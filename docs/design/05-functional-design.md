@@ -128,7 +128,7 @@ PermissionService（权限决策 + 审批）
 
 | 工具名 | 权限 | 说明 |
 |--------|------|------|
-| `ask_user_question` | ask | 向用户提问（单选/多选 + 自由输入，AskDialog 渲染） |
+| `ask_user_question` | auto（control） | 向用户提问（单选/多选 + 自由输入，AskDialog 渲染）。零副作用控制面：不弹审批、plan 模式亦可用 |
 | `enter_plan_mode` / `exit_plan_mode` | auto | plan/build 双模式切换标记 |
 
 **编排体系（9 个，qwen-code 对齐；模块级单例）：**

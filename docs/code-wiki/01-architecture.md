@@ -100,7 +100,7 @@ docs/design/       设计文档（三区索引制：规范 / 实施记录 / 治�
 | **定义表驱动的 IPC + 编译期双向 parity** | `IPC_META`（纯字符串，preload 安全导入）→ `IPC_DEFINITIONS`（+schema）→ 推导 `IpcApi`。两处用 TS 类型相等检查保证 `meta ⊆ definitions ⊆ meta`，任何一侧多写方法都会编译失败。 |
 | **ServiceContainer 单例 + 延迟初始化** | 所有服务懒加载 + 可注入（测试用 `setXxxService`）。dispose 严格按反向依赖顺序（见 02 章）逐步骤 try/catch 隔离。 |
 | **StreamText 请求级重试** | 只重试"流创建 + 首 part 读取"阶段，首 part 成功后不重试，避免重复工具副作用。 |
-| **plan / build 双模式** | plan 模式按工具类别判定：`category='read'` → auto，非 read（edit/exec）→ deny（零副作用只读探索；含显式逃生舱名单——exit_plan_mode / task_* / save_memory 豁免，防审批死锁）；build 模式写操作走审批流。子代理继承同一 PermissionService（plan 模式下子代理写工具同样被拒）。 |
+| **plan / build 双模式** | plan 模式按工具类别判定：零副作用类别（`read` 读数据 / `control` 与用户或内部状态交互，经 `isZeroSideEffectTool` 判定）→ auto，其余（edit/exec）→ deny（零副作用只读探索；另有显式逃生舱名单 `PLAN_MODE_CONTROL_TOOLS`，现仅 save_memory——它有持久化副作用，不属零副作用，防计划期不可用）；build 模式写操作走审批流。子代理继承同一 PermissionService（plan 模式下子代理写工具同样被拒）。 |
 | **前端 mock 层保留** | 渲染层 `dev/mock-api.ts` 在浏览器 dev 模式（`pnpm dev:web`）提供 `window.api` 全链路模拟，前端可独立于主进程开发；E2E 浏览器模式同走此层。不用 MSW——它拦截 HTTP，本项目 mock 的是 IPC 桥（裁决见 design/20 号）。 |
 | **状态管理分工** | IPC `invoke` 的 server state 用 TanStack Query（缓存 + 去重 + 失效）；IPC `on` 推送事件用 Zustand（流式 part / tool progress / file-tree）。**铁律：不要把流式事件塞进 Query。** |
 | **安全基线严格** | `sandbox:true` + `contextIsolation:true` + 自定义 CSP 注入 + 拒绝所有 Web 权限请求 + 导航/新窗口白名单（见 02）。 |

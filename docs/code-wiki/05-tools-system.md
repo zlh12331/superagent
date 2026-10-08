@@ -15,9 +15,12 @@ Tool<TInput> 接口（tool.ts）
 
 ## 2. 核心抽象 `tool.ts`
 
-- `ToolContext`：工具执行上下文（含 `mode: 'plan'|'build'`、`webContents`、`abortSignal`、`metadata`）。
+- `ToolContext`：工具执行上下文（含 `mode: 'plan'|'build'`、`webContents`、`abortSignal`、`metadata`、`contextWindowSize`（工具输出闸门按窗口比例收紧））。
 - `ToolResult`：统一返回结构（`{ title, output, metadata? }`——title 给 UI、output 给 LLM、metadata 结构化可选）。
-- `ToolCategory`：`'read' | 'edit' | 'exec'`（ApprovalMode 分级决策依据）。
+- `ToolCategory`：`'read' | 'control' | 'edit' | 'exec'`（ApprovalMode 分级决策依据）。
+  - `read` 读数据 / `control` 零副作用控制面（提问、任务记账、计划模式切换）/ `edit` 工作区编辑 / `exec` 命令执行
+  - 零副作用类别（read + control）由 `isZeroSideEffectTool` 统一判定：plan 模式放行 + auto 快速路径免审批
+  - ⚠️ MCP 工具的 category 由适配器**硬编码为 exec**（`mcp-tool-adapter.ts`），第三方工具不参与快速路径
 - `Tool<TInput>` 接口：
 
 ```ts
