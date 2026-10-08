@@ -118,7 +118,8 @@ function createTurn(approvalTimeoutMs?: number, askTimeoutMs?: number) {
     ...(approvalTimeoutMs !== undefined ? { approvalTimeoutMs } : {}),
     ...(askTimeoutMs !== undefined ? { askTimeoutMs } : {}),
   });
-  const state = (): AgentTurnState => actor.getSnapshot().value;
+  // 快照 value 的类型由 XState 从机器定义推导；此处断言为领域字面量联合便于断言
+  const state = (): AgentTurnState => actor.getSnapshot().value as AgentTurnState;
   return { actor, state, resolveModel, acquireGate, executeTurn, log, deps };
 }
 
@@ -249,12 +250,12 @@ describe('AgentTurnMachine（编排者）', () => {
     await settle(t.actor);
     t.actor.send({ type: 'approval.requested', approvalId: 'ap-1' });
     expect(t.state()).toEqual({ running: 'waitingApproval' });
-    expect(t.actor.getSnapshot().context.pendingApprovalId).toBe('ap-1');
-    t.actor.send({ type: 'approval.responded', decision: 'approved' });
+    expect(t.actor.getSnapshot().context.pendingApprovalIds).toEqual(['ap-1']);
+    t.actor.send({ type: 'approval.responded', approvalId: 'ap-1', decision: 'approved' });
     expect(t.state()).toEqual({ running: 'streaming' });
     expect(t.actor.getSnapshot().context.approvalDecision).toBe('approved');
     // responded 清空等待标记（无残留 pending id）
-    expect(t.actor.getSnapshot().context.pendingApprovalId).toBeUndefined();
+    expect(t.actor.getSnapshot().context.pendingApprovalIds).toEqual([]);
     t.executeTurn.resolve(runOutput());
     await settle(t.actor);
     expect(t.state()).toBe('completed');
@@ -274,7 +275,7 @@ describe('AgentTurnMachine（编排者）', () => {
     expect(t.state()).toEqual({ running: 'streaming' });
     expect(t.actor.getSnapshot().context.approvalDecision).toBe('timed-out');
     expect(t.log).toContain('expireApproval:ap-timeout');
-    expect(t.actor.getSnapshot().context.pendingApprovalId).toBeUndefined();
+    expect(t.actor.getSnapshot().context.pendingApprovalIds).toEqual([]);
   });
 
   it('after 超时取消语义：提前 responded → 到期不再触发 expireApproval（无需手工 clearTimeout）', async () => {
@@ -284,13 +285,84 @@ describe('AgentTurnMachine（编排者）', () => {
     t.acquireGate.resolve();
     await settle(t.actor);
     t.actor.send({ type: 'approval.requested', approvalId: 'ap-early' });
-    t.actor.send({ type: 'approval.responded', decision: 'denied' });
+    t.actor.send({ type: 'approval.responded', approvalId: 'ap-early', decision: 'denied' });
 
     await new Promise((resolve) => setTimeout(resolve, 60));
     expect(t.state()).toEqual({ running: 'streaming' });
     // 决策保持 responded 的值（若 after 未取消，会被改写成 timed-out）
     expect(t.actor.getSnapshot().context.approvalDecision).toBe('denied');
     expect(t.log.some((x) => x.startsWith('expireApproval'))).toBe(false);
+  });
+
+  // ── 并行审批（2026-10-08 修复：一轮多 ask 工具，AI SDK 以 Promise.all 并发执行）──
+
+  it('并行审批：两条同时待决 → 全部记账；批准一条仍留在 waitingApproval', async () => {
+    const t = createTurn();
+    t.resolveModel.resolve('m');
+    await settle(t.actor);
+    t.acquireGate.resolve();
+    await settle(t.actor);
+
+    t.actor.send({ type: 'approval.requested', approvalId: 'ap-1' });
+    t.actor.send({ type: 'approval.requested', approvalId: 'ap-2' });
+    await settle(t.actor);
+
+    // 两条都被记账（缺陷版：第 2 条被状态机静默忽略，其工具 Promise 永不 settle）
+    expect(t.state()).toEqual({ running: 'waitingApproval' });
+    expect(t.actor.getSnapshot().context.pendingApprovalIds).toEqual(['ap-1', 'ap-2']);
+
+    // 批准第 1 条：仍有待决 → 留在等待态（否则第 2 条的 after 计时会丢失）
+    t.actor.send({ type: 'approval.responded', approvalId: 'ap-1', decision: 'approved' });
+    await settle(t.actor);
+    expect(t.state()).toEqual({ running: 'waitingApproval' });
+    expect(t.actor.getSnapshot().context.pendingApprovalIds).toEqual(['ap-2']);
+
+    // 批准第 2 条：全部决出 → 回 streaming
+    t.actor.send({ type: 'approval.responded', approvalId: 'ap-2', decision: 'approved' });
+    await settle(t.actor);
+    expect(t.state()).toEqual({ running: 'streaming' });
+    expect(t.actor.getSnapshot().context.pendingApprovalIds).toEqual([]);
+  });
+
+  it('并行审批超时：到期把**全部**待决一并过期（缺陷版只过期第一个，其余永久挂起）', async () => {
+    const t = createTurn(20);
+    t.resolveModel.resolve('m');
+    await settle(t.actor);
+    t.acquireGate.resolve();
+    await settle(t.actor);
+    t.actor.send({ type: 'approval.requested', approvalId: 'ap-1' });
+    t.actor.send({ type: 'approval.requested', approvalId: 'ap-2' });
+    await settle(t.actor);
+
+    await new Promise((resolve) => setTimeout(resolve, 60));
+
+    expect(t.state()).toEqual({ running: 'streaming' });
+    expect(t.actor.getSnapshot().context.approvalDecision).toBe('timed-out');
+    // 两条都要被 expire——第 2 条此前无任何计时源（permission-service 已不自设 setTimeout）
+    expect(t.log).toContain('expireApproval:ap-1');
+    expect(t.log).toContain('expireApproval:ap-2');
+    expect(t.actor.getSnapshot().context.pendingApprovalIds).toEqual([]);
+  });
+
+  it('并行审批混合：先决一条、另一条超时 → 超时只过期剩余那条', async () => {
+    const t = createTurn(20);
+    t.resolveModel.resolve('m');
+    await settle(t.actor);
+    t.acquireGate.resolve();
+    await settle(t.actor);
+    t.actor.send({ type: 'approval.requested', approvalId: 'ap-1' });
+    t.actor.send({ type: 'approval.requested', approvalId: 'ap-2' });
+    await settle(t.actor);
+
+    // 用户先批准 ap-1（仍有 ap-2 待决 → 留在等待态，after 计时继续）
+    t.actor.send({ type: 'approval.responded', approvalId: 'ap-1', decision: 'approved' });
+    await settle(t.actor);
+    expect(t.state()).toEqual({ running: 'waitingApproval' });
+
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    // ap-2 到期被过期；ap-1 已决不应被重复过期
+    expect(t.log).toContain('expireApproval:ap-2');
+    expect(t.log).not.toContain('expireApproval:ap-1');
   });
 
   it('提问挂起：ask.requested → waitingInput → ask.responded 回 streaming（38 号收尾）', async () => {
@@ -301,11 +373,11 @@ describe('AgentTurnMachine（编排者）', () => {
     await settle(t.actor);
     t.actor.send({ type: 'ask.requested', askId: 'ask-1' });
     expect(t.state()).toEqual({ running: 'waitingInput' });
-    expect(t.actor.getSnapshot().context.pendingAskId).toBe('ask-1');
-    t.actor.send({ type: 'ask.responded', decision: 'answered' });
+    expect(t.actor.getSnapshot().context.pendingAskIds).toEqual(['ask-1']);
+    t.actor.send({ type: 'ask.responded', askId: 'ask-1', decision: 'answered' });
     expect(t.state()).toEqual({ running: 'streaming' });
     expect(t.actor.getSnapshot().context.askDecision).toBe('answered');
-    expect(t.actor.getSnapshot().context.pendingAskId).toBeUndefined();
+    expect(t.actor.getSnapshot().context.pendingAskIds).toEqual([]);
     t.executeTurn.resolve(runOutput());
     await settle(t.actor);
     expect(t.state()).toBe('completed');
@@ -325,7 +397,7 @@ describe('AgentTurnMachine（编排者）', () => {
     expect(t.state()).toEqual({ running: 'streaming' });
     expect(t.actor.getSnapshot().context.askDecision).toBe('timed-out');
     expect(t.log).toContain('expireAsk:ask-timeout');
-    expect(t.actor.getSnapshot().context.pendingAskId).toBeUndefined();
+    expect(t.actor.getSnapshot().context.pendingAskIds).toEqual([]);
   });
 
   it('提问 after 取消语义：提前 answered → 到期不再触发 expireAsk', async () => {
@@ -335,12 +407,51 @@ describe('AgentTurnMachine（编排者）', () => {
     t.acquireGate.resolve();
     await settle(t.actor);
     t.actor.send({ type: 'ask.requested', askId: 'ask-early' });
-    t.actor.send({ type: 'ask.responded', decision: 'answered' });
+    t.actor.send({ type: 'ask.responded', askId: 'ask-early', decision: 'answered' });
 
     await new Promise((resolve) => setTimeout(resolve, 60));
     expect(t.state()).toEqual({ running: 'streaming' });
     expect(t.actor.getSnapshot().context.askDecision).toBe('answered');
     expect(t.log.some((x) => x.startsWith('expireAsk'))).toBe(false);
+  });
+
+  it('并行提问：两条同时待决 → 全部记账；答一条仍留在 waitingInput', async () => {
+    const t = createTurn();
+    t.resolveModel.resolve('m');
+    await settle(t.actor);
+    t.acquireGate.resolve();
+    await settle(t.actor);
+
+    t.actor.send({ type: 'ask.requested', askId: 'ask-1' });
+    t.actor.send({ type: 'ask.requested', askId: 'ask-2' });
+    await settle(t.actor);
+    expect(t.actor.getSnapshot().context.pendingAskIds).toEqual(['ask-1', 'ask-2']);
+
+    t.actor.send({ type: 'ask.responded', askId: 'ask-1', decision: 'answered' });
+    await settle(t.actor);
+    expect(t.state()).toEqual({ running: 'waitingInput' });
+    expect(t.actor.getSnapshot().context.pendingAskIds).toEqual(['ask-2']);
+
+    t.actor.send({ type: 'ask.responded', askId: 'ask-2', decision: 'answered' });
+    await settle(t.actor);
+    expect(t.state()).toEqual({ running: 'streaming' });
+  });
+
+  it('并行提问超时：到期把全部待决一并过期（对称修复）', async () => {
+    const t = createTurn(undefined, 20);
+    t.resolveModel.resolve('m');
+    await settle(t.actor);
+    t.acquireGate.resolve();
+    await settle(t.actor);
+    t.actor.send({ type: 'ask.requested', askId: 'ask-1' });
+    t.actor.send({ type: 'ask.requested', askId: 'ask-2' });
+    await settle(t.actor);
+
+    await new Promise((resolve) => setTimeout(resolve, 60));
+
+    expect(t.log).toContain('expireAsk:ask-1');
+    expect(t.log).toContain('expireAsk:ask-2');
+    expect(t.actor.getSnapshot().context.pendingAskIds).toEqual([]);
   });
 
   it('exit 顺序：releaseGate 先于 clearModelTimeout（排队下回合尽早启动）', async () => {
