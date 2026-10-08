@@ -2,6 +2,29 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [1.8.0-beta.2](https://github.com/zlh12331/superagent/compare/v1.8.0-beta.1...v1.8.0-beta.2) (2026-10-08)
+
+<!-- changelog:polished -->
+
+### 新增
+
+* **对话真正用上你选的模型**：修复「界面所选模型」从未接线到对话回合的问题——此前选择只用于展示，实际请求仍走默认模型（[#122](https://github.com/zlh12331/superagent/issues/122)）
+* **自定义模型支持三种 API 格式**：Chat Completions / Responses / Messages 三选一，兼容更多 OpenAI 兼容与 Claude 风格端点（[#122](https://github.com/zlh12331/superagent/issues/122)）
+* **模型级超时**：可为单个模型配置总时长超时，长时间无响应不再无限等待（[#122](https://github.com/zlh12331/superagent/issues/122)）
+
+### 修复
+
+* **自定义模型端点 404**：端点 URL 收敛为单一真源，修复 `/v1` 被重复拼接（[#122](https://github.com/zlh12331/superagent/issues/122)）
+* **API Key 变更后仍用旧凭证**：设置/删除 Key 后立即重建 provider 缓存（[#122](https://github.com/zlh12331/superagent/issues/122)）
+* **并行审批卡死**：同一回合出现第 2 条审批时永不超时、回合永久挂起；状态机已支持并行多审批（[#122](https://github.com/zlh12331/superagent/issues/122)）
+* **僵尸审批卡**：审批超时/中断后界面残留等待卡片，决议已不再上报——现在有审批必有决议（[#122](https://github.com/zlh12331/superagent/issues/122)）
+* **计划模式无法提问**：新增 control 工具类别，修复提问工具被「先批准才能提问」循环拦截（[#122](https://github.com/zlh12331/superagent/issues/122)）
+
+### 改进
+
+* 审批可见性：同一会话并行审批排队渲染不互相覆盖；侧栏会话行显示待审批徽标，跨会话也能看到哪个回合在等你（[#122](https://github.com/zlh12331/superagent/issues/122)）
+* 提问弹窗队列化：一轮多个提问依次呈现，不再相互顶替（[#122](https://github.com/zlh12331/superagent/issues/122)）
+
 ## [1.8.0-beta.1](https://github.com/zlh12331/superagent/compare/v1.8.0-beta...v1.8.0-beta.1) (2026-10-08)
 
 <!-- changelog:polished -->
