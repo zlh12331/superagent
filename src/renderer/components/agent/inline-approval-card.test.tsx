@@ -10,7 +10,7 @@
 // ──────────────────────────────────────────────────────────────
 
 import { REMEMBER_TTL_MINUTES } from '@code-agent/shared/renderer';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ThemeProvider } from '@/providers/ThemeProvider';
@@ -127,5 +127,64 @@ describe('InlineApprovalCard', () => {
   it('无审批项时不渲染', () => {
     renderCard();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  // ── 队列渲染（2026-10-08 修复：此前 reverse().find() 只渲染最新一条）──
+
+  it('队列：同会话两个待审批 → 两张卡都在，各自可操作', () => {
+    useApprovalsStore.setState({
+      pending: [
+        makeItem({ id: 'ap-1' }),
+        makeItem({ id: 'ap-2', description: '执行命令: npm test' }),
+      ],
+    });
+    renderCard();
+
+    expect(screen.getAllByRole('alert')).toHaveLength(2);
+    expect(screen.getByText('执行命令: npm install axios')).toBeInTheDocument();
+    expect(screen.getByText('执行命令: npm test')).toBeInTheDocument();
+    // 每张卡各有一组操作按钮（两卡可独立批准/拒绝）
+    expect(screen.getAllByRole('button', { name: '批准' })).toHaveLength(2);
+  });
+
+  it('队列：只显示本会话的审批（跨会话不混入）', () => {
+    useApprovalsStore.setState({
+      pending: [
+        makeItem({ id: 'ap-1' }),
+        makeItem({ id: 'ap-other', sessionId: 'session-2', description: '别的会话的审批' }),
+      ],
+    });
+    renderCard();
+
+    expect(screen.getAllByRole('alert')).toHaveLength(1);
+    expect(screen.queryByText('别的会话的审批')).not.toBeInTheDocument();
+  });
+
+  it('超时决议（settleExternal）：卡片转为「已超时」终态、操作按钮消失', () => {
+    useApprovalsStore.setState({ pending: [makeItem({ id: 'ap-1' })] });
+    renderCard();
+    expect(screen.getByRole('button', { name: '批准' })).toBeInTheDocument();
+
+    // 主进程超时回推（approval:resolved → bridge → settleExternal）；
+    // act 包裹：zustand 外部更新须让 React 同步渲染后才可断言
+    act(() => {
+      useApprovalsStore.getState().settleExternal('ap-1', 'timed-out');
+    });
+
+    // 卡片保留（终态回显）但不再是可操作态——此前无此通道，卡片永久残留可点
+    expect(screen.getAllByRole('alert')).toHaveLength(1);
+    expect(screen.getByText('已超时')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '批准' })).not.toBeInTheDocument();
+  });
+
+  it('中断决议（settleExternal aborted）：显示「已中断」终态', () => {
+    useApprovalsStore.setState({ pending: [makeItem({ id: 'ap-1' })] });
+    renderCard();
+
+    act(() => {
+      useApprovalsStore.getState().settleExternal('ap-1', 'aborted');
+    });
+
+    expect(screen.getByText('已中断')).toBeInTheDocument();
   });
 });

@@ -124,7 +124,12 @@ export async function assembleAndRunTurn(args: TurnAssemblyArgs): Promise<TurnRu
     span,
   } = args;
   // 1. 取 model 实例（ai-provider 模块级单例，与 ChatService 同源）
-  const model = await getModel(undefined);
+  //    必须传 resolvedModel.modelId 而非 undefined：宿主已按「请求 modelId →
+  //    设置 ai.defaultModel → 默认模型」解析出 ResolvedModel，此处若再传
+  //    undefined，会二次解析回默认模型，导致「元数据/生成参数取自 A 模型、
+  //    实际请求发给 B 模型」的分裂。显式传 id 与宿主解析结果恒等
+  //    （resolve 幂等：同 id 再解析返回同一 providerKind / capabilities）
+  const model = await getModel(resolvedModel.modelId);
 
   // 2. 模型级总时长超时（P0-1）：仅当模型配置了 timeoutMs 才创建信号。
   //    数据来源（2026-10-07 接通）：runtime_models.timeout_ms 列（设置页模型

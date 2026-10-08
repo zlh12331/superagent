@@ -12,6 +12,7 @@
 
 import type {
   AvailableModelInfo,
+  ModelApiFormat,
   ModelsListBuiltinRes,
   ModelsListRes,
   TestModelRes,
@@ -22,6 +23,7 @@ import { getAppConfig } from '../config';
 import { runtimeModelStore } from '../infra/ai/llm-client/ai-provider';
 import { modelRegistry } from '../infra/ai/models';
 import { runtimeModelKeychainKey } from '../infra/ai/models/runtime-model-store';
+import { resolveApiFormat, resolveProviderRequestUrl } from '../infra/ai/providers/endpoint';
 import type { ProviderKind } from '../infra/ai/providers/types';
 import { isBlockedAddress, isBlockedHostname } from '../infra/ai/tools/url-guard';
 import { getSecret } from '../infra/storage/keychain';
@@ -57,22 +59,70 @@ function isLoopbackTarget(hostname: string): boolean {
   return /^::(?:ffff:)?127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host);
 }
 
-/** 根地址需拼接 /v1 的供应商（与 ProviderRegistry 拼接规则一致） */
-const V1_PREFIX_KINDS: readonly ProviderKind[] = ['deepseek', 'openai', 'ollama'];
+/** 根地址拼接规则已收敛至 endpoint.ts 单一真源（见 buildTestUrl 注释） */
 
 /**
  * 拼接探测目标 URL
  *
- * - anthropic：{base}/v1/messages（Anthropic 原生协议）
- * - deepseek/openai/ollama：{base}/v1/chat/completions（registry 拼接 /v1）
- * - 其余 OpenAI Compatible：{base}/chat/completions（默认地址已含 /v1 路径）
+ * 单一真源：与真实调用共用 resolveProviderRequestUrl（同一份端点归一化规则
+ * + 与 SDK 源码一致的协议路径，随 API 格式变化）。此前本文件自带纯字符串拼接，
+ * 既不 trim 尾斜杠也不做 /v1 幂等判断——用户填 `http://host/v1`（自定义模式
+ * 常见填法）时探测打到 `/v1/v1/chat/completions` 得 404，**在保存前拦住了
+ * 本可正常使用的配置**（2026-10-08 修复；同类事故 2026-09-06 已出现过一次，
+ * 当时只修了调用路径）。
  */
-function buildTestUrl(providerKind: ProviderKind, baseUrl: string): string {
-  if (providerKind === 'anthropic') {
-    return `${baseUrl}/v1/messages`;
+function buildTestUrl(
+  providerKind: ProviderKind,
+  baseUrl: string,
+  apiFormat: ModelApiFormat,
+): string {
+  return resolveProviderRequestUrl(providerKind, baseUrl, apiFormat);
+}
+
+/**
+ * 构造探测请求体与格式专属头
+ *
+ * 三格式的请求体差异（权威来源：AI SDK 各 provider 的 getArgs 实现）：
+ * - openai-chat：`{ model, max_tokens, messages }`
+ * - openai-responses：`{ model, max_output_tokens, input }`（Responses 无
+ *   messages 字段，用错字段会被网关判 400 —— 假阴性）
+ * - anthropic-messages：`{ model, max_tokens, messages }` + anthropic-version 头
+ */
+function buildProbeRequest(
+  apiFormat: ModelApiFormat,
+  model: string,
+): { readonly body: Record<string, unknown>; readonly extraHeaders: Record<string, string> } {
+  if (apiFormat === 'anthropic-messages') {
+    return {
+      body: {
+        model,
+        // biome-ignore lint/style/useNamingConvention: 供应商 API 协议字段（snake_case）
+        max_tokens: 1,
+        messages: [{ role: 'user', content: 'ping' }],
+      },
+      extraHeaders: { 'anthropic-version': '2023-06-01' },
+    };
   }
-  const root = V1_PREFIX_KINDS.includes(providerKind) ? `${baseUrl}/v1` : baseUrl;
-  return `${root}/chat/completions`;
+  if (apiFormat === 'openai-responses') {
+    return {
+      body: {
+        model,
+        // biome-ignore lint/style/useNamingConvention: 供应商 API 协议字段（snake_case）
+        max_output_tokens: 1,
+        input: 'ping',
+      },
+      extraHeaders: {},
+    };
+  }
+  return {
+    body: {
+      model,
+      // biome-ignore lint/style/useNamingConvention: 供应商 API 协议字段（snake_case）
+      max_tokens: 1,
+      messages: [{ role: 'user', content: 'ping' }],
+    },
+    extraHeaders: {},
+  };
 }
 
 /**
@@ -182,9 +232,18 @@ export const modelsHandlers = {
     modelId?: string | undefined;
     baseUrl: string | undefined;
     apiKey: string | undefined;
+    apiFormat?: ModelApiFormat | undefined;
   }): Promise<TestModelRes> => {
     const { providerKind } = input;
     const baseUrl = input.baseUrl ?? getAppConfig().providers[providerKind];
+    // 生效格式：显式传入 > 已存运行时模型的记录 > 该 kind 默认
+    // （保存前测试时模型尚未落库，走显式传入；编辑历史模型时为记录值）
+    const storedFormat =
+      input.apiFormat ??
+      (input.modelId !== undefined
+        ? (await runtimeModelStore.get(input.modelId))?.apiFormat
+        : undefined);
+    const apiFormat = resolveApiFormat(providerKind, storedFormat);
 
     if (input.baseUrl !== undefined) {
       assertSafeTestBaseUrl(input.baseUrl, input.apiKey);
@@ -199,28 +258,22 @@ export const modelsHandlers = {
       apiKey = (await getSecret(runtimeModelKeychainKey(input.modelId))) ?? undefined;
     }
 
-    const url = buildTestUrl(providerKind, baseUrl);
-    const model = input.modelId ?? 'ping';
+    const url = buildTestUrl(providerKind, baseUrl, apiFormat);
+    const probe = buildProbeRequest(apiFormat, input.modelId ?? 'ping');
     try {
       const response = await fetch(url, {
         method: 'POST',
-        headers:
-          providerKind === 'anthropic'
-            ? {
-                'content-type': 'application/json',
-                'x-api-key': apiKey ?? '',
-                'anthropic-version': '2023-06-01',
-              }
-            : {
-                'content-type': 'application/json',
-                ...(apiKey !== undefined ? { authorization: `Bearer ${apiKey}` } : {}),
-              },
-        body: JSON.stringify({
-          model,
-          // biome-ignore lint/style/useNamingConvention: 供应商 API 协议字段（snake_case）
-          max_tokens: 1,
-          messages: [{ role: 'user', content: 'ping' }],
-        }),
+        headers: {
+          'content-type': 'application/json',
+          // anthropic 用 x-api-key；其余（含 Responses）用 Bearer
+          ...(apiFormat === 'anthropic-messages'
+            ? { 'x-api-key': apiKey ?? '' }
+            : apiKey !== undefined
+              ? { authorization: `Bearer ${apiKey}` }
+              : {}),
+          ...probe.extraHeaders,
+        },
+        body: JSON.stringify(probe.body),
         signal: AbortSignal.timeout(TEST_TIMEOUT_MS),
       });
       if (response.ok) {
@@ -229,7 +282,9 @@ export const modelsHandlers = {
       if (response.status === 401 || response.status === 403) {
         return { ok: false, error: 'API Key 无效或未授权' };
       }
-      return { ok: false, error: `HTTP ${response.status}` };
+      // 附上实际探测 URL：拼接/协议选错类问题（如 /v1/v1、格式与端点不匹配）
+      // 一眼可辨，无需反查代码
+      return { ok: false, error: `HTTP ${response.status}（${url}）` };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       return { ok: false, error: message };

@@ -30,13 +30,14 @@ export function forwardStreamPart(
   part: unknown,
   sessionId: string,
   webContents: WebContents | undefined,
+  contextWindowSize?: number,
 ): void {
   if (webContents === undefined || webContents.isDestroyed()) {
     return;
   }
   const payload: AgentStreamPartPayload = {
     sessionId,
-    part: clampToolPartOutput(part),
+    part: clampToolPartOutput(part, contextWindowSize),
   };
   // dev 契约校验后发送（payloadSchema 见定义表）
   emitEvent(webContents, IPC_DEFINITIONS.agent.subscribeStreamPart, payload);
@@ -58,16 +59,21 @@ export interface TurnPartForwarder {
  *
  * 合帧与保序细节由 createTextDeltaBatcher 承担：同 id 相邻 delta 合并、
  * 非 text-delta 前先落地缓冲、超 4096 字符立即落地、flush 幂等。
+ *
+ * @param getContextWindowSize 模型窗口的惰性读取（推送发生在回合执行期间，
+ *   而 forwarder 在模型解析前装配——值形态会拿到 undefined；传 getter 使
+ *   每次推送都读到当下的窗口，供工具输出闸门按比例收紧）
  */
 export function createTurnPartForwarder(
   sessionId: string,
   webContents: WebContents | undefined,
+  getContextWindowSize?: () => number | undefined,
 ): TurnPartForwarder {
   if (webContents === undefined) {
     return { push: () => {}, flush: () => {} };
   }
   const batcher = createTextDeltaBatcher({
-    emit: (part) => forwardStreamPart(part, sessionId, webContents),
+    emit: (part) => forwardStreamPart(part, sessionId, webContents, getContextWindowSize?.()),
   });
   return { push: (part) => batcher.push(part), flush: () => batcher.flush() };
 }

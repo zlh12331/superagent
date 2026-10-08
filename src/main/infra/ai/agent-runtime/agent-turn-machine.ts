@@ -118,12 +118,22 @@ export interface AgentTurnContext {
   error?: unknown;
   /** 最后一次审批决策（38 号阶段 2：waitingApproval 出口语义显式化；快照审计用） */
   approvalDecision?: ApprovalDecisionOutcome;
-  /** 当前等待中的审批 id（approval.requested 赋值；after 超时据此定位待决条目） */
-  pendingApprovalId?: string;
+  /**
+   * 当前等待中的审批 id 列表（approval.requested 累加；responded 逐个移除）
+   *
+   * 一轮模型回复可含多个 ask 工具调用（AI SDK 并行执行），故为列表而非单值——
+   * 全部决出（或一起超时）才退出 waitingApproval（2026-10-08 并行审批修复）。
+   */
+  pendingApprovalIds: readonly string[];
   /** 审批超时毫秒（input 注入；默认 shared APPROVAL_TIMEOUT_MS，测试可缩短） */
   readonly approvalTimeoutMs: number;
-  /** 当前等待中的提问 id（ask.requested 赋值；after 超时据此定位待决条目） */
-  pendingAskId?: string;
+  /**
+   * 当前等待中的提问 id 列表（ask.requested 累加；responded 逐个移除）
+   *
+   * 与 pendingApprovalIds 同构：一轮可含多个 ask 工具调用（AI SDK 并行执行），
+   * 全部决出（或一起超时）才退出 waitingInput（2026-10-08 并行修复）。
+   */
+  pendingAskIds: readonly string[];
   /** 提问超时毫秒（input 注入；默认 shared ASK_TIMEOUT_MS，测试可缩短） */
   readonly askTimeoutMs: number;
   /** 最后一次提问决策（waitingInput 出口语义显式化；快照审计用） */
@@ -135,9 +145,22 @@ export interface AgentTurnContext {
  * （{ type, error }）经此进入类型系统，guard/assign 可窄化读取 error 字段 */
 export type TurnMachineEvent =
   | { readonly type: 'approval.requested'; readonly approvalId: string }
-  | { readonly type: 'approval.responded'; readonly decision: ApprovalDecisionOutcome }
+  | {
+      readonly type: 'approval.responded';
+      /**
+       * 决出的审批 id（并行审批必需：一次回合可有多条待决，responded 需指明
+       * 是哪一条——否则无法判断"是否还有其它待决"与退出时机）
+       */
+      readonly approvalId: string;
+      readonly decision: ApprovalDecisionOutcome;
+    }
   | { readonly type: 'ask.requested'; readonly askId: string }
-  | { readonly type: 'ask.responded'; readonly decision: 'answered' | 'timed-out' }
+  | {
+      readonly type: 'ask.responded';
+      /** 决出的提问 id（并行提问必需：说明"哪一条已答"以判断是否还有待决） */
+      readonly askId: string;
+      readonly decision: 'answered' | 'timed-out';
+    }
   | { readonly type: 'xstate.error.actor.*'; readonly error: unknown };
 
 /** 回合状态字面量联合（快照 value 形态；running 为层级嵌套） */
@@ -196,6 +219,19 @@ export const agentTurnMachine = setup({
     /** 用户中断（TurnRunner 归因；区别于 completed/timeout） */
     isAborted: ({ context }) => context.runOutput?.reason === 'aborted',
     /**
+     * 本次 responded 后是否仍有待决审批（并行审批的退出判据）
+     *
+     * true → 仅移除刚决出的 id 并留在 waitingApproval（其余继续计时）；
+     * false → 全部决出，退出到 streaming。
+     */
+    hasMorePendingApprovals: ({ context, event }) =>
+      context.pendingApprovalIds.some(
+        (id) => id !== (event as { readonly approvalId: string }).approvalId,
+      ),
+    /** 本次 ask.responded 后是否仍有待决提问（同 hasMorePendingApprovals 语义） */
+    hasMorePendingAsks: ({ context, event }) =>
+      context.pendingAskIds.some((id) => id !== (event as { readonly askId: string }).askId),
+    /**
      * 中断类失败（AbortError：用户中断 / 排队让位 / 装配期信号触发）——
      * 走 aborted 终态而非 error（原 catch 的 isAbortError 分支语义：
      * 用户中断不是错误，推送 reason='aborted' 的 END）。
@@ -249,6 +285,8 @@ export const agentTurnMachine = setup({
     turnId: input.turnId,
     startedAt: Date.now(),
     deps: input.deps,
+    pendingApprovalIds: [],
+    pendingAskIds: [],
     approvalTimeoutMs: input.approvalTimeoutMs ?? APPROVAL_TIMEOUT_MS,
     askTimeoutMs: input.askTimeoutMs ?? ASK_TIMEOUT_MS,
   }),
@@ -303,78 +341,130 @@ export const agentTurnMachine = setup({
           on: {
             'approval.requested': {
               target: 'waitingApproval',
-              actions: assign({ pendingApprovalId: ({ event }) => event.approvalId }),
+              // 进入等待：首条审批入列（后续同轮请求由 waitingApproval 状态内
+              // 的 'approval.requested' 自转换累加）
+              actions: assign({ pendingApprovalIds: ({ event }) => [event.approvalId] }),
             },
             // 提问挂起（ask_user_question）：此前机器完全不感知，挂起期间显示
             // streaming（状态失真）；38 号阶段 2 收尾补齐为 waitingInput 状态
             'ask.requested': {
               target: 'waitingInput',
-              actions: assign({ pendingAskId: ({ event }) => event.askId }),
+              // 进入等待：首条提问入列（后续同轮提问由 waitingInput 内自转换累加）
+              actions: assign({ pendingAskIds: ({ event }) => [event.askId] }),
             },
           },
         },
         waitingApproval: {
           on: {
+            // 并行审批（2026-10-08 修复）：一轮模型回复可含多个 ask 工具调用，
+            // AI SDK 以 Promise.all 并行执行 → 多个 requestApproval 并发到达。
+            // 此前本状态只处理 responded，第 2 个 requested 被静默忽略：它既无
+            // 机器记账、也无 after 计时，其工具 Promise 永不 settle，回合永久挂起。
+            // 语义对齐 waitingApproval 的「等待全部待决审批」：
+            // - requested：累加 id（保持停留本状态；after 计时随状态重入而重置）
+            // - responded：移除该 id；**仍有待决则留在本状态**（继续计时），
+            //   全部决出才回 streaming
+            'approval.requested': {
+              actions: assign({
+                pendingApprovalIds: ({ context, event }) => [
+                  ...context.pendingApprovalIds,
+                  event.approvalId,
+                ],
+              }),
+            },
             // 38 号阶段 2：responded 携带决策结果（approved/denied/timed-out/aborted），
             // context 记录供快照审计——此前出口语义黑盒（机器只知道"结束了"）
-            'approval.responded': {
-              target: 'streaming',
-              actions: [
-                assign({
+            'approval.responded': [
+              {
+                // 还有其它待决审批：仅移除本 id，留在 waitingApproval 继续计时
+                guard: 'hasMorePendingApprovals',
+                actions: assign({
                   approvalDecision: ({ event }) => event.decision,
-                  // 清空等待标记（approvalId 为 string | undefined；exactOptional
-                  // 语义下显式赋 undefined 需类型注解路径）
-                  pendingApprovalId: (): string | undefined => undefined,
+                  pendingApprovalIds: ({ context, event }) =>
+                    context.pendingApprovalIds.filter((id) => id !== event.approvalId),
                 }),
-              ],
-            },
+              },
+              {
+                target: 'streaming',
+                actions: [
+                  assign({
+                    approvalDecision: ({ event }) => event.decision,
+                    // 清空等待标记（exactOptional 语义下显式赋空数组）
+                    pendingApprovalIds: (): readonly string[] => [],
+                  }),
+                ],
+              },
+            ],
           },
-          // 声明式超时：进入 waitingApproval 起算，approvalTimeoutMs 后自动触发；
-          // 提前 responded 退出该状态 → after 计时自动取消（无需手工 clearTimeout）。
+          // 声明式超时：进入/重入 waitingApproval 起算，approvalTimeoutMs 后自动触发；
+          // 提前全决退出该状态 → after 计时自动取消（无需手工 clearTimeout）。
           // 计时源单一：permission-service 不再自设超时定时器（见 TurnDeps.expireApproval）。
+          // 并行语义：超时到点时**全部**待决审批一并过期（它们同时进入等待）。
           after: {
             approvalTimeout: {
               target: 'streaming',
               actions: [
-                // 顺序：先记决策（审计）→ 再让宿主以超时语义拒绝 pending →
-                // 最后清 pendingApprovalId（内联 action 读取当时的 context）
+                // 顺序：先记决策（审计）→ 再让宿主以超时语义拒绝全部 pending →
+                // 最后清空 id 列表（内联 action 读取当时的 context）
                 assign({ approvalDecision: (): 'timed-out' => 'timed-out' }),
                 ({ context }: { context: AgentTurnContext }) => {
-                  if (context.pendingApprovalId !== undefined) {
-                    context.deps.expireApproval(context.pendingApprovalId);
+                  for (const approvalId of context.pendingApprovalIds) {
+                    context.deps.expireApproval(approvalId);
                   }
                 },
-                assign({ pendingApprovalId: (): string | undefined => undefined }),
+                assign({ pendingApprovalIds: (): readonly string[] => [] }),
               ],
             },
           },
         },
         // 等待用户回答提问（ask_user_question 挂起；与 waitingApproval 同构）
+        //
+        // 并行提问（2026-10-08 对称修复）：与审批同理，一轮可含多个 ask 工具调用
+        // （AI SDK 并行执行），此前第 2 个 ask.requested 被忽略 → 其工具 Promise
+        // 永久挂起。此处采用与 waitingApproval 相同的「列表 + 全部决出才退出」语义。
+        // 前端 AskDialog 同步队列化（FIFO 逐条呈现队头，超时由决议事件放行），
+        // 两端对称：后端不再永久挂起，前端不再覆盖丢失。
         waitingInput: {
           on: {
-            'ask.responded': {
-              target: 'streaming',
-              actions: [
-                assign({
-                  askDecision: ({ event }) => event.decision,
-                  pendingAskId: (): string | undefined => undefined,
-                }),
-              ],
+            'ask.requested': {
+              actions: assign({
+                pendingAskIds: ({ context, event }) => [...context.pendingAskIds, event.askId],
+              }),
             },
+            'ask.responded': [
+              {
+                guard: 'hasMorePendingAsks',
+                actions: assign({
+                  askDecision: ({ event }) => event.decision,
+                  pendingAskIds: ({ context, event }) =>
+                    context.pendingAskIds.filter((id) => id !== event.askId),
+                }),
+              },
+              {
+                target: 'streaming',
+                actions: [
+                  assign({
+                    askDecision: ({ event }) => event.decision,
+                    pendingAskIds: (): readonly string[] => [],
+                  }),
+                ],
+              },
+            ],
           },
-          // 声明式超时（同 waitingApproval）：提前 answered 退出 → after 自动取消。
+          // 声明式超时（同 waitingApproval）：提前全答退出 → after 自动取消。
           // 计时源单一：agent-ask-service 不再自设 setTimeout（见 TurnDeps.expireAsk）。
+          // 超时到点把**全部**待决提问一并过期（它们同时进入等待）。
           after: {
             askTimeout: {
               target: 'streaming',
               actions: [
                 assign({ askDecision: (): 'timed-out' => 'timed-out' }),
                 ({ context }: { context: AgentTurnContext }) => {
-                  if (context.pendingAskId !== undefined) {
-                    context.deps.expireAsk(context.pendingAskId);
+                  for (const askId of context.pendingAskIds) {
+                    context.deps.expireAsk(askId);
                   }
                 },
-                assign({ pendingAskId: (): string | undefined => undefined }),
+                assign({ pendingAskIds: (): readonly string[] => [] }),
               ],
             },
           },

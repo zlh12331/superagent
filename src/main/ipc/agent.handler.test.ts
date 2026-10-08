@@ -44,6 +44,7 @@ describe('agent.handler', () => {
       mode: 'plan' as const,
       thinking: undefined,
       temperature: undefined,
+      modelId: undefined,
     };
     const ctx = createCtx();
     const result = await handlers.run(input, ctx);
@@ -66,6 +67,7 @@ describe('agent.handler', () => {
         mode: 'build' as const,
         thinking: undefined,
         temperature: undefined,
+        modelId: undefined,
       },
       ctx as never,
     );
@@ -73,6 +75,48 @@ describe('agent.handler', () => {
     const startCall = ctx.sender.send.mock.calls.find((c) => c[0] === 'agent:stream:start');
     expect(startCall).toBeDefined();
     expect(startCall?.[1]).toEqual({ sessionId: 'session-abc' });
+  });
+
+  it('run：modelId 已定义时透传给 startAgent（界面所选模型生效链路）', async () => {
+    const ctx = createCtx();
+    await handlers.run(
+      {
+        messages: [{ role: 'user' as const, content: 'hi' }],
+        sessionId: undefined,
+        workingDir: '/tmp/proj',
+        systemPrompt: undefined,
+        maxSteps: 20,
+        mode: 'build' as const,
+        thinking: undefined,
+        temperature: undefined,
+        modelId: 'gpt-4o',
+      },
+      ctx,
+    );
+    expect(agentService.startAgent).toHaveBeenCalledWith(
+      expect.objectContaining({ modelId: 'gpt-4o' }),
+    );
+  });
+
+  it('run：modelId 未定义时不下发该键（主进程回落设置 ai.defaultModel）', async () => {
+    const ctx = createCtx();
+    await handlers.run(
+      {
+        messages: [{ role: 'user' as const, content: 'hi' }],
+        sessionId: undefined,
+        workingDir: '/tmp/proj',
+        systemPrompt: undefined,
+        maxSteps: 20,
+        mode: 'build' as const,
+        thinking: undefined,
+        temperature: undefined,
+        modelId: undefined,
+      },
+      ctx,
+    );
+    const args = (agentService as unknown as { startAgent: ReturnType<typeof vi.fn> }).startAgent
+      .mock.calls[0]?.[0] as Record<string, unknown> | undefined;
+    expect(args).not.toHaveProperty('modelId');
   });
 
   it('run：最后一条用户消息超过主进程硬上限 → 拒绝且不启动 agent', async () => {
@@ -85,6 +129,7 @@ describe('agent.handler', () => {
       mode: 'plan' as const,
       thinking: undefined,
       temperature: undefined,
+      modelId: undefined,
     };
     await expect(handlers.run(oversized, createCtx())).rejects.toMatchObject({
       code: ErrorCode.INVALID_INPUT,

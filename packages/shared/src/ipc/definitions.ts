@@ -15,6 +15,8 @@ import { z } from 'zod';
 import {
   type AgentApprovalRequestPayload,
   AgentApprovalRequestPayloadSchema,
+  type AgentApprovalResolvedPayload,
+  AgentApprovalResolvedPayloadSchema,
   AgentApprovalResponseReqSchema,
   AgentRunReqSchema,
   type AgentRunRes,
@@ -32,6 +34,8 @@ import {
 import {
   type AskEventPayload,
   AskEventPayloadSchema,
+  type AskResolvedPayload,
+  AskResolvedPayloadSchema,
   AskRespondReqSchema,
   type AskRespondRes,
   AskRespondResSchema,
@@ -531,6 +535,11 @@ export const IPC_DEFINITIONS = {
       {} as AskEventPayload,
       AskEventPayloadSchema,
     ),
+    subscribeAskResolved: withPayload(
+      IPC_META.agent.subscribeAskResolved,
+      {} as AskResolvedPayload,
+      AskResolvedPayloadSchema,
+    ),
     subscribeStreamEnd: withPayload(
       IPC_META.agent.subscribeStreamEnd,
       {} as AgentStreamEndPayload,
@@ -555,6 +564,11 @@ export const IPC_DEFINITIONS = {
       IPC_META.agent.subscribeApprovalRequest,
       {} as AgentApprovalRequestPayload,
       AgentApprovalRequestPayloadSchema,
+    ),
+    subscribeApprovalResolved: withPayload(
+      IPC_META.agent.subscribeApprovalResolved,
+      {} as AgentApprovalResolvedPayload,
+      AgentApprovalResolvedPayloadSchema,
     ),
   },
 

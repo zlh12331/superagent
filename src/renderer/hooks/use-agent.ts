@@ -95,10 +95,13 @@ export function useAgentWithIpc<Message extends UIMessage = UIMessage>(
   const transport = getIpcAgentTransport();
 
   // 用户设置项（settings-store persistent；变化时重新 configure）：
-  // 思考强度 / 采样温度直接透传；系统提示词为空串时回落主进程内置默认 prompt
+  // 思考强度 / 采样温度 / 目标模型直接透传；系统提示词为空串时回落主进程内置默认 prompt
   const thinking = useSettingsStore((s) => s.ai.thinking);
   const temperature = useSettingsStore((s) => s.ai.temperature);
   const settingsSystemPrompt = useSettingsStore((s) => s.ai.systemPrompt);
+  // 模型选择：设置 ai.defaultModel 即模型选择器当前值（ChatPanel 与 home 的
+  // ModelSelector 写入同一字段）——此前仅用于 UI 展示，现经 transport 透传主进程
+  const modelId = useSettingsStore((s) => s.ai.defaultModel);
 
   // 解构 agent 专用字段（id 用于按会话配置 transport），剩余透传给 useChat
   const { id, workingDir, systemPrompt, maxSteps, ...chatOptions } = options;
@@ -122,9 +125,10 @@ export function useAgentWithIpc<Message extends UIMessage = UIMessage>(
         maxSteps,
         thinking,
         temperature,
+        modelId,
       }),
     );
-  }, [id, workingDir, effectiveSystemPrompt, maxSteps, thinking, temperature]);
+  }, [id, workingDir, effectiveSystemPrompt, maxSteps, thinking, temperature, modelId]);
 
   // id 必须透传给 useChat：transport.sendMessages 用 options.chatId 作为 IPC sessionId，
   // 只有 chatId === 会话 id，主进程回流的审批/事件才能按 sessionId 正确匹配（内联审批卡渲染）

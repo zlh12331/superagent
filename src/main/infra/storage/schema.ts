@@ -324,6 +324,14 @@ export const runtimeModels = sqliteTable(
      * 「无字节」，本字段管「有进展但整体跑飞」）。
      */
     timeoutMs: integer('timeout_ms'),
+    /**
+     * API 协议格式（null = 未设置，按 'openai-chat' 处理）
+     *
+     * 仅自定义模式（手动填请求地址）写非默认值；服务商模式的格式由
+     * providerKind 决定。存量行迁移后为 NULL——保持历史行为（Chat
+     * Completions），不得因引入本列改变已有模型的调用协议。
+     */
+    apiFormat: text('api_format'),
     /** 启停状态（0=停用 1=启用；默认启用） */
     isEnabled: integer('is_enabled').$type<0 | 1>().notNull().default(1),
     /** 创建时间（Unix timestamp 毫秒） */

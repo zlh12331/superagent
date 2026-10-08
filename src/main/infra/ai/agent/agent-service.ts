@@ -45,6 +45,7 @@ import type { WebContents } from 'electron';
 import { emitEvent } from '../../../utils/emit-event';
 import { logger } from '../../../utils/logger';
 import { broadcastInvalidation } from '../../invalidation/invalidation';
+import { readSelectedModelId } from '../../storage/ai-pref';
 import type { ISessionService } from '../../storage/session-service';
 import { withSpan } from '../../telemetry/otel';
 import { TurnEventEmitter } from '../agent-runtime';
@@ -129,6 +130,13 @@ export interface StartAgentOptions {
   readonly thinking?: 'off' | 'low' | 'medium' | 'high';
   /** 采样温度（可选：渲染层设置项，覆盖模型级默认 generationConfig.temperature；思考模型忽略） */
   readonly temperature?: number;
+  /**
+   * 目标模型 id（可选：渲染层模型选择器的当前选择）
+   *
+   * 省略时回落 `app_settings.ai.defaultModel`（无头入口：IM / cron / 远程 /
+   * 子代理不带本字段，统一走用户选定模型），仍无则用默认供应商默认模型。
+   */
+  readonly modelId?: string | undefined;
   /** 运行模式（plan 只读探索 / build 审批后执行，缺省视为 build） */
   readonly mode?: 'plan' | 'build';
   /**
@@ -490,18 +498,30 @@ export class AgentService implements IAgentService {
         let assistantText = '';
         const transcriptEntries: TurnTranscriptEntry[] = [];
         let rawPartCount = 0;
-        // 原始 part 推送（P2-31：text-delta 按 sessionId 16–20ms 微批合帧；
-        // flush 在各收尾路径推送 END/ERROR 前调用，保序防丢尾）
-        const partForwarder = createTurnPartForwarder(sessionId, options.webContents);
         let releaseGate: (() => void) | undefined;
         let resolvedModel: ResolvedModel | undefined;
         let unsubscribeApproval: (() => void) | undefined;
         let unsubscribeAsk: (() => void) | undefined;
+        // 原始 part 推送（P2-31：text-delta 按 sessionId 16–20ms 微批合帧；
+        // flush 在各收尾路径推送 END/ERROR 前调用，保序防丢尾）。
+        // 窗口经 getter 惰性读取——此刻模型尚未解析（resolving 阶段才赋值），
+        // 值形态会拿到 undefined，而推送发生在解析之后（?. 不产生认知分支）
+        const partForwarder = createTurnPartForwarder(
+          sessionId,
+          options.webContents,
+          () => resolvedModel?.capabilities.contextWindowSize,
+        );
 
         // 本轮效果面（机器经 TurnDeps 在正确时机调用；闭包捕获 span/累积器/窗口）
         const deps: TurnDeps = {
           resolveModel: async () => {
-            resolvedModel = modelRegistry.resolve(undefined);
+            // 模型解析优先级（2026-10-08 接通界面所选模型）：
+            // 1. 请求携带的 modelId——渲染层模型选择器即时值，规避设置写穿透
+            //    （settings:set 为 fire-and-forget，DB 可能落后于 UI）
+            // 2. app_settings.ai.defaultModel——无头入口（IM / cron / 远程 /
+            //    子代理）不带该字段，统一按用户选定模型执行
+            // 3. 默认供应商默认模型（registry 内部兜底，见 ModelRegistry.resolve）
+            resolvedModel = modelRegistry.resolve(options.modelId ?? readSelectedModelId());
             return resolvedModel.modelId;
           },
           acquireGate: async () => {
@@ -555,6 +575,9 @@ export class AgentService implements IAgentService {
               mode: options.mode ?? 'build',
               // 用户原始 prompt（权限决策：意图豁免破坏性拦截）
               ...(userPrompt !== undefined ? { userPrompt } : {}),
+              // 模型窗口（工具输出闸门按窗口比例收紧；与 token 预算同源字段）。
+              // 直接赋值：ToolContext 该字段类型含 `| undefined`，无需条件展开
+              contextWindowSize: resolved.capabilities.contextWindowSize,
             };
             const tools = this.toolRegistry.toAISDKTools(
               baseCtx,

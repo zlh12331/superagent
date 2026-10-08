@@ -19,7 +19,7 @@ import { join } from 'node:path';
 import { type InferHandlers, type IPC_DEFINITIONS, SETTING_KEYS } from '@code-agent/shared/main';
 import { app, dialog } from 'electron';
 
-import { llmClient, runtimeModelStore } from '../infra/ai/llm-client/ai-provider';
+import { llmClient, resetAIProvider, runtimeModelStore } from '../infra/ai/llm-client/ai-provider';
 import { toKeychainKey } from '../infra/ai/providers';
 import type { IPermissionService } from '../infra/ai/tools/permission-service';
 import { setMainLanguage } from '../infra/i18n';
@@ -165,6 +165,10 @@ export function createSettingsHandlers(params: {
     setApiKey: async (input) => {
       const key = toKeychainKey(input.provider);
       await setSecret(key, input.apiKey);
+      // 缓存重建：provider 工厂按 kind 缓存且闭包持有创建时的 apiKey，
+      // llmClient per-model 实例同样持旧 key——不重建则「换 Key 后仍用旧 key
+      // 发请求」直到重启（resetAIProvider 的注释一直声称本场景，此前未接线）
+      resetAIProvider();
       return { ok: true };
     },
 
@@ -172,6 +176,8 @@ export function createSettingsHandlers(params: {
     deleteApiKey: async (input) => {
       const key = toKeychainKey(input.provider);
       await deleteSecret(key);
+      // 同上：清除持有已删 key 的缓存实例（下次调用按 keychain 现状重建/报未配置）
+      resetAIProvider();
       return { ok: true };
     },
 
@@ -209,8 +215,9 @@ export function createSettingsHandlers(params: {
         ...(input.apiKey !== undefined ? { apiKey: input.apiKey } : {}),
         ...(input.displayName !== undefined ? { displayName: input.displayName } : {}),
         ...(input.timeoutMs !== undefined ? { timeoutMs: input.timeoutMs } : {}),
+        ...(input.apiFormat !== undefined ? { apiFormat: input.apiFormat } : {}),
       });
-      // 缓存失效：同模型下次 getModel 重建（读取新 baseUrl/apiKey）
+      // 缓存失效：同模型下次 getModel 重建（读取新 baseUrl/apiKey/apiFormat）
       llmClient.invalidateModel(input.modelId);
       return { ok: true };
     },
@@ -225,6 +232,7 @@ export function createSettingsHandlers(params: {
         // timeoutMs 三态：省略不改 / null 清除 / number 设置（null !== undefined，
         // 条件展开不会误吞清除语义）
         ...(input.timeoutMs !== undefined ? { timeoutMs: input.timeoutMs } : {}),
+        ...(input.apiFormat !== undefined ? { apiFormat: input.apiFormat } : {}),
         ...(input.isEnabled !== undefined ? { isEnabled: input.isEnabled } : {}),
       });
       llmClient.invalidateModel(input.modelId);
@@ -251,6 +259,7 @@ export function createSettingsHandlers(params: {
           baseUrl: r.baseUrl ?? undefined,
           displayName: r.displayName ?? undefined,
           ...(r.timeoutMs !== undefined ? { timeoutMs: r.timeoutMs } : {}),
+          ...(r.apiFormat !== undefined ? { apiFormat: r.apiFormat } : {}),
           isEnabled: r.isEnabled,
           createdAt: r.createdAt,
         })),

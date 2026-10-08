@@ -11,6 +11,7 @@ import { type AgentQuestion, ASK_TIMEOUT_SECONDS } from '@code-agent/shared/rend
 import { X } from 'lucide-react';
 import { type ReactElement, useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import { useShallow } from 'zustand/react/shallow';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -33,25 +34,33 @@ interface AskState {
   readonly askId: string | null;
   readonly questions: readonly AgentQuestion[];
   readonly receivedAt: number;
-  readonly clearAsk: (sessionId?: string) => void;
+  readonly removeAsk: (askId: string) => void;
 }
 
 /**
- * 提问状态选择器（模块级提取，2026-09-11）
+ * 提问状态选择器（模块级提取，2026-09-11；2026-10-08 队列化适配）
  *
- * - **逐字段 selector**：此前是「全项目唯一的整体订阅」`useAgentAskStore()`，
- *   任何 state 变化（含未来新增字段）都会触发整个对话框重渲染。现按仓库既有模式
- *   （如 rate-limit-banner）逐字段订阅，各字段独立比较。
- * - 提取为模块级 hook 而非内联四条 selector：避免 AskDialog 函数体因此增长
- *   （check-functions 棘轮只允许下降）。
+ * - **队列取队头**：store 持有全部待答提问（一轮可并行多个 ask 工具），
+ *   本对话框为全屏模态，一次呈现**队头**（FIFO 先问先答）；队头出队后
+ *   下一条自动上浮——超时的队头由主进程决议事件放行，不会阻塞队列。
+ *   会话归属在前端过滤（多会话并发时只看当前激活会话的提问）。
+ * - **逐字段 selector**：各字段独立比较，避免整体订阅导致的全量重渲染。
+ * - 提取为模块级 hook：AskDialog 函数体受 check-functions 棘轮约束。
  */
-function useAskState(): AskState {
+function useAskState(activeSessionId: string | null): AskState {
+  // 队头选择：取首个归属当前激活会话的条目（asks 按到达顺序 FIFO）
+  // ⚠️ useShallow：filter/find 每次返回新对象引用，裸用触发
+  // "getSnapshot should be cached" 无限重渲染（React 19 + zustand 5 实测）
+  const head = useAgentAskStore(
+    useShallow((s) => s.asks.find((a) => a.sessionId === activeSessionId) ?? null),
+  );
+  const removeAsk = useAgentAskStore((s) => s.removeAsk);
   return {
-    sessionId: useAgentAskStore((s) => s.sessionId),
-    askId: useAgentAskStore((s) => s.askId),
-    questions: useAgentAskStore((s) => s.questions),
-    receivedAt: useAgentAskStore((s) => s.receivedAt),
-    clearAsk: useAgentAskStore((s) => s.clearAsk),
+    sessionId: head?.sessionId ?? null,
+    askId: head?.askId ?? null,
+    questions: head?.questions ?? [],
+    receivedAt: head?.receivedAt ?? 0,
+    removeAsk,
   };
 }
 
@@ -99,8 +108,8 @@ interface UseAskAnswersDeps {
   readonly askId: string | null;
   /** 问题列表（初始化 AnswerState 的长度基准） */
   readonly questions: readonly AgentQuestion[];
-  /** 清除提问（提交成功/失败后统一收尾） */
-  readonly clearAsk: (sessionId?: string) => void;
+  /** 出队（提交成功/取消后统一收尾；下一队列头自动上浮） */
+  readonly removeAsk: (askId: string) => void;
 }
 
 /**
@@ -110,7 +119,7 @@ interface UseAskAnswersDeps {
  * - 提取动机：AskDialog 函数体受 check-functions 棘轮约束（只允许下降），
  *   状态机与渲染职责本就可分（对齐文件内 useAskState 先例）
  */
-function useAskAnswers({ askId, questions, clearAsk }: UseAskAnswersDeps): {
+function useAskAnswers({ askId, questions, removeAsk }: UseAskAnswersDeps): {
   readonly answers: AnswerState[];
   readonly submitting: boolean;
   readonly toggleOption: (qIndex: number, optionIndex: number) => void;
@@ -152,14 +161,14 @@ function useAskAnswers({ askId, questions, clearAsk }: UseAskAnswersDeps): {
 
   const handleSubmit = async (): Promise<void> => {
     if (askId === null || !hasIpcBridge()) {
-      clearAsk();
+      if (askId !== null) removeAsk(askId);
       return;
     }
     setSubmitting(true);
     try {
       await respondAgentAsk({ askId, answers: answers.map(toAnswerPayload) });
-      // 仅成功才关闭：失败保留现场（选项/文本/askId），用户可原地重试
-      clearAsk();
+      // 仅成功才出队：失败保留现场（选项/文本/askId），用户可原地重试
+      removeAsk(askId);
     } catch (error) {
       // 对齐全仓统一模式：[CODE] 前缀错误 → 错误码本地化；非 IPC 异常回退通用文案
       toast.error(
@@ -169,7 +178,7 @@ function useAskAnswers({ askId, questions, clearAsk }: UseAskAnswersDeps): {
       );
     }
     // finally 语义（React Compiler 不优化 try/finally）：catch 不 rethrow，
-    // 成功/失败统一复位 submitting（关闭仅发生在成功分支）
+    // 成功/失败统一复位 submitting（出队仅发生在成功分支）
     setSubmitting(false);
   };
 
@@ -220,38 +229,46 @@ function QuestionProgressBar({
   );
 }
 
-/** Agent 提问对话框 */
+/** Agent 提问对话框（队列队头呈现：FIFO 先问先答，出队后下一条自动上浮） */
 export function AskDialog(): ReactElement | null {
   const { t } = useTranslation();
-  // 逐字段 selector（见 useAskState 说明；此前为整体订阅）
-  const { sessionId: askSessionId, askId, questions, receivedAt, clearAsk } = useAskState();
-  // 超时倒计时（hook 在 early return 前调用；非本会话提问 active=false 内部短路）
+  // 会话归属校验在 selector 内完成（多会话并发时只看当前激活会话的提问）
+  const activeSessionId = useActiveSessionStore((s) => s.activeSessionId);
+  // 队头提问（见 useAskState 说明）
+  const {
+    sessionId: askSessionId,
+    askId,
+    questions,
+    receivedAt,
+    removeAsk,
+  } = useAskState(activeSessionId);
+  // 超时倒计时（hook 在 early return 前调用；无提问时 active=false 内部短路）
   const timeout = useAskCountdown(receivedAt, askId !== null);
   // 回答状态机（模块级 useAskAnswers：answers/submitting + 初始化 + 交互与提交）
   const { answers, submitting, toggleOption, setText, handleSubmit } = useAskAnswers({
     askId,
     questions,
-    clearAsk,
+    removeAsk,
   });
-  // 会话归属校验：多会话并发回合时，仅渲染当前激活会话的提问（防后台回合串扰前台弹窗）
-  const activeSessionId = useActiveSessionStore((s) => s.activeSessionId);
 
-  // 非当前会话的提问不渲染（askSessionId 为 null 的旧数据照常显示，向后兼容）
-  const open = askId !== null && (askSessionId === null || askSessionId === activeSessionId);
+  // 无本会话提问时不渲染（队列由 store 持有，其他会话的提问在各自会话下呈现）
+  const open = askId !== null && askSessionId !== null;
   if (!open) {
     return null;
   }
 
   const handleCancel = (): void => {
     // 取消 = 回传空回答（LLM 按「用户未选择」继续）。
-    // 与「提交失败」区分：用户意图是离开，无论 IPC 成败都 clearAsk，
-    // 否则关闭按钮失灵会把用户锁在弹窗里。
+    // 与「提交失败」区分：用户意图是离开，无论 IPC 成败都出队，
+    // 否则关闭按钮失灵会把用户锁在弹窗里（且阻塞队列后续提问）。
     if (hasIpcBridge() && askId !== null) {
       void respondAgentAsk({ askId, answers: [] }).catch(() => {
-        // 取消回传失败：主进程 5 分钟超时兜底，UI 不再阻塞用户
+        // 取消回传失败：主进程 60s 超时兜底，UI 不再阻塞用户
       });
     }
-    clearAsk();
+    if (askId !== null) {
+      removeAsk(askId);
+    }
   };
 
   return (

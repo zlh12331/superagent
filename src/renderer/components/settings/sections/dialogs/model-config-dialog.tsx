@@ -59,6 +59,8 @@ function createDefaultValues(): ModelConfigFormValues {
     displayName: '',
     requestUrl: '',
     apiKey: '',
+    // 默认 Chat Completions：兼容面最广，也是本字段引入前的历史行为
+    apiFormat: 'openai-chat',
     timeoutSeconds: '',
     contextInput: '',
     contextOutput: '',
@@ -149,6 +151,8 @@ export function ModelConfigDialog({
         modelId: editingModel.modelId,
         displayName: editingModel.displayName ?? '',
         requestUrl: editingModel.baseUrl ?? '',
+        // 记录值回填；未设置（存量行）→ 默认 openai-chat（与历史行为一致）
+        apiFormat: editingModel.apiFormat ?? 'openai-chat',
         // 毫秒 → 秒回显（1500 → '1.5'）；未设置 → 空串（= 不限制）
         timeoutSeconds:
           editingModel.timeoutMs !== undefined ? String(editingModel.timeoutMs / 1000) : '',
@@ -219,6 +223,9 @@ export function ModelConfigDialog({
         // （此前 !isEdit 守卫导致编辑模式永远测默认端点，改了地址不生效）
         ...(values.requestUrl.trim() !== '' ? { baseUrl: values.requestUrl.trim() } : {}),
         ...(values.apiKey.trim() !== '' ? { apiKey: values.apiKey.trim() } : {}),
+        // 自定义模式带上所选格式：探测须按该格式的协议路径与请求体发起，
+        // 否则会「按 Chat Completions 测 Responses/Anthropic 端点」而假红
+        ...(isCustom ? { apiFormat: values.apiFormat } : {}),
       });
       if (!res.ok) {
         setErrors((prev) => ({ ...prev, test: res.error ?? 'failed' }));
@@ -268,13 +275,16 @@ export function ModelConfigDialog({
         ...fields.apiKey,
         // '' → null：编辑弹窗清空超时即发送清除语义（回不限制）
         timeoutMs: fields.timeoutMs,
+        apiFormat: values.apiFormat,
       });
       toast.success(t('settings.modelMgmt.modelUpdated'));
       return;
     }
     if (isProviderMode) {
       // 服务商模式：API 密钥走提供商级 keychain（settings:setApiKey），
-      // 模型添加时省略 apiKey（主进程回退读 keychain 提供商 key）
+      // 模型添加时省略 apiKey（主进程回退读 keychain 提供商 key）。
+      // 也不传 apiFormat——服务商模式的格式由 providerKind 决定（主进程按
+      // 默认格式路由），显式传会把「按 kind 决定」变成「按用户表单值决定」
       if (fields.apiKeyValue !== undefined) {
         await setApiKeyMutation.mutateAsync({
           provider: values.providerKind,
@@ -298,6 +308,7 @@ export function ModelConfigDialog({
       ...fields.apiKey,
       ...fields.displayName,
       timeoutMs: fields.timeoutMs,
+      apiFormat: values.apiFormat,
     });
     toast.success(t('settings.modelMgmt.modelAdded'));
   };

@@ -222,6 +222,7 @@ describe('IpcAgentTransport 配置注入与分支覆盖', () => {
         maxSteps: undefined,
         thinking: undefined,
         temperature: undefined,
+        modelId: undefined,
       }),
     );
     await transport.sendMessages({
@@ -245,9 +246,38 @@ describe('IpcAgentTransport 配置注入与分支覆盖', () => {
       maxSteps: undefined,
       thinking: undefined,
       temperature: undefined,
+      modelId: undefined,
     });
     expect('systemPrompt' in config).toBe(true);
     expect(config.systemPrompt).toBeUndefined();
+  });
+
+  it('modelId 已定义时透传给 run（界面所选模型生效的契约前提）', async () => {
+    const transport = new IpcAgentTransport();
+    transport.configureFor('s1', { workingDir: '/w', modelId: 'gpt-4o' });
+    await transport.sendMessages({
+      trigger: 'submit-message',
+      chatId: 's1',
+      messageId: undefined,
+      messages: [{ id: 'u1', role: 'user', parts: [{ type: 'text', text: 'hi' }] }],
+      abortSignal: undefined,
+    });
+    await tick();
+    expect(ipc.runArgs).toMatchObject({ modelId: 'gpt-4o' });
+  });
+
+  it('modelId 未定义时不下发该键（主进程回落设置 ai.defaultModel，两条路径同源不冲突）', async () => {
+    const transport = new IpcAgentTransport();
+    transport.configureFor('s1', { workingDir: '/w' });
+    await transport.sendMessages({
+      trigger: 'submit-message',
+      chatId: 's1',
+      messageId: undefined,
+      messages: [{ id: 'u1', role: 'user', parts: [{ type: 'text', text: 'hi' }] }],
+      abortSignal: undefined,
+    });
+    await tick();
+    expect(ipc.runArgs).not.toHaveProperty('modelId');
   });
 
   it('stream error 事件 → 流错误 + 三订阅全部退订 + 批处理器释放', async () => {

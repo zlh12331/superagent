@@ -13,6 +13,7 @@
 // - 默认模型/默认供应商从模型领域层派生（builtin-models.ts 单一真源）
 // ──────────────────────────────────────────────────────────────
 
+import type { ModelApiFormat } from '@code-agent/shared/main';
 import type { LanguageModel } from 'ai';
 
 /**
@@ -74,6 +75,13 @@ export interface ProviderCreateContext {
    * 触发场景：用户手动配置的自定义 OpenAI-compatible 端点。
    */
   readonly baseUrl?: string;
+  /**
+   * API 协议格式覆盖（运行时模型快照携带；undefined = 按 kind 默认）
+   *
+   * 仅自定义模型会传非默认值——用户显式选择协议（Chat Completions /
+   * Responses / Anthropic Messages）；服务商模式由 kind 决定，不传本字段。
+   */
+  readonly apiFormat?: ModelApiFormat;
 }
 
 /**

@@ -43,10 +43,6 @@
     "count": 1,
     "max": 37
   },
-  "src/main/infra/ai/tools/tool-executor.ts": {
-    "count": 1,
-    "max": 17
-  },
   "src/main/infra/ai/tools/url-guard.ts": {
     "count": 1,
     "max": 21
@@ -89,7 +85,7 @@
   },
   "src/main/ipc/models.handler.ts": {
     "count": 1,
-    "max": 25
+    "max": 20
   },
   "src/main/utils/wrap.ts": {
     "count": 1,

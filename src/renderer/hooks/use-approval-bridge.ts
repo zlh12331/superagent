@@ -42,6 +42,18 @@ interface ApprovalRequestPayload {
 }
 
 /**
+ * 审批决议 payload（从主进程推送过来）
+ *
+ * 与 packages/shared/src/schemas/agent.ts 的 AgentApprovalResolvedPayload 对齐
+ * （此处独立定义的理由同 ApprovalRequestPayload）。
+ */
+interface ApprovalResolvedPayload {
+  readonly sessionId: string;
+  readonly approvalId: string;
+  readonly decision: 'approved' | 'denied' | 'timed-out' | 'aborted';
+}
+
+/**
  * toolName → ApprovalType 映射规则
  *
  * 按关键字匹配，命中即返回对应类型；全部未命中时回退到 'external_call'。
@@ -94,6 +106,10 @@ function classifyTool(toolName: string): ApprovalType {
  * 在根组件挂载一次即可（AppShell）。
  * 纯订阅副作用：接 IPC approval:request 事件，入队到 useApprovalsStore；
  * 审批结果的回传由 InlineApprovalCard 直接调用 window.api.agent.approvalResponse。
+ *
+ * 另订阅 approval:resolved（配对事件）：主进程在**非用户路径**（超时/中断）
+ * 判定决议后回推，前端据此把条目移出待审批队列——此前无此通道，超时的审批
+ * 会永久残留在界面上（2026-10-08 修复）。
  */
 export function useApprovalBridge(): void {
   // 订阅 IPC approval:request 事件，将 payload 入队到 store
@@ -102,7 +118,7 @@ export function useApprovalBridge(): void {
       // SSR / 测试环境下 window.api 可能不存在，安全跳过
       return;
     }
-    const unsubscribe = window.api.agent.subscribeApprovalRequest((payload) => {
+    const unsubscribeRequest = window.api.agent.subscribeApprovalRequest((payload) => {
       const typedPayload = payload as ApprovalRequestPayload;
       // 将 IPC payload 映射为 store ApprovalItem（status / resolvedAt 由 store 内部填充）
       useApprovalsStore.getState().enqueue({
@@ -115,6 +131,16 @@ export function useApprovalBridge(): void {
         createdAt: Date.now(),
       });
     });
-    return unsubscribe;
+    // 决议回推：超时/中断路径清理界面残留（用户已自行操作时 settleExternal 幂等 no-op）
+    const unsubscribeResolved = window.api.agent.subscribeApprovalResolved((payload) => {
+      const typed = payload as ApprovalResolvedPayload;
+      if (typed.decision === 'timed-out' || typed.decision === 'aborted') {
+        useApprovalsStore.getState().settleExternal(typed.approvalId, typed.decision);
+      }
+    });
+    return () => {
+      unsubscribeRequest();
+      unsubscribeResolved();
+    };
   }, []);
 }

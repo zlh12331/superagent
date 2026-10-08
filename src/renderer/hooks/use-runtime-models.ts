@@ -11,6 +11,7 @@
 import type {
   ApiKeyProvider,
   ListRuntimeModelsRes,
+  ModelApiFormat,
   TestModelRes,
 } from '@code-agent/shared/renderer';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -44,6 +45,8 @@ export interface AddRuntimeModelInput {
   readonly displayName?: string;
   /** 单回合总时长上限（毫秒；省略或 null = 不限制） */
   readonly timeoutMs?: number | null;
+  /** API 协议格式（省略 = 主进程按 kind 默认，即服务商模式） */
+  readonly apiFormat?: ModelApiFormat;
 }
 
 /** 新增 mutation：成功后失效运行时模型 key + 全局模型清单 key */
@@ -62,6 +65,7 @@ export function useAddRuntimeModel() {
           ...(input.displayName !== undefined ? { displayName: input.displayName } : {}),
           // null 与省略同义（add 契约无「清除」形态——新记录本就无旧值可清）
           ...(input.timeoutMs ? { timeoutMs: input.timeoutMs } : {}),
+          ...(input.apiFormat !== undefined ? { apiFormat: input.apiFormat } : {}),
         }),
       );
     },
@@ -81,6 +85,8 @@ export interface UpdateRuntimeModelInput {
   readonly apiKey?: string;
   /** 三态：省略 = 不修改，null = 清除（回不限制），number = 设置 */
   readonly timeoutMs?: number | null;
+  /** API 协议格式（省略 = 不修改；仅自定义模式下发） */
+  readonly apiFormat?: ModelApiFormat;
   readonly isEnabled?: boolean;
 }
 
@@ -99,6 +105,7 @@ export function useUpdateRuntimeModel() {
           ...(input.apiKey !== undefined ? { apiKey: input.apiKey } : {}),
           // null !== undefined：条件展开不会误吞清除语义
           ...(input.timeoutMs !== undefined ? { timeoutMs: input.timeoutMs } : {}),
+          ...(input.apiFormat !== undefined ? { apiFormat: input.apiFormat } : {}),
           ...(input.isEnabled !== undefined ? { isEnabled: input.isEnabled } : {}),
         }),
       );
@@ -134,6 +141,8 @@ export interface TestModelInput {
   readonly modelId?: string;
   readonly baseUrl?: string;
   readonly apiKey?: string;
+  /** API 协议格式（仅自定义模式下发；省略 = 主进程按 kind 默认） */
+  readonly apiFormat?: ModelApiFormat;
 }
 
 /**
@@ -154,6 +163,7 @@ export function useTestModel() {
           ...(input.modelId !== undefined ? { modelId: input.modelId } : {}),
           ...(input.baseUrl !== undefined ? { baseUrl: input.baseUrl } : {}),
           ...(input.apiKey !== undefined ? { apiKey: input.apiKey } : {}),
+          ...(input.apiFormat !== undefined ? { apiFormat: input.apiFormat } : {}),
         }),
       );
     },

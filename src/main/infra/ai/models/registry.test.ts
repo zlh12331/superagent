@@ -156,6 +156,58 @@ describe('ModelRegistry', () => {
       expect(registry.resolve('my-coder').generationConfig).toBeUndefined();
     });
 
+    it('快照覆盖同名内置模型：继承能力元数据（contextWindowSize / reasoning）', () => {
+      // 服务商模式典型形态：modelId 即内置 id（deepseek-v4-pro），仅覆盖 apiKey/baseUrl。
+      // 能力是同一模型的固有属性，必须沿用——否则窗口回落 128K 保守值、reasoning 标记
+      // 丢失（后者会让 buildGenerationOptions 向思考模型注入采样参数，违背官方语义）
+      registry.registerRuntimeModel({
+        id: buildRuntimeSnapshotId('deepseek', 'deepseek-v4-pro'),
+        providerKind: 'deepseek',
+        modelId: 'deepseek-v4-pro',
+        baseUrl: 'https://proxy.example.com',
+        createdAt: 1_700_000_000_000,
+      });
+
+      const resolved = registry.resolve('deepseek-v4-pro');
+
+      expect(resolved.isRuntime).toBe(true);
+      expect(resolved.capabilities.reasoning).toBe(true);
+      expect(resolved.capabilities.contextWindowSize).toBe(1_000_000);
+      expect(resolved.capabilities.maxOutputTokens).toBe(384_000);
+      expect(resolved.generationConfig).toEqual({ reasoningEffort: 'max' });
+    });
+
+    it('快照覆盖同名内置模型且配置 timeoutMs：能力继承 + 生成参数合并（不全覆盖）', () => {
+      registry.registerRuntimeModel({
+        id: buildRuntimeSnapshotId('deepseek', 'deepseek-v4-pro'),
+        providerKind: 'deepseek',
+        modelId: 'deepseek-v4-pro',
+        timeoutMs: 600_000,
+        createdAt: 1_700_000_000_000,
+      });
+
+      const resolved = registry.resolve('deepseek-v4-pro');
+
+      expect(resolved.capabilities.reasoning).toBe(true);
+      expect(resolved.generationConfig).toEqual({ reasoningEffort: 'max', timeoutMs: 600_000 });
+    });
+
+    it('自定义模型（id 无同名内置条目）：能力回落空对象（保守策略）', () => {
+      registry.registerRuntimeModel({
+        id: buildRuntimeSnapshotId('openai', 'my-private-model'),
+        providerKind: 'openai',
+        modelId: 'my-private-model',
+        baseUrl: 'https://private.example.com',
+        createdAt: 1_700_000_000_000,
+      });
+
+      const resolved = registry.resolve('my-private-model');
+
+      expect(resolved.isRuntime).toBe(true);
+      expect(resolved.capabilities).toEqual({});
+      expect(resolved.generationConfig).toBeUndefined();
+    });
+
     it('注销后解析回退内置条目', () => {
       const snapshotId = buildRuntimeSnapshotId('openai', 'gpt-4o');
       registry.registerRuntimeModel({

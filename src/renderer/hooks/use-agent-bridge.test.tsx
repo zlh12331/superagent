@@ -141,18 +141,19 @@ describe('use-agent-bridge', () => {
   });
 
   it('stream:end：清理 agent-ask 弹窗状态（P2：超时后弹窗不得悬挂）', () => {
-    // 会话归属：setAsk 带 sessionId，回合 end 按会话精确清理
-    useAgentAskStore
-      .getState()
-      .setAsk('s1', 'ask-1', [
-        { id: 'q1', question: '继续吗？', header: '确认', options: [] } as never,
-      ]);
-    expect(useAgentAskStore.getState().askId).toBe('ask-1');
+    // 会话归属：入队带 sessionId，回合 end 按会话精确清理（队列形态）
+    useAgentAskStore.getState().enqueue({
+      sessionId: 's1',
+      askId: 'ask-1',
+      questions: [{ question: '继续吗？', header: '确认', options: [] } as never],
+      receivedAt: Date.now(),
+    });
+    expect(useAgentAskStore.getState().asks).toHaveLength(1);
 
     renderHook(() => useAgentBridge(), { wrapper: createWrapper() });
     fireEnd({ sessionId: 's1', reason: 'completed' });
 
-    expect(useAgentAskStore.getState().askId).toBeNull();
+    expect(useAgentAskStore.getState().asks).toHaveLength(0);
   });
 
   it('stream:end：仅清理审批缓冲；tool 缓冲保留（P3：右面板数据源）', () => {
@@ -230,11 +231,12 @@ describe('use-agent-bridge', () => {
 
   it('事件已覆盖：L2 清理（审批缓冲 / 提问弹窗）仍无条件执行', () => {
     noteInvalidationEvent(turnEndDomains('s1'), 's1');
-    useAgentAskStore
-      .getState()
-      .setAsk('s1', 'ask-1', [
-        { id: 'q1', question: '继续吗？', header: '确认', options: [] } as never,
-      ]);
+    useAgentAskStore.getState().enqueue({
+      sessionId: 's1',
+      askId: 'ask-1',
+      questions: [{ question: '继续吗？', header: '确认', options: [] } as never],
+      receivedAt: Date.now(),
+    });
     useApprovalsStore.getState().enqueue({
       id: 'a-1',
       sessionId: 's1',
@@ -248,7 +250,7 @@ describe('use-agent-bridge', () => {
     renderHook(() => useAgentBridge(), { wrapper: createWrapper() });
     fireEnd({ sessionId: 's1', reason: 'completed' });
 
-    expect(useAgentAskStore.getState().askId).toBeNull();
+    expect(useAgentAskStore.getState().asks).toHaveLength(0);
     expect(useApprovalsStore.getState().pending.length).toBe(0);
   });
 });

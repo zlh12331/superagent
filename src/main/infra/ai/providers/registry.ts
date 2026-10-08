@@ -17,13 +17,16 @@
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
+import type { ModelApiFormat } from '@code-agent/shared/main';
 import type { LanguageModel } from 'ai';
 
 import { getAppConfig } from '../../../config';
 import { proxiedFetch } from '../../network/proxied-fetch';
 // 单一真源：默认模型 / 默认供应商由模型领域层定义（避免双源维护路由分裂）
 import { DEFAULT_KIND, DEFAULT_MODEL_BY_KIND } from '../models/builtin-models';
+import { defaultApiFormat, resolveProviderBaseUrl } from './endpoint';
 import type {
+  ProviderCreateContext,
   ProviderDefinition,
   ProviderFactory,
   ProviderInfo,
@@ -126,24 +129,13 @@ const BUILTIN_DEFINITIONS: readonly ProviderDefinition[] = [
 ];
 
 /**
- * 归一化端点：去尾部斜杠（避免拼出 `//chat/completions`）
+ * 端点归一化已收敛至 ./endpoint 单一真源（2026-10-08）
  *
- * 2026-09-06 审计修复：自定义端点末尾带 / 会拼出双斜杠，部分网关直接 404。
+ * 此前本文件私有 trimTrailingSlash / withOpenAiV1，而连通性探测
+ * （models.handler.ts 的 buildTestUrl）另有一份不幂等的拼接实现——同一事实
+ * 两处各算一遍，用户填 `/v1` 结尾地址时探测 404 拦保存（真实调用反而正确）。
+ * 现调用路径与探测路径共用 resolveProviderBaseUrl / resolveProviderRequestUrl。
  */
-function trimTrailingSlash(baseUrl: string): string {
-  return baseUrl.replace(/\/+$/, '');
-}
-
-/**
- * 补齐 OpenAI 风格端点的 /v1 后缀（幂等）
- *
- * 2026-09-06 审计修复：此前 deepseek/openai/ollama 无条件拼 `/v1`，
- * 用户按其他供应商习惯填 `https://host/v1` 时会变成 `/v1/v1` → 404。
- */
-function withOpenAiV1(baseUrl: string): string {
-  const trimmed = trimTrailingSlash(baseUrl);
-  return trimmed.endsWith('/v1') ? trimmed : `${trimmed}/v1`;
-}
 
 /**
  * AI SDK fetch 注入（34 号网络代理）
@@ -166,7 +158,7 @@ const BUILTIN_FACTORIES: Record<ProviderKind, ProviderFactory> = {
     const resolvedBaseUrl = baseUrl ?? getAppConfig().providers.deepseek;
     return createOpenAICompatible({
       name: 'deepseek',
-      baseURL: withOpenAiV1(resolvedBaseUrl),
+      baseURL: resolveProviderBaseUrl('deepseek', resolvedBaseUrl),
       // exactOptionalPropertyTypes: apiKey 为 undefined 时不传该字段（ollama 等本地场景）
       ...(apiKey !== undefined ? { apiKey } : {}),
       includeUsage: true,
@@ -217,19 +209,27 @@ const BUILTIN_FACTORIES: Record<ProviderKind, ProviderFactory> = {
   },
   openai: ({ apiKey, baseUrl }) => {
     const resolvedBaseUrl = baseUrl ?? getAppConfig().providers.openai;
-    return createOpenAI({
+    const provider = createOpenAI({
       // exactOptionalPropertyTypes: apiKey 为 undefined 时不传该字段
       ...(apiKey !== undefined ? { apiKey } : {}),
-      baseURL: withOpenAiV1(resolvedBaseUrl),
+      baseURL: resolveProviderBaseUrl('openai', resolvedBaseUrl),
       ...sdkFetch,
-    }) as unknown as (modelId: string) => LanguageModel;
+    });
+    // ⚠️ 必须显式 .chat()：@ai-sdk/openai 4.x 的 provider 可调用对象默认返回
+    // **Responses API** 模型（`/responses`，见 SDK 类型定义：`(modelId) => OpenAILanguageModel`
+    // 实际委托 createResponsesModel），而产品 UI 标注与连通性探测（models:test
+    // 的 /chat/completions 请求体）都按 Chat Completions 语义——不显式选 chat
+    // 会让真实调用与探测/标注三方分裂（2026-10-08 契约测试实证）
+    return provider.chat as unknown as (modelId: string) => LanguageModel;
   },
   anthropic: ({ apiKey, baseUrl }) => {
     const resolvedBaseUrl = baseUrl ?? getAppConfig().providers.anthropic;
     return createAnthropic({
       // exactOptionalPropertyTypes: apiKey 为 undefined 时不传该字段
       ...(apiKey !== undefined ? { apiKey } : {}),
-      baseURL: resolvedBaseUrl,
+      // 归一化后 SDK 的 normalizeBaseURL 成为无害空转（它只特判官方地址补
+      // /v1，输入已归一化时不改变结果）——自建网关原样透传，与探测路径一致
+      baseURL: resolveProviderBaseUrl('anthropic', resolvedBaseUrl),
       ...sdkFetch,
     }) as unknown as (modelId: string) => LanguageModel;
   },
@@ -241,7 +241,7 @@ const BUILTIN_FACTORIES: Record<ProviderKind, ProviderFactory> = {
     const resolvedBaseUrl = baseUrl ?? getAppConfig().providers.moonshot;
     return createOpenAICompatible({
       name: 'moonshot',
-      baseURL: trimTrailingSlash(resolvedBaseUrl),
+      baseURL: resolveProviderBaseUrl('moonshot', resolvedBaseUrl),
       ...(apiKey !== undefined ? { apiKey } : {}),
       includeUsage: true,
       ...sdkFetch,
@@ -251,7 +251,7 @@ const BUILTIN_FACTORIES: Record<ProviderKind, ProviderFactory> = {
     const resolvedBaseUrl = baseUrl ?? getAppConfig().providers.zhipu;
     return createOpenAICompatible({
       name: 'zhipu',
-      baseURL: trimTrailingSlash(resolvedBaseUrl),
+      baseURL: resolveProviderBaseUrl('zhipu', resolvedBaseUrl),
       ...(apiKey !== undefined ? { apiKey } : {}),
       includeUsage: true,
       ...sdkFetch,
@@ -261,7 +261,7 @@ const BUILTIN_FACTORIES: Record<ProviderKind, ProviderFactory> = {
     const resolvedBaseUrl = baseUrl ?? getAppConfig().providers.qwen;
     return createOpenAICompatible({
       name: 'qwen',
-      baseURL: trimTrailingSlash(resolvedBaseUrl),
+      baseURL: resolveProviderBaseUrl('qwen', resolvedBaseUrl),
       ...(apiKey !== undefined ? { apiKey } : {}),
       includeUsage: true,
       ...sdkFetch,
@@ -271,7 +271,7 @@ const BUILTIN_FACTORIES: Record<ProviderKind, ProviderFactory> = {
     const resolvedBaseUrl = baseUrl ?? getAppConfig().providers.doubao;
     return createOpenAICompatible({
       name: 'doubao',
-      baseURL: trimTrailingSlash(resolvedBaseUrl),
+      baseURL: resolveProviderBaseUrl('doubao', resolvedBaseUrl),
       ...(apiKey !== undefined ? { apiKey } : {}),
       includeUsage: true,
       ...sdkFetch,
@@ -281,7 +281,7 @@ const BUILTIN_FACTORIES: Record<ProviderKind, ProviderFactory> = {
     const resolvedBaseUrl = baseUrl ?? getAppConfig().providers.siliconflow;
     return createOpenAICompatible({
       name: 'siliconflow',
-      baseURL: trimTrailingSlash(resolvedBaseUrl),
+      baseURL: resolveProviderBaseUrl('siliconflow', resolvedBaseUrl),
       ...(apiKey !== undefined ? { apiKey } : {}),
       includeUsage: true,
       ...sdkFetch,
@@ -291,7 +291,7 @@ const BUILTIN_FACTORIES: Record<ProviderKind, ProviderFactory> = {
     const resolvedBaseUrl = baseUrl ?? getAppConfig().providers.openrouter;
     return createOpenAICompatible({
       name: 'openrouter',
-      baseURL: trimTrailingSlash(resolvedBaseUrl),
+      baseURL: resolveProviderBaseUrl('openrouter', resolvedBaseUrl),
       ...(apiKey !== undefined ? { apiKey } : {}),
       includeUsage: true,
       ...sdkFetch,
@@ -301,7 +301,7 @@ const BUILTIN_FACTORIES: Record<ProviderKind, ProviderFactory> = {
     const resolvedBaseUrl = baseUrl ?? getAppConfig().providers.ollama;
     return createOpenAICompatible({
       name: 'ollama',
-      baseURL: withOpenAiV1(resolvedBaseUrl),
+      baseURL: resolveProviderBaseUrl('ollama', resolvedBaseUrl),
       apiKey: 'ollama',
       // 本地模型不按 token 计费，且 Ollama 的 OpenAI 兼容端点不保证回传 usage
       includeUsage: false,
@@ -309,6 +309,58 @@ const BUILTIN_FACTORIES: Record<ProviderKind, ProviderFactory> = {
     }) as unknown as (modelId: string) => LanguageModel;
   },
 };
+
+/**
+ * 按 API 格式创建 LanguageModel 工厂（自定义模型的协议切换入口）
+ *
+ * 分发规则：
+ * - 格式等于该 kind 的原生默认（见 endpoint.ts 的 DEFAULT_API_FORMAT_BY_KIND）
+ *   → 走 BUILTIN_FACTORIES（保住各家的深度适配：DeepSeek 的 transformRequestBody
+ *     / convertUsage、六家的 includeUsage 等），自定义模型选「默认格式」时与
+ *     服务商模式行为完全一致
+ * - 用户显式选了非默认格式（如 deepseek kind + openai-responses）→ 用该格式
+ *   对应的官方 SDK 接口创建（协议由格式决定，不再套用 kind 的深度适配——
+ *     那些适配只对原生协议有意义）
+ *
+ * 三种格式对应的 SDK 接口（源码实读，勿凭印象改）：
+ * - openai-chat → createOpenAICompatible（也可用 createOpenAI().chat；兼容包
+ *   对自建网关更宽容，且与六家 kind 的既有路径一致）
+ * - openai-responses → createOpenAI().responses
+ * - anthropic-messages → createAnthropic
+ */
+function createFactoryByFormat(
+  kind: ProviderKind,
+  apiFormat: ModelApiFormat,
+  context: ProviderCreateContext,
+): (modelId: string) => LanguageModel {
+  const baseUrl = context.baseUrl ?? getAppConfig().providers[kind];
+  const apiKey = context.apiKey;
+
+  // 格式 = 原生默认：直通 builtin 工厂（保留 kind 特化）
+  if (apiFormat === defaultApiFormat(kind)) {
+    return BUILTIN_FACTORIES[kind](context);
+  }
+
+  if (apiFormat === 'anthropic-messages') {
+    const provider = createAnthropic({
+      ...(apiKey !== undefined ? { apiKey } : {}),
+      baseURL: resolveProviderBaseUrl('anthropic', baseUrl),
+      ...sdkFetch,
+    });
+    // anthropic 的 provider 可调用对象即 messages 模型（无 chat/responses 分叉）
+    return provider as unknown as (modelId: string) => LanguageModel;
+  }
+
+  // openai-compatible 协议族（chat 与 responses 共用 createOpenAI 的官方实现）
+  const provider = createOpenAI({
+    ...(apiKey !== undefined ? { apiKey } : {}),
+    baseURL: resolveProviderBaseUrl(apiFormat === 'openai-responses' ? 'openai' : kind, baseUrl),
+    ...sdkFetch,
+  });
+  return (apiFormat === 'openai-responses' ? provider.responses : provider.chat) as unknown as (
+    modelId: string,
+  ) => LanguageModel;
+}
 
 /**
  * Provider 注册表
@@ -365,7 +417,7 @@ export class ProviderRegistry {
    * 创建 LanguageModel 工厂
    *
    * @param kind 供应商标识
-   * @param context 创建上下文（apiKey / baseUrl）
+   * @param context 创建上下文（apiKey / baseUrl / apiFormat）
    * @returns (modelId) => LanguageModel 工厂函数
    */
   createFactory(
@@ -373,13 +425,17 @@ export class ProviderRegistry {
     context: {
       readonly apiKey: string | undefined;
       readonly baseUrl?: string;
+      readonly apiFormat?: ModelApiFormat;
     },
   ): (modelId: string) => LanguageModel {
     const entry = this.providers.get(kind);
     if (entry === undefined) {
       throw new Error(`未知模型供应商：${kind}`);
     }
-    return entry.factory(context);
+    // 显式格式（自定义模型）→ 走格式分发；省略 → 走该 kind 的原生工厂
+    return context.apiFormat !== undefined
+      ? createFactoryByFormat(kind, context.apiFormat, context)
+      : entry.factory(context);
   }
 
   /**

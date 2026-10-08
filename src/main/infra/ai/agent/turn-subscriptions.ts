@@ -40,7 +40,13 @@ export function subscribeApprovalLifecycle(
     onResolved: (p) => {
       if (p.sessionId === sessionId) {
         // 38 号阶段 2：决议结果透传（approved/denied/timed-out/aborted）
-        turnMachine.send({ type: 'approval.responded', decision: p.decision });
+        // 2026-10-08：同时透传 approvalId——并行审批下机器需据此判断「已决的是
+        // 哪一条」与「是否还有其它待决」（决定留在等待态还是退出 to streaming）
+        turnMachine.send({
+          type: 'approval.responded',
+          approvalId: p.approvalId,
+          decision: p.decision,
+        });
       }
     },
   });
@@ -67,9 +73,10 @@ export function subscribeAskLifecycle(
     onResolved: (p) => {
       if (p.sessionId === sessionId) {
         // 机器 waitingInput 只认 answered/timed-out（aborted 走回合中断路径，
-        // 不经此事件——AskDecisionOutcome 的 aborted 分支在此不映射）
+        // 不经此事件——AskDecisionOutcome 的 aborted 分支在此不映射）；
+        // 2026-10-08：透传 askId——并行提问下机器据此判断已决的是哪一条
         if (p.decision !== 'aborted') {
-          turnMachine.send({ type: 'ask.responded', decision: p.decision });
+          turnMachine.send({ type: 'ask.responded', askId: p.askId, decision: p.decision });
         }
       }
     },

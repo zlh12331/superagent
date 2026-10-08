@@ -24,7 +24,7 @@
 // ──────────────────────────────────────────────────────────────
 
 import { randomUUID } from 'node:crypto';
-import type { AgentAnswer, AgentQuestion } from '@code-agent/shared/main';
+import type { AgentAnswer, AgentQuestion, AskResolvedPayload } from '@code-agent/shared/main';
 import { IPC_DEFINITIONS } from '@code-agent/shared/main';
 import type { WebContents } from 'electron';
 import { emitEvent } from '../../../utils/emit-event';
@@ -44,6 +44,14 @@ interface PendingAsk {
   resolve: (answers: AgentAnswer[] | null) => void;
   /** 归属会话 id（生命周期事件按会话过滤，多会话并发互不串扰） */
   readonly sessionId: string;
+  /**
+   * 接收提问的窗口（决议事件回推目标）
+   *
+   * 超时等**非用户路径**必须让渲染层知道条目已死，否则弹窗永久残留；且
+   * 队列化后（前端按 FIFO 逐条呈现）已超时的队头会阻塞后续提问。
+   * 与提问推送同源（ask 的入参）——同一窗口收发保证配对。
+   */
+  readonly webContents: WebContents;
 }
 
 /**
@@ -102,6 +110,12 @@ export class AgentAskService {
   /**
    * 广播决议完成（respond / expireAsk 两个出口共用）
    *
+   * 两条通路：
+   * 1. 进程内 lifecycle 监听器（回合状态机 → 退出 waitingInput）
+   * 2. 渲染层回推（agent:event:ask:resolved）——**非用户路径**（超时）必须
+   *    让前端知道条目已死，否则弹窗永久残留；队列化后已超时的队头还会阻塞
+   *    后续提问（2026-10-08 补齐，与此前审批的决议回推对称）
+   *
    * 逐个 try/catch：某个监听器抛错不得影响其余监听器，也不得阻断 resolve
    * （挂起解除是主职责，通知是附加语义）。
    */
@@ -117,6 +131,28 @@ export class AgentAskService {
         logger.error({ error: err }, '提问生命周期 onResolved 异常');
       }
     }
+  }
+
+  /**
+   * 决议回推渲染层（agent:event:ask 的配对事件）
+   *
+   * @param entry 已出队的 pending 条目（携带发起窗口；已销毁时静默跳过）
+   * @param askId 提问 id（渲染层据此定位待答条目）
+   * @param decision 决议结果
+   */
+  private emitResolvedToRenderer(
+    entry: PendingAsk,
+    askId: string,
+    decision: AskDecisionOutcome,
+  ): void {
+    if (entry.webContents.isDestroyed()) {
+      return;
+    }
+    emitEvent(entry.webContents, IPC_DEFINITIONS.agent.subscribeAskResolved, {
+      sessionId: entry.sessionId,
+      askId,
+      decision,
+    } satisfies AskResolvedPayload);
   }
 
   /**
@@ -140,6 +176,7 @@ export class AgentAskService {
         questions,
         resolve,
         sessionId,
+        webContents,
       });
 
       // 窗口已销毁：无接收方，直接以「未响应」解除挂起并回收（否则条目会
@@ -197,8 +234,10 @@ export class AgentAskService {
     this.pending.delete(askId);
     entry.resolve(answers);
     logger.info({ askId }, '提问已回答');
-    // 生命周期：决议完成（机器 → 回 streaming）
+    // 生命周期：决议完成（机器 → 回 streaming）；渲染层回推保证配对闭合
+    // （前端已自行移出队列时收到为幂等 no-op）
     this.emitResolved({ sessionId: entry.sessionId, askId, decision: 'answered' });
+    this.emitResolvedToRenderer(entry, askId, 'answered');
     return true;
   }
 
@@ -218,6 +257,9 @@ export class AgentAskService {
     this.pending.delete(askId);
     logger.warn({ askId }, '提问超时（机器 after 转换触发），返回未响应');
     this.emitResolved({ sessionId: entry.sessionId, askId, decision: 'timed-out' });
+    // 渲染层回推：超时是**非用户路径**，此前渲染层完全不知情——弹窗永久残留、
+    // 倒计时归零仍显示；队列化后更会阻塞后续提问（2026-10-08 修复）
+    this.emitResolvedToRenderer(entry, askId, 'timed-out');
     entry.resolve(null);
   }
 

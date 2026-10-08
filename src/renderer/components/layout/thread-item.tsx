@@ -14,6 +14,7 @@ import { useSortable } from '@dnd-kit/sortable';
 import {
   FolderOpen,
   FolderTree,
+  Hourglass,
   Loader2,
   MoreVertical,
   Pencil,
@@ -53,6 +54,14 @@ interface SortableThreadItemProps {
   readonly isPinned: boolean;
   /** 会话有回合在跑（lastRunStatus='running'，D4A：渲染运行徽标 + 中断入口） */
   readonly isRunning: boolean;
+  /**
+   * 会话有等待用户决策的审批（2026-10-08：跨会话可见性）
+   *
+   * 数据源 = approvals-store.pending 按 sessionId 聚合。非当前会话的审批请求
+   * 只在它自己的 ChatPanel 里渲染，切走后用户无从得知——不响应即 5 分钟超时
+   * 被拒。侧栏徽标补上这个可见性缺口（点该行即可切过去处理）。
+   */
+  readonly hasPendingApproval: boolean;
   /** 搜索匹配高亮（照搬参考项目：Sidebar 防抖搜索后传入，2 秒后自动移除） */
   readonly highlighted: boolean;
   readonly onSelect: () => void;
@@ -75,6 +84,7 @@ export function SortableThreadItem({
   isDeleting,
   isPinned,
   isRunning,
+  hasPendingApproval,
   highlighted,
   onSelect,
   onDelete,
@@ -105,6 +115,7 @@ export function SortableThreadItem({
         isDeleting={isDeleting}
         isPinned={isPinned}
         isRunning={isRunning}
+        hasPendingApproval={hasPendingApproval}
         highlighted={highlighted}
         onSelect={onSelect}
         onDelete={onDelete}
@@ -129,6 +140,8 @@ interface ThreadItemProps {
   readonly isPinned: boolean;
   /** 会话有回合在跑（D4A：渲染运行徽标 + hover 中断入口） */
   readonly isRunning: boolean;
+  /** 会话有等待用户决策的审批（跨会话可见性：切走后仍能看到并点过去处理） */
+  readonly hasPendingApproval: boolean;
   /** 搜索匹配高亮（照搬参考项目：Sidebar 防抖搜索后传入，2 秒后自动移除） */
   readonly highlighted: boolean;
   readonly onSelect: () => void;
@@ -152,6 +165,7 @@ function ThreadItem({
   isDeleting,
   isPinned,
   isRunning,
+  hasPendingApproval,
   highlighted,
   onSelect,
   onDelete,
@@ -249,6 +263,19 @@ function ThreadItem({
                         aria-hidden="true"
                       />
                       <span className="sr-only">{t('sidebar.sessionRunning')}</span>
+                    </>
+                  )}
+                  {/* 待审批徽标（2026-10-08）：非当前会话的审批请求只在它自己的
+                      ChatPanel 里渲染，切走后无从得知——不响应即 5 分钟超时被拒。
+                      用琥珀色沙漏与运行中转圈区分（前者需用户行动，后者是进度）。 */}
+                  {hasPendingApproval && (
+                    <>
+                      <Hourglass
+                        className="text-warn-text mr-1 inline size-2.5 shrink-0"
+                        strokeWidth={2.5}
+                        aria-hidden="true"
+                      />
+                      <span className="sr-only">{t('sidebar.sessionPendingApproval')}</span>
                     </>
                   )}
                   {/* 置顶标识（用户要求：置顶/未置顶有明显区别） */}

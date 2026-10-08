@@ -29,7 +29,8 @@ export function createTaskStopTool(): Tool {
     description:
       '中止任务：将任务状态置为已取消（CANCELLED）。用于任务不再需要继续执行、或需要终止长期运行任务时。',
     permission: 'auto' as const,
-    category: 'exec' as const,
+    // 零副作用控制面（改 agent 自己的任务记账）——plan 模式需可用（2026-10-08）
+    category: 'control' as const,
     inputSchema: TaskStopInputSchema,
     async execute(input: TaskStopInput, _ctx: ToolContext): Promise<ToolResult> {
       const ok = taskService.update(input.taskId, TaskStatus.CANCELLED);

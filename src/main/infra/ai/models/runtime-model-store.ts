@@ -11,12 +11,17 @@
 // - CRUD 消费方：settings.handler（设置页模型配置 add/update/remove/list）
 //   + models.handler（list，models:list 数据源）+ ServiceContainer init
 //   （loadAll，LLM 首次调用前）
-// - LlmClient per-model 缓存失效契约未接线（add/update 后同 id 缓存持旧
-//   配置，见 add 方法登记说明）
+// - LlmClient per-model 缓存失效：注册表同步在本类内完成，缓存失效由调用方
+//   settings.handler 负责（add/update/remove 三处均调 llmClient.invalidateModel）
 // - keychain key 约定与 keychain 域一致（`${前缀}-api-key` 风格：`runtime:${modelId}`）
 // ──────────────────────────────────────────────────────────────
 
-import { AppError, ErrorCode } from '@code-agent/shared/main';
+import {
+  AppError,
+  ErrorCode,
+  MODEL_API_FORMATS,
+  type ModelApiFormat,
+} from '@code-agent/shared/main';
 import { eq } from 'drizzle-orm';
 import { logger } from '../../../utils/logger';
 import { getDb } from '../../storage/db';
@@ -42,6 +47,8 @@ export interface RuntimeModelRecord {
   readonly displayName?: string;
   /** 单回合总时长上限（毫秒；省略 = 不限制，仅流空闲超时兜底） */
   readonly timeoutMs?: number;
+  /** API 协议格式（省略 = openai-chat；仅自定义模式写非默认值） */
+  readonly apiFormat?: ModelApiFormat;
   /** 启停状态（停用模型不注册、不可路由） */
   readonly isEnabled: boolean;
   readonly createdAt: number;
@@ -59,6 +66,8 @@ export interface AddRuntimeModelInput {
   readonly displayName?: string;
   /** 单回合总时长上限（毫秒；省略 = 不限制） */
   readonly timeoutMs?: number;
+  /** API 协议格式（省略 = openai-chat，与存量行为一致） */
+  readonly apiFormat?: ModelApiFormat;
   /** 启停状态（省略 = 启用） */
   readonly isEnabled?: boolean;
 }
@@ -75,6 +84,8 @@ export interface UpdateRuntimeModelInput {
    * number = 设置）
    */
   readonly timeoutMs?: number | null;
+  /** API 协议格式（省略 = 不修改） */
+  readonly apiFormat?: ModelApiFormat;
   readonly isEnabled?: boolean;
 }
 
@@ -85,6 +96,7 @@ function rowToRecord(row: {
   readonly baseUrl: string | null;
   readonly displayName: string | null;
   readonly timeoutMs: number | null;
+  readonly apiFormat: string | null;
   readonly isEnabled: number;
   readonly createdAt: number;
 }): RuntimeModelRecord {
@@ -94,9 +106,16 @@ function rowToRecord(row: {
     ...(row.baseUrl !== null ? { baseUrl: row.baseUrl } : {}),
     ...(row.displayName !== null ? { displayName: row.displayName } : {}),
     ...(row.timeoutMs !== null ? { timeoutMs: row.timeoutMs } : {}),
+    // 单边校验：仅放行三种合法格式（NULL / 脏值一律按未设置 = openai-chat）
+    ...(isModelApiFormat(row.apiFormat) ? { apiFormat: row.apiFormat } : {}),
     isEnabled: row.isEnabled === 1,
     createdAt: row.createdAt,
   };
+}
+
+/** 单边校验：字符串是否为合法 API 格式（DB 脏值防御，免 zod 依赖） */
+function isModelApiFormat(value: string | null): value is ModelApiFormat {
+  return value !== null && (MODEL_API_FORMATS as readonly string[]).includes(value);
 }
 
 /** 记录 → 注册表快照（apiKey 存 keychain 不落库，不进快照） */
@@ -107,6 +126,7 @@ function toSnapshot(record: RuntimeModelRecord): RuntimeModelSnapshot {
     modelId: record.modelId,
     ...(record.baseUrl !== undefined ? { baseUrl: record.baseUrl } : {}),
     ...(record.timeoutMs !== undefined ? { timeoutMs: record.timeoutMs } : {}),
+    ...(record.apiFormat !== undefined ? { apiFormat: record.apiFormat } : {}),
     createdAt: record.createdAt,
   };
 }
@@ -138,10 +158,8 @@ export class RuntimeModelStore {
   /**
    * 新增运行时模型：DB 持久化 + keychain 存 key + 注册到 ModelRegistry
    *
-   * 注册表同步在本方法内完成；但 LlmClient 的 per-model 缓存失效契约
-   * （llmClient.invalidateModel(modelId)）当前未接线——调用方未调用，
-   * 同 id 缓存持旧配置，需 reset/重启清理（见 LlmClient.invalidateModel
-   * 的登记说明）。
+   * 注册表同步在本方法内完成；LlmClient 的 per-model 缓存失效由调用方
+   * settings.handler 在 add 后调用（见其 addRuntimeModel）。
    */
   async add(input: AddRuntimeModelInput): Promise<void> {
     const db = getDb();
@@ -153,6 +171,7 @@ export class RuntimeModelStore {
         ...(input.baseUrl !== undefined ? { baseUrl: input.baseUrl } : {}),
         ...(input.displayName !== undefined ? { displayName: input.displayName } : {}),
         ...(input.timeoutMs !== undefined ? { timeoutMs: input.timeoutMs } : {}),
+        ...(input.apiFormat !== undefined ? { apiFormat: input.apiFormat } : {}),
         ...(input.isEnabled !== undefined ? { isEnabled: input.isEnabled ? 1 : 0 } : {}),
         createdAt: Date.now(),
       })
@@ -172,6 +191,7 @@ export class RuntimeModelStore {
       modelId: input.modelId,
       ...(input.baseUrl !== undefined ? { baseUrl: input.baseUrl } : {}),
       ...(input.timeoutMs !== undefined ? { timeoutMs: input.timeoutMs } : {}),
+      ...(input.apiFormat !== undefined ? { apiFormat: input.apiFormat } : {}),
       ...(input.apiKey !== undefined ? { apiKey: input.apiKey } : {}),
       createdAt: Date.now(),
     });
@@ -183,7 +203,8 @@ export class RuntimeModelStore {
    * - displayName / baseUrl / isEnabled 落库
    * - apiKey 传入时更新 keychain（不落库）
    * - 注册表同步：注销旧快照后按最新记录重建；停用则仅注销
-   * - LlmClient per-model 缓存失效契约未接线（同 add——见其登记说明）
+   * - LlmClient per-model 缓存失效由调用方 settings.handler 在 update 后调用
+   *   （见其 updateRuntimeModel）
    *
    * @throws AppError(NOT_FOUND) modelId 不存在
    */
@@ -204,11 +225,13 @@ export class RuntimeModelStore {
       displayName?: string;
       baseUrl?: string;
       timeoutMs?: number | null;
+      apiFormat?: ModelApiFormat;
       isEnabled?: 0 | 1;
     } = {
       ...(input.displayName !== undefined ? { displayName: input.displayName } : {}),
       ...(input.baseUrl !== undefined ? { baseUrl: input.baseUrl } : {}),
       ...(input.timeoutMs !== undefined ? { timeoutMs: input.timeoutMs } : {}),
+      ...(input.apiFormat !== undefined ? { apiFormat: input.apiFormat } : {}),
       ...(input.isEnabled !== undefined
         ? { isEnabled: input.isEnabled ? (1 as const) : (0 as const) }
         : {}),

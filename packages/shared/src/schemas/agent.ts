@@ -77,6 +77,15 @@ export const AgentRunReqSchema = z.object({
     .max(2)
     .optional()
     .transform((v) => v ?? undefined),
+  // 目标模型 id（可选：渲染层模型选择器的当前选择，主进程经 ModelRegistry 解析路由）。
+  // 省略 = 主进程回落 app_settings.ai.defaultModel，仍无则用默认供应商默认模型。
+  // 上限与 runtime_models.model_id 的存储约束对齐。
+  modelId: z
+    .string()
+    .min(1)
+    .max(100)
+    .optional()
+    .transform((v) => v ?? undefined),
 });
 
 /** Agent 中断入参 zod schema */
@@ -188,6 +197,35 @@ export const AgentApprovalRequestPayloadSchema = z.object({
   toolName: z.string().min(1),
   input: z.unknown(),
   description: z.string().min(1),
+});
+
+/**
+ * 审批决议事件 payload（主进程 → 渲染层）
+ *
+ * 与 approval:request 配对的事件：任一审批条目最终都会走到一个决议
+ * （用户批准/拒绝、超时、abort 中断、dispose 清理），渲染层据此把对应
+ * 待审批条目移出队列——否则超时等非用户路径会让卡片永久残留在界面上
+ * （2026-10-08 修复：此前决议只经进程内 lifecycle 传播，渲染层无从得知）。
+ *
+ * decision 语义与 ApprovalDecisionOutcome 一致：
+ * - approved   用户批准
+ * - denied     用户拒绝（含 auto 模式拒绝跟踪触发的拒绝）
+ * - timed-out  审批超时（机器 after 转换 → expireApproval）
+ * - aborted    会话中断/工具中止导致 pending 被清理
+ */
+export interface AgentApprovalResolvedPayload {
+  readonly sessionId: string;
+  /** 决议对应的审批请求 id（渲染层据此定位待审批条目） */
+  readonly approvalId: string;
+  /** 决议结果（决定 UI 展示的终态徽章） */
+  readonly decision: 'approved' | 'denied' | 'timed-out' | 'aborted';
+}
+
+/** 审批决议事件 payload zod schema（主进程发送侧 dev 契约校验用） */
+export const AgentApprovalResolvedPayloadSchema = z.object({
+  sessionId: z.string().min(1),
+  approvalId: z.string().min(1),
+  decision: z.enum(['approved', 'denied', 'timed-out', 'aborted']),
 });
 
 /**

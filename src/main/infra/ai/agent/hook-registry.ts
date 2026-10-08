@@ -64,12 +64,51 @@ export interface HookContext {
 /**
  * 钩子处理器
  *
- * 同步或异步均可（trigger 内 await 统一收口）；返回 false 表示阻止
- * （pre-tool-use 语义），其余返回值（true / undefined）视为放行。
+ * 同步或异步均可（trigger 内 await 统一收口）。
+ *
+ * 返回值语义（2026-10-08 升级）：
+ * - `false`：阻止（pre-tool-use），原因缺失（兼容旧 handler）
+ * - `HookDenial`：阻止并携带原因——用户可见（工具错误消息含该原因），
+ *   避免"被钩子阻止"这类无信息的提示
+ * - `true` / `undefined`：放行
  */
 export type HookHandler = (
   context: HookContext,
-) => boolean | undefined | Promise<boolean | undefined>;
+) => boolean | HookDenial | undefined | Promise<boolean | HookDenial | undefined>;
+
+/**
+ * 钩子阻断决定（携带原因）
+ *
+ * 为什么不是 boolean：`tool-executor` 的阻断出口此前只能硬编码
+ * "工具执行被钩子阻止：<toolName>"——用户配了钩子拦截却看不到是哪条规则
+ * 拦的（可诊断性缺口）。升级为对象后，钩子的阻断原因直达工具错误消息与 UI。
+ */
+export interface HookDenial {
+  /** 固定为 false 的判别位（便于 handler 返回 `{ allowed: false, reason }` 字面量） */
+  readonly allowed: false;
+  /** 阻断原因（展示给用户；省略时回落通用文案） */
+  readonly reason?: string;
+}
+
+/** 判定 handler 返回值是否为「携带原因的阻断」 */
+function isDenial(value: unknown): value is HookDenial {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    (value as { allowed?: unknown }).allowed === false
+  );
+}
+
+/**
+ * trigger 的阻断结果（携带钩子提供的原因）
+ *
+ * reason 为空串时表示"阻断但未提供原因"（兼容旧 boolean handler），
+ * 调用方回落通用文案而不显示空括号。
+ */
+export interface HookBlock {
+  /** 钩子提供的阻断原因（可能为空串） */
+  readonly reason: string;
+}
 
 /**
  * 生命周期钩子注册表
@@ -103,29 +142,35 @@ export class HookRegistry {
   /**
    * 触发钩子（顺序执行桶内全部 handler；错误隔离：单个钩子异常不阻断其他钩子与主流程）
    *
-   * 语义：任意 handler 返回 false → 整体返回 false；不短路——后续 handler
-   * 仍会执行（保证所有钩子都能观测到事件），异常仅记日志并继续。
+   * 语义：任一 handler 阻断（返回 false 或 HookDenial）→ 整体阻断；
+   * **不短路**——后续 handler 仍会执行（保证所有钩子都能观测到事件），
+   * 异常仅记日志并继续。
    *
-   * @returns 无注册时返回 true（默认放行）；否则「无任何 handler 返回 false」即 true
+   * @returns `null` = 放行；`{ reason }` = 阻断（reason 为钩子提供的原因，
+   *   未提供时为空串，调用方回落通用文案）。用判别式对象而非 boolean：
+   *   调用方需要携带阻断原因（2026-10-08，此前 boolean 让错误消息只能硬编码）
    */
-  async trigger(event: HookEventName, context: HookContext): Promise<boolean> {
+  async trigger(event: HookEventName, context: HookContext): Promise<HookBlock | null> {
     const bucket = this.handlers.get(event);
     if (bucket === undefined || bucket.size === 0) {
-      return true;
+      return null;
     }
-    let allow = true;
+    let block: HookBlock | null = null;
     for (const handler of bucket) {
       try {
         const result = await handler(context);
+        // 首个阻断即采纳（后续阻断不覆盖，保持原因可追溯）；不短路仍执行其余 handler
         if (result === false) {
-          allow = false;
+          block ??= { reason: '' }; // 兼容旧 handler：只表达"阻断"，无原因
+        } else if (isDenial(result)) {
+          block ??= { reason: result.reason ?? '' };
         }
       } catch (err: unknown) {
         // 钩子异常隔离：记录日志，不阻断工具执行与其他钩子
         logger.error({ event, toolName: context.toolName, error: err }, '钩子执行异常');
       }
     }
-    return allow;
+    return block;
   }
 
   /** 当前钩子总数（跨事件求和；测试断言用） */

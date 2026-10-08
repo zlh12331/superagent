@@ -49,24 +49,17 @@ export function matchesWhitelistPattern(command: string, pattern: string): boole
 }
 
 /**
- * 计划模式下仍然放行的 auto 控制面工具（P0 修复的显式逃生舱）
+ * 计划模式下仍然放行的**有副作用**工具（显式逃生舱）
  *
- * plan 模式语义 = 只读探索，非只读的 auto 工具一律回落到模式判定（deny）。
- * 但下列工具改的是「agent 自己的记账/模式状态」，不触碰工作区与外部系统：
- * - enter_plan_mode / exit_plan_mode：若 exit_plan_mode 也被 deny，
- *   模型和用户都再也走不出计划模式（审批死锁）
- * - task_create / task_update / task_stop：计划期维护 todo 列表正是 plan 的用途
- * - save_memory：写记忆库，非工作区文件
- * 新增工具不在此列时按「非只读」处理（fail closed），需要放行就显式加名。
+ * plan 模式语义 = 只读探索；零副作用的 read / control 类别已由类别判据放行
+ * （见 isDeniedByPlanMode），本名单只保留「确有副作用但计划期必须可用」的例外：
+ * - save_memory：写记忆库（非工作区文件，但确有持久化副作用）
+ *
+ * 历史条目去向（2026-10-08 类别化）：enter/exit_plan_mode 与 task_* 均零副作用，
+ * 已迁至 category='control' 由类别判据放行。判据从「名字枚举」升级为「类别声明」后，
+ * 新增零副作用工具无需再往本名单加名（fail-closed 默认仍保留）。
  */
-export const PLAN_MODE_CONTROL_TOOLS: ReadonlySet<string> = new Set([
-  'enter_plan_mode',
-  'exit_plan_mode',
-  'task_create',
-  'task_update',
-  'task_stop',
-  'save_memory',
-]);
+export const PLAN_MODE_CONTROL_TOOLS: ReadonlySet<string> = new Set(['save_memory']);
 
 /**
  * 复合命令特征（P0 安全修复）
@@ -214,11 +207,42 @@ function resolvePathToken(token: string, boundary: string): string {
  * 只读工具与控制面逃生舱放行，其余一律拒绝。**必须在记忆缓存 / 用户白名单之前判定**，
  * 否则 plan 模式下"曾被批准的同入参调用"或白名单工具仍会真实写文件 / 执行命令。
  */
+/**
+ * 工具是否零副作用（读数据 / 与用户或内部状态交互）
+ *
+ * 两类属零副作用：'read'（读文件/搜索）与 'control'（提问/任务记账/模式切换）
+ * ——共同判据「不写工作区、不执行命令、无外部副作用」，是 plan 模式放行与
+ * auto 快速路径的共同依据。
+ *
+ * 独立成函数而非在各消费点内联 category 比较：① 语义有名字，新增零副作用
+ * 类别只改一处；② 布尔或运算不进各调用方的认知复杂度（工具决策链是复杂度
+ * 棘轮的重点看护对象）。
+ *
+ * @param tool 工具形状（只读 category）
+ */
+export function isZeroSideEffectTool(tool: { readonly category: string }): boolean {
+  return tool.category === 'read' || tool.category === 'control';
+}
+
+/**
+ * 计划模式下的工具拒绝判定（plan 模式只读约束的单一判据）
+ *
+ * 零副作用工具（read / control）放行；其余（edit / exec）拒绝，
+ * 除显式列入逃生舱的工具（见 PLAN_MODE_CONTROL_TOOLS）。
+ * **必须在记忆缓存 / 用户白名单之前判定**，否则 plan 模式下"曾被批准的同入参
+ * 调用"或白名单工具仍会真实写文件 / 执行命令。
+ */
 export function isDeniedByPlanMode(
   mode: string,
   tool: { readonly name: string; readonly category: string },
 ): boolean {
-  return mode === 'plan' && tool.category !== 'read' && !PLAN_MODE_CONTROL_TOOLS.has(tool.name);
+  if (mode !== 'plan') {
+    return false;
+  }
+  if (isZeroSideEffectTool(tool)) {
+    return false;
+  }
+  return !PLAN_MODE_CONTROL_TOOLS.has(tool.name);
 }
 
 /**

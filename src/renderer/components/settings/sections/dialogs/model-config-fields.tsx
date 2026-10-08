@@ -5,7 +5,11 @@
 // 高级配置区字段首版不持久化（仅表单交互，见文档 3.3.4 字段映射）。
 // ──────────────────────────────────────────────────────────────
 
-import type { ApiKeyProvider, AvailableModelInfo } from '@code-agent/shared/renderer';
+import type {
+  ApiKeyProvider,
+  AvailableModelInfo,
+  ModelApiFormat,
+} from '@code-agent/shared/renderer';
 import { ChevronDown, ChevronRight, Eye, EyeOff } from 'lucide-react';
 import { type ReactElement, useState } from 'react';
 
@@ -39,6 +43,13 @@ export interface ModelConfigFormValues {
   /** 自定义/编辑模式：请求地址（映射 baseUrl） */
   readonly requestUrl: string;
   readonly apiKey: string;
+  /**
+   * API 协议格式（仅自定义模式可选；服务商模式由 providerKind 决定，不显示该字段）
+   *
+   * 三种取值对应 AI SDK 的三个协议（见 ModelApiFormatSchema 注释）；
+   * 默认 openai-chat（兼容面最广，也是本字段引入前的历史行为）。
+   */
+  readonly apiFormat: ModelApiFormat;
   /** 单回合总时长上限（秒；'' = 不限制；承载输入态，保存时换算毫秒） */
   readonly timeoutSeconds: string;
   readonly contextInput: string;
@@ -159,7 +170,6 @@ export function ModelConfigFields({
   /** modelId 锁定：编辑模式（update 主键）或服务商下拉已选定 */
   const modelIdLocked = isEdit || (isProvider && !values.useOtherModel);
 
-  const apiFormat = t('settings.modelMgmt.apiFormatOpenAI');
   const inputClass = 'text-xs';
   const labelClass = 'text-2xs text-muted-foreground font-medium';
   const thinkingLabels: Record<string, string> = {
@@ -234,13 +244,26 @@ export function ModelConfigFields({
         <>
           <div className="flex flex-col gap-1.5">
             <Label className={labelClass}>{t('settings.modelMgmt.apiFormatLabel')}</Label>
-            <Select value={apiFormat} disabled>
+            {/* 三格式可选（2026-10-08）：此前是写死单选的禁用下拉——用户配
+                Responses / Anthropic 协议的网关时无法表达，只能被按 Chat
+                Completions 调用而 404/400 */}
+            <Select
+              value={values.apiFormat}
+              onValueChange={(v) => onFieldChange('apiFormat', v as ModelApiFormat)}
+            >
               <SelectTrigger className={cn('h-8', inputClass)}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value={apiFormat} className={inputClass}>
-                  {apiFormat}
+                {/* key 必须是 t() 的字面量实参（check:i18n 静态扫描；拼 key 会被判冗余） */}
+                <SelectItem value="openai-chat" className={inputClass}>
+                  {t('settings.modelMgmt.apiFormat_openai-chat')}
+                </SelectItem>
+                <SelectItem value="openai-responses" className={inputClass}>
+                  {t('settings.modelMgmt.apiFormat_openai-responses')}
+                </SelectItem>
+                <SelectItem value="anthropic-messages" className={inputClass}>
+                  {t('settings.modelMgmt.apiFormat_anthropic-messages')}
                 </SelectItem>
               </SelectContent>
             </Select>

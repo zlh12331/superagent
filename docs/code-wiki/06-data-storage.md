@@ -68,6 +68,7 @@
 | `telemetry-pref.ts` | 遥测级别（`off|error-only|full`），OTel 初始化前同步读（off→跳过初始化） |
 | `whitelist-pref.ts` | 命令白名单（`whitelist.json`），跨会话保留 |
 | `remote-pref.ts` | 远程控制绑定范围（仅本机/局域网） |
+| `ai-pref.ts` | AI 设置读取（`app_settings.ai.defaultModel`，主进程侧消费：对话回合无头入口 / compact 预算；读取失败一律回落 undefined） |
 | `im-allowlist-pref.ts` | IM 群白名单（IM 域允许列表） |
 
 > 窗口状态记忆在 `utils/window-state.ts`（非 storage 目录）。
