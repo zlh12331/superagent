@@ -81,16 +81,19 @@ function restrictFilePermissions(filePath: string): void {
  * pendingBackup 赋值使 closeDb 可等待在途备份落地。
  */
 function runBackup(sqlite: Database.Database, dbPath: string): Promise<void> {
-  const task: Promise<void> = createBackupFile(sqlite, dbPath)
-    .then(() => undefined)
-    .catch((error: unknown) => {
-      cleanupBackupTmpFiles(dbPath);
-      // 备份失败不阻断启动（日志中可诊断）
-      logger.error(
-        { error: error instanceof Error ? error.message : String(error) },
-        '数据库备份失败',
-      );
-    });
+  const run = (): Promise<void> =>
+    createBackupFile(sqlite, dbPath)
+      .then(() => undefined)
+      .catch((error: unknown) => {
+        cleanupBackupTmpFiles(dbPath);
+        // 备份失败不阻断启动（日志中可诊断）
+        logger.error(
+          { error: error instanceof Error ? error.message : String(error) },
+          '数据库备份失败',
+        );
+      });
+  // 排队挂链：前序备份完成后才开始（同一轮转环计数 + pendingBackup 引用不脱落）
+  const task = pendingBackup !== null ? pendingBackup.then(run, run) : run();
   pendingBackup = task;
   return task;
 }
@@ -319,10 +322,12 @@ let dbInstance: DrizzleDB | null = null;
 let sqliteInstance: Database.Database | null = null;
 
 /**
- * 在途启动备份 Promise（无则在 idle）
+ * 在途备份串行链尾（无则 idle）
  *
- * 备份是异步的，关闭连接前必须等待它落地——否则备份会在连接已关闭后继续写
- * 临时文件，产出截断的备份副本混入轮转环（看似健康的假恢复点）。
+ * runBackup 把新任务排队挂链（.then 串行）而非覆盖赋值——单槽会让前序
+ * 备份的 Promise 从槽位脱落，drain/closeDb 只等到最后一个，前序备份仍在
+ * 线程池写 .tmp 时断言/关连接即踩竞态（macOS runner 实证 2026-10-08）。
+ * 等到链尾即等到全部在途备份。
  */
 let pendingBackup: Promise<void> | null = null;
 
@@ -587,15 +592,20 @@ export function reclaimFreePages(): number {
  * 等待在途备份全部落地（不关闭连接）
  *
  * 备份以 void 异步发起（copyFileSync 到 .tmp → renameSync 原子落位），
- * 本函数等待所有在途备份的 rename 完成——调用后备份目录处于稳定态，
- * 可对「无 .tmp 残留」做确定性断言（测试轮询采样竞态窗口的根治）。
+ * 本函数等待备份串行链尾——链尾完成即链上全部备份落地（单槽时代只等
+ * 最后一个、前序仍在写 .tmp 的竞态已由 runBackup 挂链根治）。调用后
+ * 备份目录处于稳定态，可对「无 .tmp 残留」做确定性断言。
  *
  * 幂等：多次调用安全。
  */
 export async function drainPendingBackups(): Promise<void> {
-  if (pendingBackup !== null) {
-    await pendingBackup;
-    pendingBackup = null;
+  const tail = pendingBackup;
+  if (tail !== null) {
+    await tail;
+    // await 期间若有新备份挂链，保留新链尾引用（置 null 会让下一次 drain 漏等）
+    if (pendingBackup === tail) {
+      pendingBackup = null;
+    }
   }
 }
 
