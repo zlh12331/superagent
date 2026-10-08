@@ -584,17 +584,6 @@ export function reclaimFreePages(): number {
 }
 
 /**
- * 关闭数据库连接
- *
- * 应用退出时调用，释放 SQLite 文件句柄。
- * WAL 模式下关闭会自动 checkpoint（合并 WAL 到主数据库）。
- *
- * 关闭前先等待在途启动备份落地：备份若继续跑在已关闭的连接上会产出截断副本，
- * 而轮转按 *.db 计数——假恢复点比没有备份更危险。
- *
- * 幂等：多次调用安全。
- */
-/**
  * 等待在途备份全部落地（不关闭连接）
  *
  * 备份以 void 异步发起（copyFileSync 到 .tmp → renameSync 原子落位），
@@ -610,6 +599,17 @@ export async function drainPendingBackups(): Promise<void> {
   }
 }
 
+/**
+ * 关闭数据库连接
+ *
+ * 应用退出时调用，释放 SQLite 文件句柄。
+ * WAL 模式下关闭会自动 checkpoint（合并 WAL 到主数据库）。
+ *
+ * 关闭前先等待在途启动备份落地（drainPendingBackups）：备份若继续跑在已关闭的
+ * 连接上会产出截断副本，而轮转按 *.db 计数——假恢复点比没有备份更危险。
+ *
+ * 幂等：多次调用安全。
+ */
 export async function closeDb(): Promise<void> {
   await drainPendingBackups();
   if (sqliteInstance !== null) {
