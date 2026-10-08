@@ -79,6 +79,7 @@ const mocks = vi.hoisted(() => ({
   runtimeUpdate: vi.fn(async () => {}),
   runtimeList: vi.fn(async () => []),
   invalidateModel: vi.fn(() => {}),
+  resetAIProvider: vi.fn(() => {}),
   readAllSettings: vi.fn(() => ({})),
   writeSetting: vi.fn(() => {}),
   writeSettings: vi.fn(() => {}),
@@ -121,7 +122,8 @@ vi.mock('../infra/ai/llm-client/ai-provider', () => ({
     list: mocks.runtimeList,
   },
   // resetAll → applyProxyChange → resetAIProvider（34 号代理收口链）
-  resetAIProvider: vi.fn(),
+  // setApiKey/deleteApiKey → resetAIProvider（换 Key 后重建 provider 缓存）
+  resetAIProvider: mocks.resetAIProvider,
 }));
 
 const EMPTY_CTX = {} as never;
@@ -199,6 +201,16 @@ describe('settings.handler API Key（三件套）', () => {
     const res = await handlers.deleteApiKey({ provider: 'deepseek' }, EMPTY_CTX);
     expect(mocks.deleteSecret).toHaveBeenCalledWith('deepseek-api-key');
     expect(res).toEqual({ ok: true });
+  });
+
+  it('setApiKey：重置 provider 缓存（否则换 Key 后仍用旧 key 发请求直到重启）', async () => {
+    await handlers.setApiKey({ provider: 'deepseek', apiKey: 'sk-new' }, EMPTY_CTX);
+    expect(mocks.resetAIProvider).toHaveBeenCalledTimes(1);
+  });
+
+  it('deleteApiKey：重置 provider 缓存（清除持有已删 key 的实例）', async () => {
+    await handlers.deleteApiKey({ provider: 'deepseek' }, EMPTY_CTX);
+    expect(mocks.resetAIProvider).toHaveBeenCalledTimes(1);
   });
 
   it('异常：keychain 抛错 → 透传', async () => {

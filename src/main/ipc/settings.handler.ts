@@ -19,7 +19,7 @@ import { join } from 'node:path';
 import { type InferHandlers, type IPC_DEFINITIONS, SETTING_KEYS } from '@code-agent/shared/main';
 import { app, dialog } from 'electron';
 
-import { llmClient, runtimeModelStore } from '../infra/ai/llm-client/ai-provider';
+import { llmClient, resetAIProvider, runtimeModelStore } from '../infra/ai/llm-client/ai-provider';
 import { toKeychainKey } from '../infra/ai/providers';
 import type { IPermissionService } from '../infra/ai/tools/permission-service';
 import { setMainLanguage } from '../infra/i18n';
@@ -165,6 +165,10 @@ export function createSettingsHandlers(params: {
     setApiKey: async (input) => {
       const key = toKeychainKey(input.provider);
       await setSecret(key, input.apiKey);
+      // 缓存重建：provider 工厂按 kind 缓存且闭包持有创建时的 apiKey，
+      // llmClient per-model 实例同样持旧 key——不重建则「换 Key 后仍用旧 key
+      // 发请求」直到重启（resetAIProvider 的注释一直声称本场景，此前未接线）
+      resetAIProvider();
       return { ok: true };
     },
 
@@ -172,6 +176,8 @@ export function createSettingsHandlers(params: {
     deleteApiKey: async (input) => {
       const key = toKeychainKey(input.provider);
       await deleteSecret(key);
+      // 同上：清除持有已删 key 的缓存实例（下次调用按 keychain 现状重建/报未配置）
+      resetAIProvider();
       return { ok: true };
     },
 
