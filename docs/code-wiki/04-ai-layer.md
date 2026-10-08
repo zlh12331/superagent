@@ -84,7 +84,8 @@ ai/
 - `registry.ts`：`BUILTIN_DEFINITIONS` + `BUILTIN_FACTORIES`（同文件；新增供应商 = 注册一条定义 + 一个工厂）。
 - 路由：`getModel(kind, modelId)`（实现在 `llm-client/ai-provider.ts`，委托 llmClient）→ ProviderRegistry；deepseek/ollama 及其余兼容端走 `@ai-sdk/openai-compatible`，openai 走 `@ai-sdk/openai`，anthropic 走 `@ai-sdk/anthropic`。
 - API Key 按供应商存 keychain（safeStorage）；baseURL 可 `.env` 覆盖（`*_API_BASE`）。
-- **默认供应商/模型单一真源**：`packages/shared/src/constants/defaults.ts` 定义 `DEFAULT_PROVIDER`（deepseek）与 `DEFAULT_MODEL`（deepseek-v4-flash），渲染层对话区模型选择器与主进程 `ModelRegistry.resolve(undefined)` 共用，保证"默认模型"三端一致。
+- **默认供应商/模型单一真源**：`packages/shared/src/constants/defaults.ts` 定义 `DEFAULT_PROVIDER`（deepseek）与 `DEFAULT_MODEL`（deepseek-v4-flash），作为「未指定模型」的最终兜底。
+- **模型选择路由（2026-10-08 接通）**：对话回合按「`agent:run` 契约的 modelId（渲染层模型选择器即时值）→ `app_settings.ai.defaultModel`（无头入口：IM/cron/远程/子代理）→ 默认供应商默认模型」三档解析（`agent-service.ts` 的 `resolveModel` dep；设置读取经 `infra/storage/ai-pref.ts`）。规则与边界成文见 [15 号 §七](file:///docs/design/15-model-management-spec.md)。
 
 ## 5. Prompt 层（`prompt/`）
 

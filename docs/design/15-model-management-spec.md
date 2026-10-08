@@ -6,6 +6,7 @@
 >
 > **实现状态（已落地）**：本文描述的目标形态已全部实现——列表页 `models-section.tsx`、三类弹窗 `sections/dialogs/{add-model-dialog,model-config-dialog,model-config-fields}.tsx`、删除确认；后端 `settings:addRuntimeModel / updateRuntimeModel / removeRuntimeModel / listRuntimeModels` 与 `models:test` 均已进定义表并接线。
 > 表单锁定规则：编辑模式下 `providerKind` 与 `modelId` 均为只读（`updateRuntimeModel` 以 `modelId` 为主键定位行，允许改动会导致保存静默失效）。
+> **2026-10-08 补载 §七「模型路由」**：对话链路如何消费所选模型（三档解析 / 拒绝路径 / 能力继承 / 缓存失效 / 已知边界）。
 
 ## 一、设置页面全局概览
 
@@ -379,3 +380,63 @@ interface ModelConfig {
 * 添加弹窗厂商网格 = 本项目已适配厂商全量（`PROVIDER_LABELS`，kind 单一真源 `ApiKeyProviderSchema`），不依赖 key 配置状态
 * 数据统一走 `useRuntimeModelsQuery`（`RUNTIME_MODELS_QUERY_KEY`），增删改启停后失效刷新
 * 列表页无搜索/分页（首版），数据量小
+
+---
+
+## 七、模型路由（对话链路消费，2026-10-08 补载）
+
+> 本节补记「模型配置如何作用于对话」——首版文档只覆盖设置页形态，未成文对话链路的解析规则，
+> 导致「界面所选模型是否生效」长期无据可查（2026-10-08 核实：此前主链路硬编码 `resolve(undefined)`，
+> 所选模型仅用于 UI 展示、不参与路由，已修复）。
+
+### 7.1 解析优先级（三档回落）
+
+对话回合启动时按下列顺序确定目标模型（`agent-service.ts` 的 `resolveModel` dep）：
+
+| 序 | 来源 | 说明 |
+|---|---|---|
+| 1 | `agent:run` 契约的 `modelId` | 渲染层模型选择器的当前值（`ai.defaultModel`），经 `IpcAgentTransport` 随请求下发。走请求而非读库的原因：`settings:set` 是 fire-and-forget 写穿透，DB 可能落后于 UI 的即时选择 |
+| 2 | `app_settings.ai.defaultModel` | 无头入口（IM 桥接 / cron 定时任务 / 远程控制 / 子代理）不带 `modelId`，统一经 `readSelectedModelId()`（`infra/storage/ai-pref.ts`）读用户选定模型 |
+| 3 | 默认供应商默认模型 | `ModelRegistry.resolve` 内部兜底（`DEFAULT_KIND` + `DEFAULT_MODEL_BY_KIND`，当前 deepseek / deepseek-v4-flash） |
+
+第 1 与第 2 档同源（同一设置字段），区别仅在读取时机：UI 路径取请求快照，无头路径取库现值。
+
+### 7.2 拒绝路径（不回落）
+
+`ModelRegistry.resolve` 的 `available=false`（模型被用户停用）**不参与回落**——`LlmClient.getModel`
+据此抛 `MODEL_DISABLED`（`该模型已被停用，请在设置中启用后再使用`）。这与「未注册 id 透传兜底」
+是两条独立路径：后者是配置错误的防御性降级（打 warn 后仍可路由），前者是用户显式关闭。
+
+对话许可门禁另有一道：`ensureModelConfigured` 在「一条启用记录都没有」时抛
+`AI_MODEL_NOT_CONFIGURED`，阻止默认模型直连绕过配置（渲染层不显示模型 = 后端不可用）。
+
+### 7.3 同名内置模型的能力继承
+
+运行时快照（服务商模式：`modelId` 即内置 id，仅覆盖 apiKey / baseUrl）解析时**继承同名内置条目的
+能力元数据与生成默认值**，仅 `timeoutMs` 由快照覆盖：
+
+* 能力（`contextWindowSize` / `reasoning` / `maxOutputTokens` 等）是模型固有属性——不继承会让窗口
+  预算回落 128K 保守值、`reasoning` 标记丢失（进而向思考模型注入采样参数，违背 DeepSeek 官方语义）
+* 自定义模式（`modelId` 无同名内置条目）仍回落空能力——保守策略，与首版一致
+
+### 7.4 /compact 的窗口预算
+
+`session:compact` 的压缩预算按同一解析口径取用户选定模型的 `contextWindowSize`
+（`index.ts` 的 `compactMessages`，此前硬编码 `resolve(undefined)` 恒按默认模型计算）。
+
+### 7.5 缓存失效（两处，均需显式重置）
+
+模型配置变更后必须让已缓存的实例失效，否则旧配置继续生效：
+
+| 变更 | 失效调用 | 说明 |
+|---|---|---|
+| 增删改运行时模型（baseUrl / apiKey / 启停） | `llmClient.invalidateModel(modelId)` | `settings.handler` 的 add / update / remove 三处调用；只失效该模型 |
+| 设置 / 删除供应商 API Key | `resetAIProvider()` | provider 工厂按 kind 缓存且闭包持有创建时的 apiKey，`llmClient` per-model 实例同样持旧 key——需全量重建（2026-10-08 补齐，此前缺失导致换 Key 后仍用旧 key 发请求直到重启） |
+
+### 7.6 已知边界（如实登记）
+
+* **高级配置字段不参与路由**：`model-config-dialog` 高级区（上下文窗口输入/输出、工具调用轮数、
+  支持图片输入、思考模式、Temperature / Top P / Top K）首版仅表单交互，不落库、不生效
+  （见 §3.3.4 字段映射表的「不持久化」清单）。`runtime_models` 表只有 `timeout_ms` 一个数值旋钮。
+* **`vision` 能力无消费方**：`builtin-models.ts` 为 GPT-4o / Claude 标注了 `vision: true`，
+  但当前无功能按该能力路由（附件以文本形式拼入消息，见 `chat/attachments.ts`）。
