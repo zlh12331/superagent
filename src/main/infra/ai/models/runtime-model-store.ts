@@ -16,7 +16,12 @@
 // - keychain key 约定与 keychain 域一致（`${前缀}-api-key` 风格：`runtime:${modelId}`）
 // ──────────────────────────────────────────────────────────────
 
-import { AppError, ErrorCode } from '@code-agent/shared/main';
+import {
+  AppError,
+  ErrorCode,
+  MODEL_API_FORMATS,
+  type ModelApiFormat,
+} from '@code-agent/shared/main';
 import { eq } from 'drizzle-orm';
 import { logger } from '../../../utils/logger';
 import { getDb } from '../../storage/db';
@@ -42,6 +47,8 @@ export interface RuntimeModelRecord {
   readonly displayName?: string;
   /** 单回合总时长上限（毫秒；省略 = 不限制，仅流空闲超时兜底） */
   readonly timeoutMs?: number;
+  /** API 协议格式（省略 = openai-chat；仅自定义模式写非默认值） */
+  readonly apiFormat?: ModelApiFormat;
   /** 启停状态（停用模型不注册、不可路由） */
   readonly isEnabled: boolean;
   readonly createdAt: number;
@@ -59,6 +66,8 @@ export interface AddRuntimeModelInput {
   readonly displayName?: string;
   /** 单回合总时长上限（毫秒；省略 = 不限制） */
   readonly timeoutMs?: number;
+  /** API 协议格式（省略 = openai-chat，与存量行为一致） */
+  readonly apiFormat?: ModelApiFormat;
   /** 启停状态（省略 = 启用） */
   readonly isEnabled?: boolean;
 }
@@ -75,6 +84,8 @@ export interface UpdateRuntimeModelInput {
    * number = 设置）
    */
   readonly timeoutMs?: number | null;
+  /** API 协议格式（省略 = 不修改） */
+  readonly apiFormat?: ModelApiFormat;
   readonly isEnabled?: boolean;
 }
 
@@ -85,6 +96,7 @@ function rowToRecord(row: {
   readonly baseUrl: string | null;
   readonly displayName: string | null;
   readonly timeoutMs: number | null;
+  readonly apiFormat: string | null;
   readonly isEnabled: number;
   readonly createdAt: number;
 }): RuntimeModelRecord {
@@ -94,9 +106,16 @@ function rowToRecord(row: {
     ...(row.baseUrl !== null ? { baseUrl: row.baseUrl } : {}),
     ...(row.displayName !== null ? { displayName: row.displayName } : {}),
     ...(row.timeoutMs !== null ? { timeoutMs: row.timeoutMs } : {}),
+    // 单边校验：仅放行三种合法格式（NULL / 脏值一律按未设置 = openai-chat）
+    ...(isModelApiFormat(row.apiFormat) ? { apiFormat: row.apiFormat } : {}),
     isEnabled: row.isEnabled === 1,
     createdAt: row.createdAt,
   };
+}
+
+/** 单边校验：字符串是否为合法 API 格式（DB 脏值防御，免 zod 依赖） */
+function isModelApiFormat(value: string | null): value is ModelApiFormat {
+  return value !== null && (MODEL_API_FORMATS as readonly string[]).includes(value);
 }
 
 /** 记录 → 注册表快照（apiKey 存 keychain 不落库，不进快照） */
@@ -107,6 +126,7 @@ function toSnapshot(record: RuntimeModelRecord): RuntimeModelSnapshot {
     modelId: record.modelId,
     ...(record.baseUrl !== undefined ? { baseUrl: record.baseUrl } : {}),
     ...(record.timeoutMs !== undefined ? { timeoutMs: record.timeoutMs } : {}),
+    ...(record.apiFormat !== undefined ? { apiFormat: record.apiFormat } : {}),
     createdAt: record.createdAt,
   };
 }
@@ -151,6 +171,7 @@ export class RuntimeModelStore {
         ...(input.baseUrl !== undefined ? { baseUrl: input.baseUrl } : {}),
         ...(input.displayName !== undefined ? { displayName: input.displayName } : {}),
         ...(input.timeoutMs !== undefined ? { timeoutMs: input.timeoutMs } : {}),
+        ...(input.apiFormat !== undefined ? { apiFormat: input.apiFormat } : {}),
         ...(input.isEnabled !== undefined ? { isEnabled: input.isEnabled ? 1 : 0 } : {}),
         createdAt: Date.now(),
       })
@@ -170,6 +191,7 @@ export class RuntimeModelStore {
       modelId: input.modelId,
       ...(input.baseUrl !== undefined ? { baseUrl: input.baseUrl } : {}),
       ...(input.timeoutMs !== undefined ? { timeoutMs: input.timeoutMs } : {}),
+      ...(input.apiFormat !== undefined ? { apiFormat: input.apiFormat } : {}),
       ...(input.apiKey !== undefined ? { apiKey: input.apiKey } : {}),
       createdAt: Date.now(),
     });
@@ -203,11 +225,13 @@ export class RuntimeModelStore {
       displayName?: string;
       baseUrl?: string;
       timeoutMs?: number | null;
+      apiFormat?: ModelApiFormat;
       isEnabled?: 0 | 1;
     } = {
       ...(input.displayName !== undefined ? { displayName: input.displayName } : {}),
       ...(input.baseUrl !== undefined ? { baseUrl: input.baseUrl } : {}),
       ...(input.timeoutMs !== undefined ? { timeoutMs: input.timeoutMs } : {}),
+      ...(input.apiFormat !== undefined ? { apiFormat: input.apiFormat } : {}),
       ...(input.isEnabled !== undefined
         ? { isEnabled: input.isEnabled ? (1 as const) : (0 as const) }
         : {}),

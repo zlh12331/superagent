@@ -9,7 +9,12 @@
 // 捕获 SDK 实际请求 URL 对照本模块预测值，两端不可能静默漂移。
 
 import { describe, expect, it } from 'vitest';
-import { resolveProviderBaseUrl, resolveProviderRequestUrl } from './endpoint';
+import {
+  defaultApiFormat,
+  resolveApiFormat,
+  resolveProviderBaseUrl,
+  resolveProviderRequestUrl,
+} from './endpoint';
 import { PROVIDER_KINDS } from './types';
 
 describe('resolveProviderBaseUrl（交给 SDK 的 baseURL）', () => {
@@ -115,5 +120,67 @@ describe('resolveProviderRequestUrl（探测目标完整 URL）', () => {
     const url = resolveProviderRequestUrl('deepseek', 'http://127.0.0.1:9527/');
     expect(url).toBe('http://127.0.0.1:9527/v1/chat/completions');
     expect(url).not.toContain('//v1');
+  });
+});
+
+describe('resolveProviderRequestUrl（按 API 格式分派的协议路径）', () => {
+  it('三格式在同一个 baseUrl 上产出各自协议路径（自定义模式的格式切换）', () => {
+    const base = 'http://127.0.0.1:9527';
+    expect(resolveProviderRequestUrl('deepseek', base, 'openai-chat')).toBe(
+      'http://127.0.0.1:9527/v1/chat/completions',
+    );
+    expect(resolveProviderRequestUrl('deepseek', base, 'openai-responses')).toBe(
+      'http://127.0.0.1:9527/v1/responses',
+    );
+    expect(resolveProviderRequestUrl('deepseek', base, 'anthropic-messages')).toBe(
+      'http://127.0.0.1:9527/messages',
+    );
+  });
+
+  it('未指定格式：按 kind 默认（anthropic → messages，其余 → chat）', () => {
+    expect(resolveProviderRequestUrl('anthropic', 'https://gw.example.com')).toBe(
+      'https://gw.example.com/messages',
+    );
+    expect(resolveProviderRequestUrl('deepseek', 'https://gw.example.com')).toBe(
+      'https://gw.example.com/v1/chat/completions',
+    );
+  });
+
+  it('anthropic-messages 用 anthropic 的归一化规则（自建网关不补 /v1）', () => {
+    // 若按 OpenAI 族补 /v1 会与 /messages 拼错位——此用例锁定格式与归一化族的绑定
+    expect(
+      resolveProviderRequestUrl('deepseek', 'https://gw.example.com', 'anthropic-messages'),
+    ).toBe('https://gw.example.com/messages');
+    expect(
+      resolveProviderRequestUrl('deepseek', 'https://api.anthropic.com', 'anthropic-messages'),
+    ).toBe('https://api.anthropic.com/v1/messages');
+  });
+
+  it('openai-responses 用 openai 的归一化规则（根地址补 /v1）', () => {
+    expect(resolveProviderRequestUrl('moonshot', 'http://127.0.0.1:9527', 'openai-responses')).toBe(
+      'http://127.0.0.1:9527/v1/responses',
+    );
+  });
+});
+
+describe('resolveApiFormat / defaultApiFormat', () => {
+  it('显式格式优先于 kind 默认', () => {
+    expect(resolveApiFormat('deepseek', 'openai-responses')).toBe('openai-responses');
+    expect(resolveApiFormat('anthropic', 'openai-chat')).toBe('openai-chat');
+  });
+
+  it('省略格式 → kind 默认（anthropic 为 messages，其余为 chat）', () => {
+    expect(resolveApiFormat('anthropic')).toBe('anthropic-messages');
+    expect(resolveApiFormat('deepseek')).toBe('openai-chat');
+    expect(defaultApiFormat('anthropic')).toBe('anthropic-messages');
+    expect(defaultApiFormat('openai')).toBe('openai-chat');
+  });
+
+  it('每个 ProviderKind 都有默认格式（新增供应商须显式表态）', () => {
+    for (const kind of PROVIDER_KINDS) {
+      expect(['openai-chat', 'openai-responses', 'anthropic-messages']).toContain(
+        defaultApiFormat(kind),
+      );
+    }
   });
 });

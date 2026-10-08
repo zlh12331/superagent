@@ -17,14 +17,16 @@
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
+import type { ModelApiFormat } from '@code-agent/shared/main';
 import type { LanguageModel } from 'ai';
 
 import { getAppConfig } from '../../../config';
 import { proxiedFetch } from '../../network/proxied-fetch';
 // 单一真源：默认模型 / 默认供应商由模型领域层定义（避免双源维护路由分裂）
 import { DEFAULT_KIND, DEFAULT_MODEL_BY_KIND } from '../models/builtin-models';
-import { resolveProviderBaseUrl } from './endpoint';
+import { defaultApiFormat, resolveProviderBaseUrl } from './endpoint';
 import type {
+  ProviderCreateContext,
   ProviderDefinition,
   ProviderFactory,
   ProviderInfo,
@@ -309,6 +311,58 @@ const BUILTIN_FACTORIES: Record<ProviderKind, ProviderFactory> = {
 };
 
 /**
+ * 按 API 格式创建 LanguageModel 工厂（自定义模型的协议切换入口）
+ *
+ * 分发规则：
+ * - 格式等于该 kind 的原生默认（见 endpoint.ts 的 DEFAULT_API_FORMAT_BY_KIND）
+ *   → 走 BUILTIN_FACTORIES（保住各家的深度适配：DeepSeek 的 transformRequestBody
+ *     / convertUsage、六家的 includeUsage 等），自定义模型选「默认格式」时与
+ *     服务商模式行为完全一致
+ * - 用户显式选了非默认格式（如 deepseek kind + openai-responses）→ 用该格式
+ *   对应的官方 SDK 接口创建（协议由格式决定，不再套用 kind 的深度适配——
+ *     那些适配只对原生协议有意义）
+ *
+ * 三种格式对应的 SDK 接口（源码实读，勿凭印象改）：
+ * - openai-chat → createOpenAICompatible（也可用 createOpenAI().chat；兼容包
+ *   对自建网关更宽容，且与六家 kind 的既有路径一致）
+ * - openai-responses → createOpenAI().responses
+ * - anthropic-messages → createAnthropic
+ */
+function createFactoryByFormat(
+  kind: ProviderKind,
+  apiFormat: ModelApiFormat,
+  context: ProviderCreateContext,
+): (modelId: string) => LanguageModel {
+  const baseUrl = context.baseUrl ?? getAppConfig().providers[kind];
+  const apiKey = context.apiKey;
+
+  // 格式 = 原生默认：直通 builtin 工厂（保留 kind 特化）
+  if (apiFormat === defaultApiFormat(kind)) {
+    return BUILTIN_FACTORIES[kind](context);
+  }
+
+  if (apiFormat === 'anthropic-messages') {
+    const provider = createAnthropic({
+      ...(apiKey !== undefined ? { apiKey } : {}),
+      baseURL: resolveProviderBaseUrl('anthropic', baseUrl),
+      ...sdkFetch,
+    });
+    // anthropic 的 provider 可调用对象即 messages 模型（无 chat/responses 分叉）
+    return provider as unknown as (modelId: string) => LanguageModel;
+  }
+
+  // openai-compatible 协议族（chat 与 responses 共用 createOpenAI 的官方实现）
+  const provider = createOpenAI({
+    ...(apiKey !== undefined ? { apiKey } : {}),
+    baseURL: resolveProviderBaseUrl(apiFormat === 'openai-responses' ? 'openai' : kind, baseUrl),
+    ...sdkFetch,
+  });
+  return (apiFormat === 'openai-responses' ? provider.responses : provider.chat) as unknown as (
+    modelId: string,
+  ) => LanguageModel;
+}
+
+/**
  * Provider 注册表
  *
  * 无状态：所有供应商定义与工厂均为纯函数/常量。
@@ -363,7 +417,7 @@ export class ProviderRegistry {
    * 创建 LanguageModel 工厂
    *
    * @param kind 供应商标识
-   * @param context 创建上下文（apiKey / baseUrl）
+   * @param context 创建上下文（apiKey / baseUrl / apiFormat）
    * @returns (modelId) => LanguageModel 工厂函数
    */
   createFactory(
@@ -371,13 +425,17 @@ export class ProviderRegistry {
     context: {
       readonly apiKey: string | undefined;
       readonly baseUrl?: string;
+      readonly apiFormat?: ModelApiFormat;
     },
   ): (modelId: string) => LanguageModel {
     const entry = this.providers.get(kind);
     if (entry === undefined) {
       throw new Error(`未知模型供应商：${kind}`);
     }
-    return entry.factory(context);
+    // 显式格式（自定义模型）→ 走格式分发；省略 → 走该 kind 的原生工厂
+    return context.apiFormat !== undefined
+      ? createFactoryByFormat(kind, context.apiFormat, context)
+      : entry.factory(context);
   }
 
   /**

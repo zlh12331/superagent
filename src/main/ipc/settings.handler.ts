@@ -215,8 +215,9 @@ export function createSettingsHandlers(params: {
         ...(input.apiKey !== undefined ? { apiKey: input.apiKey } : {}),
         ...(input.displayName !== undefined ? { displayName: input.displayName } : {}),
         ...(input.timeoutMs !== undefined ? { timeoutMs: input.timeoutMs } : {}),
+        ...(input.apiFormat !== undefined ? { apiFormat: input.apiFormat } : {}),
       });
-      // 缓存失效：同模型下次 getModel 重建（读取新 baseUrl/apiKey）
+      // 缓存失效：同模型下次 getModel 重建（读取新 baseUrl/apiKey/apiFormat）
       llmClient.invalidateModel(input.modelId);
       return { ok: true };
     },
@@ -231,6 +232,7 @@ export function createSettingsHandlers(params: {
         // timeoutMs 三态：省略不改 / null 清除 / number 设置（null !== undefined，
         // 条件展开不会误吞清除语义）
         ...(input.timeoutMs !== undefined ? { timeoutMs: input.timeoutMs } : {}),
+        ...(input.apiFormat !== undefined ? { apiFormat: input.apiFormat } : {}),
         ...(input.isEnabled !== undefined ? { isEnabled: input.isEnabled } : {}),
       });
       llmClient.invalidateModel(input.modelId);
@@ -257,6 +259,7 @@ export function createSettingsHandlers(params: {
           baseUrl: r.baseUrl ?? undefined,
           displayName: r.displayName ?? undefined,
           ...(r.timeoutMs !== undefined ? { timeoutMs: r.timeoutMs } : {}),
+          ...(r.apiFormat !== undefined ? { apiFormat: r.apiFormat } : {}),
           isEnabled: r.isEnabled,
           createdAt: r.createdAt,
         })),

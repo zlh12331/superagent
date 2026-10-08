@@ -127,6 +127,65 @@ describe('RuntimeModelStore', () => {
     expect(resolved.generationConfig).toEqual({ timeoutMs: 600_000 });
   });
 
+  it('add 带 apiFormat：落库 + 快照携带（resolve 透传给工厂做协议路由）', async () => {
+    await store.add({
+      modelId: 'my-responses-model',
+      providerKind: 'deepseek',
+      baseUrl: 'https://gw.example.com',
+      apiFormat: 'openai-responses',
+    });
+
+    expect((await store.list())[0]).toMatchObject({ apiFormat: 'openai-responses' });
+    expect(modelRegistry.resolve('my-responses-model').apiFormat).toBe('openai-responses');
+  });
+
+  it('add 不带 apiFormat（存量语义）：记录无该字段 + resolve 为 undefined（工厂按 kind 默认）', async () => {
+    await store.add({ modelId: 'legacy-model', providerKind: 'deepseek' });
+
+    // undefined 而非 'openai-chat'：把「未表态」与「显式选 chat」区分开，
+    // 前者交 providerKind 决定（服务商模式语义）
+    expect((await store.list())[0]?.apiFormat).toBeUndefined();
+    expect(modelRegistry.resolve('legacy-model').apiFormat).toBeUndefined();
+  });
+
+  it('update：apiFormat 落库 + 注册表重建为最新值', async () => {
+    await store.add({ modelId: 'my-coder', providerKind: 'deepseek' });
+
+    await store.update({ modelId: 'my-coder', apiFormat: 'anthropic-messages' });
+
+    expect((await store.get('my-coder'))?.apiFormat).toBe('anthropic-messages');
+    expect(modelRegistry.resolve('my-coder').apiFormat).toBe('anthropic-messages');
+  });
+
+  it('loadAll：apiFormat 随快照恢复（重启后协议选择仍生效）', async () => {
+    await store.add({
+      modelId: 'my-responses-model',
+      providerKind: 'deepseek',
+      apiFormat: 'openai-responses',
+    });
+
+    // 模拟重启：清空注册表内存态后 loadAll 从 DB 重建
+    modelRegistry.clearRuntimeModels();
+    await new RuntimeModelStore().loadAll();
+
+    expect(modelRegistry.resolve('my-responses-model').apiFormat).toBe('openai-responses');
+  });
+
+  it('DB 脏值（非法 apiFormat）：按未设置处理（回落 kind 默认，不抛错）', async () => {
+    await store.add({ modelId: 'my-coder', providerKind: 'deepseek' });
+    // 直接写非法值模拟历史脏数据（绕过入参校验）
+    const { getDb } = await import('../../storage/db');
+    const { runtimeModels } = await import('../../storage/schema');
+    const { eq } = await import('drizzle-orm');
+    getDb()
+      .update(runtimeModels)
+      .set({ apiFormat: 'not-a-format' })
+      .where(eq(runtimeModels.modelId, 'my-coder'))
+      .run();
+
+    expect((await store.get('my-coder'))?.apiFormat).toBeUndefined();
+  });
+
   it('update：timeoutMs 三态（设置 / null 清除 / 省略不改）', async () => {
     await store.add({ modelId: 'my-coder', providerKind: 'deepseek' });
 

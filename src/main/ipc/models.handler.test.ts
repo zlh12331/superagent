@@ -18,6 +18,10 @@ const mocks = vi.hoisted(() => ({
   listModels: vi.fn((): Array<Record<string, unknown>> => []),
   findBuiltin: vi.fn((_modelId: string) => undefined as Record<string, unknown> | undefined),
   listRuntimeModels: vi.fn(async (): Promise<Array<Record<string, unknown>>> => []),
+  // 运行时模型单条查询（test 的 apiFormat 回退来源：已存记录值）
+  getRuntimeModel: vi.fn(
+    async (_modelId: string): Promise<Record<string, unknown> | undefined> => undefined,
+  ),
   getSecret: vi.fn(async () => undefined),
   getProviders: vi.fn(() => ({
     deepseek: 'https://api.deepseek.com',
@@ -39,7 +43,7 @@ vi.mock('../infra/ai/models', () => ({
 }));
 
 vi.mock('../infra/ai/llm-client/ai-provider', () => ({
-  runtimeModelStore: { list: mocks.listRuntimeModels },
+  runtimeModelStore: { list: mocks.listRuntimeModels, get: mocks.getRuntimeModel },
 }));
 
 vi.mock('../infra/storage/keychain', () => ({
@@ -211,6 +215,59 @@ describe('models.handler test（连通性探测）', () => {
     expect(res).toEqual({ ok: false, error: 'API Key 无效或未授权' });
   });
 
+  it('apiFormat=openai-responses：打 /responses + responses 形态请求体', async () => {
+    mocks.fetch.mockResolvedValueOnce(respond(200));
+    const res = await modelsHandlers.test({
+      providerKind: 'deepseek',
+      modelId: 'gpt-5',
+      baseUrl: 'http://127.0.0.1:9527',
+      apiKey: PLACEHOLDER_CREDENTIAL,
+      apiFormat: 'openai-responses',
+    });
+
+    expect(res).toEqual({ ok: true });
+    const [url, init] = mocks.fetch.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('http://127.0.0.1:9527/v1/responses');
+    const body = JSON.parse(init.body as string) as Record<string, unknown>;
+    // Responses 用 max_output_tokens + input（无 messages）
+    // biome-ignore lint/style/useNamingConvention: 供应商 API 协议字段（snake_case）
+    expect(body).toMatchObject({ model: 'gpt-5', max_output_tokens: 1, input: 'ping' });
+    expect(body).not.toHaveProperty('messages');
+  });
+
+  it('apiFormat=anthropic-messages：打 /messages + x-api-key + anthropic-version', async () => {
+    mocks.fetch.mockResolvedValueOnce(respond(200));
+    await modelsHandlers.test({
+      providerKind: 'deepseek',
+      modelId: 'claude-x',
+      baseUrl: 'http://127.0.0.1:9527',
+      apiKey: PLACEHOLDER_CREDENTIAL,
+      apiFormat: 'anthropic-messages',
+    });
+
+    const [url, init] = mocks.fetch.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('http://127.0.0.1:9527/messages');
+    const headers = init.headers as Record<string, string>;
+    expect(headers['x-api-key']).toBe(PLACEHOLDER_CREDENTIAL);
+    expect(headers['anthropic-version']).toBeDefined();
+    expect(headers['authorization']).toBeUndefined();
+  });
+
+  it('apiFormat 省略但 modelId 命中已存记录：用记录的格式探测', async () => {
+    // 编辑历史模型时表单未显式下发格式，主进程按已存记录值探测
+    mocks.getRuntimeModel.mockResolvedValueOnce({ apiFormat: 'openai-responses' });
+    mocks.fetch.mockResolvedValueOnce(respond(200));
+    await modelsHandlers.test({
+      providerKind: 'deepseek',
+      modelId: 'my-stored-model',
+      baseUrl: 'http://127.0.0.1:9527',
+      apiKey: PLACEHOLDER_CREDENTIAL,
+    });
+
+    const [url] = mocks.fetch.mock.calls[0] as unknown as [string];
+    expect(url).toBe('http://127.0.0.1:9527/v1/responses');
+  });
+
   it('500：ok=false + 状态码提示', async () => {
     mocks.fetch.mockResolvedValueOnce(respond(500));
     const res = await modelsHandlers.test({
@@ -219,10 +276,13 @@ describe('models.handler test（连通性探测）', () => {
       baseUrl: undefined,
       apiKey: undefined,
     });
-    expect(res).toEqual({ ok: false, error: 'HTTP 500' });
+    // 错误文案带实际探测 URL（拼接/协议选错类问题一眼可辨）
+    expect(res.ok).toBe(false);
+    expect(res.error).toContain('HTTP 500');
     // openrouter 默认地址已含 /v1：不重复拼接
     const [url] = mocks.fetch.mock.calls[0] as unknown as [string];
     expect(url).toBe('https://openrouter.ai/api/v1/chat/completions');
+    expect(res.error).toContain(url);
   });
 
   it('anthropic：/v1/messages + x-api-key header', async () => {

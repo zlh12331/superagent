@@ -133,11 +133,18 @@ export const llmClient = new LlmClient({
   // 全局模型超时兜底（config.modelTimeoutMs；test 环境 5s）
   defaultTimeoutMs: getAppConfig().modelTimeoutMs,
   createProviderFactory: async (kind, options) => {
-    // 运行时快照携带显式配置时创建临时实例（不污染 kind 级缓存）
-    if (options?.apiKey !== undefined || options?.baseUrl !== undefined) {
+    // 运行时快照携带显式配置时创建临时实例（不污染 kind 级缓存）。
+    // apiFormat 同属「快照显式配置」（自定义模型的协议选择），必须一并判定——
+    // 否则「只选格式、未改 baseUrl/apiKey」的模型会落入 kind 级缓存路径，格式被忽略
+    if (
+      options?.apiKey !== undefined ||
+      options?.baseUrl !== undefined ||
+      options?.apiFormat !== undefined
+    ) {
       return providerRegistry.createFactory(kind, {
         apiKey: options.apiKey,
         ...(options.baseUrl !== undefined ? { baseUrl: options.baseUrl } : {}),
+        ...(options.apiFormat !== undefined ? { apiFormat: options.apiFormat } : {}),
       });
     }
     // 常规路径：kind 级缓存 + keychain 读取

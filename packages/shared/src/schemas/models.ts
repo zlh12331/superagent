@@ -9,7 +9,11 @@
 
 import { z } from 'zod';
 
-import { ApiKeyProviderSchema } from './settings';
+import { ApiKeyProviderSchema, ModelApiFormatSchema } from './settings';
+
+/** re-export：API 协议格式（定义在 settings.ts——models 依赖 settings 的方向不变） */
+export type { ModelApiFormat } from './settings';
+export { MODEL_API_FORMATS, ModelApiFormatSchema } from './settings';
 
 /** 可用模型信息（对齐主进程 ModelRegistry.listModels 形状） */
 export interface AvailableModelInfo {
@@ -88,6 +92,9 @@ export const TestModelReqSchema = z.object({
     .min(1)
     .optional()
     .transform((v) => v ?? undefined),
+  // API 协议格式（可选；省略 = 按 providerKind 默认 / 已存记录值）
+  // 保存前测试时模型尚未落库，必须随请求传入才能测到用户选的格式
+  apiFormat: ModelApiFormatSchema.optional(),
 });
 
 /** models:test 响应 payload */

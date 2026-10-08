@@ -22,6 +22,8 @@
 // 两者共用同一份端点归一化规则，结构上不可能再漂移。
 // ──────────────────────────────────────────────────────────────
 
+import type { ModelApiFormat } from '@code-agent/shared/main';
+
 import type { ProviderKind } from './types';
 
 /** Anthropic 官方 API 根地址（SDK 也以此为补 /v1 的判据，见文件头） */
@@ -88,25 +90,84 @@ export function resolveProviderBaseUrl(kind: ProviderKind, baseUrl: string): str
   return trimmed.endsWith(fillVersionSuffix) ? trimmed : `${trimmed}${fillVersionSuffix}`;
 }
 
-/** 协议路径（SDK 内部使用的 path：与我们探测拼接的协议段必须一致） */
-const PROTOCOL_PATHS: Record<'anthropic' | 'openaiCompatible', string> = {
-  anthropic: '/messages',
-  openaiCompatible: '/chat/completions',
+/** 协议路径（必须与 SDK 内部使用的 path 逐字一致，见各自源码依据） */
+const PROTOCOL_PATHS: Record<ModelApiFormat, string> = {
+  // @ai-sdk/openai-compatible 3.0.43 / @ai-sdk/openai 4.0.58：path: "/chat/completions"
+  'openai-chat': '/chat/completions',
+  // @ai-sdk/openai 4.0.58（createResponsesModel）：path: "/responses"
+  'openai-responses': '/responses',
+  // @ai-sdk/anthropic 4.0.49：`${baseURL}/messages`
+  'anthropic-messages': '/messages',
 };
+
+/**
+ * 供应商的默认 API 格式（未显式指定格式时的路由目标）
+ *
+ * 语义：服务商模式（用户只选厂商）走各自厂商的原生协议；自定义模式未选格式
+ * 时回落 `openai-chat`（兼容面最广，也是本字段引入前的历史行为）。
+ */
+const DEFAULT_API_FORMAT_BY_KIND: Record<ProviderKind, ModelApiFormat> = {
+  deepseek: 'openai-chat',
+  openai: 'openai-chat',
+  ollama: 'openai-chat',
+  moonshot: 'openai-chat',
+  zhipu: 'openai-chat',
+  qwen: 'openai-chat',
+  doubao: 'openai-chat',
+  siliconflow: 'openai-chat',
+  openrouter: 'openai-chat',
+  anthropic: 'anthropic-messages',
+};
+
+/**
+ * 解析生效的 API 格式
+ *
+ * @param kind 供应商标识
+ * @param apiFormat 显式指定的格式（自定义模型快照携带；undefined = 按 kind 默认）
+ * @returns 实际生效的格式
+ */
+export function resolveApiFormat(kind: ProviderKind, apiFormat?: ModelApiFormat): ModelApiFormat {
+  return apiFormat ?? DEFAULT_API_FORMAT_BY_KIND[kind];
+}
+
+/** 该供应商的默认（原生）API 格式 */
+export function defaultApiFormat(kind: ProviderKind): ModelApiFormat {
+  return DEFAULT_API_FORMAT_BY_KIND[kind];
+}
+
+/**
+ * 端点归一化所依据的"协议族"
+ *
+ * 与 `resolveApiFormat` 配合：格式决定协议路径，协议族决定版本段补齐规则。
+ * - anthropic-messages：按 anthropic 规则（仅官方地址补 /v1，自建网关原样）
+ * - openai-responses：按 openai 规则（根地址补 /v1 —— Responses 端点在 /v1 下）
+ * - openai-chat：沿用 kind 自身策略（六家默认地址已含版本段的供应商不补，
+ *   与既有行为一致；deepseek/openai/ollama 型根地址补 /v1）
+ */
+function protocolFamily(kind: ProviderKind, apiFormat: ModelApiFormat): ProviderKind {
+  if (apiFormat === 'anthropic-messages') {
+    return 'anthropic';
+  }
+  if (apiFormat === 'openai-responses') {
+    return 'openai';
+  }
+  return kind;
+}
 
 /**
  * 该端点配置最终会被请求的完整 URL（连通性探测专用）
  *
- * 与真实调用的一致性由两件事保证：① 同一份 resolveProviderBaseUrl；
- * ② 协议路径与 SDK 源码一致（见文件头依据）。回归防线见
- * endpoint.test.ts 的「SDK 契约测试」——用真工厂捕获实际 URL 对照。
- *
  * @param kind 供应商标识
  * @param baseUrl 用户填写的根地址
+ * @param apiFormat 显式 API 格式（省略 = 按 kind 默认）
  * @returns 完整请求 URL（探测目标）
  */
-export function resolveProviderRequestUrl(kind: ProviderKind, baseUrl: string): string {
-  const base = resolveProviderBaseUrl(kind, baseUrl);
-  const path = kind === 'anthropic' ? PROTOCOL_PATHS.anthropic : PROTOCOL_PATHS.openaiCompatible;
-  return `${base}${path}`;
+export function resolveProviderRequestUrl(
+  kind: ProviderKind,
+  baseUrl: string,
+  apiFormat?: ModelApiFormat,
+): string {
+  const effectiveFormat = resolveApiFormat(kind, apiFormat);
+  const base = resolveProviderBaseUrl(protocolFamily(kind, effectiveFormat), baseUrl);
+  return `${base}${PROTOCOL_PATHS[effectiveFormat]}`;
 }

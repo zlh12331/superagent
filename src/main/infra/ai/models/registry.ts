@@ -139,6 +139,7 @@ export class ModelRegistry {
         isRuntime: false,
         explicitApiKey: undefined,
         explicitBaseUrl: undefined,
+        apiFormat: undefined,
         available: false,
       };
     }
@@ -159,6 +160,7 @@ export class ModelRegistry {
       isRuntime: false,
       explicitApiKey: undefined,
       explicitBaseUrl: undefined,
+      apiFormat: undefined,
       available: true,
     };
   }
@@ -242,6 +244,8 @@ export class ModelRegistry {
         isRuntime: true,
         explicitApiKey: snapshot.apiKey,
         explicitBaseUrl: snapshot.baseUrl,
+        // 自定义模型可携带 API 格式（服务商模式快照不带 → undefined，工厂按 kind 路由）
+        apiFormat: snapshot.apiFormat,
         available: true,
       };
     }
@@ -259,6 +263,7 @@ export class ModelRegistry {
       isRuntime: false,
       explicitApiKey: undefined,
       explicitBaseUrl: undefined,
+      apiFormat: undefined,
       available: true,
     };
   }

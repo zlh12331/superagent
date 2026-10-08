@@ -14,6 +14,8 @@
 // - 本文件不依赖任何 SDK / config / keychain，纯类型与常量
 // ──────────────────────────────────────────────────────────────
 
+import type { ModelApiFormat } from '@code-agent/shared/main';
+
 import type { ProviderKind } from '../providers/types';
 import type { ReasoningEffort } from './reasoning-effort';
 
@@ -118,6 +120,14 @@ export interface RuntimeModelSnapshot {
   /** 显式 baseUrl（覆盖供应商默认端点） */
   readonly baseUrl?: string;
   /**
+   * API 协议格式（缺省 = 'openai-chat'，与存量行为一致）
+   *
+   * 仅自定义模型（用户手填请求地址）携带；服务商模式的格式由 providerKind
+   * 在工厂层决定，不进快照。解析结果经 ResolvedModel.apiFormat 传给工厂，
+   * 由工厂选择 SDK 的对应接口（chat / responses / messages）。
+   */
+  readonly apiFormat?: ModelApiFormat;
+  /**
    * 单回合总时长上限（毫秒；缺省不限制，仅流空闲超时兜底）
    *
    * 解析时并入 resolvedModel.generationConfig.timeoutMs（与内置条目的
@@ -149,6 +159,13 @@ export interface ResolvedModel {
   readonly explicitApiKey: string | undefined;
   /** 运行时快照携带的显式 baseUrl（undefined = 供应商默认端点） */
   readonly explicitBaseUrl: string | undefined;
+  /**
+   * API 协议格式（undefined = 交由 providerKind 决定，即服务商模式）
+   *
+   * 仅自定义模型快照携带；工厂据此选择 SDK 接口（chat / responses /
+   * messages），undefined 时按 providerKind 的默认格式路由。
+   */
+  readonly apiFormat: ModelApiFormat | undefined;
   /**
    * 是否可路由（false = 模型已停用，调用方应拒绝使用）
    *

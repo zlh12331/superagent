@@ -11,6 +11,7 @@
 // 「业务逻辑不 mock、基础设施可替身」的分层原则。
 // ──────────────────────────────────────────────────────────────
 
+import type { ModelApiFormat } from '@code-agent/shared/main';
 import type { LanguageModel } from 'ai';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { resolveProviderRequestUrl } from './endpoint';
@@ -96,6 +97,26 @@ const CASES: ReadonlyArray<{ kind: ProviderKind; baseUrl: string }> = [
   { kind: 'anthropic', baseUrl: 'https://my-gw.example.com/v1' },
 ];
 
+/**
+ * 显式 API 格式用例矩阵（自定义模型三格式切换）
+ *
+ * 锁定「用户选的格式 = SDK 实际请求的协议」——格式选错（如选 responses 却
+ * 仍打 chat/completions）会让真实调用与探测/UI 三方分裂。
+ */
+const FORMAT_CASES: ReadonlyArray<{
+  kind: ProviderKind;
+  baseUrl: string;
+  apiFormat: ModelApiFormat;
+}> = [
+  { kind: 'deepseek', baseUrl: 'http://127.0.0.1:9527', apiFormat: 'openai-chat' },
+  { kind: 'deepseek', baseUrl: 'http://127.0.0.1:9527/v1', apiFormat: 'openai-chat' },
+  { kind: 'deepseek', baseUrl: 'http://127.0.0.1:9527', apiFormat: 'openai-responses' },
+  { kind: 'deepseek', baseUrl: 'http://127.0.0.1:9527/v1', apiFormat: 'openai-responses' },
+  { kind: 'deepseek', baseUrl: 'http://127.0.0.1:9527', apiFormat: 'anthropic-messages' },
+  { kind: 'openai', baseUrl: 'https://self-hosted.example.com', apiFormat: 'openai-responses' },
+  { kind: 'moonshot', baseUrl: 'https://api.moonshot.cn/v1', apiFormat: 'anthropic-messages' },
+];
+
 describe('端点推导契约（resolveProviderRequestUrl ↔ SDK 实际请求 URL）', () => {
   let registry: ProviderRegistry;
 
@@ -119,4 +140,21 @@ describe('端点推导契约（resolveProviderRequestUrl ↔ SDK 实际请求 UR
 
     expect(actualUrl).toBe(resolveProviderRequestUrl(kind, baseUrl));
   });
+
+  it.each(FORMAT_CASES)(
+    '$kind · $apiFormat · $baseUrl：显式格式的路由与预测一致',
+    async ({ kind, baseUrl, apiFormat }) => {
+      stubUrlCapturingFetch();
+      const factory = registry.createFactory(kind, {
+        apiKey: PLACEHOLDER_CREDENTIAL,
+        baseUrl,
+        apiFormat,
+      });
+      const model = factory('test-model') as unknown as LanguageModel;
+
+      const actualUrl = await captureRequestUrl(model);
+
+      expect(actualUrl).toBe(resolveProviderRequestUrl(kind, baseUrl, apiFormat));
+    },
+  );
 });

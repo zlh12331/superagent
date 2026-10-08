@@ -604,7 +604,7 @@ describe('老库升级（增量迁移）', () => {
     return (db as unknown as { $client: Database.Database }).$client;
   }
 
-  it('旧 schema 库 → 数据保真 + 约束补齐 + journal 七条，重复 initDb 幂等', async () => {
+  it('旧 schema 库 → 数据保真 + 约束补齐 + journal 八条，重复 initDb 幂等', async () => {
     resetDb();
     await closeDb();
     const legacyDir = mkdtempSync(join(tmpdir(), 'code-agent-db-legacy-v2-'));
@@ -669,9 +669,9 @@ describe('老库升级（增量迁移）', () => {
           .run(),
       ).toThrow(/UNIQUE constraint failed/i);
 
-      // 4) journal 记录全部迁移（进入 drizzle 版本体系：0000 ~ 0007）
+      // 4) journal 记录全部迁移（进入 drizzle 版本体系：0000 ~ 0008）
       const migs = raw(db).prepare('SELECT hash FROM __drizzle_migrations').all();
-      expect(migs).toHaveLength(8);
+      expect(migs).toHaveLength(9);
 
       // 5) 幂等：重复 initDb 不重跑迁移、不崩
       await closeDb();
@@ -690,7 +690,7 @@ describe('老库升级（增量迁移）', () => {
     // （GitHub windows runner 实测）会超 vitest 默认 5s——显式放宽到 30s
   }, 30_000);
 
-  it('新库：0000 ~ 0007 全执行（journal 八条），约束齐全', async () => {
+  it('新库：0000 ~ 0008 全执行（journal 九条），约束齐全', async () => {
     resetDb();
     await closeDb();
     const freshDir = mkdtempSync(join(tmpdir(), 'code-agent-db-fresh-v2-'));
@@ -698,7 +698,7 @@ describe('老库升级（增量迁移）', () => {
     try {
       const db = initDb();
       const migs = raw(db).prepare('SELECT hash FROM __drizzle_migrations').all();
-      expect(migs).toHaveLength(8);
+      expect(migs).toHaveLength(9);
       // 约束仍生效（0001 重建未破坏 0000 语义）
       expect(() =>
         raw(db)

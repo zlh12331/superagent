@@ -19,6 +19,39 @@ import { TERMINAL_FONT_SIZES, TERMINAL_SHELL_CHOICES } from '../constants/termin
 import { ZOOM_LEVELS } from '../constants/zoom';
 
 /**
+ * 自定义模型的 API 协议格式（三选一）
+ *
+ * 三方语义（与 AI SDK 的接口一一对应）：
+ * - `openai-chat`：OpenAI Chat Completions（`POST {base}/chat/completions`）
+ *   —— 兼容面最广，绝大多数第三方网关 / 自建推理服务用这个
+ * - `openai-responses`：OpenAI Responses API（`POST {base}/responses`）
+ *   —— 新版协议，支持内置工具与更强推理；仅 OpenAI 官方及少数网关提供
+ * - `anthropic-messages`：Anthropic Messages（`POST {base}/messages`）
+ *   —— Claude 原生协议
+ *
+ * 仅用于「自定义模式」（手动填请求地址）的模型；服务商模式的格式由
+ * providerKind 决定，不暴露本字段。
+ *
+ * ⚠️ 存储默认值为 `openai-chat`：历史上自定义模型一律按 Chat Completions
+ * 调用，迁移时不得改变存量模型行为（2026-10-08 引入本字段）。
+ */
+export const ModelApiFormatSchema = z.enum([
+  'openai-chat',
+  'openai-responses',
+  'anthropic-messages',
+]);
+
+/** 自定义模型的 API 协议格式 */
+export type ModelApiFormat = z.infer<typeof ModelApiFormatSchema>;
+
+/** 全部 API 格式（渲染层下拉数据源；顺序 = 展示顺序） */
+export const MODEL_API_FORMATS = [
+  'openai-chat',
+  'openai-responses',
+  'anthropic-messages',
+] as const satisfies readonly ModelApiFormat[];
+
+/**
  * API Key 提供商标识
  *
  * 用作 keychain 的 key 前缀（如 'deepseek' → 'deepseek-api-key'）。
@@ -474,6 +507,8 @@ export const AddRuntimeModelReqSchema = z.object({
   timeoutMs: z.number().int().positive().max(86_400_000).optional(),
   // 启停状态（可选；省略 = 启用）
   isEnabled: z.boolean().optional(),
+  // API 协议格式（可选；省略 = openai-chat，与存量行为一致——见其注释）
+  apiFormat: ModelApiFormatSchema.optional(),
 });
 
 /** settings:addRuntimeModel 响应 payload */
@@ -529,6 +564,8 @@ export const UpdateRuntimeModelReqSchema = z.object({
   // 单回合总时长上限（毫秒；三态：省略 = 不修改，null = 清除（回不限制），
   // number = 设置）
   timeoutMs: z.number().int().positive().max(86_400_000).nullable().optional(),
+  // API 协议格式（可选；省略 = 不修改）
+  apiFormat: ModelApiFormatSchema.optional(),
   // 启停状态（可选；不传 = 不修改）
   isEnabled: z.boolean().optional(),
 });
@@ -551,6 +588,8 @@ export interface RuntimeModelInfo {
   readonly displayName: string | undefined;
   /** 单回合总时长上限（毫秒；省略 = 未设置，不限制） */
   readonly timeoutMs?: number;
+  /** API 协议格式（省略 = openai-chat；仅自定义模式写非默认值） */
+  readonly apiFormat?: ModelApiFormat;
   readonly isEnabled: boolean;
   readonly createdAt: number;
 }
@@ -575,6 +614,7 @@ export const ListRuntimeModelsResSchema = z.object({
         .optional()
         .transform((v) => v ?? undefined),
       timeoutMs: z.number().int().positive().max(86_400_000).optional(),
+      apiFormat: ModelApiFormatSchema.optional(),
       isEnabled: z.boolean(),
       createdAt: z.number().int(),
     }),

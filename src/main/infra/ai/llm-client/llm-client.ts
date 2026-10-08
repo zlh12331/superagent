@@ -21,7 +21,7 @@
 // - generateText 走 retryWithBackoff（错误码感知 + 指数退避 + 遥测回调）
 // ──────────────────────────────────────────────────────────────
 
-import { AppError, ErrorCode } from '@code-agent/shared/main';
+import { AppError, ErrorCode, type ModelApiFormat } from '@code-agent/shared/main';
 import {
   APICallError,
   generateText as generateTextAi,
@@ -103,7 +103,11 @@ export interface LlmClientDeps {
    */
   readonly createProviderFactory: (
     kind: ProviderKind,
-    options?: { readonly apiKey?: string; readonly baseUrl?: string },
+    options?: {
+      readonly apiKey?: string;
+      readonly baseUrl?: string;
+      readonly apiFormat?: ModelApiFormat;
+    },
   ) => Promise<(modelId: string) => LanguageModel>;
   /**
    * 模型配置门禁（可选）：每次获取模型前执行的校验。
@@ -215,7 +219,9 @@ export class LlmClient {
     }
 
     const hasExplicitOverride =
-      resolved.explicitApiKey !== undefined || resolved.explicitBaseUrl !== undefined;
+      resolved.explicitApiKey !== undefined ||
+      resolved.explicitBaseUrl !== undefined ||
+      resolved.apiFormat !== undefined;
     const factory = await this.deps.createProviderFactory(
       resolved.providerKind,
       ...(hasExplicitOverride
@@ -225,6 +231,8 @@ export class LlmClient {
               ...(resolved.explicitBaseUrl !== undefined
                 ? { baseUrl: resolved.explicitBaseUrl }
                 : {}),
+              // 自定义模型的 API 格式（服务商模式为 undefined → 工厂按 kind 默认）
+              ...(resolved.apiFormat !== undefined ? { apiFormat: resolved.apiFormat } : {}),
             },
           ]
         : []),
