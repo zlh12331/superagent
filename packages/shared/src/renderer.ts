@@ -84,8 +84,6 @@ export type * from './schemas/invalidation';
 export { INVALIDATION_DOMAINS, TURN_END_GLOBAL_DOMAINS } from './schemas/invalidation';
 export type * from './schemas/memory';
 export type * from './schemas/models';
-// API 格式词表（值：渲染层下拉数据源，与主进程 ModelApiFormatSchema 同源）
-export { MODEL_API_FORMATS } from './schemas/models';
 export type * from './schemas/proxy';
 export type * from './schemas/remote';
 export type * from './schemas/search';
