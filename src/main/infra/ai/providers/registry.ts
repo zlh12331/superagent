@@ -23,6 +23,7 @@ import { getAppConfig } from '../../../config';
 import { proxiedFetch } from '../../network/proxied-fetch';
 // 单一真源：默认模型 / 默认供应商由模型领域层定义（避免双源维护路由分裂）
 import { DEFAULT_KIND, DEFAULT_MODEL_BY_KIND } from '../models/builtin-models';
+import { resolveProviderBaseUrl } from './endpoint';
 import type {
   ProviderDefinition,
   ProviderFactory,
@@ -126,24 +127,13 @@ const BUILTIN_DEFINITIONS: readonly ProviderDefinition[] = [
 ];
 
 /**
- * 归一化端点：去尾部斜杠（避免拼出 `//chat/completions`）
+ * 端点归一化已收敛至 ./endpoint 单一真源（2026-10-08）
  *
- * 2026-09-06 审计修复：自定义端点末尾带 / 会拼出双斜杠，部分网关直接 404。
+ * 此前本文件私有 trimTrailingSlash / withOpenAiV1，而连通性探测
+ * （models.handler.ts 的 buildTestUrl）另有一份不幂等的拼接实现——同一事实
+ * 两处各算一遍，用户填 `/v1` 结尾地址时探测 404 拦保存（真实调用反而正确）。
+ * 现调用路径与探测路径共用 resolveProviderBaseUrl / resolveProviderRequestUrl。
  */
-function trimTrailingSlash(baseUrl: string): string {
-  return baseUrl.replace(/\/+$/, '');
-}
-
-/**
- * 补齐 OpenAI 风格端点的 /v1 后缀（幂等）
- *
- * 2026-09-06 审计修复：此前 deepseek/openai/ollama 无条件拼 `/v1`，
- * 用户按其他供应商习惯填 `https://host/v1` 时会变成 `/v1/v1` → 404。
- */
-function withOpenAiV1(baseUrl: string): string {
-  const trimmed = trimTrailingSlash(baseUrl);
-  return trimmed.endsWith('/v1') ? trimmed : `${trimmed}/v1`;
-}
 
 /**
  * AI SDK fetch 注入（34 号网络代理）
@@ -166,7 +156,7 @@ const BUILTIN_FACTORIES: Record<ProviderKind, ProviderFactory> = {
     const resolvedBaseUrl = baseUrl ?? getAppConfig().providers.deepseek;
     return createOpenAICompatible({
       name: 'deepseek',
-      baseURL: withOpenAiV1(resolvedBaseUrl),
+      baseURL: resolveProviderBaseUrl('deepseek', resolvedBaseUrl),
       // exactOptionalPropertyTypes: apiKey 为 undefined 时不传该字段（ollama 等本地场景）
       ...(apiKey !== undefined ? { apiKey } : {}),
       includeUsage: true,
@@ -217,19 +207,27 @@ const BUILTIN_FACTORIES: Record<ProviderKind, ProviderFactory> = {
   },
   openai: ({ apiKey, baseUrl }) => {
     const resolvedBaseUrl = baseUrl ?? getAppConfig().providers.openai;
-    return createOpenAI({
+    const provider = createOpenAI({
       // exactOptionalPropertyTypes: apiKey 为 undefined 时不传该字段
       ...(apiKey !== undefined ? { apiKey } : {}),
-      baseURL: withOpenAiV1(resolvedBaseUrl),
+      baseURL: resolveProviderBaseUrl('openai', resolvedBaseUrl),
       ...sdkFetch,
-    }) as unknown as (modelId: string) => LanguageModel;
+    });
+    // ⚠️ 必须显式 .chat()：@ai-sdk/openai 4.x 的 provider 可调用对象默认返回
+    // **Responses API** 模型（`/responses`，见 SDK 类型定义：`(modelId) => OpenAILanguageModel`
+    // 实际委托 createResponsesModel），而产品 UI 标注与连通性探测（models:test
+    // 的 /chat/completions 请求体）都按 Chat Completions 语义——不显式选 chat
+    // 会让真实调用与探测/标注三方分裂（2026-10-08 契约测试实证）
+    return provider.chat as unknown as (modelId: string) => LanguageModel;
   },
   anthropic: ({ apiKey, baseUrl }) => {
     const resolvedBaseUrl = baseUrl ?? getAppConfig().providers.anthropic;
     return createAnthropic({
       // exactOptionalPropertyTypes: apiKey 为 undefined 时不传该字段
       ...(apiKey !== undefined ? { apiKey } : {}),
-      baseURL: resolvedBaseUrl,
+      // 归一化后 SDK 的 normalizeBaseURL 成为无害空转（它只特判官方地址补
+      // /v1，输入已归一化时不改变结果）——自建网关原样透传，与探测路径一致
+      baseURL: resolveProviderBaseUrl('anthropic', resolvedBaseUrl),
       ...sdkFetch,
     }) as unknown as (modelId: string) => LanguageModel;
   },
@@ -241,7 +239,7 @@ const BUILTIN_FACTORIES: Record<ProviderKind, ProviderFactory> = {
     const resolvedBaseUrl = baseUrl ?? getAppConfig().providers.moonshot;
     return createOpenAICompatible({
       name: 'moonshot',
-      baseURL: trimTrailingSlash(resolvedBaseUrl),
+      baseURL: resolveProviderBaseUrl('moonshot', resolvedBaseUrl),
       ...(apiKey !== undefined ? { apiKey } : {}),
       includeUsage: true,
       ...sdkFetch,
@@ -251,7 +249,7 @@ const BUILTIN_FACTORIES: Record<ProviderKind, ProviderFactory> = {
     const resolvedBaseUrl = baseUrl ?? getAppConfig().providers.zhipu;
     return createOpenAICompatible({
       name: 'zhipu',
-      baseURL: trimTrailingSlash(resolvedBaseUrl),
+      baseURL: resolveProviderBaseUrl('zhipu', resolvedBaseUrl),
       ...(apiKey !== undefined ? { apiKey } : {}),
       includeUsage: true,
       ...sdkFetch,
@@ -261,7 +259,7 @@ const BUILTIN_FACTORIES: Record<ProviderKind, ProviderFactory> = {
     const resolvedBaseUrl = baseUrl ?? getAppConfig().providers.qwen;
     return createOpenAICompatible({
       name: 'qwen',
-      baseURL: trimTrailingSlash(resolvedBaseUrl),
+      baseURL: resolveProviderBaseUrl('qwen', resolvedBaseUrl),
       ...(apiKey !== undefined ? { apiKey } : {}),
       includeUsage: true,
       ...sdkFetch,
@@ -271,7 +269,7 @@ const BUILTIN_FACTORIES: Record<ProviderKind, ProviderFactory> = {
     const resolvedBaseUrl = baseUrl ?? getAppConfig().providers.doubao;
     return createOpenAICompatible({
       name: 'doubao',
-      baseURL: trimTrailingSlash(resolvedBaseUrl),
+      baseURL: resolveProviderBaseUrl('doubao', resolvedBaseUrl),
       ...(apiKey !== undefined ? { apiKey } : {}),
       includeUsage: true,
       ...sdkFetch,
@@ -281,7 +279,7 @@ const BUILTIN_FACTORIES: Record<ProviderKind, ProviderFactory> = {
     const resolvedBaseUrl = baseUrl ?? getAppConfig().providers.siliconflow;
     return createOpenAICompatible({
       name: 'siliconflow',
-      baseURL: trimTrailingSlash(resolvedBaseUrl),
+      baseURL: resolveProviderBaseUrl('siliconflow', resolvedBaseUrl),
       ...(apiKey !== undefined ? { apiKey } : {}),
       includeUsage: true,
       ...sdkFetch,
@@ -291,7 +289,7 @@ const BUILTIN_FACTORIES: Record<ProviderKind, ProviderFactory> = {
     const resolvedBaseUrl = baseUrl ?? getAppConfig().providers.openrouter;
     return createOpenAICompatible({
       name: 'openrouter',
-      baseURL: trimTrailingSlash(resolvedBaseUrl),
+      baseURL: resolveProviderBaseUrl('openrouter', resolvedBaseUrl),
       ...(apiKey !== undefined ? { apiKey } : {}),
       includeUsage: true,
       ...sdkFetch,
@@ -301,7 +299,7 @@ const BUILTIN_FACTORIES: Record<ProviderKind, ProviderFactory> = {
     const resolvedBaseUrl = baseUrl ?? getAppConfig().providers.ollama;
     return createOpenAICompatible({
       name: 'ollama',
-      baseURL: withOpenAiV1(resolvedBaseUrl),
+      baseURL: resolveProviderBaseUrl('ollama', resolvedBaseUrl),
       apiKey: 'ollama',
       // 本地模型不按 token 计费，且 Ollama 的 OpenAI 兼容端点不保证回传 usage
       includeUsage: false,

@@ -22,6 +22,7 @@ import { getAppConfig } from '../config';
 import { runtimeModelStore } from '../infra/ai/llm-client/ai-provider';
 import { modelRegistry } from '../infra/ai/models';
 import { runtimeModelKeychainKey } from '../infra/ai/models/runtime-model-store';
+import { resolveProviderRequestUrl } from '../infra/ai/providers/endpoint';
 import type { ProviderKind } from '../infra/ai/providers/types';
 import { isBlockedAddress, isBlockedHostname } from '../infra/ai/tools/url-guard';
 import { getSecret } from '../infra/storage/keychain';
@@ -57,22 +58,19 @@ function isLoopbackTarget(hostname: string): boolean {
   return /^::(?:ffff:)?127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host);
 }
 
-/** 根地址需拼接 /v1 的供应商（与 ProviderRegistry 拼接规则一致） */
-const V1_PREFIX_KINDS: readonly ProviderKind[] = ['deepseek', 'openai', 'ollama'];
+/** 根地址拼接规则已收敛至 endpoint.ts 单一真源（见 buildTestUrl 注释） */
 
 /**
  * 拼接探测目标 URL
  *
- * - anthropic：{base}/v1/messages（Anthropic 原生协议）
- * - deepseek/openai/ollama：{base}/v1/chat/completions（registry 拼接 /v1）
- * - 其余 OpenAI Compatible：{base}/chat/completions（默认地址已含 /v1 路径）
+ * 单一真源：与真实调用共用 resolveProviderRequestUrl（同一份端点归一化规则
+ * + 与 SDK 源码一致的协议路径）。此前本文件自带纯字符串拼接，既不 trim 尾斜杠
+ * 也不做 /v1 幂等判断——用户填 `http://host/v1`（自定义模式常见填法）时探测
+ * 打到 `/v1/v1/chat/completions` 得 404，**在保存前拦住了本可正常使用的配置**
+ * （2026-10-08 修复；同类事故 2026-09-06 已出现过一次，当时只修了调用路径）。
  */
 function buildTestUrl(providerKind: ProviderKind, baseUrl: string): string {
-  if (providerKind === 'anthropic') {
-    return `${baseUrl}/v1/messages`;
-  }
-  const root = V1_PREFIX_KINDS.includes(providerKind) ? `${baseUrl}/v1` : baseUrl;
-  return `${root}/chat/completions`;
+  return resolveProviderRequestUrl(providerKind, baseUrl);
 }
 
 /**
