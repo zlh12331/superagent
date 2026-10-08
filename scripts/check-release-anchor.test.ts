@@ -270,4 +270,11 @@ describe('compareVersions（方向性判定）', () => {
   it('不同 core 的 prerelease 按 core 比较', () => {
     expect(compareVersions('1.8.0-beta.1', '1.7.0-beta.99')).toBeGreaterThan(0);
   });
+
+  it('prerelease 标识符追加（冻结基底首例：beta → beta.1）——回归 2026-10-08 方向写反事故', () => {
+    // 前缀相同时，标识符更多者优先级更高（SemVer 11.4：位数多者为更大）
+    expect(compareVersions('1.8.0-beta.1', '1.8.0-beta')).toBeGreaterThan(0);
+    expect(compareVersions('1.8.0-beta', '1.8.0-beta.1')).toBeLessThan(0);
+    expect(compareVersions('1.7.1-beta.1', '1.7.1-beta')).toBeGreaterThan(0);
+  });
 });
