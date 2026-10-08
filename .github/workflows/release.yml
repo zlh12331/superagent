@@ -1,25 +1,3 @@
-# .github/workflows/release.yml
-# CD 流水线：Release PR 合并后 → 三平台构建 → **构建全部成功才打 tag + 发布**
-#
-# 触发：Release PR（release-please 生成）合并产生的 push（main），或 workflow_dispatch 手动重放。
-# 流程：
-#   0. gate job：识别本次 push 是否 release-please 的发布提交，提取版本号（非发布 push → 全部跳过）
-#   1. CD 三平台矩阵构建（windows/macos/linux，各自原生单测 + 打包 + 产物 smoke）
-#   2. release job（needs: gate+build）：三平台构建全部成功后才打 tag → 创建 draft Release
-#      └ 打 tag 后把对应 release PR 标记为 autorelease: tagged（代 release-please 收尾；
-#        见该步骤注释：skip-github-release 使 release-please 不再自行更新此 label）
-#   3. publish job（needs: release）：校验三平台安装包 + latest*.yml 齐全 → draft 转正式
-#
-# 关键语义（2026-09-10 方案二：CI on PR, CD on main）：
-#   本工作流**不再等待/轮询独立 ci.yml 的 push 运行**（旧 `ci-check` job 已删除）。
-#   依据：仓库 ruleset 强制 main 所有提交必须走 PR、禁用管理员绕过、
-#   strict_required_status_checks_policy=true（PR 必须含 main 最新提交）、
-#   required_linear_history（只允许 squash/rebase ⇒ 合入树与 PR head 一致）
-#   ⇒ release 提交在合并前必然已通过 CI 全量门禁，此处再轮询一遍属重复劳动。
-#   任一方构建失败则无 tag 无 release，版本号不占号、可重试。
-#
-# 所需 Secrets：
-# - 代码签名（可选）：CSC_LINK + CSC_KEY_PASSWORD（Windows/macOS 签名；无证书时自动跳过签名）
 
 name: Release
 
@@ -28,8 +6,6 @@ on:
     branches: [main]
   workflow_dispatch:
     inputs:
-      # 防误触发（2026-09-10 收口）：手动重放必须显式确认版本，
-      # 且须与 package.json 当前版本一致，gate 校验不符即拒绝。
       confirm_version:
         description: 待构建/补发验证的版本号（必须与 package.json 版本一致）
         required: true
@@ -38,15 +14,11 @@ on:
 permissions:
   contents: write
 
-# 防快速连推时叠加：同一分支的 release 运行串行化。
-# cancel-in-progress 必须为 false——正在构建/发布的运行被取消会留下半成品
-# （tag 已打、资产未齐的中间态），宁可排队等前一个跑完。
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  # ── gate：仅 release-please 的发布提交（或手动 dispatch）才继续 ──
   gate:
     name: Gate (release-please commit?)
     runs-on: ubuntu-latest
@@ -55,7 +27,6 @@ jobs:
       is_release: ${{ steps.detect.outputs.is_release }}
       version: ${{ steps.detect.outputs.version }}
       prerelease: ${{ steps.detect.outputs.prerelease }}
-      # 产出该版本的发布提交 SHA——tag 必须钉在它上面（见 release job 的 target_commitish）
       release_sha: ${{ steps.detect.outputs.release_sha }}
     steps:
       - uses: actions/checkout@v4
@@ -66,11 +37,6 @@ jobs:
         env:
           CONFIRM_VERSION: ${{ github.event.inputs.confirm_version }}
         run: |
-          # 找出「产出目标版本号的发布提交」的 SHA。
-          # 为什么需要：tag 必须钉在这个提交上，而非"当前 main tip"——重跑 release job
-          # 时 softprops 会按 target_commitish 重置已存在的 tag，用 main tip 会把已发布
-          # 的 tag 挪到后续提交（2026-09-21 事故，见 release job 注释）。
-          # 判据：该提交的 subject 是 release-please 的发布格式 `chore(main): release X.Y.Z`。
           find_release_sha() {
             local want="$1"
             git log --format='%H%x09%s' -300 \
@@ -78,10 +44,6 @@ jobs:
               | head -n 1 | cut -f1
           }
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            # 手动重试（2026-09-10 收口）：必须显式输入与 package.json 一致的版本号，
-            # 防止误点 dispatch 直接发版。输入不符 → gate 失败 → 全部 job 跳过。
-            # ⚠️ 输入经 env 中转（2026-10-07 收口）：dispatch 输入是用户可控字符串，
-            # 不直接内插进 run 块（与下游步骤的版本号中转同模式）。
             VERSION=$(node -p "require('./package.json').version")
             CONFIRM="$CONFIRM_VERSION"
             if [[ -z "$CONFIRM" || "$CONFIRM" != "$VERSION" ]]; then
@@ -90,8 +52,6 @@ jobs:
             fi
             echo "is_release=true" >> "$GITHUB_OUTPUT"
             echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-            # 手动重试时 main tip 往往已是发布提交之后的修复提交 ⇒ 必须回溯找出发布提交，
-            # 否则 tag 会被挪到 main tip（正是 v1.3.3 发生的事）
             RELEASE_SHA=$(find_release_sha "$VERSION")
             if [[ -z "$RELEASE_SHA" ]]; then
               echo "::error::未能在最近 300 个提交中找到 'chore(main): release $VERSION' 发布提交——无法确定 tag 锚点。若该版本确实尚未发布（无 tag），请用 push 触发或先补一个 Release PR 合并。"
@@ -112,7 +72,6 @@ jobs:
             VERSION="${BASH_REMATCH[2]}"
             echo "is_release=true" >> "$GITHUB_OUTPUT"
             echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-            # push 触发时 HEAD 本身就是发布提交（gate 的 if 已保证）
             echo "release_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
             if [[ "$VERSION" == *-* ]]; then
               echo "prerelease=true" >> "$GITHUB_OUTPUT"
@@ -124,38 +83,12 @@ jobs:
           fi
 
       - name: CHANGELOG polish check (兜底，打 tag 前)
-        # ── 为什么在这里再查一遍 ─────────────────────────────────────
-        # ci.yml 的 quality job 已在 Release PR 阶段拦（合并被阻塞），本步是第二道
-        # 防线：若 Release PR 走了绕过路径（或未来 ruleset 必需检查清单变动导致 CI
-        # 那步不再阻塞），发版会在**打 tag 之前**失败——不占版本号、可重试，与
-        # 「三平台构建全部成功才打 tag」同一取舍（宁可失败也不产出用户可见的错误文案）。
-        # 失败处置：补一个小 PR 润色 CHANGELOG，合并后重跑本 workflow。
-        #
-        # 用 npx tsx 而非 pnpm：本 job 不装依赖（装依赖会触发 electron 原生模块重建，
-        # 使 gate 从秒级劣化到分钟级，而每次发版重试都要经过它）。本脚本只依赖
-        # node:fs 与同目录 TS 文件，tsx 足以直接执行；checkout 默认深 1 足够
-        # （只读工作区内的 CHANGELOG.md）。
-        #
-        # ⚠️ 动态值经 env 中转（2026-10-07 收口，与 ci.yml Release PR gates 同模式）：
-        # 不直接内插进 run 块——注入向量的缓解 = 中间环境变量（GitHub 官方加固模式）。
         if: steps.detect.outputs.is_release == 'true'
         run: npx --yes tsx@^4.23.0 scripts/check-changelog-polish.ts --version "$RELEASE_VERSION"
         env:
           RELEASE_VERSION: ${{ steps.detect.outputs.version }}
 
       - name: Release anchor check (post-merge, 打 tag 前)
-        # ── 为什么在 gate（与 ci.yml 的差异）─────────────────────────
-        # post-merge 模式：断言 manifest=发布版本 且 tag 尚不存在（重跑挪 tag
-        # 事故形态，RELEASING.md §5——v1.3.3 曾被挪位）。不用 pre-merge 模式：
-        # 刚合并的 Release PR 此刻停在 autorelease: pending 属合法状态（label
-        # 收尾在 release job 末尾），套用会对每次发版误报。
-        # 失败即在打 tag 前终止——不占版本号、可重试，与 changelog-polish 同取舍。
-        #
-        # 用 npx tsx 而非 pnpm：本 job 不装依赖（装依赖会触发 electron 原生模块重建，
-        # 使 gate 从秒级劣化到分钟级，而每次发版重试都要经过它）。本脚本只依赖
-        # node:fs/url 与同目录 lib TS 文件，tsx 足以直接执行。
-        #
-        # ⚠️ 版本号经 env 中转（与上一步同模式）：不直接内插进 run 块。
         if: steps.detect.outputs.is_release == 'true'
         run: npx --yes tsx@^4.23.0 scripts/check-release-anchor.ts --phase post-merge --version "$RELEASE_VERSION"
         env:
@@ -175,37 +108,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # ── 架构策略（2026-09-20 二次改造：6 个单架构 build job）────────────────
-          # 每个平台变体一个 job，全部在**原生 runner** 上构建：
-          # 为什么必须原生：@electron/rebuild **总是**传 --build-from-source（源码里
-          # buildArgs 硬编码，已核实），即原生模块必须为每个架构从源码编译；node-gyp
-          # 拒绝跨平台编译（node-gyp.js 显式 throw）。在 x64 上为 arm64 交叉编译会
-          # **静默复用 host 架构**（实测 @electron/rebuild 以 0.4s 假成功，产物含
-          # x64 原生模块），check:native-arch 是唯一的兜底探针。
-          #
-          # - Windows / macOS / Linux：每架构一个原生 runner。x64 用 *-latest；
-          #   arm64 用原生 ARM64 runner（公共仓库免费）。Windows arm64 用
-          #   windows-11-arm——该镜像**含** Visual Studio Enterprise 2022 + 
-          #   Microsoft.VisualStudio.Component.VC.Tools.ARM64（已核实官方镜像清单
-          #   images/windows/Windows11-Arm64-Readme.md；此前注释称"不含 VS"是错的）。
-          #   ⚠️ 该 label 正于 2026-09-21~09-30 迁移到 VS2026 镜像（官方公告 #14602），
-          #   两者都带 ARM64 工具链；迁移窗口内如遇工具链异常可临时改用显式
-          #   `windows-11-vs2026-arm` 隔离变量。
-          #
-          # - 更新元数据（拆 job 的硬约束，已核实 app-builder-lib 源码）：
-          #   writeUpdateInfoFiles 按「文件名 + publish 配置」为 key 累积 files，而
-          #   getArchPrefixForUpdateFile **仅对 Linux** 追加架构后缀 ⇒
-          #   · Linux：latest-linux.yml / latest-linux-arm64.yml，天然分文件，无冲突；
-          #   · Windows（latest.yml）/ macOS（latest-mac.yml）：两个 job 各产一份**同名**
-          #     互斥文件。故新增 merge job（见下）把两份合并成一份双架构元数据，
-          #     release job 用合并结果建 Release。合并逻辑见 scripts/lib/update-metadata.ts。
-          #
-          # - target-archs：传给 prepare-codegraph.mjs（CODE_AGENT_TARGET_ARCHS），
-          #   只部署本 job 需要的 codegraph 捆绑包。**每个 job 必须收窄为单值**：
-          #   双架构值会让单架构 job 多下载约 240MB 无关捆绑包。
-          # - artifact-suffix：SBOM 命名与 artifact 上传名后缀。**必须唯一**——
-          #   upload-artifact@v4 的 artifact 不可变，同名会冲突（Windows/macOS
-          #   拆双 job 后不能再用 win / mac）。
           - platform: Windows
             variant: x64
             runs-on: windows-latest
@@ -247,7 +149,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # 获取完整历史（changelog 等）
+          fetch-depth: 0
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -261,11 +163,6 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # ── SBOM 生成（供应链合规：CycloneDX 物料清单，随 release 归档）───────
-      # 2026-09-04 供应链加固：发布构建产物附 SBOM，供审计/合规/漏洞联动。
-      # cdxgen（Node 实现免 Java）从 pnpm lockfile 生成；命名带 artifact-suffix
-      # （platform-variant）——Linux 拆成 x64/arm64 两个 job 后，仅用 platform
-      # 会让两份 SBOM 互相覆盖。release job 的 Collect 步骤统一收集 sbom-*.cdx.json。
       - name: Generate SBOM (CycloneDX)
         shell: bash
         run: |
@@ -273,37 +170,12 @@ jobs:
           pnpm sbom:generate
           cp bom.json release/sbom-${{ matrix.artifact-suffix }}.cdx.json
 
-      # Linux 构建依赖：AppImage 打包需 libfuse2（ubuntu-24.04 默认不装）；
-      # rpm 目标需 rpmbuild 与 xz（app-builder-lib 的 FpmTarget 明确要求：
-      # "Need executable 'rpmbuild' to convert dir to rpm"）。
-      # 两个 Linux runner（x64 amd64 / arm64）均适用。
       - name: Install Linux build dependencies
         if: matrix.platform == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libfuse2 rpm xz-utils
 
-      # ── 单测已移出（2026-09-20 二次改造）────────────────────────────
-      # 原步骤「Unit tests」在此跑各平台原生单测（每平台 2–3 分钟）。现已移交
-      # PR 阶段的 CI：ci.yml 新增 unit job，6 个平台各自跑自己的单测。
-      # 为什么移出：① 质量验证属 PR 阶段（失败要在合并前暴露，而非发版时才知道）；
-      # ② CD 的职责收敛为「构建 + 产物验证」，失败原因一眼可判；③ 同一件事只跑一次。
-      # Windows 仍不跑集成测试（node-pty/ConPTY + vitest fork worker 崩 0xC0000005，
-      # 该层本就只在 ubuntu 的 CI job 覆盖）。
 
-      # ── 平台打包 ───────────────────────────────────────────────────
       - name: Build & package ${{ matrix.platform }} installer
-        # macOS 签名令牌的"空值注入"坑（2026-09-10 实测定位）：
-        # 把 secrets.CSC_LINK 直接放进 env:，secret 未配置时会以**空字符串**注入进程环境；
-        # electron-builder 按 `env.CSC_LINK != null` 判定"配置了证书"→ 用空密码去 stat
-        # 空路径（≈项目根）→ "not a file" 失败（macOS 主发端必踩）。
-        # 修法：secret 先进中间变量 ORIG_CSC_*（空串无意义），bash 中仅当非空才
-        # 导出真实的 CSC_LINK/CSC_KEY_PASSWORD——没有证书时 electron-builder 进程
-        # 环境里 CSC_LINK **彻底不存在**（而非空串），配合关闭身份自发现 → 干净跳过签名。
-        #
-        # 公证（notarize）凭据同理：electron-builder 的 getNotarizeOptions 按
-        # APPLE_* 环境变量判定，未配置则 warn 跳过（不会失败）。这里只在整套凭据
-        # 齐备时导出，避免"配了一半"触发 InvalidConfigurationError。
-        # 优先 App Store Connect API Key（APPLE_API_* 三件套）；未配置则回退
-        # Apple ID 模式（APPLE_ID + APPLE_APP_SPECIFIC_PASSWORD + APPLE_TEAM_ID）。
         shell: bash
         env:
           ORIG_CSC_LINK: ${{ secrets.CSC_LINK }}
@@ -314,14 +186,12 @@ jobs:
           ORIG_APPLE_ID: ${{ secrets.APPLE_ID }}
           ORIG_APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           ORIG_APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          # electron-builder 自动发布控制（手动上传，故不自动 publish）
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if [ -n "${ORIG_CSC_LINK:-}" ]; then
             export CSC_LINK="$ORIG_CSC_LINK"
             export CSC_KEY_PASSWORD="$ORIG_CSC_KEY_PASSWORD"
           fi
-          # 公证凭据：三件套齐备才导出（缺一则整套不导出 → 干净跳过公证）
           if [ -n "${ORIG_APPLE_API_KEY:-}" ] && [ -n "${ORIG_APPLE_API_KEY_ID:-}" ] && [ -n "${ORIG_APPLE_API_ISSUER:-}" ]; then
             export APPLE_API_KEY="$ORIG_APPLE_API_KEY"
             export APPLE_API_KEY_ID="$ORIG_APPLE_API_KEY_ID"
@@ -336,38 +206,16 @@ jobs:
             echo "公证：未配置凭据，跳过（electron-builder 会 warn）"
           fi
           export CSC_IDENTITY_AUTO_DISCOVERY=false
-          # codegraph 平台捆绑包按架构部署（每个约 250MB）：只准备本 job 目标架构，
-          # 避免 x64/arm64 双份下载与磁盘占用（Linux 双 job 各自只需一套）
           export CODE_AGENT_TARGET_ARCHS="${{ matrix.target-archs }}"
           ${{ matrix.build-cmd }}
 
-      # 更新源已切 provider: github（electron-builder.yml publish），
-      # 占位 feed guard 随之移除；GitHub Release 资产即更新源。
-      # 注：Sentry 符号上传步骤已于 2026-09-13 随 Sentry 移除整体删除
-      # （本地优先错误处理，报障走 GitHub issue + 诊断包，见 error-report.ts）。
 
-      # ── 安装包引擎断言（防"发布缺引擎的包"事故复发）──────────────
-      # 2026-09-12 事故：引擎源码未入仓 → CI 生成占位目录并 exit 0 → 打包"成功"
-      # 但产物不含引擎（运行时静默降级），而 README 承诺了该功能。
-      # 本步在打包后校验最终产物内的 resources/memory-hub 真有可运行引擎
-      # （入口 + node_modules + 无占位标记 + 关键依赖），缺任一即失败。
       - name: Verify packaged memory engine
         run: pnpm check:packaged-engine
 
-      # ── 原生模块架构断言（防「交叉构建静默产出错误架构二进制」）──────
-      # 2026-09-20 实测：x64 机器上为 arm64 目标打包时，@electron/rebuild 会以
-      # 0.4s「成功」（真实编译 9s/98s），实际复用 host 架构 —— 构建日志无任何错误，
-      # 产出的 arm64 安装包内是 x64 原生模块（用户装上即崩）。唯一可靠探针是读
-      # 二进制头（ELF e_machine / PE Machine / Mach-O cputype），见 check-native-arch。
-      # 逐个 unpacked 目录按目录名推断目标架构（win-unpacked=x64、linux-arm64-unpacked=arm64），
-      # 校验 node-pty 编译产物、better-sqlite3 主动加载的二进制、codegraph 捆绑包。
       - name: Verify native module architecture
         run: pnpm check:native-arch
 
-      # ── 生产产物 smoke 测试（验证打包后 binary 可启动）──────────────
-      # 不下载 Chromium（2026-09-10 优化）：smoke.prod.spec.ts 用 _electron.launch 驱动
-      # 打包产物，无需 Playwright 自带浏览器；ffmpeg 供 video:'retain-on-failure' 录像。
-      # 本步此前占 207s（三平台各一次），是 build job 的单项大头。
       - name: Install Playwright deps (ffmpeg only, no Chromium)
         shell: bash
         run: |
@@ -375,16 +223,8 @@ jobs:
           pnpm exec playwright install ffmpeg
 
       - name: Run production smoke tests
-        # Linux 无头环境走 xvfb（Electron 启动需要 Display）。
-        # matrix.platform 为 'Linux'（variant 区分架构），条件判断不受变体影响。
         run: ${{ matrix.platform == 'Linux' && 'xvfb-run -a pnpm test:smoke' || 'pnpm test:smoke' }}
 
-      # ── 上传构建产物（merge/release job 使用）────────────────────────
-      # 2026-09-10 资产规范化：只上传 release/ 根目录的安装包 + 更新元数据 + SBOM，
-      # 不再整个 release/（否则 win-unpacked/linux-unpacked 内 node.exe/rg.exe/
-      # OpenConsole/winpty-agent 等杂项与 app-update.yml 一并混入 GitHub Release）。
-      # 上传名用 artifact-suffix：6 个 job 必须互不相同——upload-artifact@v4 的
-      # artifact 不可变（官方 MIGRATION 文档："Artifacts are immutable"），同名会冲突。
       - name: Upload build artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -402,14 +242,6 @@ jobs:
             release/sbom-*.cdx.json
           retention-days: 30
 
-  # ── merge：把 Windows / macOS 的双份同名更新元数据合成双架构一份 ──────────
-  # 为什么必需（已核实 app-builder-lib/out/publish/updateInfoBuilder.js:55-60）：
-  # electron-builder 的 getArchPrefixForUpdateFile **仅对 Linux** 追加架构后缀，
-  # 故 Windows（latest.yml）/ macOS（latest-mac.yml）在拆成两个单架构 build job 后
-  # 会各产一份同名互斥文件。不合并的后果是**静默故障**：release job 的 `cp -n`
-  # 只有一份生效，另一架构的用户在 electron-updater 的 findFile 里找不到自己的
-  # 条目，回退下载到另一个架构的包（x64 用户拿到 arm64 版，装上即无法运行）。
-  # Linux 的 latest-linux.yml / latest-linux-arm64.yml 天然分文件，不参与合并。
   merge:
     name: Merge update metadata (win/mac dual-arch)
     needs: [gate, build]
@@ -433,20 +265,14 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # 保留各 build job 的子目录结构（不用 merge-multiple）——
-      # 两份 latest.yml 必须能各自取到：脚本按子目录名（release-win-x64-<ref> /
-      # release-win-arm64-<ref>）识别架构，扁平化会让它们互相覆盖。
       - name: Download build artifacts (keep subdirectories)
         uses: actions/download-artifact@v4
         with:
           path: artifacts
 
-      # 合并 Windows / macOS 的双架构元数据（纯函数 + 单测见 scripts/lib/update-metadata.ts）
       - name: Merge dual-arch update metadata
         run: pnpm exec tsx scripts/merge-update-metadata.ts
 
-      # 作为独立 artifact 上传（release job 只从这里取合并结果，避免与
-      # build job 上传的两份单架构同名文件混在一起）
       - name: Upload merged metadata
         uses: actions/upload-artifact@v4
         with:
@@ -462,41 +288,26 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: write
-      # label 回写需要 issue/PR 写权限（gh pr edit --remove-label/--add-label）
       pull-requests: write
 
     steps:
-      # 提取发布描述需要 CHANGELOG.md（release job 此前无 checkout）
       - name: Checkout
         uses: actions/checkout@v4
 
-      # ⚠️ 不能用 merge-multiple（2026-09-20 拆 job 改造）：Windows 的两个单架构
-      # build job 各上传一份 latest.yml、macOS 同理，扁平化后会互相覆盖，且与
-      # merge job 产出的双架构版本混在一起——取到哪一份将取决于解包顺序（不确定）。
-      # 保留子目录（artifacts/<artifact 名>/…）才能确定性地按来源取用。
       - name: Download all artifacts (keep subdirectories)
         uses: actions/download-artifact@v4
         with:
           path: artifacts
 
-      # ── 更新元数据的取用规则（拆 job 后新增，2026-09-20）───────────────────
-      # 取用优先级是**显式**的两步，而非依赖 cp -n 的遍历顺序：
-      #   ① 先放 merge job 的双架构合并件（artifacts/merged-update-metadata/）；
-      #   ② 再收集其余资产——含各 build job 的单架构 latest.yml / latest-mac.yml，
-      #      它们会被第 ① 步的文件挡住（cp -n 不覆盖已存在文件），因此不可能覆盖
-      #      合并结果；Linux 的 latest-linux*.yml 按架构分文件，天然唯一，直接收。
-      # publish job 的「元数据必含双架构条目」断言是这条规则失效时的 fail-closed 兜底。
       - name: Collect release files
         run: |
           mkdir -p release
-          # ① 双架构合并件优先（merge job 产出）
           if [ -d artifacts/merged-update-metadata ]; then
             find artifacts/merged-update-metadata -type f -name "latest*.yml" -exec cp -n {} release/ \;
           else
             echo "::error::artifacts/merged-update-metadata 不存在——merge job 的产物缺失，无法保证元数据为双架构"
             exit 1
           fi
-          # ② 其余资产（安装包 / blockmap / SBOM / Linux 元数据）
           find artifacts -type f \( \
             -name "Code-Agent-Desktop-Windows-*.exe" -o \
             -name "Code-Agent-Desktop-macOS-*.dmg" -o \
@@ -510,7 +321,6 @@ jobs:
           \) -exec cp -n {} release/ \;
           ls -la release/
 
-      # 发布描述取自 CHANGELOG.md 中对应版本的段落（发版前在 Release PR 中润色好的文案）
       - name: Extract release body from CHANGELOG
         shell: bash
         env:
@@ -525,55 +335,22 @@ jobs:
             }
             inbody { print }
           ' CHANGELOG.md > release-body.md
-          # 匹配失败时兜底：仍创建一个非空描述，避免 Release 文案为空
           if [ ! -s release-body.md ]; then
             echo "## Release $VERSION" > release-body.md
           fi
 
-      # 此处已处于「6 个架构构建全部成功」之后：tag 在这里创建（softprops 在 tag 不存在时
-      # 自动打 tag），即"构建成功才打 tag/占号"。draft 对用户不可见，由 publish 校验后转正。
-      #
-      # ⚠️ target_commitish 必须显式指定为**产出该版本的发布提交**（2026-09-21 实测事故）：
-      # softprops 在 tag **已存在**时走 update 路径，并按 target_commitish 重置 tag 指向；
-      # 不指定时它取 `${{ github.sha }}`（= 触发本次运行的分支 tip）。后果是**重跑
-      # release job 会把已发布的 tag 挪到更新的提交上**——v1.3.3 即因此从发布提交
-      # `3b9b8fa`（chore(main): release 1.3.3）被移到 `1f1a66b`（其后的一个修复提交）。
-      # 这让 release-please 认不出该 release（它靠「tag 指向 release 提交」建立版本锚点），
-      # 于是一路回退到历史起点、算出 **1.0.0** 的下一个版本（PR #64），并使 CHANGELOG
-      # 凭空多出全部历史条目。
-      # 用 gate 的 release_sha（回溯找出的 `chore(main): release X.Y.Z` 提交）而非
-      # github.sha：手动 dispatch 重跑时 github.sha 是 main tip（已不是发布提交），
-      # 钉在它上面等于重演同一个错误。
       - name: Create GitHub Release (tag + draft)
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ needs.gate.outputs.version }}
           target_commitish: ${{ needs.gate.outputs.release_sha }}
-          body_path: release-body.md # 使用润色后的 CHANGELOG 版本段，而非机器生成的 release notes（v2 参数名是 body_path）
+          body_path: release-body.md
           files: release/**
-          draft: true # 电源包与元数据齐备前对外不可见；由下方 publish job 校验后转正式
-          prerelease: ${{ needs.gate.outputs.prerelease }} # beta 等含 '-' 版本标记为 prerelease
+          draft: true
+          prerelease: ${{ needs.gate.outputs.prerelease }}
         env:
-          # token 选择（2026-09-10 实测定位）：normal 发布路径下 softprops 走 **create**，
-          # 用 GITHUB_TOKEN 即可（内置 bot 创建 release，后续资产上传同身份，全链路无 403）。
-          # 不要改回 RELEASE_PLEASE_TOKEN：对**已存在**的 release（由用户 PAT 创建）做 update
-          # 时，GITHUB_TOKEN 与 fine-grained PAT 均会 403 "Resource not accessible by
-          # integration"（User PAT 创建的 release，Actions 身份无权修改）。
-          # 补发/重放已存在 tag 的场景（如历史空壳 v1.0.5）使用 gh CLI 手动处理。
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # ── label 回写（2026-09-14 加固，防「untagged release PR → abort」死锁）──
-      # release-please 用 PR label 判定发布是否已收尾，**不看 tag 实际是否存在**
-      # （源码 src/manifest.ts：DEFAULT_LABELS=['autorelease: pending']；扫到
-      # 「已合并 + 仍带 pending」的 release PR 即 abort："There are untagged, merged
-      # release PRs outstanding - aborting"）。该 label 正常由 release-please 自己
-      # 在 createReleasesForPullRequest 里改成 autorelease: tagged，但本仓库用
-      # skip-github-release 把打 tag 移交本工作流 ⇒ 那条路径被跳过 ⇒ label 永远停在
-      # pending ⇒ **下一次发版无法生成 Release PR**。实测事故：PR #30（v1.0.0，
-      # 2026-09-10 改流程后的首个 release）label 一直未更新，2026-09-14 带 feat 的
-      # 提交因此被 abort。故在此代 release-please 收尾：tag + draft Release 创建成功
-      # 后，把对应 release PR 标记为 tagged。此步失败即失败（fail-closed）——label
-      # 未同步会让下次发版静默死锁，必须当下暴露而非留到下一次。
       - name: Mark release PR as tagged (release-please label handoff)
         shell: bash
         env:
@@ -581,12 +358,10 @@ jobs:
           RELEASE_VERSION: ${{ needs.gate.outputs.version }}
         run: |
           VERSION="$RELEASE_VERSION"
-          # 优先按版本号精确匹配（release PR 标题形如 chore(main): release X.Y.Z）
           PRS=$(gh pr list --state merged --label "autorelease: pending" \
                   --search "release ${VERSION} in:title" \
                   --json number --jq '.[].number' || true)
           if [ -z "$PRS" ]; then
-            # 回退：同步全部 pending（含标题不匹配/历史遗留），避免误判失败
             PRS=$(gh pr list --state merged --label "autorelease: pending" \
                     --json number --jq '.[].number' || true)
             if [ -n "$PRS" ]; then
@@ -604,10 +379,6 @@ jobs:
             echo "release PR #${pr} -> autorelease: tagged"
           done
 
-  # ── 发布转正式（2026-09-09 流程加固）────────────────────────────
-  # 「打 tag」只代表代码快照 + 构建成功；对用户可见的发布必须连安装包一起。
-  # 本 job 校验三平台安装包 + latest*.yml 元数据齐全后才把草稿转正式（draft=false），
-  # 缺任一项即失败保持草稿 → 用户永远看不到"空版本"。失败后 rerun build job 即可。
   publish:
     name: Publish Release (assets verified)
     needs: [gate, release]
@@ -616,7 +387,7 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: write
-      discussions: write # 公告版块自动发帖（仅 beta/stable 发布成功后）
+      discussions: write
 
     steps:
       - name: Verify all platform assets & promote draft to public
@@ -627,10 +398,6 @@ jobs:
         run: |
           TAG="v$RELEASE_VERSION"
           REPO="${{ github.repository }}"
-          # draft release 不响应 /releases/tags/{tag}（GitHub 对 draft 返回 404，2026-09-10
-          # 实测：create 成功后 publish 因此误报"找不到 draft release"）。改用 releases
-          # 列表按 tag 匹配拿 release_id，后续查资产/转正式全部走 id。
-          # 注：gh api 的 --jq 不接受 --arg（纯 jq CLI 参数），直接用字符串内插表达式。
           RELEASE_ID=$(gh api "/repos/$REPO/releases?per_page=100" \
             --jq ".[] | select(.tag_name == \"$TAG\") | .id" 2>/dev/null | head -n 1)
           if [ -z "$RELEASE_ID" ] || [ "$RELEASE_ID" = "null" ]; then
@@ -640,59 +407,33 @@ jobs:
           ASSETS=$(gh api "/repos/$REPO/releases/$RELEASE_ID" --jq '.assets[].name')
           echo "release #$RELEASE_ID assets:"; echo "$ASSETS"
           MISSING=0
-          # 更新元数据：Windows/macOS 单份（内含双架构条目），Linux 按架构两份
-          # （app-builder-lib 的 getArchPrefixForUpdateFile：非 x64 的 Linux 加
-          # -<arch> 后缀，x64 不加后缀）
           for req in "latest.yml" "latest-mac.yml" "latest-linux.yml" "latest-linux-arm64.yml"; do
             if ! grep -qx "$req" <<<"$ASSETS"; then echo "::error::缺少更新元数据: $req"; MISSING=1; fi
           done
-          # ── 元数据双架构断言（2026-09-20 拆 job 后新增，fail-closed）──────────
-          # 背景：拆成单架构 build job 后，Windows/macOS 各自产出同名 latest*.yml，
-          # 必须由 merge job 合成双架构一份（见 release.yml 的 merge job 注释）。
-          # 若 merge 未生效、或 release job 误取了单架构版本，用户侧的后果是**静默故障**：
-          # electron-updater 的 findFile 按 `url.includes(process.arch)` 挑包
-          # （providers/Provider.js:80），元数据里缺哪个架构的条目，那个架构的用户就会
-          # 回退下载另一个架构的包（装上无法运行）。故此处校验每个条目族**同时含
-          # x64 与 arm64**，而不是只看文件是否存在。
-          # 判定方式：下载元数据正文，各自 grep 架构串。
           for yml in "latest.yml" "latest-mac.yml"; do
             YML_ID=$(gh api "/repos/$REPO/releases/$RELEASE_ID" \
               --jq ".assets[] | select(.name == \"$yml\") | .id")
             if [ -z "$YML_ID" ] || [ "$YML_ID" = "null" ]; then
-              continue # 缺文件已由上一段断言报错，此处只处理"存在但内容不完整"
+              continue
             fi
             YML_BODY=$(gh api "/repos/$REPO/releases/assets/$YML_ID" -H "Accept: application/octet-stream")
             for arch in "x64" "arm64"; do
-            # 匹配 "-x64-" / "-x64." 两种形态：产物名是 `产品名-平台-架构-版本.扩展名`
-            # （架构后跟 `-版本`），而 electron-updater 的 findFile 判据是
-            # `url.includes(process.arch)` ⇒ 断言"架构串以分隔符为界出现"即可。
-            # ⚠️ 首版这里只匹配 `-x64.`（点号），在真实产物 `…-macOS-x64-1.3.3.zip`
-            # 上必然漏判（架构后是 `-`）——2026-09-21 首次实跑把正确的双架构元数据
-            # 误判为"缺 x64 条目"。断言必须贴合真实命名形态。
             if ! grep -qE -- "-${arch}[-.]" <<<"$YML_BODY"; then
               echo "::error::$yml 缺 $arch 条目（合并元数据未生效或取了单架构版本）"
               echo "$YML_BODY" | head -20
               MISSING=1
             fi
           done
-            # path 必须指向 files 中的首个条目之一（防悬空引用：electron-updater 1.x
-            # 回退路径会 404）。取 path: 行的值，断言它在正文中作为 url 出现过。
             PRIMARY=$(grep -m1 '^path:' <<<"$YML_BODY" | sed 's/^path:[[:space:]]*//')
             if [ -n "$PRIMARY" ] && ! grep -qF "$PRIMARY" <<<"$(grep 'url:' <<<"$YML_BODY")"; then
               echo "::error::$yml 的 path=\"$PRIMARY\" 不在 files 中（悬空引用）"
               MISSING=1
             fi
           done
-          # ── 安装包：每个平台-架构-格式组合都必须存在 ─────────────────────
-          # 2026-09-20 命名规范化：`产品名-平台-架构-版本.扩展名`
-          # （artifactName 含 ${arch} 与 ${version}）。每个组合各一份安装包，
-          # 不再产出「双架构通用包」（nsis.buildUniversalInstaller: false）。
-          # 注意 Windows/macOS 用 ${arch} 原值（x64/arm64），Linux 用各生态惯例串。
           V="$RELEASE_VERSION"
           require_asset() {
             if ! grep -Eq "$1" <<<"$ASSETS"; then echo "::error::缺少 $2"; MISSING=1; fi
           }
-          # 负向断言：命中即视为配置回退（比"缺资产"更难被察觉，故显式拦截）
           forbid_asset() {
             if grep -Eq "$1" <<<"$ASSETS"; then echo "::error::出现不应存在的资产（$2）：$(grep -E "$1" <<<"$ASSETS")"; MISSING=1; fi
           }
@@ -708,26 +449,10 @@ jobs:
           require_asset "Code-Agent-Desktop-Linux-arm64-${V//./\\.}\\.deb$"       'Linux arm64 deb'
           require_asset "Code-Agent-Desktop-Linux-x86_64-${V//./\\.}\\.rpm$"      'Linux x64 rpm'
           require_asset "Code-Agent-Desktop-Linux-aarch64-${V//./\\.}\\.rpm$"     'Linux arm64 rpm'
-          # 架构串来源 builder-util 的 getArtifactArchName(arch, ext)（已核实映射）：
-          #   x64   → AppImage/rpm: x86_64 ｜ deb: amd64
-          #   arm64 → rpm: aarch64 ｜ AppImage/deb: arm64
-          # ── 负向断言（2026-09-20 资产瘦身）───────────────────────────────
-          # ① 双架构通用安装包：nsis.buildUniversalInstaller=false 后不应再出现。
-          #    它的存在会带来两个问题：latest.yml 的 path 指向它（但门禁不收它 →
-          #    悬空引用）、其 .blockmap 被通配符单独收进 release（孤儿资产）。
           forbid_asset 'Code-Agent-Desktop-Windows\.exe'          '双架构通用安装包（应已由 buildUniversalInstaller:false 关闭）'
           forbid_asset 'Code-Agent-Desktop-Windows\.exe\.blockmap' '通用包的差分产物（孤儿资产）'
-          # ② dmg 的 blockmap：dmg.writeUpdateInfo=false 后不应再出现
-          #    （electron-updater 在 macOS 只对 zip 做差分，dmg 的 blockmap 永不被读）
           forbid_asset 'Code-Agent-Desktop-macOS-[a-z0-9]+[^ ]*\.dmg\.blockmap' 'dmg 差分产物（永不被读取，应已由 dmg.writeUpdateInfo:false 关闭）'
-          # ③ 无版本号段的旧命名：防配置回退后资产名与本文档/门禁脱节
           forbid_asset 'Code-Agent-Desktop-(Windows|macOS|Linux)-[a-z0-9_]+\.(exe|dmg|zip|deb|rpm|AppImage)$' '未带版本号的旧命名资产'
-          # ── 差分产物门禁（设计文档 27 §8）──────────────────────────────
-          # 差分更新完全依赖 blockmap：缺 Windows/macOS 的独立 blockmap 时，
-          # electron-updater 会静默回退全量下载（用户与 CI 都察觉不到），
-          # 因此把"差分可用"变成发布硬性条件（双架构各一份）。
-          # Linux AppImage 的 blockmap 内嵌在产物尾部（无独立资产），改为校验
-          # latest-linux*.yml 含 blockMapSize。
           require_asset "Code-Agent-Desktop-Windows-x64-${V//./\\.}\\.exe\\.blockmap$"   'Windows x64 差分产物（缺失会静默退化为全量下载）'
           require_asset "Code-Agent-Desktop-Windows-arm64-${V//./\\.}\\.exe\\.blockmap$" 'Windows arm64 差分产物（缺失会静默退化为全量下载）'
           require_asset "Code-Agent-Desktop-macOS-x64-${V//./\\.}\\.zip\\.blockmap$"     'macOS x64 差分产物（缺失会静默退化为全量下载）'
@@ -736,7 +461,6 @@ jobs:
             YML_ID=$(gh api "/repos/$REPO/releases/$RELEASE_ID" \
               --jq ".assets[] | select(.name == \"$yml\") | .id")
             if [ -n "$YML_ID" ]; then
-              # draft release 的资产下载走 assets/{id}（/releases/tags/{tag} 对 draft 返回 404）
               if ! gh api "/repos/$REPO/releases/assets/$YML_ID" \
                 -H "Accept: application/octet-stream" | grep -q "blockMapSize"; then
                 echo "::error::$yml 缺 blockMapSize（AppImage 差分更新会退化为全量）"
@@ -753,15 +477,6 @@ jobs:
             --jq '"✅ 已正式发布: " + .html_url'
 
       - name: Post release announcement to Discussions (公告版块)
-        # ── 为什么在 publish job 末尾 ────────────────────────────────
-        # 发版公告的社区触达（39 号 spec §5：公告版块仅维护者可发帖，CD 的
-        # GITHUB_TOKEN 以仓库身份发帖即满足）。放在 publish（而非 release）job：
-        # 公告必须对应"资产已验证并转正式"的 release，draft 态不发。
-        # 失败语义：continue-on-error——公告是锦上添花，不发帖不应使发版 CD 变红
-        # （发布本体已 success，人工可随时补帖）。
-        # 固定模板，仅引用版本号与 Release 链接（两者均为本 run 内部事实，
-        # 无外部输入 ⇒ 无注入面）。GraphQL createDiscussion 形状已按 schema 验证
-        # （repositoryId/title/body/categoryId 四输入，公告 categoryId 已实测）。
         continue-on-error: true
         uses: actions/github-script@v7
         env:
