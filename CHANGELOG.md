@@ -2,6 +2,13 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [1.8.0-beta.2](https://github.com/zlh12331/superagent/compare/v1.8.0-beta.1...v1.8.0-beta.2) (2026-10-08)
+
+
+### 新增
+
+* 模型路由接线 + 审批/提问链路闭环 + 自定义模型 API 格式 ([#122](https://github.com/zlh12331/superagent/issues/122)) ([cfec564](https://github.com/zlh12331/superagent/commit/cfec564c2b8096542d7a5415f6c96fb7d82e9920))
+
 ## [1.8.0-beta.1](https://github.com/zlh12331/superagent/compare/v1.8.0-beta...v1.8.0-beta.1) (2026-10-08)
 
 <!-- changelog:polished -->
