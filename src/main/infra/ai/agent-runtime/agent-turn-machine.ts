@@ -422,9 +422,8 @@ export const agentTurnMachine = setup({
         // 并行提问（2026-10-08 对称修复）：与审批同理，一轮可含多个 ask 工具调用
         // （AI SDK 并行执行），此前第 2 个 ask.requested 被忽略 → 其工具 Promise
         // 永久挂起。此处采用与 waitingApproval 相同的「列表 + 全部决出才退出」语义。
-        // 前端差异（如实登记）：AskDialog 为全屏模态，一次只呈现一组问题——
-        // 并发的第二组会等第一组关闭后由 store 的单值覆盖机制丢失；这是 UI 取舍，
-        // 后端已完成计时与记账对称（不会永久挂起）。改造前端为队列需产品级拍板。
+        // 前端 AskDialog 同步队列化（FIFO 逐条呈现队头，超时由决议事件放行），
+        // 两端对称：后端不再永久挂起，前端不再覆盖丢失。
         waitingInput: {
           on: {
             'ask.requested': {

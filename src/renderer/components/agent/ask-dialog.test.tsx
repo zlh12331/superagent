@@ -10,10 +10,11 @@
 // 6. 进度条：单问题不渲染，多问题渲染（aria-valuemax）
 // 7. 异常路径：respondAsk 拒绝 / 返回 error → toast + 清空
 
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { useActiveSessionStore } from '@/stores/persistent/sessions-store';
 import { useAgentAskStore } from '@/stores/transient/agent-ask-store';
 import { AskDialog } from './ask-dialog';
 
@@ -33,8 +34,25 @@ function mkQuestion(overrides: Record<string, unknown> = {}) {
   } as never;
 }
 
-function setAsk(askId: string, questions: ReturnType<typeof mkQuestion>[]) {
-  useAgentAskStore.setState({ askId, questions: questions as never });
+/** 当前激活会话 id（队列 selector 按激活会话取队头） */
+const ACTIVE_SESSION = 'session-1';
+
+/** 入队一条提问（队列形态：asks[] 按到达顺序 FIFO） */
+function setAsk(
+  askId: string,
+  questions: ReturnType<typeof mkQuestion>[],
+  sessionId = ACTIVE_SESSION,
+) {
+  useAgentAskStore.setState({
+    asks: [{ askId, questions: questions as never, sessionId, receivedAt: Date.now() }],
+  });
+}
+
+/** 当前队头 askId（null = 该会话无待答提问） */
+function headAskId(): string | null {
+  return (
+    useAgentAskStore.getState().asks.find((a) => a.sessionId === ACTIVE_SESSION)?.askId ?? null
+  );
 }
 
 /** 注入 window.api.agent.respondAsk 并返回 mock（合法 IpcResponse 成功体） */
@@ -47,7 +65,10 @@ function injectRespondAsk() {
 describe('AskDialog', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    useAgentAskStore.setState({ askId: null, questions: [] });
+    useAgentAskStore.setState({ asks: [] });
+    // 会话归属：队列 selector 按「当前激活会话」取队头——运行时提问总发生
+    // 在已激活会话中，测试需对齐该前提
+    useActiveSessionStore.setState({ activeSessionId: ACTIVE_SESSION });
   });
 
   it('无提问时不渲染', () => {
@@ -103,7 +124,7 @@ describe('AskDialog', () => {
       askId: 'ask-9',
       answers: [{ selectedIndexes: [1], text: '补充说明' }],
     });
-    expect(useAgentAskStore.getState().askId).toBeNull();
+    expect(headAskId()).toBeNull();
   });
 
   it('未作答直接提交：answers 为无字段对象（LLM 按未选择继续）', async () => {
@@ -122,7 +143,7 @@ describe('AskDialog', () => {
     render(<AskDialog />);
     await user.click(screen.getByRole('button', { name: '取消' }));
     expect(respondAsk).toHaveBeenCalledTimes(1);
-    expect(useAgentAskStore.getState().askId).toBeNull();
+    expect(headAskId()).toBeNull();
   });
 
   it('进度条：单问题不渲染，多问题渲染且 aria-valuemax 对齐问题数', () => {
@@ -167,7 +188,7 @@ describe('AskDialog', () => {
     // [CODE] 前缀错误 → 错误码经 errors namespace 本地化（zh-CN：输入参数有误）
     expect(toast.error).toHaveBeenCalledWith('输入参数有误');
     // 失败不 clearAsk：选项保留，用户可原地重试（此前强制关窗丢答案）
-    expect(useAgentAskStore.getState().askId).toBe('ask-9');
+    expect(headAskId()).toBe('ask-9');
   });
 
   it('respondAsk 拒绝：无 [CODE] 前缀原始消息透传 toast + 保留现场', async () => {
@@ -182,7 +203,7 @@ describe('AskDialog', () => {
     const { toast } = await import('sonner');
     // 非 IPC 错误响应（无 [CODE] 前缀）→ unwrapErrorMessage 原样透传（全仓统一行为）
     expect(toast.error).toHaveBeenCalledWith('ipc down');
-    expect(useAgentAskStore.getState().askId).toBe('ask-9');
+    expect(headAskId()).toBe('ask-9');
   });
 
   it('取消：回传空回答且清空 store（与提交失败区分）', async () => {
@@ -192,6 +213,109 @@ describe('AskDialog', () => {
     render(<AskDialog />);
     await user.click(screen.getByRole('button', { name: '取消' }));
     expect(respondAsk).toHaveBeenCalledWith({ askId: 'ask-9', answers: [] });
-    expect(useAgentAskStore.getState().askId).toBeNull();
+    expect(headAskId()).toBeNull();
+  });
+
+  // ── 队列化（2026-10-08）：一轮多 ask 工具并发到达，FIFO 逐条呈现 ──
+
+  it('队列：两条待答 → 只渲染队头；队头出队后下一条自动上浮', async () => {
+    const user = userEvent.setup();
+    injectRespondAsk();
+    // 模拟并发到达：两条同会话提问同时入队（AI SDK Promise.all 并行执行工具）
+    useAgentAskStore.setState({
+      asks: [
+        {
+          askId: 'ask-1',
+          questions: [mkQuestion({ question: '第一问？' })] as never,
+          sessionId: ACTIVE_SESSION,
+          receivedAt: Date.now(),
+        },
+        {
+          askId: 'ask-2',
+          questions: [mkQuestion({ question: '第二问？' })] as never,
+          sessionId: ACTIVE_SESSION,
+          receivedAt: Date.now(),
+        },
+      ],
+    });
+    render(<AskDialog />);
+
+    // 队头（先问先答）：只显示第一问
+    expect(screen.getByText('第一问？')).toBeInTheDocument();
+    expect(screen.queryByText('第二问？')).not.toBeInTheDocument();
+
+    // 提交队头 → 出队 → 第二问自动上浮
+    await user.click(screen.getByRole('button', { name: '提交' }));
+    expect(screen.getByText('第二问？')).toBeInTheDocument();
+    expect(screen.queryByText('第一问？')).not.toBeInTheDocument();
+    expect(headAskId()).toBe('ask-2');
+  });
+
+  it('队列：超时的队头被决议事件放行（不阻塞后续提问）', () => {
+    // 主进程 60s 超时 → agent:event:ask:resolved(timed-out) → bridge 调 removeAsk。
+    // 此处直接断言 store 语义（bridge 订阅链路由 use-agent-ask-bridge 覆盖）
+    useAgentAskStore.setState({
+      asks: [
+        {
+          askId: 'ask-timeout',
+          questions: [mkQuestion()] as never,
+          sessionId: ACTIVE_SESSION,
+          receivedAt: Date.now(),
+        },
+        {
+          askId: 'ask-next',
+          questions: [mkQuestion({ question: '第二问？' })] as never,
+          sessionId: ACTIVE_SESSION,
+          receivedAt: Date.now(),
+        },
+      ],
+    });
+    render(<AskDialog />);
+    expect(screen.queryByText('第二问？')).not.toBeInTheDocument();
+
+    // 决议事件到达（removeAsk 幂等；用户未曾操作）
+    // act 包裹：zustand 外部更新须让 React 同步渲染后才可断言
+    act(() => {
+      useAgentAskStore.getState().removeAsk('ask-timeout');
+    });
+
+    expect(screen.getByText('第二问？')).toBeInTheDocument();
+  });
+
+  it('队列：只呈现当前激活会话的提问（跨会话不串扰）', () => {
+    useAgentAskStore.setState({
+      asks: [
+        {
+          askId: 'ask-other',
+          questions: [mkQuestion({ question: '别的会话？' })] as never,
+          sessionId: 'session-2',
+          receivedAt: Date.now(),
+        },
+      ],
+    });
+    const { container } = render(<AskDialog />);
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it('队列：本会话清理不影响其他会话的提问', () => {
+    useAgentAskStore.setState({
+      asks: [
+        {
+          askId: 'ask-a',
+          questions: [mkQuestion()] as never,
+          sessionId: ACTIVE_SESSION,
+          receivedAt: Date.now(),
+        },
+        {
+          askId: 'ask-b',
+          questions: [mkQuestion()] as never,
+          sessionId: 'session-2',
+          receivedAt: Date.now(),
+        },
+      ],
+    });
+    useAgentAskStore.getState().clearAsk(ACTIVE_SESSION);
+    const ids = useAgentAskStore.getState().asks.map((a) => a.askId);
+    expect(ids).toEqual(['ask-b']);
   });
 });
