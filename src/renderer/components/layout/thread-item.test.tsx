@@ -51,6 +51,7 @@ const base = {
   isDeleting: false,
   isPinned: false,
   isRunning: false,
+  hasPendingApproval: false,
   highlighted: false,
   onSelect: vi.fn(),
   onDelete: vi.fn(),
@@ -106,6 +107,18 @@ describe('ThreadItem · 渲染与选择', () => {
   it('正向边界：搜索高亮 → ring 类（2 秒高亮环的视觉锚）', () => {
     const { container } = renderThread({ highlighted: true });
     expect(container.querySelector('.thread-item')?.className).toContain('ring-1');
+  });
+
+  it('跨会话待审批：hasPendingApproval 显示沙漏徽标 + sr-only 文案', () => {
+    const { container } = renderThread({ hasPendingApproval: true });
+    // 琥珀沙漏与运行中转圈（Loader2）是两个独立信号，可同时出现
+    expect(container.querySelector('.lucide-hourglass')).not.toBeNull();
+    expect(screen.getByText('该会话有待审批的工具调用')).toBeDefined();
+  });
+
+  it('无待审批：不渲染沙漏徽标', () => {
+    const { container } = renderThread({ hasPendingApproval: false });
+    expect(container.querySelector('.lucide-hourglass')).toBeNull();
   });
 
   it('异常：拖拽进行中 → 包装层半透明（isDragging 视觉）', () => {

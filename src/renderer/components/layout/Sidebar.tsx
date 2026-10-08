@@ -39,6 +39,7 @@ import { motion } from 'motion/react';
 import { type ReactElement, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
+import { useShallow } from 'zustand/react/shallow';
 import { AsyncBoundary } from '@/components/common/AsyncBoundary';
 import { EmptyState } from '@/components/common/EmptyState';
 import { FileTreePanel } from '@/components/file-tree/FileTreePanel';
@@ -59,6 +60,10 @@ import { ROUTES } from '@/lib/constants';
 import { springTransition } from '@/lib/motion';
 import { useActiveSessionStore } from '@/stores/persistent/sessions-store';
 import { useSidebarPrefStore } from '@/stores/persistent/sidebar-pref-store';
+import {
+  selectPendingApprovalSessionIds,
+  useApprovalsStore,
+} from '@/stores/transient/approvals-store';
 import { confirm } from '@/stores/transient/confirm-dialog-store';
 import { useUiStore } from '@/stores/transient/ui-store';
 import { useWelcomeStore } from '@/stores/transient/welcome-store';
@@ -153,6 +158,12 @@ export function Sidebar(): ReactElement {
   const toggleFolder = useSidebarPrefStore((s) => s.toggleFolder);
   // PointerSensor：拖拽需移动 4px 才激活（避免与点击选择冲突）
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
+
+  // 待审批会话集合（2026-10-08）：侧栏徽标数据源——非当前会话的审批请求只在
+  // 它自己的 ChatPanel 里渲染，切走后用户无从得知（不响应即 5 分钟超时被拒）。
+  // ⚠️ 必须包 useShallow：selector 每次返回新数组，裸用会触发
+  // "getSnapshot should be cached" 无限重渲染（React 19 + zustand 5，实测）
+  const pendingApprovalSessionIds = useApprovalsStore(useShallow(selectPendingApprovalSessionIds));
 
   /** 拖拽结束：同文件夹内重排（跨文件夹拖拽被 folder 归属过滤）；覆盖写入持久化 store */
   const handleDragEnd = (event: DragEndEvent): void => {
@@ -386,6 +397,10 @@ export function Sidebar(): ReactElement {
                               isPinned={entry.session.pinned === true}
                               // D4A：跨会话运行徽标 + 中断入口（数据源 sessions 表 lastRunStatus）
                               isRunning={entry.session.lastRunStatus === 'running'}
+                              // 跨会话待审批徽标（数据源 approvals-store.pending 按会话聚合）
+                              hasPendingApproval={pendingApprovalSessionIds.includes(
+                                entry.session.id,
+                              )}
                               highlighted={highlightedThreadIds.has(entry.session.id)}
                               onSelect={() => handleSelectSession(entry.session.id)}
                               onDelete={() => handleDelete(entry.session.id)}
