@@ -58,6 +58,10 @@ export const IPC_META = {
   agent: {
     run: request('agent:run'),
     subscribeAsk: event('agent:event:ask'),
+    // 提问决议事件（含超时等非用户路径）——渲染层据此把提问移出队列，
+    // 与 agent:event:ask 配对：有提问必有决议，前端不会残留「僵尸提问弹窗」，
+    // 队列化后也不会被已超时的队头永久阻塞（2026-10-08）
+    subscribeAskResolved: event('agent:event:ask:resolved'),
     respondAsk: request('agent:ask:respond'),
     stop: request('agent:stop'),
     approvalResponse: request('agent:approval:response'),

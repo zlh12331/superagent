@@ -34,6 +34,8 @@ import {
 import {
   type AskEventPayload,
   AskEventPayloadSchema,
+  type AskResolvedPayload,
+  AskResolvedPayloadSchema,
   AskRespondReqSchema,
   type AskRespondRes,
   AskRespondResSchema,
@@ -532,6 +534,11 @@ export const IPC_DEFINITIONS = {
       IPC_META.agent.subscribeAsk,
       {} as AskEventPayload,
       AskEventPayloadSchema,
+    ),
+    subscribeAskResolved: withPayload(
+      IPC_META.agent.subscribeAskResolved,
+      {} as AskResolvedPayload,
+      AskResolvedPayloadSchema,
     ),
     subscribeStreamEnd: withPayload(
       IPC_META.agent.subscribeStreamEnd,

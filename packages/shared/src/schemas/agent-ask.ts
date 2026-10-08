@@ -79,3 +79,33 @@ export type AskRespondRes = z.infer<typeof AskRespondResSchema>;
 export type AgentAnswer = z.infer<typeof AgentAnswerSchema>;
 /** 提问事件 payload 类型 */
 export type AskEventPayload = z.infer<typeof AskEventPayloadSchema>;
+
+/**
+ * 提问决议事件 payload（主进程 → 渲染层）
+ *
+ * 与 agent:event:ask 配对：任一提问最终都会走到一个决议（用户作答、超时、
+ * 中断清理），渲染层据此把该提问移出队列——否则超时等非用户路径会让弹窗
+ * 永久残留，且队列化后已超时的队头会阻塞后续提问（2026-10-08 修复：
+ * 此前决议只经进程内 lifecycle 传播，渲染层无从得知）。
+ *
+ * decision 语义与主进程 AskDecisionOutcome 对齐：
+ * - answered   用户作答
+ * - timed-out  提问超时（机器 after 转换 → expireAsk，工具按「未响应」继续）
+ * - aborted    回合中断导致 pending 被清理（dispose 出口，当前静默不发此事件，
+ *              保留值与审批枚举对称）
+ */
+export interface AskResolvedPayload {
+  /** 归属会话 id */
+  readonly sessionId: string;
+  /** 决议对应的提问 id（渲染层据此定位待答条目） */
+  readonly askId: string;
+  /** 决议结果 */
+  readonly decision: 'answered' | 'timed-out' | 'aborted';
+}
+
+/** 提问决议事件 payload zod schema（主进程发送侧 dev 契约校验用） */
+export const AskResolvedPayloadSchema = z.object({
+  sessionId: z.string().min(1),
+  askId: z.string().min(1),
+  decision: z.enum(['answered', 'timed-out', 'aborted']),
+});

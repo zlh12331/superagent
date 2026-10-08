@@ -869,6 +869,9 @@ function createMockApi(): IpcApi {
         askCallbacks.add(cb);
         return () => askCallbacks.delete(cb);
       },
+      // 提问决议事件（真实链路：主进程超时/作答后回推；mock 无提问流，
+      // 订阅桩只保 API 形状完整）
+      subscribeAskResolved: () => () => {},
     },
 
     proxy: {
