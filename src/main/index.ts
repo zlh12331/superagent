@@ -29,6 +29,7 @@ import { isMemoryEnabled } from './infra/memory-hub/memory-pref';
 import { scheduleMemoryPrewarm } from './infra/memory-hub/prewarm';
 import { applyProxyChange } from './infra/network/proxy-applier';
 import { buildRemoteEndpoints, getLanIPv4Addresses } from './infra/remote/network-info';
+import { readSelectedModelId } from './infra/storage/ai-pref';
 import { initDb } from './infra/storage/db';
 import { readAllSettings, readSetting, writeSetting } from './infra/storage/settings-pref';
 import { readTelemetryLevelSync } from './infra/storage/telemetry-pref';
@@ -247,7 +248,9 @@ app
         // removed 只计整条丢弃；就地裁剪（条数不变）体现在 reclaimedTokens，
         // handler 以回收的 token 数作为落库与展示口径
         compactMessages: (messages) => {
-          const resolved = modelRegistry.resolve(undefined);
+          // 与 agent 主链路同一解析口径：用户选定模型 → 默认模型
+          // （此前硬编码 undefined，/compact 的窗口预算恒按默认模型计算）
+          const resolved = modelRegistry.resolve(readSelectedModelId());
           const budget = getCompactionBudget(resolved.capabilities.contextWindowSize ?? 128_000);
           const trimmed = compressByTokenBudget([...messages], budget);
           return {

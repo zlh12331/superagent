@@ -174,6 +174,8 @@ export function createAgentHandlers(deps: AgentHandlerDeps): AgentLifecycleHandl
         mode: input.mode,
         ...(input.thinking !== undefined ? { thinking: input.thinking } : {}),
         ...(input.temperature !== undefined ? { temperature: input.temperature } : {}),
+        // 渲染层模型选择器的当前选择（省略 = 主进程按设置 ai.defaultModel 回落）
+        ...(input.modelId !== undefined ? { modelId: input.modelId } : {}),
         webContents: ctx.sender,
       });
       // P2 修复：用最终 sessionId 注入本轮用户输入。此前用 `input.sessionId ?? ''`，

@@ -155,5 +155,35 @@ describe('shared 层契约补测', () => {
       expect(AgentRunReqSchema.safeParse({ ...base, temperature: 2.1 }).success).toBe(false);
       expect(AgentRunReqSchema.safeParse({ ...base, temperature: 'hot' }).success).toBe(false);
     });
+
+    it('AgentRunReqSchema：modelId 缺省 → undefined；合法 id 正向解析', () => {
+      const base = {
+        messages: [{ role: 'user', content: 'hi' }],
+        workingDir: '/tmp/proj',
+      };
+      const omitted = AgentRunReqSchema.safeParse(base);
+      expect(omitted.success).toBe(true);
+      if (omitted.success) {
+        expect(omitted.data.modelId).toBeUndefined();
+      }
+      const parsed = AgentRunReqSchema.safeParse({ ...base, modelId: 'gpt-4o' });
+      expect(parsed.success).toBe(true);
+      if (parsed.success) {
+        expect(parsed.data.modelId).toBe('gpt-4o');
+      }
+    });
+
+    it('AgentRunReqSchema：modelId 空串/超长/非字符串 → 拦截（与 runtime_models.model_id 约束对齐）', () => {
+      const base = {
+        messages: [{ role: 'user', content: 'hi' }],
+        workingDir: '/tmp/proj',
+      };
+      expect(AgentRunReqSchema.safeParse({ ...base, modelId: '' }).success).toBe(false);
+      expect(AgentRunReqSchema.safeParse({ ...base, modelId: 'a'.repeat(101) }).success).toBe(
+        false,
+      );
+      expect(AgentRunReqSchema.safeParse({ ...base, modelId: 'a'.repeat(100) }).success).toBe(true);
+      expect(AgentRunReqSchema.safeParse({ ...base, modelId: 42 }).success).toBe(false);
+    });
   });
 });

@@ -45,6 +45,7 @@ import type { WebContents } from 'electron';
 import { emitEvent } from '../../../utils/emit-event';
 import { logger } from '../../../utils/logger';
 import { broadcastInvalidation } from '../../invalidation/invalidation';
+import { readSelectedModelId } from '../../storage/ai-pref';
 import type { ISessionService } from '../../storage/session-service';
 import { withSpan } from '../../telemetry/otel';
 import { TurnEventEmitter } from '../agent-runtime';
@@ -129,6 +130,13 @@ export interface StartAgentOptions {
   readonly thinking?: 'off' | 'low' | 'medium' | 'high';
   /** 采样温度（可选：渲染层设置项，覆盖模型级默认 generationConfig.temperature；思考模型忽略） */
   readonly temperature?: number;
+  /**
+   * 目标模型 id（可选：渲染层模型选择器的当前选择）
+   *
+   * 省略时回落 `app_settings.ai.defaultModel`（无头入口：IM / cron / 远程 /
+   * 子代理不带本字段，统一走用户选定模型），仍无则用默认供应商默认模型。
+   */
+  readonly modelId?: string | undefined;
   /** 运行模式（plan 只读探索 / build 审批后执行，缺省视为 build） */
   readonly mode?: 'plan' | 'build';
   /**
@@ -501,7 +509,13 @@ export class AgentService implements IAgentService {
         // 本轮效果面（机器经 TurnDeps 在正确时机调用；闭包捕获 span/累积器/窗口）
         const deps: TurnDeps = {
           resolveModel: async () => {
-            resolvedModel = modelRegistry.resolve(undefined);
+            // 模型解析优先级（2026-10-08 接通界面所选模型）：
+            // 1. 请求携带的 modelId——渲染层模型选择器即时值，规避设置写穿透
+            //    （settings:set 为 fire-and-forget，DB 可能落后于 UI）
+            // 2. app_settings.ai.defaultModel——无头入口（IM / cron / 远程 /
+            //    子代理）不带该字段，统一按用户选定模型执行
+            // 3. 默认供应商默认模型（registry 内部兜底，见 ModelRegistry.resolve）
+            resolvedModel = modelRegistry.resolve(options.modelId ?? readSelectedModelId());
             return resolvedModel.modelId;
           },
           acquireGate: async () => {

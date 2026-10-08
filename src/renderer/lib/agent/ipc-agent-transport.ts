@@ -71,6 +71,8 @@ export interface AgentConfig {
   readonly thinking?: ThinkingLevel | undefined;
   /** 采样温度（可选：渲染层设置项，覆盖模型级默认；DeepSeek 思考模型忽略） */
   readonly temperature?: number | undefined;
+  /** 目标模型 id（设置项 ai.defaultModel：模型选择器的当前选择，主进程据此路由） */
+  readonly modelId?: string | undefined;
 }
 
 /**
@@ -89,6 +91,7 @@ export function buildAgentTransportConfig(input: {
   maxSteps: number | undefined;
   thinking: ThinkingLevel | undefined;
   temperature: number | undefined;
+  modelId: string | undefined;
 }): AgentConfig {
   return {
     workingDir: input.workingDir,
@@ -96,6 +99,7 @@ export function buildAgentTransportConfig(input: {
     maxSteps: input.maxSteps,
     thinking: input.thinking,
     temperature: input.temperature,
+    modelId: input.modelId,
   };
 }
 
@@ -220,7 +224,7 @@ export class IpcAgentTransport<Message extends UIMessage = UIMessage>
         ),
       );
     }
-    const { workingDir, systemPrompt, maxSteps, mode, thinking, temperature } = config;
+    const { workingDir, systemPrompt, maxSteps, mode, thinking, temperature, modelId } = config;
 
     // P1 修复：直接用同步已知的 chatId 过滤事件流。此前等 agent.run 响应返回才填
     // currentSessionId，而主进程 push 事件可能先于 invoke 响应到达（startAgent 为
@@ -306,6 +310,9 @@ export class IpcAgentTransport<Message extends UIMessage = UIMessage>
               thinking,
               // 采样温度：设置项覆盖模型级默认（undefined = 用模型默认）
               ...(temperature !== undefined ? { temperature } : {}),
+              // 目标模型：模型选择器的当前选择（主进程据此路由；
+              // 省略时主进程回落设置 ai.defaultModel——两条路径同源）
+              ...(modelId !== undefined ? { modelId } : {}),
             }),
           );
         } catch (err) {

@@ -77,6 +77,15 @@ export const AgentRunReqSchema = z.object({
     .max(2)
     .optional()
     .transform((v) => v ?? undefined),
+  // 目标模型 id（可选：渲染层模型选择器的当前选择，主进程经 ModelRegistry 解析路由）。
+  // 省略 = 主进程回落 app_settings.ai.defaultModel，仍无则用默认供应商默认模型。
+  // 上限与 runtime_models.model_id 的存储约束对齐。
+  modelId: z
+    .string()
+    .min(1)
+    .max(100)
+    .optional()
+    .transform((v) => v ?? undefined),
 });
 
 /** Agent 中断入参 zod schema */

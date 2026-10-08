@@ -412,7 +412,9 @@ describe('agent-service', () => {
 
       await flushAsync();
 
-      expect(mocks.mockGetModel).toHaveBeenCalledWith(undefined);
+      // 显式传解析结果的 modelId：此前传 undefined 会二次解析回默认模型，
+      // 导致「元数据取自解析结果、实际请求发给默认模型」的分裂（2026-10-08 修复）
+      expect(mocks.mockGetModel).toHaveBeenCalledWith('test-model');
       expect(mocks.mockStreamText).toHaveBeenCalledTimes(1);
       const callArgs = mocks.mockStreamText.mock.calls[0];
       if (!callArgs) throw new Error('streamText 未被调用');
