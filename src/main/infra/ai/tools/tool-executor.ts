@@ -75,7 +75,7 @@ export interface IToolExecutor {
 }
 
 /**
- * 工具输出统一字节闸门（2026-09-08 性能/成本修复）
+ * 工具输出统一字节闸门（2026-09-08 性能/成本修复；2026-10-08 窗口感知化）
  *
  * 背景：各工具的截断策略不一致——run_command 100KB、web_fetch 4000 字符，
  * 而 read_file 只透传 fileService 结果（其 2MB 上限是「超过就报错」而非截断），
@@ -85,26 +85,63 @@ export interface IToolExecutor {
  * 位置选择：放在 ToolExecutor 出口而非各工具内——单点保证「任何工具的输出
  * 都不可能无界进上下文」，新增工具无需重复实现。
  *
- * 阈值 200KB（约 5 万 token）：明显高于正常工具输出（读文件按需分段、
- * grep 有 maxResults），又远低于能报废回合的量级。截断保留头部并标注
- * 后续字节数，模型可据此改用 offset/limit 分段读取。
+ * 阈值 = min(绝对上限, 模型窗口的可分配比例)：
+ * - 绝对上限 200KB（约 5 万 token）：对 128K+ 窗口成立（原注释的隐含前提），
+ *   防单次输出报废回合
+ * - 窗口比例上限：**32K 窗口的本地模型若按 200KB 放行，单次输出即占满全部
+ *   上下文**（原常量只对 128K+ 成立）。2026-10-08 起按模型窗口收敛——
+ *   项目支持 10 家供应商（窗口 32K ~ 1M），单一常量无法同时适配两端
  */
 const MAX_TOOL_OUTPUT_BYTES = 200 * 1024;
+/** 输出下限（极端小窗口下仍保证有可用输出） */
+const MIN_TOOL_OUTPUT_BYTES = 8 * 1024;
+/**
+ * 单次工具输出占模型窗口的比例上限
+ *
+ * 保守取 1/4：工具输出只是回合的一轮输入，其后还有模型回复、后续工具调用与
+ * 历史消息——留 3/4 给其余部分是"不挤掉上下文"的估计。
+ */
+const OUTPUT_WINDOW_RATIO = 0.25;
+/**
+ * token → 字节的估算系数
+ *
+ * 英文约 4 字符/token、中文约 1.5（UTF-8 下 3 字节/字 → 2 字节/token）——
+ * 取保守中位 3，宁可少放行也不挤爆窗口。
+ */
+const BYTES_PER_TOKEN = 3;
+
+/**
+ * 按模型窗口计算输出上限（未提供窗口信息时用绝对上限）
+ *
+ * @param contextWindowSize 模型上下文窗口（token；取自 ResolvedModel.capabilities）
+ * @returns 字节上限（[MIN_TOOL_OUTPUT_BYTES, MAX_TOOL_OUTPUT_BYTES] 区间内）
+ */
+export function toolOutputLimitFor(contextWindowSize: number | undefined): number {
+  if (contextWindowSize === undefined || contextWindowSize <= 0) {
+    return MAX_TOOL_OUTPUT_BYTES;
+  }
+  const windowBudget = contextWindowSize * BYTES_PER_TOKEN * OUTPUT_WINDOW_RATIO;
+  return Math.max(MIN_TOOL_OUTPUT_BYTES, Math.min(MAX_TOOL_OUTPUT_BYTES, Math.floor(windowBudget)));
+}
 
 /**
  * 按字节截断工具输出（超限时保留头部 + 标注）
  *
  * 用 Buffer 按字节切分再转回字符串，避免按字符数截断导致多字节字符被劈开。
+ *
+ * @param output 工具输出文本
+ * @param contextWindowSize 模型上下文窗口（token；省略 = 用绝对上限，向后兼容）
  */
-export function clampToolOutput(output: string): string {
+export function clampToolOutput(output: string, contextWindowSize?: number): string {
+  const limit = toolOutputLimitFor(contextWindowSize);
   const bytes = Buffer.byteLength(output, 'utf8');
-  if (bytes <= MAX_TOOL_OUTPUT_BYTES) {
+  if (bytes <= limit) {
     return output;
   }
-  const head = Buffer.from(output, 'utf8').subarray(0, MAX_TOOL_OUTPUT_BYTES).toString('utf8');
+  const head = Buffer.from(output, 'utf8').subarray(0, limit).toString('utf8');
   // 多字节字符在切点处可能产生替换字符，去掉末尾可能不完整的字符
   const safeHead = head.endsWith('\uFFFD') ? head.slice(0, -1) : head;
-  return `${safeHead}\n\n…（输出超过 ${MAX_TOOL_OUTPUT_BYTES / 1024}KB 已截断，共 ${(bytes / 1024).toFixed(0)}KB；请缩小范围或分段读取）`;
+  return `${safeHead}\n\n…（输出超过 ${Math.round(limit / 1024)}KB 已截断，共 ${(bytes / 1024).toFixed(0)}KB；请缩小范围或分段读取）`;
 }
 
 /**
@@ -118,7 +155,7 @@ export function clampToolOutput(output: string): string {
  * 仅处理工具类 part 的字符串字段，其余 part 原样返回（不引入额外分配）。
  * 放在本模块与 clampToolOutput 同源，避免 agent-service 文件净行超限。
  */
-export function clampToolPartOutput(part: unknown): unknown {
+export function clampToolPartOutput(part: unknown, contextWindowSize?: number): unknown {
   if (typeof part !== 'object' || part === null) {
     return part;
   }
@@ -131,7 +168,7 @@ export function clampToolPartOutput(part: unknown): unknown {
   if (typeof output !== 'string') {
     return part;
   }
-  return { ...record, output: clampToolOutput(output) };
+  return { ...record, output: clampToolOutput(output, contextWindowSize) };
 }
 
 /**
@@ -163,7 +200,7 @@ export class ToolExecutor implements IToolExecutor {
   ): Promise<AgentToolResultPayload> {
     // 性能埋点：工具执行全流程耗时（含权限检查 + 审批等待 + 工具执行）
     const startTime = performance.now();
-    // OpenTelemetry span：工具执行链路（含权限决策 + 审批等待 + 实际执行）
+    // OpenTelemetry span：仅做埋点包装，执行主体在 runExecution（见其注释）
     return withSpan(
       'tool.execute',
       {
@@ -171,159 +208,163 @@ export class ToolExecutor implements IToolExecutor {
         'tool.callId': toolCallId,
         'session.id': ctx.sessionId,
       },
-      async (span) => {
-        // 1. 查找工具
-        const tool = this.registry.get(toolName);
-        if (tool === undefined) {
-          logger.warn({ toolName, toolCallId, errorCode: ErrorCode.TOOL_NOT_FOUND }, '工具不存在');
-          const result = this.buildErrorResult(
-            ctx.sessionId,
-            toolCallId,
-            toolName,
-            '工具不存在',
-            ErrorCode.TOOL_NOT_FOUND,
-            `工具不存在：${toolName}`,
-          );
-          this.sendToolResult(webContents, result);
-          return result;
-        }
-
-        // 2. 决策权限（userPrompt 用于意图豁免破坏性拦截）
-        // P2（IM 外泄向量）：ctx.workingDir 作为路径边界传入——auto 模式下
-        // 命令引用边界外的绝对路径时降级 ask，不再被只读快速路径静默放行
-        //
-        // fail-closed：decide 内部（stableStringify / 白名单匹配）的异常契约是
-        // "由调用方 catch"，而这里是唯一生产调用点。不兜住会让异常冒泡出
-        // execute()，AGENT_TOOL_RESULT 永远不推送，渲染层工具卡片卡在"执行中"。
-        let decision: PermissionDecision;
-        try {
-          decision = await this.permissionService.decide(tool, input, ctx.userPrompt, {
-            pathBoundary: ctx.workingDir,
-          });
-        } catch (error: unknown) {
-          logger.error({ toolName, toolCallId, error }, '权限决策异常，已拒绝执行');
-          const result = this.buildErrorResult(
-            ctx.sessionId,
-            toolCallId,
-            toolName,
-            '权限决策失败',
-            ErrorCode.TOOL_PERMISSION_DENIED,
-            `权限决策失败，已拒绝执行：${toolName}`,
-          );
-          this.sendToolResult(webContents, result);
-          return result;
-        }
-
-        // 3. 推送 AGENT_TOOL_CALL 事件（渲染层据此展示 ToolCallView）
-        this.sendToolCall(webContents, {
-          sessionId: ctx.sessionId,
-          toolCallId,
-          toolName,
-          input,
-          permission: decision.permission,
-        });
-
-        // 3.5 生命周期钩子：pre-tool-use（可阻断执行；错误隔离）
-        const preAllowed = await hookRegistry.trigger(HookEventName.PRE_TOOL_USE, {
-          sessionId: ctx.sessionId,
-          toolCallId,
-          toolName,
-          input,
-        });
-        if (!preAllowed) {
-          logger.info({ toolName, toolCallId }, '钩子阻止工具执行');
-          const result = this.buildErrorResult(
-            ctx.sessionId,
-            toolCallId,
-            toolName,
-            '钩子阻止',
-            ErrorCode.TOOL_PERMISSION_DENIED,
-            `工具执行被钩子阻止：${toolName}`,
-          );
-          this.sendToolResult(webContents, result);
-          return result;
-        }
-
-        // 4. 权限闸：deny 直接拒绝 / ask 推审批等用户响应（批准/拒绝/超时/中断/销毁五种出口）。
-        //    状态机细节与不变量注释见 resolvePermissionGate；返回非 null 即终止本次执行。
-        const gate = await this.resolvePermissionGate({
-          decision,
-          tool,
-          toolName,
-          toolCallId,
-          input,
-          ctx,
-          webContents,
-        });
-        if (gate !== null) {
-          return gate;
-        }
-
-        // 5. 检查中断信号（审批等待期间用户可能中断了对话）
-        if (ctx.abortSignal.aborted) {
-          logger.info({ toolName, toolCallId }, '工具执行前检测到中断信号');
-          const result = this.buildErrorResult(
-            ctx.sessionId,
-            toolCallId,
-            toolName,
-            '执行中断',
-            ErrorCode.TOOL_ABORTED,
-            '工具执行已被中断',
-          );
-          this.sendToolResult(webContents, result);
-          return result;
-        }
-
-        // 6. 执行工具
-        try {
-          logger.info({ toolName, toolCallId }, '开始执行工具');
-          const toolResult: ToolResult = await tool.execute(input, ctx);
-          // 生命周期钩子：post-tool-use（执行成功；错误隔离）
-          void hookRegistry.trigger(HookEventName.POST_TOOL_USE, {
-            sessionId: ctx.sessionId,
-            toolCallId,
-            toolName,
-            input,
-            result: toolResult,
-          });
-          const durationMs = Math.round(performance.now() - startTime);
-          logger.info({ toolName, toolCallId, durationMs }, '工具执行成功');
-          span?.setAttribute('tool.durationMs', durationMs);
-          span?.setAttribute('tool.success', true);
-
-          const result: AgentToolResultPayload = {
-            sessionId: ctx.sessionId,
-            toolCallId,
-            toolName,
-            title: toolResult.title,
-            output: clampToolOutput(toolResult.output),
-            ...(toolResult.metadata !== undefined ? { metadata: toolResult.metadata } : {}),
-          };
-          this.sendToolResult(webContents, result);
-          return result;
-        } catch (error: unknown) {
-          // 执行失败：包装为 TOOL_EXECUTION_FAILED
-          const durationMs = Math.round(performance.now() - startTime);
-          logger.error(
-            { toolName, toolCallId, errorCode: ErrorCode.TOOL_EXECUTION_FAILED, durationMs, error },
-            '工具执行失败',
-          );
-          span?.setAttribute('tool.durationMs', durationMs);
-          span?.setAttribute('tool.success', false);
-          const message = error instanceof Error ? error.message : '工具执行失败';
-          const result = this.buildErrorResult(
-            ctx.sessionId,
-            toolCallId,
-            toolName,
-            '执行失败',
-            ErrorCode.TOOL_EXECUTION_FAILED,
-            message,
-          );
-          this.sendToolResult(webContents, result);
-          return result;
-        }
-      },
+      async (span) =>
+        this.runExecution({ toolName, toolCallId, input, ctx, webContents, startTime, span }),
     );
+  }
+
+  /**
+   * 执行主体（2026-10-08 从 execute 提取）
+   *
+   * 提取动机与先例：本流程有 6 个错误出口（工具不存在 / 权限决策异常 / 钩子阻止 /
+   * 权限闸 / 中断 / 执行失败），内联展开会把认知复杂度推过门槛（实测 20 > 15）。
+   * 与下方 resolvePermissionGate 的拆分同因同法——**每层只留一类判定**，
+   * execute 退化为「span 包装 + 委托」。
+   *
+   * 出口协议：任一步失败即经 fail 构建错误结果（推渲染层）并返回——
+   * 调用方（executeHook）以 result.error 是否存在区分成败。
+   */
+  private async runExecution(args: {
+    readonly toolName: string;
+    readonly toolCallId: string;
+    readonly input: unknown;
+    readonly ctx: ToolContext;
+    readonly webContents: WebContents | undefined;
+    readonly startTime: number;
+    readonly span:
+      | { setAttribute(key: string, value: string | number | boolean): void }
+      | undefined;
+  }): Promise<AgentToolResultPayload> {
+    const { toolName, toolCallId, input, ctx, webContents, startTime, span } = args;
+    /** 统一的失败出口（构建错误结果 + 推送 + 返回） */
+    const fail = (title: string, code: string, message: string): AgentToolResultPayload =>
+      this.failWith({
+        sessionId: ctx.sessionId,
+        toolCallId,
+        toolName,
+        webContents,
+        title,
+        code,
+        message,
+      });
+
+    // 1. 查找工具
+    const tool = this.registry.get(toolName);
+    if (tool === undefined) {
+      logger.warn({ toolName, toolCallId, errorCode: ErrorCode.TOOL_NOT_FOUND }, '工具不存在');
+      return fail('工具不存在', ErrorCode.TOOL_NOT_FOUND, `工具不存在：${toolName}`);
+    }
+
+    // 2. 决策权限（userPrompt 用于意图豁免破坏性拦截）
+    // P2（IM 外泄向量）：ctx.workingDir 作为路径边界传入——auto 模式下
+    // 命令引用边界外的绝对路径时降级 ask，不再被只读快速路径静默放行
+    //
+    // fail-closed：decide 内部（stableStringify / 白名单匹配）的异常契约是
+    // "由调用方 catch"，而这里是唯一生产调用点。不兜住会让异常冒泡出
+    // execute()，AGENT_TOOL_RESULT 永远不推送，渲染层工具卡片卡在"执行中"。
+    let decision: PermissionDecision;
+    try {
+      decision = await this.permissionService.decide(tool, input, ctx.userPrompt, {
+        pathBoundary: ctx.workingDir,
+      });
+    } catch (error: unknown) {
+      logger.error({ toolName, toolCallId, error }, '权限决策异常，已拒绝执行');
+      return fail(
+        '权限决策失败',
+        ErrorCode.TOOL_PERMISSION_DENIED,
+        `权限决策失败，已拒绝执行：${toolName}`,
+      );
+    }
+
+    // 3. 推送 AGENT_TOOL_CALL 事件（渲染层据此展示 ToolCallView）
+    this.sendToolCall(webContents, {
+      sessionId: ctx.sessionId,
+      toolCallId,
+      toolName,
+      input,
+      permission: decision.permission,
+    });
+
+    // 3.5 生命周期钩子：pre-tool-use（可阻断执行；错误隔离）
+    const blocked = await hookRegistry.trigger(HookEventName.PRE_TOOL_USE, {
+      sessionId: ctx.sessionId,
+      toolCallId,
+      toolName,
+      input,
+    });
+    if (blocked !== null) {
+      // 阻断原因来自钩子本身（HookDenial.reason）；未提供时回落通用文案
+      const reasonText = blocked.reason !== '' ? `（${blocked.reason}）` : '';
+      logger.info({ toolName, toolCallId, reason: blocked.reason }, '钩子阻止工具执行');
+      return fail(
+        '钩子阻止',
+        ErrorCode.TOOL_PERMISSION_DENIED,
+        `工具执行被钩子阻止：${toolName}${reasonText}`,
+      );
+    }
+
+    // 4. 权限闸：deny 直接拒绝 / ask 推审批等用户响应（批准/拒绝/超时/中断/销毁五种出口）。
+    //    状态机细节与不变量注释见 resolvePermissionGate；返回非 null 即终止本次执行。
+    const gate = await this.resolvePermissionGate({
+      decision,
+      tool,
+      toolName,
+      toolCallId,
+      input,
+      ctx,
+      webContents,
+    });
+    if (gate !== null) {
+      return gate;
+    }
+
+    // 5. 检查中断信号（审批等待期间用户可能中断了对话）
+    if (ctx.abortSignal.aborted) {
+      logger.info({ toolName, toolCallId }, '工具执行前检测到中断信号');
+      return fail('执行中断', ErrorCode.TOOL_ABORTED, '工具执行已被中断');
+    }
+
+    // 6. 执行工具
+    try {
+      logger.info({ toolName, toolCallId }, '开始执行工具');
+      const toolResult: ToolResult = await tool.execute(input, ctx);
+      // 生命周期钩子：post-tool-use（执行成功；错误隔离）
+      void hookRegistry.trigger(HookEventName.POST_TOOL_USE, {
+        sessionId: ctx.sessionId,
+        toolCallId,
+        toolName,
+        input,
+        result: toolResult,
+      });
+      const durationMs = Math.round(performance.now() - startTime);
+      logger.info({ toolName, toolCallId, durationMs }, '工具执行成功');
+      span?.setAttribute('tool.durationMs', durationMs);
+      span?.setAttribute('tool.success', true);
+
+      const result: AgentToolResultPayload = {
+        sessionId: ctx.sessionId,
+        toolCallId,
+        toolName,
+        title: toolResult.title,
+        // 窗口感知截断：小窗口模型（如 32K 本地 ollama）按比例收紧，
+        // 防单次输出占满上下文（详见 toolOutputLimitFor 注释）
+        output: clampToolOutput(toolResult.output, ctx.contextWindowSize),
+        ...(toolResult.metadata !== undefined ? { metadata: toolResult.metadata } : {}),
+      };
+      this.sendToolResult(webContents, result);
+      return result;
+    } catch (error: unknown) {
+      // 执行失败：包装为 TOOL_EXECUTION_FAILED
+      const durationMs = Math.round(performance.now() - startTime);
+      logger.error(
+        { toolName, toolCallId, errorCode: ErrorCode.TOOL_EXECUTION_FAILED, durationMs, error },
+        '工具执行失败',
+      );
+      span?.setAttribute('tool.durationMs', durationMs);
+      span?.setAttribute('tool.success', false);
+      const message = error instanceof Error ? error.message : '工具执行失败';
+      return fail('执行失败', ErrorCode.TOOL_EXECUTION_FAILED, message);
+    }
   }
 
   /**
@@ -487,6 +528,32 @@ export class ToolExecutor implements IToolExecutor {
     // A4 接线：批准计允许一次，抵消此前累计的拒绝计数
     this.permissionService.recordUserAllowance();
     return null;
+  }
+
+  /**
+   * 统一的失败出口（构建错误结果 + 推送渲染层 + 返回）
+   *
+   * 本类有 6 个错误出口（工具不存在 / 权限决策异常 / 钩子阻止 / 权限闸各出口 /
+   * 中断 / 执行失败），逐个内联展开会把 execute 的认知复杂度推过门槛
+   * （实测 20 > 15）。收敛为一处后各出口只表达「什么错、什么码、什么文案」。
+   *
+   * 入参用对象而非位置参数：7 个位置参数超出规范门槛（≤4），且调用点
+   * 全是同型 string 相邻，位置参数极易传错位（title/code/message 互换
+   * 不会被类型系统拦住）。
+   */
+  private failWith(args: {
+    readonly sessionId: string;
+    readonly toolCallId: string;
+    readonly toolName: string;
+    readonly webContents: WebContents | undefined;
+    readonly title: string;
+    readonly code: string;
+    readonly message: string;
+  }): AgentToolResultPayload {
+    const { sessionId, toolCallId, toolName, webContents, title, code, message } = args;
+    const result = this.buildErrorResult(sessionId, toolCallId, toolName, title, code, message);
+    this.sendToolResult(webContents, result);
+    return result;
   }
 
   /**

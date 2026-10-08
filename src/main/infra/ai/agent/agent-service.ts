@@ -498,13 +498,19 @@ export class AgentService implements IAgentService {
         let assistantText = '';
         const transcriptEntries: TurnTranscriptEntry[] = [];
         let rawPartCount = 0;
-        // 原始 part 推送（P2-31：text-delta 按 sessionId 16–20ms 微批合帧；
-        // flush 在各收尾路径推送 END/ERROR 前调用，保序防丢尾）
-        const partForwarder = createTurnPartForwarder(sessionId, options.webContents);
         let releaseGate: (() => void) | undefined;
         let resolvedModel: ResolvedModel | undefined;
         let unsubscribeApproval: (() => void) | undefined;
         let unsubscribeAsk: (() => void) | undefined;
+        // 原始 part 推送（P2-31：text-delta 按 sessionId 16–20ms 微批合帧；
+        // flush 在各收尾路径推送 END/ERROR 前调用，保序防丢尾）。
+        // 窗口经 getter 惰性读取——此刻模型尚未解析（resolving 阶段才赋值），
+        // 值形态会拿到 undefined，而推送发生在解析之后（?. 不产生认知分支）
+        const partForwarder = createTurnPartForwarder(
+          sessionId,
+          options.webContents,
+          () => resolvedModel?.capabilities.contextWindowSize,
+        );
 
         // 本轮效果面（机器经 TurnDeps 在正确时机调用；闭包捕获 span/累积器/窗口）
         const deps: TurnDeps = {
@@ -569,6 +575,9 @@ export class AgentService implements IAgentService {
               mode: options.mode ?? 'build',
               // 用户原始 prompt（权限决策：意图豁免破坏性拦截）
               ...(userPrompt !== undefined ? { userPrompt } : {}),
+              // 模型窗口（工具输出闸门按窗口比例收紧；与 token 预算同源字段）。
+              // 直接赋值：ToolContext 该字段类型含 `| undefined`，无需条件展开
+              contextWindowSize: resolved.capabilities.contextWindowSize,
             };
             const tools = this.toolRegistry.toAISDKTools(
               baseCtx,
