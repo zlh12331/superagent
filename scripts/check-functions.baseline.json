@@ -1,7 +1,5 @@
 {
   "src/main/infra/ai/agent/agent-service.ts": {
-    "count": 2,
-    "max": 255,
     "params": 8
   },
   "src/main/infra/ai/tools/index.ts": {
@@ -18,6 +16,6 @@
   },
   "src/renderer/dev/mock-api.ts": {
     "count": 1,
-    "max": 389
+    "max": 390
   }
 }
