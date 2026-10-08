@@ -52,6 +52,7 @@ import {
   isCompositeCommand,
   isDeniedByPlanMode,
   isUniversalWhitelistPattern,
+  isZeroSideEffectTool,
   matchesWhitelistPattern,
 } from './command-guards';
 import { detectDangerousCommand, isSafeReadOnlyCommand } from './dangerous-commands';
@@ -387,8 +388,11 @@ export class PermissionService implements IPermissionService {
     //   → 一个撒谎/被攻陷的 MCP server 拿到「任何模式免审批」的任意调用通道
     // 现在 auto 只担保「只读工具免打扰」，其余一律回落到完整决策链并 fail closed。
     if (tool.permission === 'auto') {
-      // 2a. 只读工具：保持快速路径（plan/auto/ask/yolo 都不弹审批，零副作用）
-      if (tool.category === 'read') {
+      // 2a. 零副作用工具（read 读数据 / control 与用户或内部状态交互）：
+      //     保持快速路径（plan/auto/ask/yolo 都不弹审批）。
+      //     control 纳入此处是 2026-10-08 修复：ask_user_question 此前标为 exec，
+      //     默认 ask 模式下"想向用户提问，先要用户批准提问"（双弹窗串联）。
+      if (isZeroSideEffectTool(tool)) {
         return { permission: 'auto', description: tool.description };
       }
       // 2b. 命令形状入参：Layer-0 确定性拦截对 auto 同样生效（不可被 auto 标记绕过）
@@ -478,8 +482,9 @@ export class PermissionService implements IPermissionService {
   }> {
     switch (this.approvalMode) {
       case 'plan':
-        // 只读探索：写类工具全部拒绝（Plan/Apply 分离的只读阶段）
-        return tool.category === 'read'
+        // 只读探索：零副作用类别（read 读数据 / control 与用户或内部状态交互）放行，
+        // 其余（edit / exec）拒绝（Plan/Apply 分离的只读阶段）
+        return isZeroSideEffectTool(tool)
           ? { permission: 'auto', description: tool.description }
           : { permission: 'deny', description: tool.description };
       case 'auto': {

@@ -59,6 +59,19 @@ export interface ToolContext {
   readonly mode?: 'plan' | 'build';
   /** 用户原始 prompt（权限决策用：意图豁免破坏性拦截；由 agent-service 从消息历史提取） */
   readonly userPrompt?: string;
+  /**
+   * 当前模型上下文窗口（token；回合级不变，取自 ResolvedModel.capabilities）
+   *
+   * 消费方：工具输出统一闸门（tool-executor 的 clampToolOutput）按窗口比例
+   * 收紧单次输出上限——32K 窗口的本地模型若按 200KB 绝对上限放行，单次输出
+   * 即占满全部上下文。undefined 时用绝对上限（与引入该字段前的行为一致）。
+   *
+   * 类型含显式 `| undefined`（而非仅 `?`）：宿主恒传该键（值可能为 undefined），
+   * 直接赋值即可满足 exactOptionalPropertyTypes——否则组装点要写条件展开，
+   * 会给回合执行函数叠出多余认知分支（实测恰为棘轮临界值）。与
+   * ipc-agent-transport 的 AgentConfig 同款写法。
+   */
+  readonly contextWindowSize?: number | undefined;
 }
 
 /**
@@ -87,10 +100,21 @@ export interface ToolResult {
  * 工具类别（ApprovalMode 决策依据，对齐 qwen 安全白名单语义）
  *
  * - read：只读工具（读文件/搜索/glob），全部模式自动放行
+ * - control：零副作用控制面（提问 / 任务清单 / 计划模式切换 / 记忆检索）
+ *   ——不写工作区、不执行命令、不产生外部副作用，写守卫（plan 拦截与
+ *   auto 命令分层）对其不适用
  * - edit：工作区编辑（写文件/编辑/git 操作），auto 模式快速路径放行
  * - exec：命令执行（终端/run_command），auto 模式仍需审批（危险操作）
+ *
+ * 为什么 read 与 control 分档（2026-10-08）：两者都零副作用，但语义不同——
+ * read 是"读数据"（有 IO、受路径边界约束），control 是"与用户/内部状态交互"
+ * （无文件 IO）。此前 ask_user_question 被误标为 exec，导致两条真实后果：
+ * ① 默认 ask 模式下"想提问先要用户批准提问"（双弹窗串联）
+ * ② plan 模式被 isDeniedByPlanMode 拒绝——计划阶段无法向用户提问
+ * （而计划阶段恰是最需要确认方向的阶段）。用类别表达"零副作用"这一事实，
+ * 使新增同类工具自动正确，无需逐个往 PLAN_MODE_CONTROL_TOOLS 名单里加。
  */
-export type ToolCategory = 'read' | 'edit' | 'exec';
+export type ToolCategory = 'read' | 'control' | 'edit' | 'exec';
 
 /**
  * Tool 接口：Code Agent 工具系统的核心抽象

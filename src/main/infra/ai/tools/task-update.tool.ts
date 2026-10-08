@@ -37,7 +37,8 @@ export function createTaskUpdateTool(): Tool<TaskUpdateInput> {
       '更新任务状态（pending/running/completed/failed/cancelled）。任务进入终端状态（completed/failed/cancelled）后不可再改变。',
     inputSchema: TaskUpdateInputSchema,
     permission: 'auto',
-    category: 'exec',
+    // 零副作用控制面（改 agent 自己的任务记账）——plan 模式需可用（2026-10-08）
+    category: 'control',
     execute: async (input: TaskUpdateInput, _ctx: ToolContext): Promise<ToolResult> => {
       const ok = taskService.update(input.taskId, input.status);
       if (!ok) {

@@ -36,7 +36,7 @@ vi.mock('../../storage/whitelist-pref', () => ({
 /** 创建 mock 工具 */
 function createMockTool(
   permission: 'auto' | 'ask' = 'ask',
-  category: 'read' | 'edit' | 'exec' = 'edit',
+  category: 'read' | 'control' | 'edit' | 'exec' = 'edit',
 ): Tool {
   return {
     name: 'mock_tool',
@@ -188,6 +188,47 @@ describe('PermissionService', () => {
       const tool = createMockTool('ask');
       const decision = await service.decide(tool, { path: '/tmp/a.ts' });
       expect(decision.permission).toBe('ask');
+    });
+
+    // ── control 类别（2026-10-08：零副作用控制面，如 ask_user_question）──
+
+    it('control 工具（auto）：默认 ask 模式直接放行——不再"先批准提问才能提问"', async () => {
+      // 回归锚：ask_user_question 此前 permission='ask'+category='exec'，
+      // 默认模式下先弹审批卡（且卡上只在问"是否允许提问"），批准后才显示问题
+      const tool = { ...createMockTool('auto', 'control'), name: 'ask_user_question' };
+      const decision = await service.decide(tool, { questions: [{ question: 'q' }] });
+      expect(decision.permission).toBe('auto');
+    });
+
+    it('control 工具：plan 模式放行（计划阶段需能向用户提问）', async () => {
+      service.setApprovalMode('plan');
+      const tool = { ...createMockTool('auto', 'control'), name: 'ask_user_question' };
+      const decision = await service.decide(tool, { questions: [{ question: 'q' }] });
+      expect(decision.permission).toBe('auto');
+    });
+
+    it('control 工具：即使 permission 标为 ask（元数据保守），plan 模式同样放行', async () => {
+      // 类别判据（零副作用）优先于 permission 声明：control 不产生副作用，
+      // 不该因元数据标错而在只读阶段被拒
+      service.setApprovalMode('plan');
+      const tool = { ...createMockTool('ask', 'control'), name: 'ask_user_question' };
+      const decision = await service.decide(tool, { questions: [{ question: 'q' }] });
+      expect(decision.permission).toBe('auto');
+    });
+
+    it('edit/exec 工具：plan 模式仍拒绝（control 放行不外溢）', async () => {
+      service.setApprovalMode('plan');
+      const editTool = createMockTool('ask', 'edit');
+      const execTool = createMockTool('ask', 'exec');
+      expect((await service.decide(editTool, {})).permission).toBe('deny');
+      expect((await service.decide(execTool, {})).permission).toBe('deny');
+    });
+
+    it('save_memory：plan 模式放行仍靠名单（它有持久化副作用，不属 control）', async () => {
+      service.setApprovalMode('plan');
+      const tool = { ...createMockTool('auto', 'exec'), name: 'save_memory' };
+      const decision = await service.decide(tool, { content: 'x' });
+      expect(decision.permission).toBe('auto');
     });
 
     it('深读回归：MCP auto 工具无命令形状 → 降级 ask（撒谎元数据不给免审批）', async () => {

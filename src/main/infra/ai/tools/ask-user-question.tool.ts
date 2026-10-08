@@ -50,8 +50,13 @@ export function createAskUserQuestionTool(askService: AgentAskService): Tool {
   return {
     name: 'ask_user_question',
     description: toolDescription,
-    permission: 'ask' as const,
-    category: 'exec' as const,
+    // 2026-10-08 修复：原声明为 permission='ask' + category='exec'，造成两条真实后果——
+    // ① 默认 ask 模式下"想向用户提问，先要用户批准提问"（审批卡与提问弹窗串联，
+    //    且审批卡只在问"是否允许提问"、无实质信息）
+    // ② plan 模式被 isDeniedByPlanMode 拒绝：计划阶段恰是最需要确认方向的阶段却无法提问
+    // 提问零副作用（不写文件、不执行命令），归入 control 类别后两处同时修复。
+    permission: 'auto' as const,
+    category: 'control' as const,
     inputSchema: AskUserQuestionInputSchema,
     async execute(input: unknown, context: ToolContext): Promise<ToolResult> {
       const { questions } = AskUserQuestionInputSchema.parse(input);
