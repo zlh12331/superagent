@@ -270,6 +270,22 @@ jobs:
         with:
           path: artifacts
 
+      - name: Assert all artifact downloads landed
+        run: |
+          MISSING=0
+          for pair in "win-x64:latest.yml" "win-arm64:latest.yml" "mac-x64:latest-mac.yml" "mac-arm64:latest-mac.yml" "linux-x64:latest-linux.yml" "linux-arm64:latest-linux-arm64.yml"; do
+            SUFFIX="${pair%%:*}"
+            YML="${pair#*:}"
+            if ! ls artifacts/release-"$SUFFIX"-*/"$YML" >/dev/null 2>&1; then
+              echo "::error::artifact 未落盘：release-$SUFFIX-*/$YML（download-artifact 静默竞态——重跑本 job 即可，产物已持久在库）"
+              MISSING=1
+            fi
+          done
+          if [ "$MISSING" = "1" ]; then
+            echo "::error::6 个构建产物未全部落盘，禁止进入合并（防缺架构元数据的 Release 发出去）"
+          fi
+          exit $MISSING
+
       - name: Merge dual-arch update metadata
         run: pnpm exec tsx scripts/merge-update-metadata.ts
 
