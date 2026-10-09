@@ -7,7 +7,7 @@
 | 项 | 要求 |
 |---|---|
 | Node.js | `>=24.13.0`（`engines`）；TRAE IDE 终端可能注入自带 Node（v22）导致版本不符，属 TRAE 限制，系统 Node 正确安装即可） |
-| pnpm | `>=11.0.0`（`packageManager: pnpm@11.24.0`；**构建脚本决策在 `pnpm-workspace.yaml` 的 `allowBuilds`**——pnpm 11 不再读 `package.json#pnpm.onlyBuiltDependencies`） |
+| pnpm | `>=12.0.0`（`packageManager: pnpm@12.10.1`；**构建脚本决策在 `pnpm-workspace.yaml` 的 `allowBuilds`**——pnpm 11 起不再读 `package.json#pnpm.onlyBuiltDependencies`） |
 | 原生模块 | better-sqlite3 / esbuild / node-pty 等（allowBuilds 放行编译；postinstall 走 `scripts/postinstall-rebuild.mjs`） |
 
 ## 2. 安装与启动

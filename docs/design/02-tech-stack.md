@@ -1,18 +1,18 @@
 # 技术栈文档
 
 > 基于 `code-agent-desktop` 实际 [package.json](file:///package.json) 整理。
-> 整理时间：2026-07-23（依赖清单 2026-08-11 同步；**2026-09-30 全量对账**——版本号/pnpm 11/allowBuilds/tsconfig 引用/workspace 三包按现值核对）
+> 整理时间：2026-07-23（依赖清单 2026-08-11 同步；**2026-09-30 全量对账**——版本号/pnpm 11/allowBuilds/tsconfig 引用/workspace 三包按现值核对；**2026-10-09 pnpm 12.10.1 升级**——packageManager/engines/锁文件同步，version 行随包现值修正）
 
 ## 1. 项目基本信息
 
 | 项              | 值                                                              | 来源                                         |
 | -------------- | -------------------------------------------------------------- | ------------------------------------------ |
 | name           | `code-agent-desktop`                                           | [package.json](file:///package.json) |
-| version        | `1.3.3`                                                        | [package.json](file:///package.json) |
+| version        | `1.8.0-beta.3`                                                 | [package.json](file:///package.json) |
 | description    | Code Agent Desktop - 生产级 Electron Code Agent 桌面应用（Windows 桌面端） | [package.json](file:///package.json) |
 | type           | `module`                                                       | [package.json](file:///package.json) |
 | main           | `./out/main/index.js`                                          | [package.json](file:///package.json) |
-| packageManager | `pnpm@11.24.0`                                                  | [package.json](file:///package.json) |
+| packageManager | `pnpm@12.10.1`                                                  | [package.json](file:///package.json) |
 
 ## 2. engines 与运行时要求
 
