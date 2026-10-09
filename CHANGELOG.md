@@ -2,6 +2,20 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [1.8.0](https://github.com/zlh12331/superagent/compare/v1.8.0-beta.4...v1.8.0) (2026-10-09)
+
+
+### 修复
+
+* **deps:** oxc 回退 0.152（上游 peer 支持上限）+ otel exporter 升 0.223 ([2d6a9fa](https://github.com/zlh12331/superagent/commit/2d6a9fa1219716789e9be65fce67ba61b6142d5f))
+* **e2e:** 提问弹窗 a11y 用例加固——消除会话进入的两处竞态（CI 两次红于此） ([1d6adef](https://github.com/zlh12331/superagent/commit/1d6adef687a81505a0e9ac8726063a752c71438f))
+* **renderer:** 回合错误改为对话区常驻提示卡——替代泛化且瞬时的 toast ([b886f10](https://github.com/zlh12331/superagent/commit/b886f1070ba83a0d3d788ff5e1b13935780d134c))
+
+
+### 杂项
+
+* **release:** 毕业正式版 1.8.0 ([#137](https://github.com/zlh12331/superagent/issues/137)) ([03def60](https://github.com/zlh12331/superagent/commit/03def60dd852fbd49a728ac9a2784b054049ab88))
+
 ## [1.8.0-beta.4](https://github.com/zlh12331/superagent/compare/v1.8.0-beta.3...v1.8.0-beta.4) (2026-10-09)
 
 <!-- changelog:polished -->
