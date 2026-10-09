@@ -163,6 +163,15 @@ jobs:
             build-cmd: pnpm build:linux:arm64
 
     steps:
+      # 运行时行为监控（audit 起步，39 号 spec §8）：第三方执行面——依赖 postinstall
+      # 与 Electron 二进制下载均在监控下。SHA 对应 step-security/harden-runner v2.22.1
+      - name: Harden Runner
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25
+        # ARM 采集能力官方未证实（README 平台矩阵未提 ARM）：试跑期不让监控步阻断 CD
+        #（失败在 run 摘要可见）；证实可用后删本行，不可用则撤 ARM 两 job 的该 step
+        continue-on-error: ${{ contains(matrix.runs-on, '-arm') }}
+        with:
+          egress-policy: audit
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -333,6 +342,12 @@ jobs:
       pull-requests: write
 
     steps:
+      # 运行时行为监控（audit 起步，39 号 spec §8）：release job 持 contents: write——
+      # 供应链后段的最高权限面。SHA 对应 step-security/harden-runner v2.22.1
+      - name: Harden Runner
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25
+        with:
+          egress-policy: audit
       - name: Checkout
         uses: actions/checkout@v4
 

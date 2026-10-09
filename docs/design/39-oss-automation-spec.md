@@ -377,7 +377,7 @@ Renovate `minimumReleaseAge`（新版发布 24h 后才进升级 PR）+ electron 
 | 项 | 设计保留 | 现状与建议 |
 |---|---|---|
 | **L2-Socket** | 设计沿 v1.1 §5：GitHub App 只读评审，盯依赖变更的恶意行为——typosquat / postinstall 外联 / 代码混淆 / 包接管（已知 CVE 库之外的行为面，与 CodeQL/Dependabot 互补）；安装时索要 `contents: write` 直接拒 | **✅ 已安装并定为常设（2026-10-07 装 / 2026-10-09 用户拍板取消观察期）**。自动评审每个依赖 PR（Socket Security: Project Report + Pull Request Alerts 两个 check 随每个 PR 运行，生效期内历次 PR 全 pass、零噪音）；不再设卸载判据 |
-| **L2-Harden-Runner** | v1.1 §5 设计保留：runner 出口 DNS/HTTP 审计（step 形式，`egress-policy: audit` 起步，仅 release.yml 持密钥 job）；三平台采集能力需先核实 | **维持搁置**（2026-10-07 仅批 Socket） |
+| **L2-Harden-Runner** | v1.1 §5 设计保留：runner 出口 DNS/HTTP 审计（step 形式，`egress-policy: audit` 起步，仅 release.yml 持密钥 job）；三平台采集能力需先核实 | **✅ 已接入（2026-10-09 用户拍板 A）**：release.yml build×6 + release job 各挂第一步（v2.22.1 pin SHA）。平台核实结果：hosted Linux 全功能 / hosted Windows+macOS 仅 audit / self-hosted 需 Enterprise（公开仓亦收费）——我们是全 hosted 免费档，audit 需求全满足；ARM 两 job 带 `continue-on-error` 试跑期（官方平台矩阵未证实 ARM，失败不阻断 CD，证实可用后删、不可用则撤该 step） |
 | 21 提交推送 | 分组 PR：安全修复组 / dependabot / a11y / 文档 | 安全修复组建议尽早——云端 first-interaction 现在是坏的 |
 | **merge queue** | ruleset `merge_queue` 规则 + ci.yml 监听 `merge_group` | **⛔ 判定不可用（2026-10-07 关闭）**：REST / GraphQL / 网页 UI 三通道均无此能力（UI 的 Add rule 下拉无 Merge queue 项；API 双通道正确 schema 仍报 "Invalid rule 'merge_queue'"；独立 ruleset 探针同拒）——账号上下文门，社区 [#137097](https://github.com/orgs/community/discussions/137097) 同源。**防护不缺位**：strict policy（分支须含 main 最新提交）继续挡过时合并；ci.yml 的 merge_group 触发已合入 main、无害保留（将来功能开放即自动接通）。过期再评估 |
 
@@ -387,6 +387,7 @@ Renovate `minimumReleaseAge`（新版发布 24h 后才进升级 PR）+ electron 
 
 | 日期 | 版本 | 动作 |
 |---|---|---|
+| 2026-10-09 | v4.3 | Harden-Runner 接入（用户拍板 A）：release.yml build×6 + release job 第一步挂 step-security/harden-runner v2.22.1（pin SHA，`egress-policy: audit`）；平台覆盖核实=hosted Linux 全功能 / Win+macOS 仅 audit / self-hosted 需付费（我们全 hosted 免费档）；ARM 两 job `continue-on-error` 试跑期（§8） |
 | 2026-10-09 | v4.2 | Socket 观察期取消（用户拍板）：由「观察至 10-21、不达标即卸载」转为常设评审——生效期内历次 PR 两个 Socket check 全 pass、零噪音，成功标准提前自证（§8） |
 | 2026-10-09 | v4.1 | 用户拍板打破云端零新增一次：新增 pr-title.yml（amannn/action-semantic-pull-request v6.1.1 pin SHA + sticky-pull-request-comment 错误评论），并升级为 ruleset 第 6 项必需检查 `Lint PR Title`——封堵 squash 标题逃逸 commitlint → release-please 升版静默漏项的缺口。接线顺序硬约束：workflow 先进 main，ruleset 后加必需检查（反序 = 所有 PR 卡 pending） |
 | 2026-10-07 | v4.0 | 模型重写：本机审批门控 agent（八项拍板 §0 + 三档审批协议 §2 + 运维会话 §3）；云端零新增原则（§1.4）；v1.1 分层/暂缓/负面清单框架废止；L0/L1 与 1.6.x 护栏收编 §6；L2 设计保留于 §8 遗留项 |
