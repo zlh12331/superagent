@@ -1,7 +1,7 @@
 {
   "$comment": "记忆引擎版本锚点（唯一真源）。改这里 = 改引擎版本，须配合 memory-engine:sync 重新同步源码。",
   "repository": "https://github.com/TencentCloud/TencentDB-Agent-Memory",
-  "repoTag": "v2.0.2-beta.1",
+  "repoTag": "v2.0.2-beta.3",
   "commit": "220af62226",
   "corePackageName": "@tencentdb-agent-memory/memory-tencentdb-v2",
   "corePackageVersion": "1.0.2-beta.1",
@@ -9,9 +9,9 @@
   "copyright": "Copyright (C) 2026 Tencent",
   "vendoredPath": "MemoryCore",
   "provenance": {
-    "archiveName": "TencentDB-Agent-Memory-2.0.2-beta.1.zip",
-    "archiveSha256": "613ea453d4a87b33faa0806a9f45655409f32011bd3709ce8f0ca35c72e43dfe",
-    "note": "归档（codeload tag 源码包）内 MemoryCore 与 vendored 源码用门禁同款算法逐字节比对一致：tree hash 4456fcb915ebdd8e… / 304 文件。2026-09-24 重建登记——此前该字段停留在初版 v2.0.1 的登记，sync 不更新导致与 repoTag 脱节"
+    "archiveName": "beta3.zip",
+    "archiveSha256": "85dcd651ad9de70938098b5b6c5c26437cc015cca362a7563468a0d11fa919ba",
+    "note": "归档 sha256 由 sync --archive 登记；归档与源码树的内容一致性由 memory-engine:integrity 校验"
   },
-  "syncedAt": "2026-09-13"
+  "syncedAt": "2026-10-09"
 }
