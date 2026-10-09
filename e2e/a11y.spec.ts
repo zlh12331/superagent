@@ -90,13 +90,21 @@ async function gotoSettingsSection(page: Page, navLabel: string): Promise<Locato
   return dialog;
 }
 
-/** 进入 mock 首会话（journey-chat 同款入口，等 composer 出现确认会话视图渲染） */
+/** 进入 mock 首会话（journey-chat 同款入口）
+ *
+ * 2026-10-09 加固（CI 两次红于此）：原实现「点 role=button 后等 composer 出现」有
+ * 两处竞态——① role=button 命中的是整行 ti-content（含右侧操作钮的父 div），
+ * click 落点可能压到相邻按钮；② composer 在**欢迎页同样存在**，点击后的异步导航
+ * 未完成时断言即通过，随后 fill 作用在即将卸载的输入框上（AskDialog 弹不出）。
+ * 现改为：点会话标题文本（journey-helpers 同款精确目标）+ 等 URL 进入该会话。 */
 async function openFirstSession(page: Page): Promise<void> {
   await page.goto('/');
   await page.waitForLoadState('networkidle');
-  const firstThread = page.getByRole('button', { name: /重构 IPC|修复双|设计令牌/ }).first();
+  const firstThread = page.getByText(/重构 IPC|修复双|设计令牌/).first();
   await expect(firstThread).toBeVisible({ timeout: 10_000 });
   await firstThread.click();
+  // 等导航真正落到会话路由（欢迎页无此 URL；composer 两页皆有，不可作判据）
+  await expect(page).toHaveURL(/#\/chat\//, { timeout: 10_000 });
   await expect(page.locator('.composer-box textarea, .composer textarea').first()).toBeVisible({
     timeout: 10_000,
   });
