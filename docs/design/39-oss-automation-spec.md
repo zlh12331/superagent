@@ -301,7 +301,7 @@ Latest 切换）——`gh run list` 匹配旧 run 假绿的教训已入档。
 - **无签名**：Windows 首次安装遇 SmartScreen 警告（更多信息→仍要运行）、macOS
   需系统设置放行；**升级场景不受影响**（electron-updater 在已装应用内自更新）。
   摩擦集中在首次安装这一步。
-- `stagingPercentage` 灰度：可选未拍板（一行配置，无监控配套，仅降低爆炸半径）。
+- `stagingPercentage` 灰度：**2026-10-09 拍板不启用**——无监控配套（纯客户端骰子，ramp 节奏靠人工观察），当前用户规模下统计意义弱，防护靠 beta 渠道 + 爆炸半径本身小。机制留档：字段写更新元数据 yml（本仓 merge job 合成处可注入，一行改动），ramp=同版本替换资产、可改小变相撤单（源码级判定与 `.updaterId` 持久化机制见台账 2026-10-09 节）。
 
 ---
 
@@ -387,6 +387,7 @@ Renovate `minimumReleaseAge`（新版发布 24h 后才进升级 PR）+ electron 
 
 | 日期 | 版本 | 动作 |
 |---|---|---|
+| 2026-10-09 | v4.4 | stagingPercentage 灰度拍板不启用（无监控配套 + 用户规模小，beta 渠道即灰度）；源码级机制与本仓接入路径留档 §5.6 |
 | 2026-10-09 | v4.3 | Harden-Runner 接入（用户拍板 A）：release.yml build×6 + release job 第一步挂 step-security/harden-runner v2.22.1（pin SHA，`egress-policy: audit`）；平台覆盖核实=hosted Linux 全功能 / Win+macOS 仅 audit / self-hosted 需付费（我们全 hosted 免费档）；ARM 两 job `continue-on-error` 试跑期（§8） |
 | 2026-10-09 | v4.2 | Socket 观察期取消（用户拍板）：由「观察至 10-21、不达标即卸载」转为常设评审——生效期内历次 PR 两个 Socket check 全 pass、零噪音，成功标准提前自证（§8） |
 | 2026-10-09 | v4.1 | 用户拍板打破云端零新增一次：新增 pr-title.yml（amannn/action-semantic-pull-request v6.1.1 pin SHA + sticky-pull-request-comment 错误评论），并升级为 ruleset 第 6 项必需检查 `Lint PR Title`——封堵 squash 标题逃逸 commitlint → release-please 升版静默漏项的缺口。接线顺序硬约束：workflow 先进 main，ruleset 后加必需检查（反序 = 所有 PR 卡 pending） |
