@@ -89,6 +89,21 @@ const CSS_Z_INDEX_RE = /z-index:\s*-?\d+/g;
 // 达标），图标/文字无法从类名区分。
 const CSS_TEXT_BASE_COLOR_RE = /(?:^|[;{\s])color:\s*var\(--(error|success|warning|amber)\)/g;
 
+// ── 字体栈 CJK 回退不变量（2026-10-09 立规）─────────────────────────────
+// 硬编码 font-family / fontFamily 必须引用 var(--font-*) 令牌或自带 CJK 回退
+// 字体：缺回退时中文掉到平台兜底（Windows mono 上下文 = SimSun 宋体，小字
+// ClearType 下发灰发绿——file-tree 与 xterm 终端先后实测）。白名单不含 SimSun：
+// 它是本不变量要防的失败形态本身。
+const CJK_FONT_OK_RE =
+  /PingFang|Hiragino|YaHei|Noto (?:Sans|Serif) SC|Noto Sans CJK|Noto Serif CJK|Source Han|WenQuanYi|SimHei|Songti|Heiti|STHeiti|STSong|微软雅黑/;
+
+// TS 侧 fontFamily 字面量（内联样式对象 / JSX 属性）：值可为含另一引号形态的串
+// （如 xterm 的 '…"JetBrains Mono"…'），按定界符三分支捕获；跨行值不匹配
+const TS_FONT_FAMILY_RE = /fontFamily\s*[:=]\s*(?:'([^'\n]*)'|"([^"\n]*)"|`([^`\n]*)`)/g;
+
+// CSS 侧 font-family 声明：值整段捕获（引号在 CSS 值内合法），var(--font-*) 引用放行
+const CSS_FONT_FAMILY_RE = /font-family\s*:\s*([^;{}]+)[;}]?/g;
+
 /** 单条令牌违规 */
 export interface TokenViolation {
   readonly file: string;
@@ -181,6 +196,19 @@ export function scanTsLike(content: string, rel: string, monoExempt = false): To
         });
       }
     }
+
+    // 字体栈 CJK 回退不变量：fontFamily 字面量必须含 CJK 字体或 var() 令牌引用
+    // （xterm 等 API 需要 CSS font-family 字符串，不经 className 扫描）
+    for (const m of line.matchAll(TS_FONT_FAMILY_RE)) {
+      const value = (m[1] ?? m[2] ?? m[3] ?? '') as string;
+      if (value.includes('var(--font-') || CJK_FONT_OK_RE.test(value)) continue;
+      violations.push({
+        file: rel,
+        line: lineNo,
+        rule: 'font-cjk-fallback',
+        detail: m[0].trim().slice(0, 90),
+      });
+    }
   });
   return violations;
 }
@@ -238,6 +266,27 @@ export function scanCss(content: string, rel: string): TokenViolation[] {
         line: lineNo,
         rule: 'text-base-color',
         detail: m[0].trim(),
+      });
+    }
+    // 字体栈 CJK 回退不变量（CSS 侧）：值须引用 var(--font-*) 或自带 CJK 回退；
+    // inherit/initial 跟随父级放行。值为空（跨行声明）无法按行判定，放行——
+    // 当前仓库无此形态（误报不可接受，见 text-base-color 同款取舍）
+    for (const m of line.matchAll(CSS_FONT_FAMILY_RE)) {
+      const value = (m[1] as string).trim();
+      if (
+        value === '' ||
+        value === 'inherit' ||
+        value === 'initial' ||
+        value.includes('var(--font-') ||
+        CJK_FONT_OK_RE.test(value)
+      ) {
+        continue;
+      }
+      violations.push({
+        file: rel,
+        line: lineNo,
+        rule: 'font-cjk-fallback',
+        detail: `font-family: ${value.slice(0, 70)}`,
       });
     }
   });
