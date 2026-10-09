@@ -39,6 +39,7 @@ import { queryClient } from '@/lib/query/query-client';
 import { useAgentAskStore } from '@/stores/transient/agent-ask-store';
 import { useApprovalsStore } from '@/stores/transient/approvals-store';
 import { useRateLimitStore } from '@/stores/transient/rate-limit-store';
+import { useTurnErrorStore } from '@/stores/transient/turn-error-store';
 
 /**
  * 把指定会话的 lastRunStatus 乐观点亮为 running（D4A：回合开始 → 侧栏运行徽标）
@@ -143,6 +144,8 @@ export function useAgentBridge(): void {
     // D4A：回合开始——乐观点亮该会话的侧栏运行徽标（方案取舍见 applyRunningToCache）
     const unsubscribeStart = window.api.agent.subscribeStreamStart((payload) => {
       const typedPayload = payload as AgentStreamStartPayload;
+      // 新回合开始：清除上一回合的错误卡（turn-error-store；重试/重发后不留旧错误）
+      useTurnErrorStore.getState().clear(typedPayload.sessionId);
       queryClient.setQueryData<InfiniteData<SessionListData>>(SESSIONS_QUERY_KEY, (old) =>
         applyRunningToCache(old, typedPayload.sessionId),
       );
@@ -158,6 +161,11 @@ export function useAgentBridge(): void {
     const unsubscribeError = window.api.agent.subscribeStreamError((payload) => {
       const typedPayload = payload as AgentStreamErrorPayload;
       handleSessionEnd(typedPayload.sessionId);
+      // 回合错误：写入 turn-error-store——对话区错误卡（TurnErrorNotice）据此
+      // 常驻显示具体错误（code 本地化 + 消息原文）；此处为权威来源（未经 SDK 脱敏）
+      useTurnErrorStore
+        .getState()
+        .set(typedPayload.sessionId, typedPayload.code, typedPayload.message);
       // 429 限流：触发限流横幅（RateLimitBanner 订阅显示）
       if (typedPayload.code === 'AI_RATE_LIMITED') {
         useRateLimitStore.getState().trigger();
