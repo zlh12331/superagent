@@ -98,7 +98,10 @@ export function TerminalView({ session }: TerminalViewProps): ReactElement {
     // 创建 Terminal 实例（主题色与 tokens --bg/--text 联动；字号取设置快照——
     // 后续变化走下方 store 订阅热更，不重建实例）
     const term = new Terminal({
-      fontFamily: '"Cascadia Code", "JetBrains Mono", "Consolas", monospace',
+      // 字体栈自带 CJK 回退（回退段与 --font-mono 令牌一致）：缺回退时终端中文
+      // 掉到 Windows monospace 兜底宋体，小字 ClearType 下发灰发绿（2026-10-09 同类修复）
+      fontFamily:
+        '"Cascadia Code", "JetBrains Mono", "Consolas", "Noto Sans SC", "Microsoft YaHei", monospace',
       fontSize: useSettingsStore.getState().terminal.fontSize,
       lineHeight: 1.3,
       cursorBlink: true,
