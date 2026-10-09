@@ -5,9 +5,9 @@
   ──────────────────────────────────────────────────────────────
   设计：
   - 通过 Google Fonts 加载字体：
-    - Noto Serif SC（正文衬线）
-    - Noto Sans SC（UI 无衬线）
+    - Noto Sans SC（--font-mono 令牌的 CJK 回退）
     - JetBrains Mono（数字等宽）
+    （Noto Serif SC 已移除：全代码零引用，加载即空转——2026-10-09 清理）
   - CSP 由主进程通过 session.defaultSession.webRequest.onHeadersReceived 注入
     （见 src/main/security/csp.ts + src/main/index.ts）
     不在 HTML 中声明 CSP meta，避免与响应头策略冲突
@@ -28,7 +28,7 @@
   注意：
   - 用 preconnect 提前建立 TLS，降低字体加载延迟
   - 字体在 styles/ 各域 css 中通过 --font-serif/--font-sans/--font-mono 变量定义并附本地回退
-  - 加载失败时自动降级到系统字体（Songti SC / Microsoft YaHei / Consolas 等）
+  - 字体加载失败时自动降级到栈内系统字体（PingFang SC / Microsoft YaHei / Consolas 等）
 -->
 <html lang="zh-CN" style="background:#0A0A0A">
   <head>
@@ -38,9 +38,9 @@
     <!-- 预连接 Google Fonts 域名，降低首次字体请求延迟 -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <!-- 字体：Noto Serif SC（标题衬线）+ Noto Sans SC（UI）+ JetBrains Mono（数字） -->
+    <!-- 字体：Noto Sans SC（mono CJK 回退）+ JetBrains Mono（数字等宽） -->
     <link
-      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@400;500;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Noto+Sans+SC:wght@400;500;700&display=swap"
       rel="stylesheet"
     />
     <title>Code Agent Desktop</title>
