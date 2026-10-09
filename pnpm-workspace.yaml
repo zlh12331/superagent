@@ -70,6 +70,11 @@ overrides:
   'undici@<7': 6.28.1
   # 2026-09-09 升级：4.3.1 → 4.3.2（CVE-2026-84375 maxTotalMergeKeys 空合并源 CPU 耗尽，patched 4.3.2）
   'js-yaml@>=4.0.0': 4.3.2
+  # 2026-10-09 升级：4.2.0 → 4.3.0（GHSA-ch52-4w7c-c8xp high：max-stale 跨用户缓存
+  # 响应泄露；补丁 4.3.0 已于 10-04 发布——此前无补丁时走 .nsprc 白名单放行（10-03
+  # 登记），补丁到位后改 override 升级并同步收回白名单条目，2026-10-09 体检发现；
+  # 传递链 electron-builder→@electron/get→got→cacheable-request，dev 构建链）
+  http-cache-semantics: 4.3.0
   # Dependabot GHSA-mh99-v99m-4gvg / GHSA-rgw5-rvv9-x895：DoS，仅命中 typedoc 工具链的 4.x 线；1.x/2.x 合法共存不动
   # 2026-09-30 三线全升（6 条告警：4 high + 2 moderate + cdxgen 链 3 moderate）：
   # 1.1.18→1.1.21 / 2.1.4→2.1.7 / 5.0.9→5.0.12（递归 DoS 与二次展开 DoS 全系修复）
