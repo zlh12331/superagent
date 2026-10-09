@@ -55,10 +55,10 @@
       评论 · 标签 · 开 PR · push · merge · publish · close
       性质：他人可见，或改变仓库状态；逐批/逐项经维护者同意后执行
 
-GitHub（云端基线 · 本方案零新增）
+GitHub（云端基线 · 2026-10-09 起含 pr-title.yml，见 §9 v4.1）
  └─ CI 六平台 · CD 五段 · release-please · CodeQL · secret scanning + push
-    protection · labeler · first-interaction · issue-metrics · Dependabot alerts ·
-    Renovate（周末批次 + minimumReleaseAge 1 天）
+    protection · labeler · first-interaction · issue-metrics · PR 标题校验 ·
+    Dependabot alerts · Renovate（周末批次 + minimumReleaseAge 1 天）
 ```
 
 ### 1.2 为什么不是自治 bot（v3 方案的作废依据）
@@ -320,7 +320,7 @@ Latest 切换）——`gh run list` 匹配旧 run 假绿的教训已入档。
 | 社区面更正 | v1.1 §6 所写「Discussions reply templates」**不是真实存在的 GitHub 功能**（2026-10-07 实证：SavedReply 为 viewer 级个人便签且无 API 管理入口，262 个 mutation 无一可写）——其意图由 **Discussion category forms**（开帖侧结构化表单，真实功能）更优实现，见上 |
 | Renovate | 周末批次 + 上海时区；非 major 归一组；electron major `enabled:false`；react-query 双包同 PR；`minimumReleaseAge: 1 day`（供应链 24h 缓冲） |
 
-### 6.2 workflow 一览（7 个，全部 active、全 pin SHA、显式 permissions）
+### 6.2 workflow 一览（8 个，全部 active、全 pin SHA、显式 permissions）
 
 | workflow | 职责一句话 |
 |---|---|
@@ -331,6 +331,7 @@ Latest 切换）——`gh run list` 匹配旧 run 假绿的教训已入档。
 | labeler.yml | PR 区域标签（8 个，v5，pin SHA） |
 | first-interaction.yml | 首次 issue/PR 欢迎固定文案（**云端版本待修**，见 6.3） |
 | issue-metrics.yml | 周一 cron 只读统计，输出 Job Summary |
+| pr-title.yml | PR 标题语义校验（2026-10-09 新增，ruleset 第 6 项必需检查 `Lint PR Title`；squash 标题 = commit message，release-please 升版链护栏；全 PR 含 Release PR 必跑） |
 
 ### 6.3 已知缺口（21 个本地未推提交，拍板暂缓，推送需维护者指令）
 
@@ -386,6 +387,7 @@ Renovate `minimumReleaseAge`（新版发布 24h 后才进升级 PR）+ electron 
 
 | 日期 | 版本 | 动作 |
 |---|---|---|
+| 2026-10-09 | v4.1 | 用户拍板打破云端零新增一次：新增 pr-title.yml（amannn/action-semantic-pull-request v6.1.1 pin SHA + sticky-pull-request-comment 错误评论），并升级为 ruleset 第 6 项必需检查 `Lint PR Title`——封堵 squash 标题逃逸 commitlint → release-please 升版静默漏项的缺口。接线顺序硬约束：workflow 先进 main，ruleset 后加必需检查（反序 = 所有 PR 卡 pending） |
 | 2026-10-07 | v4.0 | 模型重写：本机审批门控 agent（八项拍板 §0 + 三档审批协议 §2 + 运维会话 §3）；云端零新增原则（§1.4）；v1.1 分层/暂缓/负面清单框架废止；L0/L1 与 1.6.x 护栏收编 §6；L2 设计保留于 §8 遗留项 |
 | 2026-10-06 | v1.1 | 定稿：分层信任模型 L0-L6；L0-L2 + Discussions 按批次实施，L3-L5 暂缓并设重启条件；负面清单五项 |
 | 2026-10-06 | v1.0 | 初稿（编号 33，后因撞号改编 39 号） |

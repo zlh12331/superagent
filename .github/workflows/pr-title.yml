@@ -1,0 +1,41 @@
+# PR 标题校验（amannn/action-semantic-pull-request）
+# 目标：squash 合并链路闭环——squash commit message = PR 标题，release-please 按
+# commit type 决定升版；commitlint 只拦本地 git commit，管不住外部贡献者的 PR
+# 标题，校验点前移到 PR 创建/编辑时（拍板：直接必需，进 ruleset 第 6 项）。
+# 权限：pull-requests: read（只读标题；不开 wip——它需要 write 改 PR 状态，违反最小权限）
+# 安全：action pin 到 commit SHA；经 REST API 只读 PR 元数据，无 actions/checkout、
+# 不执行 PR 代码（first-interaction 同款安全模型——pull_request_target 的危险面
+# 在此不存在，fork 令牌只读也不影响：action 用 base 仓库令牌调 API）。
+#
+# ⚠️ 必需检查配套纪律（本项目已两次踩"被跳过的必需检查"坑）：
+# - edited：改标题后重跑（标题是校验的核心输入，变了必须重判）；
+# - synchronize：推新提交后重新上报（漏掉则沿用旧结果）；
+# - 不加 workflow 级 paths/paths-ignore（路径外 PR 永不 report = 卡 pending）；
+# - Release PR（release-please-- 分支）标题 `chore(main): release x.y.z` 天然合规，
+#   无需 ignoreLabels 豁免；dependabot/renovate 标题同样天然合规。
+
+name: PR Title Check
+
+on:
+  pull_request_target:
+    types: [opened, reopened, edited, synchronize]
+
+permissions:
+  pull-requests: read
+
+jobs:
+  title:
+    name: Lint PR Title
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # SHA 对应 amannn/action-semantic-pull-request v6.1.1
+      - uses: amannn/action-semantic-pull-request@48f256284bd46cdaab1048c3721360e808335d50
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          # 与 commitlint subject-case 既有规则对齐：拦拉丁大写开头
+          subjectPattern: '^(?![A-Z]).+$'
+          subjectPatternError: >-
+            Subject 不应以拉丁大写字母开头（与 commitlint subject-case 规则一致，
+            中文/小写开头均可）
