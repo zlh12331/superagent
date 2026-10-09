@@ -2,6 +2,19 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [1.8.0-beta.4](https://github.com/zlh12331/superagent/compare/v1.8.0-beta.3...v1.8.0-beta.4) (2026-10-09)
+
+
+### 修复
+
+* **deps:** 升级 http-cache-semantics 至 4.3.0 并收回 .nsprc 白名单 ([52cb71e](https://github.com/zlh12331/superagent/commit/52cb71edc0f0f08552af1296cb1e21ba31dad599))
+* **deps:** 移除冗余 @types/js-yaml——js-yaml 5 自带类型定义（knip 检出） ([8e8796f](https://github.com/zlh12331/superagent/commit/8e8796f78980c5b9659f60a5348a0d6e8db8eec8))
+* **quality:** check:tokens 补字体栈 CJK 回退审计——封堵字体硬编码盲区 ([d6afab5](https://github.com/zlh12331/superagent/commit/d6afab53a6b553b736c5a2214a19766b1e18b283))
+* **quality:** font-cjk-fallback 扩展 font 简写与任意值字体扫描——补审计盲区 ([82a0941](https://github.com/zlh12331/superagent/commit/82a09417385e4aaf555a175d2d25313415c632ad))
+* **renderer:** mono 字体栈补 CJK 回退——中文文件夹名不再掉宋体发绿 ([#129](https://github.com/zlh12331/superagent/issues/129)) ([252ffd1](https://github.com/zlh12331/superagent/commit/252ffd131da0adb6e0acd55ad4af59f44d9e3223))
+* **renderer:** sans/serif 字体栈显式补 Windows CJK 兜底（YaHei） ([cf637bd](https://github.com/zlh12331/superagent/commit/cf637bdd2bbd755e947b7289711a6ad15fa666c5))
+* **renderer:** xterm 终端字体栈补 CJK 回退——终端中文不再掉宋体 ([91f8aa5](https://github.com/zlh12331/superagent/commit/91f8aa5ccbb29e81648cb71f8763e3d4561b27b8))
+
 ## [1.8.0-beta.3](https://github.com/zlh12331/superagent/compare/v1.8.0-beta.2...v1.8.0-beta.3) (2026-10-09)
 
 
