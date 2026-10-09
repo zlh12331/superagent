@@ -208,3 +208,56 @@ describe('text-base-color（语义基色禁作文字色）', () => {
     ).toHaveLength(0);
   });
 });
+
+describe('font-cjk-fallback（字体栈 CJK 回退不变量）', () => {
+  it('反例：TSX fontFamily 字面量无 CJK → 命中（xterm 终端实测形态）', () => {
+    const v = scanTsLike(
+      `const term = new Terminal({ fontFamily: '"Cascadia Code", monospace' });`,
+      'a.tsx',
+    );
+    expect(rulesOf(v)).toContain('font-cjk-fallback');
+  });
+
+  it('反例：TSX 双引号值无 CJK → 命中', () => {
+    const v = scanTsLike(`const style = { fontFamily: "Segoe UI", monospace };`, 'a.tsx');
+    expect(rulesOf(v)).toContain('font-cjk-fallback');
+  });
+
+  it('反例：CSS font-family 无 CJK → 命中', () => {
+    expect(rulesOf(scanCss('.x { font-family: Consolas, monospace; }', 'a.css'))).toContain(
+      'font-cjk-fallback',
+    );
+  });
+
+  it('正例：字面量栈含 CJK 回退 → 无命中（修复后 TerminalView 形态）', () => {
+    expect(
+      scanTsLike(
+        `const term = new Terminal({ fontFamily: '"Cascadia Code", "Microsoft YaHei", monospace' });`,
+        'a.tsx',
+      ),
+    ).toHaveLength(0);
+  });
+
+  it('正例：var(--font-*) 令牌引用（TSX 与 CSS）→ 无命中', () => {
+    expect(scanTsLike(`const style = { fontFamily: 'var(--font-mono)' };`, 'a.tsx')).toHaveLength(
+      0,
+    );
+    expect(scanCss('.x { font-family: var(--font-mono); }', 'a.css')).toHaveLength(0);
+  });
+
+  it('正例：inherit 跟随父级 → 无命中', () => {
+    expect(scanCss('.x { font-family: inherit; }', 'a.css')).toHaveLength(0);
+  });
+
+  it('正例：修复后的三栈定义（含 CJK）→ 无命中', () => {
+    expect(
+      scanCss(
+        [
+          '--font-sans: "SF Pro Text", "PingFang SC", system-ui, "Segoe UI", Roboto, "Microsoft YaHei", sans-serif;',
+          '--font-mono: "JetBrains Mono", ui-monospace, Consolas, "Noto Sans SC", "Microsoft YaHei", monospace;',
+        ].join('\n'),
+        'a.css',
+      ),
+    ).toHaveLength(0);
+  });
+});
