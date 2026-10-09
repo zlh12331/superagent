@@ -66,7 +66,9 @@ overrides:
   # 2026-09-29 升级：7.29.0 → 7.29.1、6.28.0 → 6.28.1（GHSA 两条 moderate DoS，
   # 双 major 线分别 patch；7.x 线 = AI SDK provider-utils 生产 fetch，6.x 线 =
   # node-gyp 构建链 devDependencies）
-  'undici@>=7.0.0': 7.29.1
+  # 2026-10-09 收窄到 7.x 线：主进程直接依赖（proxied-fetch.ts）升 8.11.2 后，
+  # 本 override 只继续负责传递链 7.x 的安全钉；不窄化会与直接依赖冲突
+  'undici@>=7.0.0 <8': 7.29.1
   'undici@<7': 6.28.1
   # 2026-09-09 升级：4.3.1 → 4.3.2（CVE-2026-84375 maxTotalMergeKeys 空合并源 CPU 耗尽，patched 4.3.2）
   # 2026-10-09 收窄到 4.x 线：直接依赖（scripts/lib/update-metadata.ts）升 5.4.3 后，
