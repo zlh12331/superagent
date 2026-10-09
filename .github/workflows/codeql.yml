@@ -64,7 +64,7 @@ jobs:
             build-mode: none
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       # 初始化 CodeQL 数据库；config-file 指向排除 vendored 路径的配置
       - name: Initialize CodeQL
