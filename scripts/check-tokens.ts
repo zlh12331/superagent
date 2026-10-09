@@ -1,7 +1,7 @@
 // scripts/check-tokens.ts
 // 设计令牌审计（工程化强制）：扫描渲染层组件，违规即卡关（exit 1）
 // ──────────────────────────────────────────────────────────────
-// 依据 docs/design/10-component-design-spec.md 样式铁律 + DESIGN.md：
+// 依据 docs/design/10-component-design-spec.md 样式铁律 + DESIGN.md（仓库根）：
 //   铁律① 语义令牌优先，禁裸色值（24 色板全禁用）
 //   铁律② 禁手动 dark: 双写（双主题差异用语义令牌）
 //   铁律④ flex+gap 替代 space-x/y
@@ -11,11 +11,15 @@
 //   基色压浅灰面 2.2-3.9:1 全不达 AA，文字走对应 *-text 层）
 //   字体栈 CJK 回退不变量（font-cjk-fallback，2026-10-09 立规：硬编码栈必须
 //   引用 var(--font-*) 令牌或含 CJK 回退——缺回退时中文掉宋体，文件树/xterm
-//   终端先后实测）
+//   终端先后实测）；font: 简写与 font-[family-name:…] 任意值同不变量收口
+//   （同日扩展）。已知限制如实登记：无引号的 fontFamily 变量引用静态不可判，
+//   放行。
 // 判据核在 scripts/lib/token-rules.ts（反例测试同目录）。
 //
 // 运行：pnpm check:tokens
-// 排除：styles/（令牌定义处）、测试文件（*.test.*）、注释行、动态样式（style 内变量表达式）
+// 排除：test/ 与 coverage/ 目录、tokens.css（生成物，文件级豁免）、测试文件
+// （*.test.*）、注释行、动态样式（style 内变量表达式）；styles/ 各域 css 自
+// 2026-09-24 起纳入管辖（目录粒度豁免曾放走硬编码，见下）
 // ──────────────────────────────────────────────────────────────
 
 import { readdirSync, readFileSync } from 'node:fs';
@@ -83,7 +87,7 @@ function main(): number {
     console.error(`  ${v.file}:${v.line} [${v.rule}] ${v.detail}`);
   }
   console.error(
-    '[check-tokens] 修复指引：docs/design/10-component-design-spec.md 样式铁律 + DESIGN.md',
+    '[check-tokens] 修复指引：docs/design/10-component-design-spec.md 样式铁律 + DESIGN.md（仓库根）',
   );
   return 1;
 }
