@@ -69,7 +69,9 @@ overrides:
   'undici@>=7.0.0': 7.29.1
   'undici@<7': 6.28.1
   # 2026-09-09 升级：4.3.1 → 4.3.2（CVE-2026-84375 maxTotalMergeKeys 空合并源 CPU 耗尽，patched 4.3.2）
-  'js-yaml@>=4.0.0': 4.3.2
+  # 2026-10-09 收窄到 4.x 线：直接依赖（scripts/lib/update-metadata.ts）升 5.4.3 后，
+  # 本 override 只负责钉住传递链的 4.x（typedoc 工具链）——不窄化会与直接依赖冲突
+  'js-yaml@>=4.0.0 <5': 4.3.2
   # 2026-10-09 升级：4.2.0 → 4.3.0（GHSA-ch52-4w7c-c8xp high：max-stale 跨用户缓存
   # 响应泄露；补丁 4.3.0 已于 10-04 发布——此前无补丁时走 .nsprc 白名单放行（10-03
   # 登记），补丁到位后改 override 升级并同步收回白名单条目，2026-10-09 体检发现；
