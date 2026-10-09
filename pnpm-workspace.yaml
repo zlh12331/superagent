@@ -53,23 +53,23 @@ packageExtensions:
 overrides:
   # 2026-09-30 升级：10.5.1 → 10.7.1（GHSA 两条 moderate：isInSubnet/isHostInSubnet
   # 子网比较错误、Address6 解析诊断信息泄漏，patched 10.7.1）
-  ip-address: 10.7.1
+  ip-address: 10.7.3
   # 2026-09-09 升级：4.12.34 → 4.13.7（CVE-2026-84363/84364/84365 系列 query/parseBody DoS，patched 4.13.5）
-  'hono@>=4.0.0': 4.13.7
-  '@hono/node-server': 1.19.15
-  postcss: 8.5.23
+  'hono@>=4.0.0': 4.13.13
+  '@hono/node-server': 1.19.17
+  postcss: 8.5.29
   # 2026-09-30 升级：3.1.7 → 3.1.8（GHSA-hrr3-gc8f-f4qj moderate：host case 不一致，
   # patched 3.1.8；传递路径 ajv←MCP SDK / commitlint / cdxgen / electron-builder）
   fast-uri: 3.1.8
-  nanoid: 3.3.18
-  tar: 7.5.21
+  nanoid: 3.3.20
+  tar: 7.5.22
   # 2026-09-29 升级：7.29.0 → 7.29.1、6.28.0 → 6.28.1（GHSA 两条 moderate DoS，
   # 双 major 线分别 patch；7.x 线 = AI SDK provider-utils 生产 fetch，6.x 线 =
   # node-gyp 构建链 devDependencies）
   # 2026-10-09 收窄到 7.x 线：主进程直接依赖（proxied-fetch.ts）升 8.11.2 后，
   # 本 override 只继续负责传递链 7.x 的安全钉；不窄化会与直接依赖冲突
-  'undici@>=7.0.0 <8': 7.29.1
-  'undici@<7': 6.28.1
+  'undici@>=7.0.0 <8': 7.30.0
+  'undici@<7': 6.29.0
   # 2026-09-09 升级：4.3.1 → 4.3.2（CVE-2026-84375 maxTotalMergeKeys 空合并源 CPU 耗尽，patched 4.3.2）
   # 2026-10-09 收窄到 4.x 线：直接依赖（scripts/lib/update-metadata.ts）升 5.4.3 后，
   # 本 override 只负责钉住传递链的 4.x（typedoc 工具链）——不窄化会与直接依赖冲突
