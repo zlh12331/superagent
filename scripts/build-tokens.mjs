@@ -1,7 +1,7 @@
 // scripts/build-tokens.mjs
 // Aurora 令牌构建（Style Dictionary 5）：tokens/aurora.json → src/renderer/styles/tokens.css
 // ──────────────────────────────────────────────────────────────
-// 依据 docs/design/DESIGN.md（令牌契约单一真源：tokens/aurora.json）
+// 依据 DESIGN.md（仓库根；令牌契约单一真源：tokens/aurora.json）
 // 输出：:root（value）+ .dark（dark 扩展字段，仅差异令牌）
 // 用法：
 //   pnpm tokens:build    # 生成 tokens.css
