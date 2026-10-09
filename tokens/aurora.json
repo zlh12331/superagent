@@ -405,8 +405,8 @@
     "comment": "TraeWork --font-family-heading（用于标题）"
   },
   "font-mono": {
-    "value": "\"JetBrains Mono\", ui-monospace, \"SF Mono\", Menlo, Consolas, monospace",
-    "comment": "TraeWork --font-family-mono"
+    "value": "\"JetBrains Mono\", ui-monospace, \"SF Mono\", Menlo, Consolas, \"Noto Sans SC\", \"Microsoft YaHei\", monospace",
+    "comment": "TraeWork --font-family-mono；栈内必须含 CJK 回退（Noto Sans SC webfont + YaHei 离线兜底）——无回退时中文掉到 Windows monospace 兜底宋体，11px 小字 ClearType 下发灰发绿（2026-10-09 实测）"
   },
   "shadow-modal": {
     "value": "0 16px 48px rgba(115, 115, 115, 0.12), 0 0 0 1px rgba(115, 115, 115, 0.06)",
