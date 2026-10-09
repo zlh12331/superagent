@@ -2,6 +2,13 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [1.8.0-beta.3](https://github.com/zlh12331/superagent/compare/v1.8.0-beta.2...v1.8.0-beta.3) (2026-10-09)
+
+
+### 修复
+
+* **renderer:** 删除侧边栏会话跨会话中断入口 + 修复提问倒计时依赖数组告警 ([9048e5f](https://github.com/zlh12331/superagent/commit/9048e5f3a80c54d0ebd42df4a1e7826be60376ee))
+
 ## [1.8.0-beta.2](https://github.com/zlh12331/superagent/compare/v1.8.0-beta.1...v1.8.0-beta.2) (2026-10-08)
 
 <!-- changelog:polished -->
