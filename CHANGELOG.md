@@ -2,19 +2,42 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
-## [1.8.0](https://github.com/zlh12331/superagent/compare/v1.8.0-beta.4...v1.8.0) (2026-10-09)
+## [1.8.0](https://github.com/zlh12331/superagent/compare/v1.7.0...v1.8.0) (2026-10-09)
 
+> 🎓 **毕业版本**：1.8.0-beta.1 → beta.4 逐版验证完毕，本版整体毕业为稳定版——是 1.8.x 首个面向稳定通道用户的版本。相对上一个正式版 1.7.0 的主要变化：① **对话出错时能看到具体原因了**（此前只闪一个笼统提示就消失）；② 中文显示全面修复（文件树/终端/界面不再掉宋体或发灰发绿）；③ 模型选择真正生效（界面所选模型此前只用于展示）；④ 自定义模型支持三种 API 格式；⑤ 记忆引擎安全加固（上游资产越权修复）。beta 期间每版详情见下方各 beta 段落。
+
+### 新增
+
+- **对话出错有据可查**：回合失败时在对话区显示常驻错误卡片——本地化的错误标题、服务端返回的原文原因、按错误类型给出的处理建议，附「重试 / 复制详情 / 关闭」。此前错误只经系统通知一闪而过，且文案被 SDK 泛化成「An error occurred.」，既看不到原因也来不及看清（[#135](https://github.com/zlh12331/superagent/issues/135)）
+- **自定义模型支持三种 API 格式**：Chat Completions / Responses / Messages 三选一，兼容更多 OpenAI 兼容端点与 Claude 风格服务（[#122](https://github.com/zlh12331/superagent/issues/122)）
+- **模型级超时**：可为单个模型配置总时长超时，长时间无响应不再无限等待（[#122](https://github.com/zlh12331/superagent/issues/122)）
 
 ### 修复
 
-* **deps:** oxc 回退 0.152（上游 peer 支持上限）+ otel exporter 升 0.223 ([2d6a9fa](https://github.com/zlh12331/superagent/commit/2d6a9fa1219716789e9be65fce67ba61b6142d5f))
-* **e2e:** 提问弹窗 a11y 用例加固——消除会话进入的两处竞态（CI 两次红于此） ([1d6adef](https://github.com/zlh12331/superagent/commit/1d6adef687a81505a0e9ac8726063a752c71438f))
-* **renderer:** 回合错误改为对话区常驻提示卡——替代泛化且瞬时的 toast ([b886f10](https://github.com/zlh12331/superagent/commit/b886f1070ba83a0d3d788ff5e1b13935780d134c))
+- **中文显示全面修复**：等宽字场景（文件树、终端、代码块）下的中文此前会回退到系统宋体，小字号下发灰发绿——现为三类字体栈统一补齐中文回退；终端（xterm）与界面字体一并覆盖。同时移除一处从未被使用的字体资源（启动更快）（[#129](https://github.com/zlh12331/superagent/issues/129)）
+- **对话真正用上你选的模型**：修复「界面所选模型」从未接线到对话回合的问题——此前选择只用于展示，实际请求仍走默认模型（[#122](https://github.com/zlh12331/superagent/issues/122)）
+- **自定义模型端点 404**：端点 URL 收敛为单一真源，修复 `/v1` 被重复拼接（[#122](https://github.com/zlh12331/superagent/issues/122)）
+- **API Key 变更后立即生效**：设置/删除 Key 后即时重建连接，不再沿用旧凭证（[#122](https://github.com/zlh12331/superagent/issues/122)）
+- **并行审批卡死 / 僵尸审批卡**：同一回合出现第 2 条审批时永久挂起、审批超时后界面残留等待卡片——均已修复，现在有审批必有决议（[#122](https://github.com/zlh12331/superagent/issues/122)）
+- **计划模式无法提问**：修复提问工具被「先批准才能提问」循环拦截（[#122](https://github.com/zlh12331/superagent/issues/122)）
+- **侧边栏跨会话中断入口收敛**：移除易误触的「终止对话」按钮，中断统一用对话区停止按钮或 Esc（运行徽标保留）（[#125](https://github.com/zlh12331/superagent/issues/125)）
+- **提问倒计时重构**：秒数计算改为纯函数 + 数值依赖，清除失效的抑制注释（[#125](https://github.com/zlh12331/superagent/issues/125)）
 
+### 安全
 
-### 杂项
+- **记忆引擎上游安全同步**：同步上游 v2.0.2-beta.1 → beta.3，含资产读接口的越权修复（原实现不校验调用者身份，现按调用者视角过滤并保持权限判定一致）（[#135](https://github.com/zlh12331/superagent/issues/135)）
+- **依赖安全跟进**：升级 http-cache-semantics 至已修复版本并收回临时放行条目（[#132](https://github.com/zlh12331/superagent/issues/132)）
 
-* **release:** 毕业正式版 1.8.0 ([#137](https://github.com/zlh12331/superagent/issues/137)) ([03def60](https://github.com/zlh12331/superagent/commit/03def60dd852fbd49a728ac9a2784b054049ab88))
+### 改进
+
+- **审批可见性**：同一会话并行审批排队渲染不互相覆盖；侧栏会话行显示待审批徽标，跨会话也能看到哪个回合在等你（[#122](https://github.com/zlh12331/superagent/issues/122)）
+- **提问弹窗队列化**：一轮多个提问依次呈现，不再相互顶替（[#122](https://github.com/zlh12331/superagent/issues/122)）
+
+### 内部改进
+
+- 运行时升级至 Node 26 线；构建/CI 依赖大版本跟进（9 个 GitHub Actions、pnpm 12、js-yaml 5、motion 14、undici 8 等）；CD 构建链加入运行时行为审计；PR 标题规范校验升级为必需检查
+
+<!-- changelog:polished -->
 
 ## [1.8.0-beta.4](https://github.com/zlh12331/superagent/compare/v1.8.0-beta.3...v1.8.0-beta.4) (2026-10-09)
 
