@@ -2,6 +2,14 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [1.8.0-beta.3](https://github.com/zlh12331/superagent/compare/v1.8.0-beta.2...v1.8.0-beta.3) (2026-10-09)
+
+
+### 修复
+
+* **侧边栏移除「终止对话」按钮**：跨会话中断统一走对话区入口——点入对应会话后用输入框旁的停止按钮（或 Esc）即可，运行徽标保留（[#125](https://github.com/zlh12331/superagent/issues/125)）
+* **提问倒计时依赖数组重构**：秒数计算提取为模块级纯函数、依赖改写为 `[active, deadline]` 数值依赖，清除 Biome useExhaustiveDependencies 双告警与失效的 eslint 抑制注释（[#125](https://github.com/zlh12331/superagent/issues/125)）
+
 ## [1.8.0-beta.2](https://github.com/zlh12331/superagent/compare/v1.8.0-beta.1...v1.8.0-beta.2) (2026-10-08)
 
 <!-- changelog:polished -->
