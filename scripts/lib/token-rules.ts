@@ -104,6 +104,15 @@ const TS_FONT_FAMILY_RE = /fontFamily\s*[:=]\s*(?:'([^'\n]*)'|"([^"\n]*)"|`([^`\
 // CSS 侧 font-family 声明：值整段捕获（引号在 CSS 值内合法），var(--font-*) 引用放行
 const CSS_FONT_FAMILY_RE = /font-family\s*:\s*([^;{}]+)[;}]?/g;
 
+// CSS 侧 font: 简写（font: <style> <weight> <size>/<line-height> <family>）——家族在
+// 尾段，整值判 CJK/var 即可（任一 CJK 字体在场即放行）；font-size:/font-family: 等
+// 复合属性名不含 "font:" 字面（"font-" 后非冒号），不会误匹配
+const CSS_FONT_SHORTHAND_RE = /(?:^|[;{\s])font:\s*([^;{}]+)[;}]?/g;
+
+// TSX 侧任意值字体（font-[family-name:…]）：绕过 @theme 映射的第二源，var() 引用
+// 放行——对称 text-[Npx] 的 font-size-literal 先例；现行仓库零使用，预防性收口
+const FONT_FAMILY_ARB_RE = /(?:^|\s|")font-\[family-name:(?!var\()[^\]]*\]/g;
+
 /** 单条令牌违规 */
 export interface TokenViolation {
   readonly file: string;
@@ -192,6 +201,15 @@ export function scanTsLike(content: string, rel: string, monoExempt = false): To
           file: rel,
           line: lineNo,
           rule: 'font-size-literal',
+          detail: m[0].trim(),
+        });
+      }
+      // 任意值字体（font-[family-name:…]）：绕过 @theme 映射的第二源（var() 引用放行）
+      for (const m of cls.matchAll(FONT_FAMILY_ARB_RE)) {
+        violations.push({
+          file: rel,
+          line: lineNo,
+          rule: 'font-family-arbitrary',
           detail: m[0].trim(),
         });
       }
@@ -287,6 +305,27 @@ export function scanCss(content: string, rel: string): TokenViolation[] {
         line: lineNo,
         rule: 'font-cjk-fallback',
         detail: `font-family: ${value.slice(0, 70)}`,
+      });
+    }
+    // 字体栈 CJK 回退不变量（font: 简写）：家族在尾段，整值判 CJK/var；
+    // inherit 与 CSS 系统字体关键字（caption/menu/icon 等）放行
+    for (const m of line.matchAll(CSS_FONT_SHORTHAND_RE)) {
+      const value = (m[1] as string).trim();
+      if (
+        value === '' ||
+        value === 'inherit' ||
+        value === 'initial' ||
+        value.includes('var(--font-') ||
+        CJK_FONT_OK_RE.test(value) ||
+        /^(caption|icon|menu|message-box|small-caption|status-bar)\b/.test(value)
+      ) {
+        continue;
+      }
+      violations.push({
+        file: rel,
+        line: lineNo,
+        rule: 'font-cjk-fallback',
+        detail: `font: ${value.slice(0, 70)}`,
       });
     }
   });

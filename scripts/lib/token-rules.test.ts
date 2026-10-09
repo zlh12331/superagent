@@ -260,4 +260,32 @@ describe('font-cjk-fallback（字体栈 CJK 回退不变量）', () => {
       ),
     ).toHaveLength(0);
   });
+
+  it('反例：font: 简写无 CJK → 命中（家族在尾段）', () => {
+    expect(rulesOf(scanCss('.x { font: 12px sans-serif; }', 'a.css'))).toContain(
+      'font-cjk-fallback',
+    );
+  });
+
+  it('正例：font: inherit 与 var 令牌简写 → 无命中', () => {
+    expect(
+      scanCss('.x { font: inherit; } .y { font: bold 12px/1.5 var(--font-mono); }', 'a.css'),
+    ).toHaveLength(0);
+  });
+
+  it('正例：font: 系统字体关键字 → 无命中', () => {
+    expect(scanCss('.x { font: caption; }', 'a.css')).toHaveLength(0);
+  });
+
+  it('反例：font-[family-name:…] 任意值字体 → 命中', () => {
+    expect(
+      rulesOf(scanTsLike('<div className="font-[family-name:Consolas]" />', 'a.tsx')),
+    ).toContain('font-family-arbitrary');
+  });
+
+  it('正例：font-[family-name:var(--font-mono)] → 无命中', () => {
+    expect(
+      scanTsLike('<div className="font-[family-name:var(--font-mono)]" />', 'a.tsx'),
+    ).toHaveLength(0);
+  });
 });
