@@ -5,7 +5,7 @@
 // - 调用 useAgentWithIpc 获取 useChat 完整状态（Agent 模式）
 // - 透传 messages / status 给 ChatMessageList
 // - 透传 status + sendMessage + stop 给 ChatInput
-// - 错误处理：onError 回调统一 toast 提示
+// - 错误处理：onError 兜底写入 turn-error-store，对话区 TurnErrorNotice 常驻显示（2026-10-09 起替代瞬时 toast）
 //
 // 设计：
 // - 三段式布局：顶部标题栏 / 中间消息列表 / 底部输入框
@@ -16,18 +16,17 @@
 import type { ChatMessage } from '@code-agent/shared/renderer';
 import { type ReactElement, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { toast } from 'sonner';
 
 import { InlineApprovalCard } from '@/components/agent/inline-approval-card';
 import { ModelSelector } from '@/components/common/ModelSelector';
 import { useAgentWithIpc } from '@/hooks/use-agent';
 import { useConversationSearch } from '@/hooks/use-conversation-search';
-import { useErrorMessage, useTranslation } from '@/i18n/use-translation';
-import { unwrapErrorMessage } from '@/lib/ipc';
+import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
 import { useSettingsStore } from '@/stores/persistent/settings-store';
 import { useAgentRunStore } from '@/stores/transient/agent-run-store';
 import { usePendingMessageStore } from '@/stores/transient/pending-message-store';
+import { useTurnErrorStore } from '@/stores/transient/turn-error-store';
 import { useUiStore } from '@/stores/transient/ui-store';
 import { ChatInput } from './ChatInput';
 import { ChatMessageList } from './ChatMessageList';
@@ -38,6 +37,7 @@ import { GoalBar } from './GoalBar';
 import { reconstructHistory, toInitialMessages } from './history-parts';
 import { PanelNotice } from './panel-notice';
 import { RateLimitBanner } from './rate-limit-banner';
+import { TurnErrorNotice } from './turn-error-notice';
 import { useAutoCompact } from './use-auto-compact';
 import { createChatComposerActions } from './use-chat-composer-actions';
 import { useChatGoals } from './use-chat-goals';
@@ -152,18 +152,17 @@ export function ChatPanel({
       setInjectedComposerValue(undefined);
     }, 0);
   };
-  // 错误码 → 本地化文案 hook
-  const { getErrorMessage } = useErrorMessage();
   // 本地化文案（声明置于组件前部：派生文案在渲染前即需使用）
   const { t } = useTranslation();
 
-  // 错误处理回调：一次性触发，避免 useEffect 双 toast
-  // 策略：尝试从 error.message 提取 [CODE] 前缀匹配 i18n 文案，失败则展示原始消息
-  // try/catch 双保险：getErrorMessage 异常时也绝不让 onError 抛错
-  // （onError 抛错会中断 AI SDK 状态机 setStatus(error)，界面永久卡 THINKING）
+  // 错误处理回调（useChat onError）：写入 turn-error-store，由对话区 TurnErrorNotice
+  // 常驻显示具体错误（2026-10-09 用户要求：回合错误不再走瞬时 toast——SDK 脱敏后
+  // 文案泛化（'An error occurred.'）且转瞬即逝）。
+  // 此处为兜底写入（ensure，缺位才写）：权威条目来自 use-agent-bridge 的 stream-error
+  // 事件（AppError 分类后的 code + 消息原文）；两路触发顺序不定、且 onError 的文案
+  // 可能已被 SDK 脱敏，已有权威条目不覆盖。
   const handleError = (error: Error): void => {
-    // unwrapErrorMessage 内部已兜底 localize 失败回退原始消息，onError 不允许再抛
-    toast.error(unwrapErrorMessage(error, getErrorMessage));
+    useTurnErrorStore.getState().ensure(chatId, 'UNKNOWN', error.message);
   };
 
   // 历史重建（纯派生，交给 React Compiler 记忆化）：session:get 返回 ModelMessage 形态（role/content），
@@ -269,6 +268,14 @@ export function ChatPanel({
     void regenerate({ messageId });
   };
 
+  // 回合错误卡的重试目标：最后一条消息
+  // （regenerate 会自动截断该消息之后的内容并重发；失败回合可能未产生 assistant
+  //  消息，此时最后一条即触发失败的用户消息，同样适用）
+  const lastMessageId = messages.at(-1)?.id;
+  const retryFailedTurn = (): void => {
+    if (lastMessageId !== undefined) handleRegenerate(lastMessageId);
+  };
+
   // 发送 / 斜杠命令（提取自本组件，压低认知复杂度）
   const { handleSend, handleSlashCommand } = createChatComposerActions({
     chatId,
@@ -321,6 +328,13 @@ export function ChatPanel({
       {/* 限流提示横幅：429 限流时显示（RateLimitBanner 订阅 rate-limit-store）
           位于状态条原位置（用户要求：与顶部状态条互换） */}
       <RateLimitBanner />
+
+      {/* 回合错误卡：具体错误常驻对话区（turn-error-store 由 use-agent-bridge 写入；
+          重试 = regenerate 截断失败回合后重发） */}
+      <TurnErrorNotice
+        sessionId={chatId}
+        {...(lastMessageId !== undefined ? { onRetry: retryFailedTurn } : {})}
+      />
 
       {/* 历史回显缺口提示：重开会话时明确告知「哪些内容没落库/没回显」，避免用户误以为工具调用消失是渲染 bug（panel-notice.tsx） */}
       {showHistoryNotice && (

@@ -177,6 +177,12 @@
     "truncatedJson": "(truncated)",
     "editFileLabel": "Edit {{name}}",
     "rateLimited": "AI rate limit reached, please retry later",
+    "turnErrorTitle": "Turn failed",
+    "turnErrorRetry": "Retry",
+    "turnErrorCopyDetail": "Copy details",
+    "turnErrorNoDetail": "(no further detail)",
+    "turnErrorHint": "Check the model configuration or network, then retry. Export a diagnostic package from Settings → Diagnostics for details.",
+    "turnErrorHintApiKey": "Check the key used by this model in Settings → Models & API Keys. Local gateway models must use a key issued or accepted by that gateway.",
     "slashSuggest": {
       "help": "Show help",
       "newChat": "New session",

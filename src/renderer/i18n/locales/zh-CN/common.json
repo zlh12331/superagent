@@ -177,6 +177,12 @@
     "truncatedJson": "(已截断)",
     "editFileLabel": "编辑 {{name}}",
     "rateLimited": "AI 调用过于频繁，请稍后重试",
+    "turnErrorTitle": "对话出错",
+    "turnErrorRetry": "重试",
+    "turnErrorCopyDetail": "复制详情",
+    "turnErrorNoDetail": "（无更多详情）",
+    "turnErrorHint": "请检查模型配置或网络后重试；详细日志可在「设置 → 诊断」导出诊断包。",
+    "turnErrorHintApiKey": "请在「设置 → 模型与 API Key」检查该模型使用的密钥；本地网关模型需使用网关自身签发/认可的 Key。",
     "slashSuggest": {
       "help": "显示帮助",
       "newChat": "新建会话",

@@ -15,6 +15,7 @@ import { queryClient as globalQueryClient } from '@/lib/query/query-client';
 import { useAgentAskStore } from '@/stores/transient/agent-ask-store';
 import { useApprovalsStore } from '@/stores/transient/approvals-store';
 import { useToolStore } from '@/stores/transient/tool-store';
+import { useTurnErrorStore } from '@/stores/transient/turn-error-store';
 
 import { useAgentBridge } from './use-agent-bridge';
 
@@ -55,6 +56,7 @@ describe('use-agent-bridge', () => {
     useToolStore.getState().clearBySession('s1');
     useApprovalsStore.getState().clearBySession('s1');
     useAgentAskStore.getState().clearAsk();
+    useTurnErrorStore.setState({ errors: {} });
     globalQueryClient.clear();
     // 清空回合结束覆盖登记（31 号：避免用例间失效事件状态串扰）
     resetInvalidationCoverage();
@@ -185,7 +187,7 @@ describe('use-agent-bridge', () => {
     expect(useApprovalsStore.getState().pending.length).toBe(0);
   });
 
-  it('stream:error：同样 invalidate + 清理', () => {
+  it('stream:error：同样 invalidate + 清理，并写入 turn-error-store（权威条目）', () => {
     const invalidateSpy = vi.spyOn(globalQueryClient, 'invalidateQueries');
     renderHook(() => useAgentBridge(), { wrapper: createWrapper() });
 
@@ -194,6 +196,18 @@ describe('use-agent-bridge', () => {
     expect(invalidateSpy).toHaveBeenCalledWith(
       expect.objectContaining({ queryKey: SESSIONS_QUERY_KEY }),
     );
+    // 对话区错误卡数据源：code + 消息原文（未经 SDK 脱敏）
+    expect(useTurnErrorStore.getState().errors['s1']?.code).toBe('INTERNAL_ERROR');
+    expect(useTurnErrorStore.getState().errors['s1']?.message).toBe('boom');
+  });
+
+  it('stream:start：清除该会话的上一回合错误卡条目（重连后不留旧错误）', () => {
+    renderHook(() => useAgentBridge(), { wrapper: createWrapper() });
+    fireError({ sessionId: 's1', code: 'INTERNAL_ERROR', message: 'boom' });
+    expect(useTurnErrorStore.getState().errors['s1']).toBeDefined();
+
+    fireStart({ sessionId: 's1' });
+    expect(useTurnErrorStore.getState().errors['s1']).toBeUndefined();
   });
 
   // ── 渐进回落（31 号 spec §2.5c）：事件覆盖 → 跳过旧清单；L2 清理不受影响 ──
