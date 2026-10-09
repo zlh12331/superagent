@@ -1,5 +1,5 @@
 # PR 按改动路径自动打区域标签
-# 配置：.github/labeler.yml（v5 语法，changed-files any-glob-to-any-file）
+# 配置：.github/labeler.yml（v7 语法，changed-files any-glob-to-any-file）
 # 权限：pull-requests: write（labeler 需要写 label）
 # 安全：action pin 到 commit SHA（防 tag 重指）
 
@@ -22,5 +22,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      # SHA 对应 actions/labeler v5（8558fd74291d67161a8a78ce36a881fa63b766a9）
-      - uses: actions/labeler@8558fd74291d67161a8a78ce36a881fa63b766a9
+      # SHA 对应 actions/labeler v7.0.0（bf12e9b00b37c5c0ca2b87b79b2daf7891dbda13）
+      # v5→v7 输入面兼容（repo-token/configuration-path 未变；本处仅用默认配置路径）
+      - uses: actions/labeler@bf12e9b00b37c5c0ca2b87b79b2daf7891dbda13
