@@ -123,7 +123,6 @@
     "unpin": "Unpin",
     "sessionRunning": "Session running",
     "sessionPendingApproval": "This session has a tool call awaiting approval",
-    "stopTurn": "Stop this session's turn",
     "openFiles": "Show files",
     "openInExplorer": "Open in Explorer",
     "fileManager": "File manager",

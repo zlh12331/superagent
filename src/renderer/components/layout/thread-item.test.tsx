@@ -12,20 +12,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { i18n } from '@/i18n';
 
-const { mockRenameAsync, mockStopTurn, sortableState } = vi.hoisted(() => ({
+const { mockRenameAsync, sortableState } = vi.hoisted(() => ({
   mockRenameAsync: vi.fn(),
-  mockStopTurn: vi.fn(),
   sortableState: { isDragging: false },
 }));
 
 vi.mock('@/hooks/use-sessions', () => ({
   // 组件仅解构 mutateAsync；重命名提交经 mutation 落库（invalidate 由 hook 内部负责）
   useRenameSession: () => ({ mutateAsync: mockRenameAsync }),
-}));
-
-vi.mock('@/hooks/use-agent-stop', () => ({
-  // D4A：跨会话中断 mutation 边界 mock（invalidate/toast 由 hook 内部负责）
-  useStopAgentTurn: () => ({ mutate: mockStopTurn, isPending: false }),
 }));
 
 vi.mock('@dnd-kit/sortable', () => ({
@@ -139,24 +133,9 @@ describe('ThreadItem · 渲染与选择', () => {
     expect(screen.getByText(i18n.t('sidebar.sessionRunning'))).toBeDefined();
   });
 
-  it('运行徽标（D4A）：非运行会话不渲染徽标与停止按钮', () => {
+  it('运行徽标（D4A）：非运行会话不渲染徽标', () => {
     renderThread({ isRunning: false });
     expect(screen.queryByText(i18n.t('sidebar.sessionRunning'))).toBeNull();
-    expect(screen.queryByLabelText(i18n.t('sidebar.stopTurn'))).toBeNull();
-  });
-
-  it('中断入口（D4A）：运行中会话显示停止按钮，点击 → useStopAgentTurn 且不冒泡成选择', () => {
-    const { props } = renderThread({ isRunning: true });
-    const stopBtn = screen.getByLabelText(i18n.t('sidebar.stopTurn'));
-    expect(stopBtn).toBeDefined();
-    fireEvent.click(stopBtn);
-    expect(mockStopTurn).toHaveBeenCalledWith('s1');
-    expect(props.onSelect).not.toHaveBeenCalled();
-  });
-
-  it('中断入口（D4A）：isDeleting 中停止按钮禁用（行级操作互斥）', () => {
-    renderThread({ isRunning: true, isDeleting: true });
-    expect(screen.getByLabelText(i18n.t('sidebar.stopTurn'))).toBeDisabled();
   });
 });
 

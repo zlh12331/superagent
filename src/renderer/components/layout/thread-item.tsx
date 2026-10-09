@@ -19,7 +19,6 @@ import {
   MoreVertical,
   Pencil,
   Pin,
-  Square,
   Trash2,
 } from 'lucide-react';
 import { type ReactElement, useState } from 'react';
@@ -37,7 +36,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { useStopAgentTurn } from '@/hooks/use-agent-stop';
 import { useRenameSession } from '@/hooks/use-sessions';
 import { useTranslation } from '@/i18n/use-translation';
 import { formatRelativeTime } from '@/lib/format-time';
@@ -52,7 +50,7 @@ interface SortableThreadItemProps {
   readonly isActive: boolean;
   readonly isDeleting: boolean;
   readonly isPinned: boolean;
-  /** 会话有回合在跑（lastRunStatus='running'，D4A：渲染运行徽标 + 中断入口） */
+  /** 会话有回合在跑（lastRunStatus='running'，D4A：渲染运行徽标） */
   readonly isRunning: boolean;
   /**
    * 会话有等待用户决策的审批（2026-10-08：跨会话可见性）
@@ -138,7 +136,7 @@ interface ThreadItemProps {
   readonly isActive: boolean;
   readonly isDeleting: boolean;
   readonly isPinned: boolean;
-  /** 会话有回合在跑（D4A：渲染运行徽标 + hover 中断入口） */
+  /** 会话有回合在跑（D4A：渲染运行徽标） */
   readonly isRunning: boolean;
   /** 会话有等待用户决策的审批（跨会话可见性：切走后仍能看到并点过去处理） */
   readonly hasPendingApproval: boolean;
@@ -180,8 +178,6 @@ function ThreadItem({
   const [renaming, setRenaming] = useState(false);
   // 重命名提交（useRenameSession：mutation + invalidate 自动刷新列表）
   const { mutateAsync: renameSession } = useRenameSession();
-  // D4A：跨会话中断（useStopAgentTurn 按 sessionId 粒度调用 agent:stop）
-  const { mutate: stopTurn, isPending: isStopping } = useStopAgentTurn();
 
   /** 提交重命名：空值/未变化时直接退出编辑态 */
   const commitRename = (next: string): void => {
@@ -293,28 +289,6 @@ function ThreadItem({
             </div>
             {/* 重命名中隐藏操作按钮：给输入框让出整行宽度（此前 97px 挤在 52px 操作按钮旁） */}
             <div className={cn('ti-actions', renaming && 'hidden')}>
-              {/* D4A：跨会话中断入口——运行中会话 hover/focus-within 显示
-                  （ti-actions 既有 opacity 语义），随行内其他操作钮同宽同级 */}
-              {isRunning && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="text-accent-text hover:bg-sidebar-accent-foreground/10 hover:text-accent-text size-6 shrink-0"
-                  aria-label={t('sidebar.stopTurn')}
-                  title={t('sidebar.stopTurn')}
-                  disabled={isStopping || isDeleting}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    stopTurn(sessionId);
-                  }}
-                >
-                  {isStopping ? (
-                    <Loader2 className="size-3.5 animate-spin" strokeWidth={1.5} />
-                  ) : (
-                    <Square className="size-3.5" strokeWidth={1.5} fill="currentColor" />
-                  )}
-                </Button>
-              )}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button

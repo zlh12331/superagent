@@ -64,6 +64,11 @@ function useAskState(activeSessionId: string | null): AskState {
   };
 }
 
+/** 剩余秒数（向上取整 + 归零兜底）；模块级纯函数，身份稳定不进 hook 依赖 */
+function secondsUntil(deadline: number): number {
+  return Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+}
+
 /**
  * 提问超时倒计时（38 号阶段 2 收尾：主进程 60s 超时自动继续对用户可见化）
  *
@@ -77,20 +82,18 @@ function useAskCountdown(
   readonly secondsLeft: number;
   readonly expiring: boolean;
 } {
-  const compute = (): number =>
-    Math.max(0, Math.ceil((receivedAt + ASK_TIMEOUT_SECONDS * 1000 - Date.now()) / 1000));
-  const [secondsLeft, setSecondsLeft] = useState(compute);
+  // 截止时刻取数值：依赖数组用原始值（active/deadline），interval 闭包持新 deadline
+  const deadline = receivedAt + ASK_TIMEOUT_SECONDS * 1000;
+  const [secondsLeft, setSecondsLeft] = useState(() => secondsUntil(deadline));
   useEffect(() => {
     if (!active) return;
     const timer = setInterval(() => {
-      setSecondsLeft(compute);
+      setSecondsLeft(secondsUntil(deadline));
     }, 1000);
     return () => {
       clearInterval(timer);
     };
-    // compute 为闭包内纯函数（读 receivedAt），无需进依赖
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [receivedAt, active]);
+  }, [active, deadline]);
   return { secondsLeft, expiring: active && secondsLeft <= 10 };
 }
 
