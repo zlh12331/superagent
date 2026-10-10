@@ -1,12 +1,3 @@
-// packages/shared/src/schemas/goal.ts
-// 会话目标跟踪域（对齐 qwen /goal 语义的持久化收敛）
-// ──────────────────────────────────────────────────────────────
-// 设计：
-// - 目标绑定会话：每会话一个 active 目标（新建覆盖旧，清除标记 aborted）
-// - 回合结束后 GoalService 用 LLM 判定 condition 是否满足（goalJudge）
-// - 状态机：active → completed（判定满足）/ aborted（用户清除）
-// ──────────────────────────────────────────────────────────────
-
 import { z } from 'zod';
 
 /** 目标状态：active 进行中 / completed 判定满足 / aborted 用户清除 */

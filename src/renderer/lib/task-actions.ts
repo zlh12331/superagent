@@ -1,9 +1,3 @@
-// src/renderer/lib/task-actions.ts
-// 计划待办 IPC 桥（task:list）
-// ──────────────────────────────────────────────────────────────
-// 职责（direct-ipc 清迁，2026-09-26）：right-panel-panes 不再直连 window.api
-// ──────────────────────────────────────────────────────────────
-
 import type { TaskListRes } from '@code-agent/shared/renderer';
 
 import { hasIpcBridge, unwrap } from '@/lib/ipc';

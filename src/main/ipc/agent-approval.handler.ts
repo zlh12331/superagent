@@ -1,22 +1,3 @@
-// src/main/ipc/agent-approval.handler.ts
-// Agent 域审批响应 IPC handler（PermissionService 暴露给渲染层的回传通道，定义表驱动）
-//
-// 实现 1 个请求-响应方法：
-// - approvalResponse  渲染层回传用户审批结果（approve / deny / remember）
-//
-// 设计要点：
-// - DI 模式：通过 deps 注入 IPermissionService 实例
-// - 此 channel 是请求-响应模式，但语义是"回传事件"：
-//     主进程通过 webContents.send('agent:approval:request') 推送审批请求
-//     渲染层弹出 ApprovalModal，用户操作后通过 invoke('agent:approval:response', req) 回传
-//     主进程收到后调用 PermissionService.handleApprovalResponse resolve 对应 Promise
-// - 返回 { ok: true } 仅作为 invoke 的 ack，业务结果通过后续 agent:tool:result 推送
-//
-// 与 agent.handler.ts 的关系：
-// - agent.handler.ts 实现 agent:run / agent:stop
-// - 本 handler 单独实现 agent:approval:response，因为审批响应是工具系统的一部分，
-//   依赖 PermissionService 而非 AgentService
-
 import type { InferHandlers, IPC_DEFINITIONS } from '@code-agent/shared/main';
 
 import type { IPermissionService } from '../infra/ai/tools/permission-service';
@@ -49,10 +30,6 @@ export function createAgentApprovalHandlers(deps: AgentApprovalHandlerDeps): Age
   const { permissionService } = deps;
 
   return {
-    // 审批响应回传：渲染层 ApprovalModal 用户操作后调用
-    // 调用 PermissionService.handleApprovalResponse resolve 对应 approvalId 的 Promise
-    // ToolExecutor 等待的 Promise 解除阻塞，继续执行或返回 TOOL_PERMISSION_DENIED
-    // 返回 { ok: true } 仅作为 invoke 的 ack，业务结果通过 agent:tool:result 推送
     approvalResponse: async (input) => {
       permissionService.handleApprovalResponse(
         input.approvalId,

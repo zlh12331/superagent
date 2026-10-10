@@ -1,13 +1,3 @@
-// src/renderer/components/settings/sections/skills-section.tsx
-// 技能管理 pane（对齐参考项目 superagent SkillsSettingsPane）
-// ──────────────────────────────────────────────────────────────
-// 数据源（skill IPC 三通道，后端已实现）：
-// - skill:listLearned：已学技能（DB skills 表，source=learned）
-// - skill:learn：输入描述 → LLM 生成结构化技能（learn-skill-agent）
-// - skill:removeLearned：移除已学技能
-// - skill:list：全部可用技能（内置注册表 + 已学合并）
-// ──────────────────────────────────────────────────────────────
-
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Sparkles, Trash2 } from 'lucide-react';
 import { type ReactElement, useState } from 'react';
@@ -34,10 +24,8 @@ export function SkillsSection(): ReactElement {
   const { t } = useTranslation();
   const { getErrorMessage } = useErrorMessage();
   const queryClient = useQueryClient();
-  // 学习表单状态（对齐参考 SkillsSettingsPane 的添加行）
   const [learnPrompt, setLearnPrompt] = useState('');
 
-  // L3：已学技能列表
   const learnedQuery = useQuery({
     queryKey: LEARNED_SKILLS_QUERY_KEY,
     queryFn: async () => {
@@ -45,7 +33,6 @@ export function SkillsSection(): ReactElement {
     },
   });
 
-  // L3：全部可用技能（内置 + 已学）
   const allSkillsQuery = useQuery({
     queryKey: ALL_SKILLS_QUERY_KEY,
     queryFn: listSkills,
@@ -55,10 +42,8 @@ export function SkillsSection(): ReactElement {
     void queryClient.invalidateQueries({ queryKey: LEARNED_SKILLS_QUERY_KEY });
     void queryClient.invalidateQueries({ queryKey: ALL_SKILLS_QUERY_KEY });
   };
-  // 错误反馈（一致性审计：写路径 mutation 必须有 onError）
   const onError = useMutationOnError();
 
-  // 学习技能 mutation（LLM 生成）
   const learnMutation = useMutation({
     mutationFn: learnSkill,
     onSuccess: () => {
@@ -69,7 +54,6 @@ export function SkillsSection(): ReactElement {
     onError,
   });
 
-  // 移除技能 mutation
   const removeMutation = useMutation({
     mutationFn: removeLearnedSkill,
     onSuccess: () => {
@@ -81,12 +65,10 @@ export function SkillsSection(): ReactElement {
   const learned: readonly LearnedSkillInfo[] = learnedQuery.data?.learned ?? [];
   const allSkills = allSkillsQuery.data?.skills ?? [];
   const learnedNames = new Set(learned.map((s) => s.name));
-  // 内置技能 = 全部 - 已学
   const builtinSkills = allSkills.filter((s) => !learnedNames.has(s.name));
 
   return (
     <div className="flex flex-col gap-2">
-      {/* 已学技能（LLM 生成，可移除） */}
       <SectionTitle>{t('settings.skillLearnedTitle')}</SectionTitle>
       <p className="text-muted-foreground text-xs leading-[1.5]">
         {t('settings.skillLearnedHint')}
@@ -114,7 +96,6 @@ export function SkillsSection(): ReactElement {
               className="text-muted-foreground hover:text-error-text size-6"
               aria-label={t('settings.skillRemove')}
               onClick={() => {
-                // 破坏性操作统一 confirm() store（此前直接删除无确认）
                 void confirm({
                   title: t('settings.skillRemove'),
                   message: t('settings.skillRemoveConfirmDesc', { name: skill.name }),
@@ -130,7 +111,6 @@ export function SkillsSection(): ReactElement {
         ))
       )}
 
-      {/* 学习新技能（LLM 生成） */}
       <SectionTitle>{t('settings.skillLearn')}</SectionTitle>
       <div className="flex flex-col gap-1.5">
         <Textarea
@@ -151,7 +131,6 @@ export function SkillsSection(): ReactElement {
         </Button>
       </div>
 
-      {/* 内置技能（只读展示） */}
       {builtinSkills.length > 0 && (
         <>
           <SectionTitle>{t('settings.skillBuiltinTitle')}</SectionTitle>

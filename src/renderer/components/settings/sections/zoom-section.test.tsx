@@ -1,12 +1,3 @@
-// src/renderer/components/settings/sections/zoom-section.test.tsx
-// ZoomSection 测试（35 号 §2.7：11 档渲染 + 选择写 store）
-// ──────────────────────────────────────────────────────────────
-// Radix Select 的浮层在 jsdom 下交互复杂，本测试：
-// - 断言触发器的当前值回显（store 单真源）
-// - 直接调用 store 断言写穿透链（Select onValueChange 的语义由 store 测试覆盖）
-// - 档位表完整性（11 档派生自 ZOOM_LEVELS，防 UI 与真源脱节）
-// ──────────────────────────────────────────────────────────────
-
 import { ZOOM_LEVELS } from '@code-agent/shared/renderer';
 import { render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -44,7 +35,6 @@ describe('ZoomSection', () => {
 
   it('档位表与 ZOOM_LEVELS 单一真源一致（11 档）', () => {
     expect(ZOOM_LEVELS).toHaveLength(11);
-    // 每档的百分比文案都有唯一 key（SelectItem value 用 String(level)，浮点唯一）
     const values = ZOOM_LEVELS.map((l) => String(l));
     expect(new Set(values).size).toBe(11);
   });

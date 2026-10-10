@@ -1,14 +1,3 @@
-// src/main/infra/storage/settings-pref.ts
-// 渲染层用户设置持久化（app_settings 表，SQLite 单一真源）
-// ──────────────────────────────────────────────────────────────
-// S1 设计（settings 下沉 SQLite，用户决策）：
-// - 此前 settings 只活在 renderer localStorage（清缓存即丢、主进程读不到）
-// - 现收敛为 SQLite app_settings 表：key → JSON value
-// - 渲染层 settings-store 保持内存态即时性，写穿透经 settings:set IPC 落库；
-//   启动时经 settings:getAll 拉取快照（main.tsx 顶层 await，无主题闪烁）
-// - 主进程不解析 value 结构（结构契约由渲染层 settings-store 定义）
-// ──────────────────────────────────────────────────────────────
-
 import { eq, sql } from 'drizzle-orm';
 
 import { getDb } from './db';
@@ -28,9 +17,7 @@ export function readAllSettings(): Record<string, unknown> {
   for (const row of rows) {
     try {
       settings[row.key] = JSON.parse(row.value);
-    } catch {
-      // 损坏条目：跳过（单条损坏不阻断整体读取）
-    }
+    } catch {}
   }
   return settings;
 }
@@ -50,7 +37,6 @@ export function readSetting(key: string): unknown {
   try {
     return JSON.parse(row.value);
   } catch {
-    // 损坏条目：视为未设置（调用方走默认值）
     return undefined;
   }
 }

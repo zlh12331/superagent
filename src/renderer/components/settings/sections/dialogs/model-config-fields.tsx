@@ -1,10 +1,3 @@
-// src/renderer/components/settings/sections/dialogs/model-config-fields.tsx
-// 模型配置弹窗 · 表单字段区（API 基础配置区 + 高级配置区）
-// ──────────────────────────────────────────────────────────────
-// 纯展示组件：表单值/错误/联动均由父层 ModelConfigDialog 持有。
-// 高级配置区字段首版不持久化（仅表单交互，见文档 3.3.4 字段映射）。
-// ──────────────────────────────────────────────────────────────
-
 import type {
   ApiKeyProvider,
   AvailableModelInfo,
@@ -180,7 +173,6 @@ export function ModelConfigFields({
 
   return (
     <div className="flex flex-col gap-3">
-      {/* ── API 基础配置区 ─────────────────────────────── */}
       {isProvider && (
         <>
           <div className="flex flex-col gap-1.5">
@@ -189,8 +181,6 @@ export function ModelConfigFields({
               value={values.providerKind}
               disabled={providerKindLocked}
               onValueChange={(v) => {
-                // 切换厂商时清空已选模型：旧厂商的 selectedModel 对新厂商无效
-                // （否则 effectiveModelId 残留跨厂商模型 id → 保存出错配模型）
                 onFieldChange('providerKind', v as ApiKeyProvider);
                 onFieldChange('selectedModel', '');
                 onFieldChange('useOtherModel', false);
@@ -244,9 +234,6 @@ export function ModelConfigFields({
         <>
           <div className="flex flex-col gap-1.5">
             <Label className={labelClass}>{t('settings.modelMgmt.apiFormatLabel')}</Label>
-            {/* 三格式可选（2026-10-08）：此前是写死单选的禁用下拉——用户配
-                Responses / Anthropic 协议的网关时无法表达，只能被按 Chat
-                Completions 调用而 404/400 */}
             <Select
               value={values.apiFormat}
               onValueChange={(v) => onFieldChange('apiFormat', v as ModelApiFormat)}
@@ -255,7 +242,6 @@ export function ModelConfigFields({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {/* key 必须是 t() 的字面量实参（check:i18n 静态扫描；拼 key 会被判冗余） */}
                 <SelectItem value="openai-chat" className={inputClass}>
                   {t('settings.modelMgmt.apiFormat_openai-chat')}
                 </SelectItem>
@@ -295,7 +281,6 @@ export function ModelConfigFields({
 
       <div className="flex flex-col gap-1.5">
         <Label className={labelClass}>{t('settings.modelMgmt.modelIdLabel')} *</Label>
-        {/* 锁定：编辑模式（update 以 modelId 为主键，改动即保存静默无效）或服务商下拉已选定 */}
         <Input
           type="text"
           value={isProvider && !values.useOtherModel ? values.selectedModel : values.modelId}
@@ -340,7 +325,6 @@ export function ModelConfigFields({
 
       {testError !== undefined && <p className="text-error-text text-2xs">{testError}</p>}
 
-      {/* ── 高级配置区（折叠） ──────────────────────────── */}
       <Button
         variant="ghost"
         size="sm"

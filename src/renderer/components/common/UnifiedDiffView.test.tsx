@@ -1,12 +1,3 @@
-// src/renderer/components/$1/UnifiedDiffView.test.tsx
-// UnifiedDiffView 单测：自研 diff 表格渲染（hunk 分组 / 行号 / 空兜底 / 语言检测）
-// ──────────────────────────────────────────────
-// 背景：渲染方案已从 react-diff-viewer-continued 迁移为自研 DiffRowsTable
-// （2026-09）。断言策略随之从「mock 渲染库断 props」改为「真实渲染断 DOM」：
-// 表结构 / hunk 分组（多 tbody）/ 行号语义 / className 透传 / 目标语言检测。
-// shiki 高亮为异步纯视觉增强，jsdom 下 mock 为永不 resolve，行结构先行断言。
-// ──────────────────────────────────────────────
-
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
@@ -16,10 +7,8 @@ import { i18n } from '@/i18n';
 import { UnifiedDiffView } from './UnifiedDiffView';
 
 vi.mock('@/lib/highlight', () => ({
-  // 永不 resolve：jsdom 下跳过 shiki 异步管线（高亮失败自动退化为纯文本，属正常路径）
   getHighlighter: vi.fn(() => new Promise<never>(() => {})),
   ensureLangLoaded: vi.fn(() => Promise.resolve()),
-  // 语言检测链路（file-viewer-utils）依赖：identity 即可（扩展名映射在查表层完成）
   normalizeLang: vi.fn((lang: string): string => lang),
 }));
 
@@ -45,7 +34,6 @@ describe('UnifiedDiffView', () => {
     expect(container.querySelectorAll('table.diff-table')).toHaveLength(1);
     expect(screen.getByText('old line')).toBeDefined();
     expect(screen.getByText('new line')).toBeDefined();
-    // 上下文行双栏同现（文本出现两次）
     expect(screen.getAllByText('context')).toHaveLength(2);
   });
 
@@ -58,7 +46,6 @@ describe('UnifiedDiffView', () => {
   it('行号语义：del 行只占左栏（oldNumber），add 行只占右栏（newNumber）', () => {
     const { container } = render(<UnifiedDiffView diff={oneHunk} />);
     const [delRow, addRow] = diffRows(container);
-    // 单元格顺序：old 行号 | old 代码 | new 行号 | new 代码
     expect(delRow?.children[0]?.textContent).toBe('1');
     expect(delRow?.children[1]?.textContent).toContain('old line');
     expect(delRow?.children[2]?.textContent).toBe('');
@@ -110,7 +97,6 @@ describe('UnifiedDiffView', () => {
       lines.push(`+line ${i}`);
     }
     const { container } = render(<UnifiedDiffView diff={lines.join('\n')} />);
-    // 初始预算 400 行：可见 400，折叠 50
     expect(diffRows(container)).toHaveLength(400);
     const more = screen.getByRole('button');
     expect(more.textContent).toBe(t('diff.showMoreRows', { remaining: 50 }));

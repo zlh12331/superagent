@@ -1,9 +1,3 @@
-// packages/shared/src/__tests__/settings-schema.test.ts
-// settings schema 单测：P0 收口——settings:set key 白名单 + lsp 命令门
-//
-// 背景：key 曾为自由字符串，渲染层可覆写主进程消费的任意 app_settings 键
-// 且持久化重启仍生效；lsp.serverCommands 值曾可为任意路径形态的可执行文件。
-
 import { describe, expect, it } from 'vitest';
 import { ZOOM_LEVELS } from '../constants/zoom';
 import { isSafeLsServerCommand, SETTING_KEYS, SettingsSetReqSchema } from '../schemas/settings';

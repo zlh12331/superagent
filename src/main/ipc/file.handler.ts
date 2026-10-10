@@ -1,46 +1,3 @@
-// src/main/ipc/file.handler.ts
-// 文件域 IPC handler（FileService 暴露给渲染层的入口，定义表驱动）
-//
-// 实现 9 个请求-响应方法：
-// - read        读取文件内容（支持 offset/limit 分批）
-// - write       写入文件（覆盖或追加，可选自动创建父目录）
-// - list        递归列出目录内容（深度可控）
-// - watchStart  开始监听文件变更，返回 watcherId
-// - watchStop   停止指定 watcherId 的监听
-// - create      创建新文件（空文件，若已存在则报错）
-// - createDir   创建新目录（递归创建父目录）
-// - delete      删除文件或目录（目录递归删除）
-// - rename      重命名/移动文件或目录
-//
-// 流式事件由 FileService 主动推送（不在此 handler 返回）：
-// - file:watch:event  文件变更事件（携带 watcherId 关联）
-//
-// 设计要点：
-// - DI 模式：通过 ServiceContainer 注入 IFileService 实例
-// - watchStart 需要使用 ctx.sender（WebContents）传给 FileService.watch()，
-//   后续文件变更事件会通过该 webContents.send 推送回渲染层
-// - handler 内不直接调用 webContents.send，所有事件推送由 FileService 内部处理
-//   （保持 handler 简单 + 关注点分离）
-//
-// ── P0 安全：渲染层文件 API 工作区收口 ──────────────────────────
-// FileService 本身只校验「绝对路径」（assertAbsolutePath），不校验边界：
-// agent 工具路径由 path-guard 在工具层收口，而渲染层直接调用 file:* 时
-// 此前可以读写/删除任意磁盘路径（含 C:\Users\<u>\.ssh\*）。
-// 现在所有带 path 的入参在 handler 层统一经过 resolveWithinWorkspace 收口：
-// - 边界集合 = 会话绑定过的 workingDir 并集（session:listRecentDirs 同源）
-// - 复用 path-guard 同一份解析逻辑（相对路径、../ 遍历、realpath 二次校验），
-//   避免两套边界实现漂移
-// - 越界抛 AppError(UNAUTHORIZED)，由 wrap 转成标准 IPC 错误
-// - 拿不到任何根目录时 fail closed（拒绝一切访问），而不是放开
-// 已知边界代价（诚实记录，非沙箱）：
-// 1. 收口粒度是「历史打开过的项目集合」，不是「当前窗口正在使用的项目」——
-//    IpcHandlerContext 只有 traceId + sender，主进程无法得知渲染层当前会话，
-//    要收窄到单会话需改 wrap.ts/定义表由渲染层显式携带 sessionId（跨 owner 协作项）
-// 2. 通过 dialog:pickFiles 选中的工作区外文件（聊天附件）走「用户手势授权」通道：
-//    原生对话框返回的路径登记进 infra/file/user-grants，仅 file:read 查询该表，
-//    命中判定是 realpath 后的精确路径相等（不放开子树）；写/删/改名一律不看此表。
-// ──────────────────────────────────────────────────────────────
-
 import type { InferHandlers, IPC_DEFINITIONS } from '@code-agent/shared/main';
 import { AppError, ErrorCode } from '@code-agent/shared/main';
 
@@ -93,7 +50,6 @@ export async function defaultWorkspaceRoots(): Promise<readonly string[]> {
     const res = await getSessionService().listRecentDirs({ limit: 50 });
     roots = res.dirs.map((dir) => dir.workingDir).filter((dir) => dir.length > 0);
   } catch {
-    // 查询失败 ≠ 「无边界」：返回空集，调用侧一律拒绝
     roots = [];
   }
   rootsCache = { at: now, roots };
@@ -126,7 +82,6 @@ export async function confineToWorkspace(
   rootsProvider: () => Promise<readonly string[]>,
   opts?: ConfineOptions,
 ): Promise<string> {
-  // 用户手势授权优先于工作区边界：命中即返回 canonical 路径（不放开子树）
   if (opts?.allowUserGrant === true) {
     const granted = matchUserGrantedReadPath(inputPath);
     if (granted !== null) return granted;
@@ -141,16 +96,12 @@ export async function confineToWorkspace(
   let lastDenied: AppError | null = null;
   for (const root of roots) {
     try {
-      // 多根语义：任一根内即为合法（相对路径按「第一个命中的根」解析）。
-      // 取 .resolved：渲染层用户手势路径（用户在对话框选中文件）非 LLM 生成，
-      // 无 symlink 换链威胁面，保持 resolved 形态即 FileService 入参（debt.md#d1 取舍）
       return resolveWithinWorkspace(inputPath, root).resolved;
     } catch (error: unknown) {
       if (error instanceof AppError && error.code === ErrorCode.UNAUTHORIZED) {
         lastDenied = error;
         continue;
       }
-      // 非越界错误（如空路径 INVALID_INPUT）直接透出，不被多根循环吞掉
       throw error;
     }
   }
@@ -186,9 +137,6 @@ export function createFileHandlers(
   const { guard, guardRead } = makePathGuards(deps.workspaceRoots ?? defaultWorkspaceRoots);
 
   return {
-    // 读取文件：支持大文件分批读取（offset/limit）
-    // 入参由 FileReadReqSchema 校验（path 非空、offset/limit 为非负整数）
-    // 返回文件内容（UTF-8 解码）+ 总行数（渲染层据此判断是否分批）
     read: async (input) => {
       return fileService.read({
         path: await guardRead(input.path),
@@ -197,9 +145,6 @@ export function createFileHandlers(
       });
     },
 
-    // 写入文件：覆盖或追加
-    // append=true 时使用 O_APPEND 模式追加，避免覆盖已有内容
-    // createDirs=true 时自动创建父目录（避免 ENOENT）
     write: async (input) => {
       return fileService.write({
         path: await guard(input.path),
@@ -209,18 +154,12 @@ export function createFileHandlers(
       });
     },
 
-    // 列出目录内容：递归深度可控（默认 1 层，最大 10 层）
-    // includeHidden=false 时跳过 .git / .vscode 等隐藏文件/目录
     list: async (input) => {
-      // 忽略模式：现读用户设置（workspace.treeIgnorePatterns）——改后下一次 list 即生效。
-      // 读取失败（DB 异常等）降级为无用户模式，不阻断文件树；内置 node_modules 基线由 service 合并
       let userPatterns: string[] = [];
       try {
         const workspace = readSetting('workspace') as { treeIgnorePatterns?: unknown } | undefined;
         userPatterns = normalizeTreeIgnorePatterns(workspace?.treeIgnorePatterns);
-      } catch {
-        // 降级路径
-      }
+      } catch {}
       return fileService.list({
         path: await guard(input.path),
         depth: input.depth,
@@ -229,10 +168,6 @@ export function createFileHandlers(
       });
     },
 
-    // 开始文件监听：基于 chokidar v5 监听指定目录
-    // 关键：传入 ctx.sender（WebContents）作为事件推送目标，
-    // 后续文件变更会通过 file:watch:event 事件推送到该 webContents
-    // 返回 watcherId，渲染层用此 id 关联后续事件并在停止时传给 watchStop
     watchStart: async (input, ctx) => {
       const handle = await fileService.watch({
         path: await guard(input.path),
@@ -241,15 +176,11 @@ export function createFileHandlers(
       return { watcherId: handle.watcherId };
     },
 
-    // 停止指定 watcher：通过 watcherId 定位并关闭对应的 chokidar watcher
-    // 返回 stopped=true 表示成功停止，stopped=false 表示 watcherId 不存在（可能已自动停止）
     watchStop: async (input) => {
       const stopped = fileService.unwatch(input.watcherId);
       return { stopped };
     },
 
-    // 创建新文件：空文件，已存在时抛 ALREADY_EXISTS
-    // createDirs=true 时自动创建父目录
     create: async (input) => {
       return fileService.createFile({
         path: await guard(input.path),
@@ -257,15 +188,12 @@ export function createFileHandlers(
       });
     },
 
-    // 创建新目录：递归创建父目录（mkdir -p 语义）
     createDir: async (input) => {
       return fileService.createDir({
         path: await guard(input.path),
       });
     },
 
-    // 删除文件或目录：recursive 必填（P0 契约，schema 已收紧）——
-    // true 递归删除目录；false 仅空目录/文件（非空抛 ENOTEMPTY）
     delete: async (input) => {
       return fileService.delete({
         path: await guard(input.path),
@@ -273,9 +201,6 @@ export function createFileHandlers(
       });
     },
 
-    // 重命名/移动：overwrite=false（默认）时目标已存在则报错
-    // P0：源与目标都必须在工作区内——只校验一侧等于允许
-    // 「把工作区外文件移进来」或「把工作区文件搬到工作区外」
     rename: async (input) => {
       return fileService.rename({
         oldPath: await guard(input.oldPath),

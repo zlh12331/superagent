@@ -1,21 +1,3 @@
-// src/renderer/components/git/GitPanel.tsx
-// Git 状态展示面板 · 组装层
-// ──────────────────────────────
-// 职责：
-// - 调用 useGitStatusQuery 获取当前分支、ahead/behind、变更文件列表
-// - 文件列表点击选中 → 调用 useGitDiffQuery 获取该文件的 unified diff
-// - 组装三态（加载 / 错误 / 干净 / 有变更）并把结果分发给子组件
-//
-// 设计：
-// - 纯只读面板（不提供 commit/push 等写操作，避免误操作主仓库）
-// - diff 渲染统一走 UnifiedDiffView（自研 DiffRowsTable + parseUnifiedDiff）
-// - 路径必须为绝对路径（由调用方传入）
-//
-// 拆分记录（2026-08 重构）：原文件 486 行，按职责拆分为本组装层 +
-// git-status-utils.ts（状态元数据纯函数）、file-diff-view.tsx（差异视图）、
-// file-list.tsx（文件列表）、git-panel-parts.tsx（分支/空态/错误）
-// ──────────────────────────────
-
 import { RefreshCw } from 'lucide-react';
 import { type ReactElement, useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -68,14 +50,9 @@ function StatusArea({
 
 /** Git 面板（右面板）：工作区状态查询 + 文件列表/单文件 diff 双视图，四态守卫见上方 Content */
 export function GitPanel({ path, className }: GitPanelProps): ReactElement {
-  // 本地化文案
   const { t } = useTranslation();
-  // 当前选中的文件路径（用于查询该文件的 diff）
   const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null);
 
-  // L3 TanStack Query：工作区状态
-  // P3 修复：无激活会话（path 为空）时禁用查询——此前硬编码默认仓库路径
-  // 会在无会话时也发起 git:status 请求
   const {
     data: status,
     isLoading,
@@ -84,7 +61,6 @@ export function GitPanel({ path, className }: GitPanelProps): ReactElement {
     isFetching,
   } = useGitStatusQuery(path, path.length > 0);
 
-  // L3 TanStack Query：选中文件的 diff（仅当 selectedFilePath 不为 null 时启用）
   const { data: diff, isLoading: isDiffLoading } = useGitDiffQuery(
     {
       path,
@@ -97,7 +73,6 @@ export function GitPanel({ path, className }: GitPanelProps): ReactElement {
 
   return (
     <div className={cn('flex h-full flex-col', className)}>
-      {/* 顶部：分支信息 + 刷新按钮 */}
       <div className="border-border bg-muted/30 flex items-center justify-between border-b px-2 py-1">
         <BranchInfo status={status} isLoading={isLoading} error={error} />
         <Button
@@ -114,7 +89,6 @@ export function GitPanel({ path, className }: GitPanelProps): ReactElement {
         </Button>
       </div>
 
-      {/* 中间：变更文件列表 */}
       <ScrollArea className="min-h-0 flex-1">
         <StatusArea
           isLoading={isLoading}
@@ -125,7 +99,6 @@ export function GitPanel({ path, className }: GitPanelProps): ReactElement {
         />
       </ScrollArea>
 
-      {/* 底部：选中文件的 diff（可折叠） */}
       {selectedFilePath !== null && (
         <FileDiffView
           filePath={selectedFilePath}

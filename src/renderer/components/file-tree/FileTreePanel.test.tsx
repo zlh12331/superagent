@@ -1,17 +1,3 @@
-// src/renderer/components/$1/FileTreePanel.test.tsx
-// 文件树面板单测（正向 / 边界 / 异常）
-// ──────────────────────────────────────────────────────────────
-// 覆盖：无工作目录空态、rootPath 未就绪占位、就绪态的树语义与根节点名、
-// 返回按钮、菜单三项动作（新建目录/文件/刷新）以及新建确认向 ops 的分流。
-//
-// 分层（2026-09 file-tree 审计后）：
-// - 数据生命周期（IPC + watch + refresh 失败提示）由 use-file-tree 的 hook 测试覆盖
-//   → 本文件 mock useFileTree 返回可控的 refresh spy
-// - 落盘动作（createFile / createDir）由 use-file-tree-ops 测试覆盖
-//   → 本文件 mock useFileTreeOps，只断言「组件把意图转发给了正确的方法」
-// - 状态直接由 store 注入（rootPath / expandedPaths / creatingEntry）
-// ──────────────────────────────────────────────────────────────
-
 import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -28,9 +14,7 @@ const { mockRefresh, mockCreateFile, mockCreateDir } = vi.hoisted(() => ({
   mockCreateDir: vi.fn(),
 }));
 
-// 数据生命周期（IPC + watch + refresh 实现）单独由 hooks 测试覆盖
 vi.mock('@/hooks/use-file-tree', () => ({ useFileTree: () => ({ refresh: mockRefresh }) }));
-// 落盘动作单独由 hooks 测试覆盖：此处只验证意图转发
 vi.mock('@/hooks/use-file-tree-ops', () => ({
   useFileTreeOps: () => ({ createFile: mockCreateFile, createDir: mockCreateDir }),
 }));
@@ -80,7 +64,6 @@ describe('FileTreePanel', () => {
     expect(screen.getByText(i18n.t('sidebar.fileTree'))).toBeDefined();
     const tree = screen.getByRole('tree');
     expect(tree.getAttribute('aria-label')).toBe(i18n.t('fileTree.treeLabel', { name: 'proj' }));
-    // 根节点行显示 basename
     expect(screen.getByText('proj')).toBeDefined();
   });
 
@@ -93,7 +76,6 @@ describe('FileTreePanel', () => {
 
   it('菜单「添加文件夹」：展开根目录并进入新建目录状态', async () => {
     renderReady();
-    // 先收起根目录，验证菜单动作会重新展开
     useFileTreeStore.getState().setExpanded(ROOT, false);
 
     await openMoreMenu();

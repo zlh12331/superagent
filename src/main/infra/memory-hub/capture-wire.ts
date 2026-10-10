@@ -1,13 +1,3 @@
-// src/main/infra/memory-hub/capture-wire.ts
-// 回合结束自动捕获：监听 AgentService 回合事件，把每轮对话写入 MemoryHub L0
-// ──────────────────────────────────────────────────────────────
-// 设计：
-// - 助手文本：TEXT_DELTA 逐段累积（TURN_START 重置缓冲）
-// - 用户文本：handler 在 run 前经 noteLastUser 注入（事件本身不携带消息文本）
-// - TURN_END(completed) 时一次性 capture；失败静默降级（adapter 已兜底）
-// - 只订阅不修改 AgentService 内部（零侵入）
-// ──────────────────────────────────────────────────────────────
-
 import type { TurnEvent } from '@code-agent/shared/main';
 import type { IAgentService } from '../ai/agent/agent-service';
 import { isMemoryEnabled } from './memory-pref';
@@ -68,7 +58,6 @@ export function createMemoryCaptureWire(deps: {
         );
         break;
       case 'turn-end':
-        // 用户开关关闭时不捕获新记忆（已记录的数据保留，可在设置页清除）
         if (event.reason === 'completed' && isMemoryEnabled()) {
           void port
             .capture({

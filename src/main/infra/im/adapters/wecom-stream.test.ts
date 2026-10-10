@@ -1,6 +1,3 @@
-// src/main/infra/im/adapters/wecom-stream.test.ts
-// 企业微信消息帧解析单测：aibot payload → 入站消息（纯函数）
-
 import { describe, expect, it } from 'vitest';
 import { parseWecomEvent } from './wecom-stream';
 

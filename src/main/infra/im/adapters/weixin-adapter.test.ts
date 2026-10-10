@@ -1,11 +1,3 @@
-// src/main/infra/im/adapters/weixin-adapter.test.ts
-// WeixinAdapter 单测：微信 iLink 渠道适配器（正向/边界/异常三件套）
-// ──────────────────────────────────────────────────────────────
-// 测试策略（遵循"业务逻辑不 mock、外部依赖注入 fake"）：
-// - sendTextFn / Receiver 经构造注入 fake（网络外部依赖）
-// - token 校验、消息分发、context_token 携带全部真实实现
-// ──────────────────────────────────────────────────────────────
-
 import { describe, expect, it, vi } from 'vitest';
 import type { ChannelIncomingMessage } from '../channel/types';
 import { WeixinAdapter } from './weixin-adapter';
@@ -48,7 +40,6 @@ function makeAdapter(): {
   currentReceiver = receiver;
   const adapter = new WeixinAdapter({
     sendText: sendText as unknown as typeof import('./weixin-stream').sendWeixinText,
-    // 测试桩构造返回共享实例：adapter 内 new ReceiverCtor 得到同一对象
     Receiver: SharedWeixinReceiver as unknown as typeof WeixinStreamReceiver,
   });
   return { adapter, sendText, receiver };

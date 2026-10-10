@@ -1,31 +1,3 @@
-// src/main/infra/codebase/codebase-service.ts
-// CodebaseService：codegraph CLI 封装（代码智能查询）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - query：结构化符号搜索（返回符号列表 + 相关度评分）
-// - explore：区域探索（自然语言查询，返回相关符号源码 + 调用路径 markdown）
-// - node：符号详情（源码 + 调用链，或文件模式：文件内容 + 依赖）
-// - callers：调用方查询（谁调用了此符号）
-// - callees：被调用方查询（此符号调用了哪些符号）
-// - impact：影响分析（修改此符号会影响哪些代码）
-// - dispose：kill 所有活跃子进程（应用退出兜底）
-//
-// 设计：
-// - 通过 child_process.spawn('codegraph', [...args]) 调用 codegraph CLI
-// - codegraph 是本地代码智能工具（@colbymchenry/codegraph），已通过 codegraph init 索引项目
-// - query 用 --json 输出结构化数据，其他命令输出 markdown 文本
-// - path 必须为已初始化 codegraph 索引的项目根目录
-// - 错误分类：codegraph 命令失败（超时/执行失败/退出码/JSON 解析）→ INTERNAL_ERROR
-//   （注：未初始化目录暂未单独分类 INVALID_INPUT——需 codegraph 退出码语义，待分类逻辑完善）
-// - 单例模式：与 FileService / GitService 一致，便于统一生命周期管理
-//
-// 内存泄漏防护（M5）：
-// - activeProcesses 追踪所有活跃子进程，dispose 时统一 kill
-// - 每条 codegraph 命令强制 60s 超时（explore/impact 可能较慢），
-//   超时后 SIGTERM 子进程并 reject
-// - 子进程 close/error 时主动从 activeProcesses 移除 + clearTimeout
-// ──────────────────────────────────────────────────────────────
-
 import { type ChildProcess, spawn } from 'node:child_process';
 import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -90,10 +62,8 @@ function resolveCodegraphBundleOnce(): CodegraphBundle {
   const target = `${process.platform}-${process.arch}`;
   let dir: string;
   if (app.isPackaged) {
-    // 生产：electron-builder extraResources 拷贝（resources/codegraph/）
     dir = join(process.resourcesPath, 'codegraph');
   } else {
-    // dev：pnpm 隔离布局 node_modules/.pnpm/@colbymchenry+codegraph-<target>@*/
     const pnpmRoot = join(process.cwd(), 'node_modules', '.pnpm');
     const prefix = `@colbymchenry+codegraph-${target}@`;
     const candidates = readdirSync(pnpmRoot, { withFileTypes: true })
@@ -286,7 +256,6 @@ export class CodebaseService implements ICodebaseService {
     const { path, search, limit, kind } = options;
 
     const args = ['query', search, '-p', path];
-    // limit 可选：直接调用方可能不传（与 zod schema 一致），避免拼出 '-l undefined'
     if (limit !== undefined) {
       args.push('-l', String(limit));
     }
@@ -309,7 +278,6 @@ export class CodebaseService implements ICodebaseService {
   async explore(options: CodebaseExploreOptions): Promise<CodebaseExploreRes> {
     const { path, query, maxFiles } = options;
     const args = ['explore', ...query, '-p', path];
-    // maxFiles 可选：避免拼出 '--max-files undefined'
     if (maxFiles !== undefined) {
       args.push('--max-files', String(maxFiles));
     }
@@ -327,13 +295,11 @@ export class CodebaseService implements ICodebaseService {
     const { path, name, file, offset, limit, symbolsOnly } = options;
 
     const args: string[] = ['node'];
-    // name 是可选位置参数，存在时放在第一个
     if (name !== undefined && name.length > 0) {
       args.push(name);
     }
     args.push('-p', path);
 
-    // 文件模式参数
     if (file !== undefined && file.length > 0) {
       args.push('-f', file);
     }
@@ -403,13 +369,10 @@ export class CodebaseService implements ICodebaseService {
       return;
     }
     const processes = Array.from(this.activeProcesses);
-    // 2026-09-08 可靠性修复：SIGTERM → 3s SIGKILL 升级
     await Promise.all(processes.map((proc) => terminateChild(proc, 'codegraph')));
     this.activeProcesses.clear();
     logger.info({}, 'CodebaseService 所有子进程已清理');
   }
-
-  // ─── 内部辅助方法 ───────────────────────────────────
 
   /**
    * 确保目标目录已建立 codegraph 索引（懒索引，方案 A）
@@ -450,8 +413,6 @@ export class CodebaseService implements ICodebaseService {
    */
   private runCodegraph(args: string[], cwd: string): Promise<{ stdout: string; stderr: string }> {
     return new Promise((resolve, reject) => {
-      // 平台包定位（DI 可注入）：Windows 用捆绑 node.exe + liftoff 标志（npm-shim 同款），
-      // 其他平台用 bin/codegraph——生产走 resourcesPath，dev 走 .pnpm，不再依赖 PATH
       const bundle = this.resolveBundle();
       const child = this.spawnFn(bundle.command, [...bundle.args, ...args], {
         cwd,
@@ -474,14 +435,10 @@ export class CodebaseService implements ICodebaseService {
         });
       }
 
-      // 超时控制：60s 内未完成则 SIGTERM 子进程并 reject
-      // 避免 codegraph 遍历大项目挂死或子进程异常不退出导致 Promise 永久 pending
       const timeoutId = setTimeout(() => {
         try {
           child.kill('SIGTERM');
-        } catch {
-          // 子进程可能已退出，kill 失败忽略
-        }
+        } catch {}
         reject(
           new AppError(
             ErrorCode.INTERNAL_ERROR,
@@ -492,7 +449,6 @@ export class CodebaseService implements ICodebaseService {
         );
       }, this.commandTimeoutMs);
 
-      // 统一清理逻辑：清超时定时器 + 从 activeProcesses 移除
       const cleanup = (): void => {
         clearTimeout(timeoutId);
         this.activeProcesses.delete(child);
@@ -543,7 +499,6 @@ export class CodebaseService implements ICodebaseService {
       if (!Array.isArray(parsed)) {
         throw new Error('Expected array output from codegraph query --json');
       }
-      // 信任 codegraph 输出结构（已通过 schema 校验入参，CLI 输出格式由版本保证）
       return parsed as CodebaseQueryResult[];
     } catch (error) {
       throw new AppError(ErrorCode.INTERNAL_ERROR, 'codegraph query JSON 解析失败', error, {

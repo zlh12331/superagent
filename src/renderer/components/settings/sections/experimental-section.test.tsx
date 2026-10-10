@@ -1,5 +1,3 @@
-// src/renderer/components/settings/sections/experimental-section.test.tsx
-// ExperimentalSection 测试：实验开关写 store（只列已接入消费方的开关）
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';

@@ -1,23 +1,3 @@
-// packages/shared/src/schemas/agent-events.ts
-// Agent 回合事件契约（TurnEvent）单一真源
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 定义一次 Agent 推理回合（turn）的标准事件流
-// - 是"回合事件系统"的领域契约：AgentRuntime 产出、agent-service 与
-//   Transcript 消费，渲染层经 IPC 订阅
-// - 与 AI SDK 解耦：事件是领域形状，不依赖 UIMessageStreamPart
-//
-// 设计（对齐 qwen-code agent-events.ts）：
-// - 事件命名用过去式/进行时语义（turn-start / text-delta / tool-call…）
-// - 统一上下文：sessionId + turnId + timestamp（消费者无需回查生产者）
-// - TurnEventMap 提供类型安全的 on/emit 映射
-// - 纯类型文件：不依赖 zod / AI SDK / IPC，可被任意进程导入
-//
-// 回合生命周期：
-//   turn-start → (text-delta | tool-call → tool-result)* → turn-end
-//   任一步出错 → error（随后 turn-end reason='error'）
-// ──────────────────────────────────────────────────────────────
-
 /** 回合事件类型（字符串字面量，IPC 传输友好） */
 export const TurnEventType = {
   TURN_START: 'turn-start',

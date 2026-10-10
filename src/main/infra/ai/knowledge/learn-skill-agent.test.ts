@@ -1,10 +1,3 @@
-// src/main/infra/ai/knowledge/learn-skill-agent.test.ts
-// 技能学习单测：引导模板 + 学习/列出/删除（内存 DB + fake LLM）
-//
-// 接线背景：生产消费方 = skill 域 IPC（learn/listLearned/removeLearned）+
-// 启动合并加载（index.ts listLearned → loadFromRows，重启保留）。remove 对
-// 内置同名自动回退内置定义（registry 侧），本文件 remove 用例是其语义锚。
-
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb, resetDb } from '../../storage/db';
 import { createTestDb } from '../../storage/test-utils';
@@ -12,7 +5,6 @@ import type { LlmClient } from '../llm-client/llm-client';
 import { skillRegistry } from '../skills/skill-registry';
 import { buildLearnSkillPrompt, LearnSkillService } from './learn-skill-agent';
 
-// mock getDb：内存数据库（drizzle 迁移，schema.ts 单一真源）
 function createInMemoryDb() {
   return createTestDb();
 }
@@ -81,9 +73,7 @@ describe('LearnSkillService', () => {
     const result = await service.learn('教我怎么优化慢 SQL');
     expect(result.skill.name).toBe('sql_optimization');
     expect(result.replaced).toBe(false);
-    // 持久化
     expect(await service.listLearned()).toHaveLength(1);
-    // 注册表立即可加载（load_skill 工具语义）
     expect(skillRegistry.load('sql_optimization')?.description).toContain('慢 SQL');
   });
 
@@ -104,7 +94,6 @@ describe('LearnSkillService', () => {
     await service.learn('教我怎么写 commit message');
     expect(service.remove('sql_optimization')).toBe(true);
     expect(await service.listLearned()).toHaveLength(0);
-    // 注册表移除（内置回退：该名不在内置集则彻底移除）
     expect(skillRegistry.load('sql_optimization')).toBeUndefined();
   });
 

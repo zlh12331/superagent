@@ -1,23 +1,3 @@
-// src/renderer/components/settings/sections/about-section.tsx
-// 关于 pane（2026-09-04 重设计 v2：品牌展示为主 + 诊断增强；v3：去边框纸感）
-// ──────────────────────────────────────────────────────────────
-// 板块：
-// - 品牌 Hero（居中视觉中心）：大标识/产品名/标语/版本 + 渠道 + 更新区
-// - 构建信息：渠道/构建时间/提交（app:getInfo 扩展自 build-info.json）
-// - 环境信息：Electron/Node/Chromium/平台/架构/数据目录（平铺保留）
-// - 诊断与支持：复制诊断信息 / 打开数据目录 / 导出诊断包
-// - 更新状态：按 UpdatePhase 分派（失败时展示完整错误 + 重试 + 打开数据目录）
-// - 许可与致谢：MIT 许可证 + 开源依赖致谢（文本，不伪造外链）
-//
-// 视觉（v3）：信息行去边框卡片（原 SettingRow 形态），改为无边框
-// label-值 左右行，纸感极简；顶部不再显示「关于」标题（导航已标识）
-//
-// 结构（2026-09 审计）：原 AboutSection 单函数认知复杂度 43（阈值 15），
-// 因内联 7 段嵌套三元（更新区）+ 三段渠道条件类 + 两个 try/catch 副作用。
-// 现拆为：UpdateBlock（早返回分派）/ ChannelBadge（表驱动）/ 三个模块级
-// 副作用函数（copyToClipboard / exportDiagnostics / openDataDir）。
-// ──────────────────────────────────────────────────────────────
-
 import type { AppInfoRes, UpdateStatusPayload } from '@code-agent/shared/renderer';
 import { Clipboard, FolderOpen, Loader2, PackageCheck, RefreshCw, Rocket } from 'lucide-react';
 import { type ReactElement, type ReactNode, useState } from 'react';
@@ -46,8 +26,6 @@ import { SectionTitle, ToggleRow } from '../settings-controls';
 
 /** i18n 文案函数类型（本项目 react-i18next 未导出 TFunction，由 hook 推导） */
 type TranslateFn = ReturnType<typeof useTranslation>['t'];
-
-// ── 纯展示子组件 ──────────────────────────────────────────────
 
 /** 无边框信息行（label 左 + 值右，纸感极简布局；替代 SettingRow 的卡片+边框形态） */
 function InfoRow({
@@ -155,7 +133,6 @@ function ReleaseNotes({ notes }: { readonly notes: string }): ReactElement {
           expanded ? 'max-h-none' : 'max-h-32',
         )}
       >
-        {/* rehype-raw 必须先于 rehype-sanitize：raw 节点先解析回元素再清洗 */}
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
           rehypePlugins={[rehypeRaw, rehypeSanitize]}
@@ -270,7 +247,6 @@ function UpdateBlock({
   const { t } = useTranslation();
   const phase = state?.phase;
 
-  // 空闲：还没查过
   if (phase === undefined) {
     return (
       <div className="flex items-center gap-2">
@@ -282,7 +258,6 @@ function UpdateBlock({
     );
   }
 
-  // 检查中（与下载中拆开：此前共用同一视觉，导致下载进度无处展示）
   if (phase === 'checking') {
     return (
       <div className="flex items-center gap-2">
@@ -294,7 +269,6 @@ function UpdateBlock({
     );
   }
 
-  // 下载中：进度条 + 详情 + 取消
   if (phase === 'downloading') {
     return <DownloadingBlock state={state} onCancel={onCancel} />;
   }
@@ -347,7 +321,6 @@ function UpdateBlock({
     );
   }
 
-  // 已取消：就地提示一行 + 保留检查入口（不弹 toast，见 UpdateNotice 的阶段过滤）
   if (phase === 'cancelled') {
     return (
       <div className="flex w-full flex-col items-start gap-2">
@@ -362,8 +335,6 @@ function UpdateBlock({
     );
   }
 
-  // 其余（error）：分类文案（主进程归类，见 update-service 的 classifyUpdateError）+
-  // 重试 + 打开数据目录（更新日志/缓存位于 userData 下，供排查）
   return (
     <div className="flex w-full flex-col items-start gap-2">
       <span className="text-error-text text-xs leading-[1.5]">{describeUpdateError(t, state)}</span>
@@ -404,7 +375,6 @@ function DiagnosticsCard({
 }): ReactElement {
   const { t } = useTranslation();
   const bridgeReady = hasIpcBridge();
-  // 无 info（未加载/加载失败）时无法拼诊断文本
   const copyDisabled = copying || info === null;
 
   const handleCopyDiagnostics = (): void => {
@@ -439,8 +409,6 @@ function DiagnosticsCard({
     </Card>
   );
 }
-
-// ── 格式化与副作用（模块级：保持组件函数体精简） ──────────────
 
 /** 格式化构建时间为本地可读时间（跟随 locale；解析失败返回原文） */
 function formatBuildTime(iso: string, locale: string): string {
@@ -480,7 +448,6 @@ async function copyToClipboard(text: string, t: TranslateFn): Promise<void> {
 async function exportDiagnostics(t: TranslateFn): Promise<void> {
   try {
     const res = await exportDiagnosticsOp();
-    // 无桥：静默返回（按钮已按 hasIpcBridge 禁用，此处为防御）
     if (res === null) return;
     if (res.saved && res.path !== undefined) {
       toast.success(t('settings.aboutExportSuccess', { path: res.path }));
@@ -497,28 +464,20 @@ function openDataDirAction(): void {
   void openDataDir();
 }
 
-// ── 主组件 ────────────────────────────────────────────────────
-
 /**
  * 关于 pane（品牌 Hero + 分组卡片）
  */
 export function AboutSection(): ReactElement {
   const { t, i18n } = useTranslation();
-  // app:getInfo 统一入口（与 Topbar / 侧栏账户菜单共享同一 hook，单一真源）。
-  // 失败经 onError 提示：hook 内返回 null 由下方渲染占位，错误细节由此 toast 告知。
   const info = useAppInfo((error: unknown) => {
     reportError(error, { tags: { scope: 'about-section.getInfo' } });
     toast.error(t('settings.aboutLoadFailed'));
   });
   const [copying, setCopying] = useState(false);
   const [exporting, setExporting] = useState(false);
-  // 更新状态（订阅主进程 update:event:status + 挂载快照；全局 UpdateNotice 与这里共享事件流）
   const { state: updateState, check, cancel, lastCheckAt } = useUpdate();
-  // 重启并安装（有回合在跑时先确认；与顶栏指示共用同一语义，见 use-install-update）
   const installUpdate = useInstallUpdate();
-  // 自动检查开关与跳过版本（写穿透落库；主进程下次启动读取开关）
   const autoCheck = useSettingsStore((s) => s.update.autoCheck);
-  // 接收预发布（beta）开关：主进程每次检查前重读，开启后立即补检即生效
   const allowPrerelease = useSettingsStore((s) => s.update.allowPrerelease);
   const skippedVersion = useSettingsStore((s) => s.update.skippedVersion);
   const setUpdate = useSettingsStore((s) => s.setUpdate);
@@ -562,7 +521,6 @@ export function AboutSection(): ReactElement {
   const copyText = async (text: string): Promise<void> => {
     setCopying(true);
     await copyToClipboard(text, t);
-    // finally 语义（React Compiler 不优化 try/finally）：在各分支后统一复位
     setCopying(false);
   };
 
@@ -577,7 +535,6 @@ export function AboutSection(): ReactElement {
 
   return (
     <div className="flex flex-col gap-3">
-      {/* 品牌 Hero：居中视觉中心——大标识 + 版本/渠道 + 更新（TraeWork quiet：无装饰光晕） */}
       <Card className="relative overflow-hidden px-4 py-8">
         <div className="relative flex flex-col items-center text-center">
           <div className="bg-primary/10 text-primary flex size-14 items-center justify-center rounded-xl">
@@ -593,7 +550,6 @@ export function AboutSection(): ReactElement {
             </span>
             {channel !== undefined && <ChannelBadge channel={channel} />}
           </div>
-          {/* 更新区（按阶段分派，实现见 UpdateBlock）+ 跳过态与上次检查时间 */}
           <div className="mt-4 flex w-full flex-col items-center gap-2">
             <UpdateBlock
               state={updateState}
@@ -628,7 +584,6 @@ export function AboutSection(): ReactElement {
         </div>
       </Card>
 
-      {/* 更新设置：自动检查开关（唯一开关，语义见 docs/design/27-auto-update-spec.md §10） */}
       <SectionTitle>{t('settings.aboutUpdatesTitle')}</SectionTitle>
       <ToggleRow
         name={t('settings.aboutAutoCheck')}
@@ -643,7 +598,6 @@ export function AboutSection(): ReactElement {
         onChange={handleAllowPrereleaseChange}
       />
 
-      {/* 构建信息 */}
       <SectionTitle>{t('settings.aboutBuildTitle')}</SectionTitle>
       <Card className="flex flex-col">
         <InfoRow label={t('settings.aboutBuildChannel')}>
@@ -677,7 +631,6 @@ export function AboutSection(): ReactElement {
         </InfoRow>
       </Card>
 
-      {/* 环境信息 */}
       <SectionTitle>{t('settings.aboutRuntime')}</SectionTitle>
       <Card className="flex flex-col">
         <InfoRow label="Electron">
@@ -704,7 +657,6 @@ export function AboutSection(): ReactElement {
         </InfoRow>
       </Card>
 
-      {/* 诊断与支持 */}
       <SectionTitle>{t('settings.aboutDiagnosticsTitle')}</SectionTitle>
       <DiagnosticsCard
         info={info}
@@ -715,7 +667,6 @@ export function AboutSection(): ReactElement {
         onExport={() => void handleExportDiagnostics()}
       />
 
-      {/* 许可与致谢 */}
       <SectionTitle>{t('settings.aboutLegalTitle')}</SectionTitle>
       <Card className="flex flex-col">
         <InfoRow label="License">

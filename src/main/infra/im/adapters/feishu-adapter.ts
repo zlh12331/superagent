@@ -1,12 +1,3 @@
-// src/main/infra/im/adapters/feishu-adapter.ts
-// 飞书渠道：webhook 发送（markdown）+ 长连接接收（官方 SDK WSClient）
-// ──────────────────────────────────────────────────────────────
-// 接入配置（token 格式，二选一）：
-// 1. 仅发送：webhook 完整 URL（https://open.feishu.cn/open-apis/bot/v2/hook/xxx）
-// 2. 发送+接收：appId:appSecret:webhookUrl（长连接接收应用机器人消息）
-// 接收说明：长连接需要自建应用（非自定义机器人）；入站为应用机器人接收的群聊/单聊文本。
-// ──────────────────────────────────────────────────────────────
-
 import { logger } from '../../../utils/logger';
 import type { ChannelIncomingMessage } from '../channel/types';
 import { FeishuStreamReceiver } from './feishu-stream';
@@ -45,7 +36,6 @@ export class FeishuAdapter extends WebhookChannelAdapter {
         appId.length > 0 &&
         appSecret.length > 0 &&
         webhookUrl.length > 0 &&
-        // 严格判定：appId 为纯字母数字（飞书 appId 形状），webhookUrl 为 http(s) 地址
         /^[a-zA-Z0-9]+$/.test(appId) &&
         (webhookUrl.startsWith('http://') || webhookUrl.startsWith('https://'))
       ) {

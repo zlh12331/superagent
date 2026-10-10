@@ -1,14 +1,3 @@
-// src/main/utils/wrap.ts
-// IPC handler 统一包装器
-// 设计文档 §4.7（IPC sender 校验 + traceId 贯穿）、§7.4（错误处理流程）
-//
-// 职责：
-// 1. sender 校验（防止跨窗口越权，Electron Security #17）
-// 2. 自动生成 / 接收 traceId（贯穿渲染层 → IPC → 主进程日志 → Sentry）
-// 3. zod schema 校验
-// 4. try/catch + 错误分类 + Sentry 上报
-// 5. 返回统一结构 { data } | { error }
-
 import { randomUUID } from 'node:crypto';
 import { AppError, ErrorCode, type IpcError, type IpcResponse } from '@code-agent/shared/main';
 import { BrowserWindow, ipcMain, type WebContents } from 'electron';
@@ -75,18 +64,12 @@ export function wrap<TInput, TOutput>(
   resSchema?: ZodType<TOutput>,
 ): void {
   ipcMain.handle(channel, async (evt, input: unknown, incomingTraceId?: string) => {
-    // 1. traceId 生成或复用（渲染层可显式传入）
-    // P2 加固：校验外部 traceId 形状（preload 传 crypto.randomUUID()）——
-    // 此前任意字符串（超长/换行/控制字符）可原样进入结构化日志与 Sentry tags（日志注入面）
     const traceId =
       typeof incomingTraceId === 'string' && TRACE_ID_PATTERN.test(incomingTraceId)
         ? incomingTraceId
         : randomUUID();
     const ctx: IpcHandlerContext = { traceId, sender: evt.sender };
 
-    // 2. sender 校验（Electron Security #17）：防止跨窗口越权调用
-    // P2 加固：除「属于应用窗口」外，再校验来源 URL 属于应用自身页面
-    // （dev: electron-vite dev server；prod: file:// 应用入口），防其他窗口借道
     const win = BrowserWindow.fromWebContents(evt.sender);
     if (win === null || !isAllowedSenderUrl(evt.sender.getURL())) {
       logger.error({ traceId, channel, senderUrl: evt.sender.getURL() }, 'IPC sender 无效');
@@ -94,7 +77,6 @@ export function wrap<TInput, TOutput>(
       return { error } satisfies IpcResponse<TOutput>;
     }
 
-    // 3. zod 校验（schema 为 null 时跳过，表示无入参）
     let parsedInput: TInput;
     if (schema !== null) {
       const parsed = schema.safeParse(input);
@@ -107,9 +89,6 @@ export function wrap<TInput, TOutput>(
       }
       parsedInput = parsed.data;
     } else {
-      // schema 为 null，input 必须为 undefined
-      // P2 修复：此前静默放行任意 input，「无参方法」契约名存实亡——
-      // 渲染层 bug 传参不会被发现。现在非 undefined 一律 INVALID_INPUT 拒绝。
       if (input !== undefined) {
         logger.warn({ traceId, channel }, 'IPC 无参方法收到非 undefined 入参');
         const error = new AppError(ErrorCode.INVALID_INPUT, '该方法不接受入参').toIpcError();
@@ -118,12 +97,10 @@ export function wrap<TInput, TOutput>(
       parsedInput = undefined as TInput;
     }
 
-    // 4. 执行 handler，所有日志自动携带 traceId
     const startTime = performance.now();
     try {
       logger.info({ traceId, channel }, 'IPC 请求开始');
       let data = await handler(parsedInput, ctx);
-      // 4.5 响应契约校验（resSchema 存在时）：防手写 Res 接口与 handler 实际返回漂移
       if (resSchema !== undefined) {
         const parsedRes = resSchema.safeParse(data);
         if (!parsedRes.success) {
@@ -136,17 +113,12 @@ export function wrap<TInput, TOutput>(
           }).toIpcError();
           return { error } satisfies IpcResponse<TOutput>;
         }
-        // P0 收口：zod 默认 strip 未声明字段——必须回写 parsedRes.data 才算
-        // 边界生效，否则校验只是"检查"：handler 返回的多余字段（实证：
-        // mcp:list config 的 headers/env，schema 未声明）原样越过契约到渲染层。
-        // typeof data 断言：handler 返回值实际不会是 Promise（TOutput 非嵌套）。
         data = parsedRes.data as typeof data;
       }
       const durationMs = Math.round(performance.now() - startTime);
       logger.info({ traceId, channel, durationMs }, 'IPC 请求成功');
       return { data } satisfies IpcResponse<TOutput>;
     } catch (error: unknown) {
-      // 错误分类 + 统一上报出口（本地结构化日志；后端可回插，见 error-report.ts）
       const ipcError = toIpcError(error);
       const durationMs = Math.round(performance.now() - startTime);
       logger.error(
@@ -170,7 +142,6 @@ function toIpcError(error: unknown): IpcError {
   if (error instanceof AppError) {
     return error.toIpcError();
   }
-  // 非 AppError 包装为内部错误
   const wrapped = new AppError(ErrorCode.INTERNAL_ERROR, undefined, error);
   return wrapped.toIpcError();
 }

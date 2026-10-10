@@ -1,15 +1,3 @@
-// packages/shared/src/constants/errors.ts
-// 统一错误码 + AppError 类：跨进程共享的错误处理基础设施
-// 设计文档 §7.2（错误码枚举）、§7.3（AppError）、§7.10（用户友好提示）
-//
-// 说明：数据库相关错误码（PROJECT/CHAPTER/CHARACTER/RAG/DB/PG/OLLAMA）
-// 已随数据库层一并删除，仅保留通用基础设施错误码。
-//
-// 命名规范：{域}_{动作/状态}，全大写下划线分隔
-// 域：UNKNOWN/INTERNAL/IPC/AI/FS/TOOL/SESSION/TERMINAL
-//
-// 注意：使用 as const 派生字面量联合类型，避免 enum 的运行时对象开销
-
 /**
  * 错误码枚举
  *
@@ -23,7 +11,6 @@
  * - Code Agent 终端：TERMINAL_SPAWN_FAILED
  */
 export const ErrorCode = {
-  // ── 通用 ──────────────────────────────────────────
   UNKNOWN: 'UNKNOWN',
   INTERNAL_ERROR: 'INTERNAL_ERROR',
   INVALID_INPUT: 'INVALID_INPUT',
@@ -32,13 +19,11 @@ export const ErrorCode = {
   UNAUTHORIZED: 'UNAUTHORIZED',
   RATE_LIMITED: 'RATE_LIMITED',
 
-  // ── IPC 边界 ──────────────────────────────────────
   IPC_SENDER_INVALID: 'IPC_SENDER_INVALID',
   IPC_CHANNEL_NOT_FOUND: 'IPC_CHANNEL_NOT_FOUND',
   /** 主进程 handler 返回结构不符合契约（resSchema 校验失败） */
   INVALID_RESPONSE: 'INVALID_RESPONSE',
 
-  // ── AI 调用 ───────────────────────────────────────
   AI_API_KEY_MISSING: 'AI_API_KEY_MISSING',
   AI_API_KEY_INVALID: 'AI_API_KEY_INVALID',
   AI_RATE_LIMITED: 'AI_RATE_LIMITED',
@@ -57,7 +42,6 @@ export const ErrorCode = {
   /** 流正常结束但零文本零工具（空响应：API 配置/余额/模型名异常时供应商可能静默返回） */
   AI_EMPTY_RESPONSE: 'AI_EMPTY_RESPONSE',
 
-  // ── IM 渠道 ───────────────────────────────────────
   /** 渠道未配置 token（keychain 无凭证） */
   IM_CHANNEL_NOT_CONFIGURED: 'IM_CHANNEL_NOT_CONFIGURED',
   /** 渠道 token 无效（getMe 等校验失败） */
@@ -67,24 +51,19 @@ export const ErrorCode = {
   /** 渠道 API 请求失败（网络/HTTP 错误） */
   IM_CHANNEL_REQUEST_FAILED: 'IM_CHANNEL_REQUEST_FAILED',
 
-  // ── 文件系统 ──────────────────────────────────────
   FS_READ_FAILED: 'FS_READ_FAILED',
   FS_WRITE_FAILED: 'FS_WRITE_FAILED',
   FS_DISK_FULL: 'FS_DISK_FULL',
 
-  // ── Code Agent ───────────────────────────────────
-  // 工具相关：Code Agent 执行 LLM 工具调用时的失败场景
   TOOL_NOT_FOUND: 'TOOL_NOT_FOUND',
   TOOL_EXECUTION_FAILED: 'TOOL_EXECUTION_FAILED',
   TOOL_PERMISSION_DENIED: 'TOOL_PERMISSION_DENIED',
   TOOL_ABORTED: 'TOOL_ABORTED',
-  // 会话相关：Code Agent 会话持久化与恢复
   SESSION_NOT_FOUND: 'SESSION_NOT_FOUND',
   /** 会话正被占用（有运行中回合）：破坏性批量操作（清空全部会话）拒绝执行（36-D） */
   SESSION_IN_USE: 'SESSION_IN_USE',
   /** 备份操作失败（恢复点不存在/损坏、路径非法）（37-B） */
   BACKUP_INVALID: 'BACKUP_INVALID',
-  // 终端相关：node-pty 终端会话管理
   TERMINAL_SPAWN_FAILED: 'TERMINAL_SPAWN_FAILED',
 } as const;
 
@@ -114,7 +93,6 @@ export interface ErrorMeta {
  * 用户友好提示文案参考设计文档 §7.10
  */
 export const ERROR_META: Readonly<Record<ErrorCode, ErrorMeta>> = {
-  // 通用
   UNKNOWN: { userMessage: '未知错误', retryable: false, severity: 'error' },
   INTERNAL_ERROR: { userMessage: '内部错误', retryable: false, severity: 'error' },
   INVALID_INPUT: { userMessage: '输入参数有误', retryable: false, severity: 'warn' },
@@ -123,7 +101,6 @@ export const ERROR_META: Readonly<Record<ErrorCode, ErrorMeta>> = {
   UNAUTHORIZED: { userMessage: '未授权', retryable: false, severity: 'warn' },
   RATE_LIMITED: { userMessage: '操作过于频繁', retryable: true, severity: 'warn' },
 
-  // IPC
   IPC_SENDER_INVALID: { userMessage: 'IPC 调用来源无效', retryable: false, severity: 'error' },
   IPC_CHANNEL_NOT_FOUND: { userMessage: 'IPC 通道不存在', retryable: false, severity: 'error' },
   INVALID_RESPONSE: {
@@ -132,7 +109,6 @@ export const ERROR_META: Readonly<Record<ErrorCode, ErrorMeta>> = {
     severity: 'error',
   },
 
-  // AI
   AI_API_KEY_MISSING: { userMessage: '请先配置 API Key', retryable: false, severity: 'warn' },
   AI_API_KEY_INVALID: { userMessage: 'API Key 无效', retryable: false, severity: 'warn' },
   AI_RATE_LIMITED: { userMessage: 'AI 调用频繁，正在重试', retryable: true, severity: 'warn' },
@@ -170,7 +146,6 @@ export const ERROR_META: Readonly<Record<ErrorCode, ErrorMeta>> = {
     severity: 'warn',
   },
 
-  // IM 渠道
   IM_CHANNEL_NOT_CONFIGURED: {
     userMessage: 'IM 渠道未配置凭证',
     retryable: false,
@@ -192,12 +167,10 @@ export const ERROR_META: Readonly<Record<ErrorCode, ErrorMeta>> = {
     severity: 'warn',
   },
 
-  // 文件系统
   FS_READ_FAILED: { userMessage: '文件读取失败', retryable: false, severity: 'error' },
   FS_WRITE_FAILED: { userMessage: '文件写入失败', retryable: false, severity: 'error' },
   FS_DISK_FULL: { userMessage: '磁盘空间不足', retryable: false, severity: 'warn' },
 
-  // Code Agent：工具调用相关
   TOOL_NOT_FOUND: { userMessage: '工具不存在', retryable: false, severity: 'warn' },
   TOOL_EXECUTION_FAILED: {
     userMessage: '工具执行失败',
@@ -210,7 +183,6 @@ export const ERROR_META: Readonly<Record<ErrorCode, ErrorMeta>> = {
     severity: 'warn',
   },
   TOOL_ABORTED: { userMessage: '工具执行被中断', retryable: false, severity: 'info' },
-  // Code Agent：会话相关
   SESSION_NOT_FOUND: { userMessage: '会话不存在', retryable: false, severity: 'warn' },
   SESSION_IN_USE: {
     userMessage: '有回合正在运行，请先停止后再操作',
@@ -222,7 +194,6 @@ export const ERROR_META: Readonly<Record<ErrorCode, ErrorMeta>> = {
     retryable: false,
     severity: 'warn',
   },
-  // Code Agent：终端相关
   TERMINAL_SPAWN_FAILED: {
     userMessage: '终端启动失败',
     retryable: false,
@@ -260,8 +231,6 @@ export class AppError extends Error {
   readonly details?: unknown;
 
   constructor(code: ErrorCode, message?: string, cause?: unknown, details?: unknown) {
-    // ES2022 Error 原生支持 cause 选项
-    // 优先使用显式 message，否则 fallback 到 ERROR_META 的 userMessage
     const messageOrDefault = message ?? ERROR_META[code].userMessage;
     if (cause !== undefined) {
       super(messageOrDefault, { cause });
@@ -297,8 +266,6 @@ export class AppError extends Error {
    * 注意 details 通过条件构建对象赋值，避免修改 readonly 字段
    */
   toIpcError(): IpcError {
-    // 使用条件构建对象，避免对 readonly 的 IpcError.details 赋值
-    // 同时 if 守卫满足 exactOptionalPropertyTypes 要求
     if (this.details !== undefined) {
       return {
         code: this.code,

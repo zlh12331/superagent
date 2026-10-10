@@ -1,7 +1,3 @@
-// electron.vite.config.ts
-// electron-vite 配置：定义 main / preload / renderer 三个构建入口
-// 参考 electron-vite 官方文档 https://electron-vite.org/
-
 import { cpSync } from 'node:fs';
 import { resolve } from 'node:path';
 import tailwindcss from '@tailwindcss/vite';
@@ -10,15 +6,9 @@ import { defineConfig } from 'electron-vite';
 import { visualizer } from 'rollup-plugin-visualizer';
 import type { Plugin } from 'vite';
 
-// Source Map 生成配置
 // - main/preload/renderer 统一 'hidden'：生成 .map 文件但不暴露 sourceMappingURL（生产环境推荐）
-// - .map 不入安装包（electron-builder.yml files 排除 **/*.map），构建机 out/ 保留供本地排障
-// - 无符号上传：Sentry 已于 2026-09-13 移除，错误经 error-report.ts 落本地日志
 const SOURCEMAP_MODE = 'hidden' as const;
 
-// 包体积分析：`pnpm analyze:bundle` 时启用 rollup-plugin-visualizer
-// - 渲染层产物生成交互式 treemap（stats/renderer-bundle.html）+ 机器可读 stats.json
-// - 不注入 ANALYZE_BUNDLE=1 时零开销（不参与日常构建）
 const ANALYZE_BUNDLE = process.env['ANALYZE_BUNDLE'] === '1';
 
 /**
@@ -45,30 +35,18 @@ function copyDevAppUpdateYml(): Plugin {
 
 /** 渲染层插件列表（analyze 模式追加体积分析插件） */
 function rendererPlugins(): Plugin[] {
-  // concat 对数组参数有展平语义：@vitejs/plugin-react v6 返回 Plugin[]，
-  // 用 concat 统一拍平，避免元素类型推断成 Plugin | Plugin[] 联合
   const plugins: Plugin[] = ([] as Plugin[]).concat(
     react({
-      // React Compiler：启用（oxc 通道）。@vitejs/plugin-react v6 已移除 `babel` 选项，
-      // compiler 选项经 oxc-transform-react（peerDep）生效；该依赖缺失时本选项会静默
-      // 不产生任何效果（本项目 2026-08 就踩过一次"配置静默忽略"），因此设
-      // scripts/check-compiler.ts 在 build 后断言产物含 react/compiler-runtime 编译痕迹。
-      // compilationMode 'infer'：自动识别组件/Hook，与存量手写 useMemo/useCallback 共存。
       compiler: { compilationMode: 'infer' },
     }),
-    // Tailwind v4 官方 Vite 插件（替代 v3 的 postcss 配置）
-    // 文档：https://tailwindcss.com/docs/installation/using-vite
     tailwindcss(),
   );
   if (ANALYZE_BUNDLE) {
     plugins.push(
-      // rollup-plugin-visualizer 的返回类型（VisualizerPlugin）与 Vite Plugin
-      // 结构兼容但声明独立，push 到 Vite 插件数组需显式兑现
       visualizer({
         filename: 'stats/renderer-bundle.html',
         gzipSize: true,
         brotliSize: true,
-        // 同时输出 stats.json 供脚本/CI 解析对比
         json: true,
         template: 'treemap',
       }) as Plugin,
@@ -79,7 +57,6 @@ function rendererPlugins(): Plugin[] {
 
 // biome-ignore lint/style/noDefaultExport: electron-vite 框架要求 config 文件必须使用 export default
 export default defineConfig({
-  // 主进程构建配置
   main: {
     plugins: [copyDevAppUpdateYml()],
     build: {
@@ -91,9 +68,6 @@ export default defineConfig({
       },
     },
   },
-  // Preload 脚本构建配置
-  // 输出 CJS 格式（.cjs）：sandbox: true 下 preload 必须是 CommonJS
-  // 参考 electron-vite ESM 限制：https://electron-vite.org/guide/dev#limitations-of-sandboxing
   preload: {
     build: {
       sourcemap: SOURCEMAP_MODE,
@@ -108,11 +82,9 @@ export default defineConfig({
       },
     },
   },
-  // 渲染层（React 19.2 + Vite 8 + React Compiler + Tailwind v4）配置
   renderer: {
     root: 'src/renderer',
     resolve: {
-      // 与 tsconfig.json paths 对齐，让 Vite 能解析 @/* 别名
       alias: {
         '@': resolve(__dirname, 'src/renderer'),
       },

@@ -1,11 +1,3 @@
-// src/renderer/hooks/use-copy.ts
-// 剪贴板复制统一反馈 hook（一致性审计收敛项）
-// ──────────────────────────────────────────────
-// 统一此前三处各自实现的「copied state + 定时器复位」模式，并补上
-// 此前静默丢失的失败反馈（clipboard 不可用/写入失败 → toast）。
-// 需要 toast 形态反馈的场景（如远程令牌）直接用 toast，不走本 hook。
-// ──────────────────────────────────────────────
-
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 

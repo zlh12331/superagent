@@ -1,24 +1,3 @@
-// src/renderer/hooks/use-sessions.ts
-// 会话数据查询 hook（L3 服务端请求状态层）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 通过 TanStack Query 调用 session:list / get / delete / rename IPC
-// - 自动处理缓存失效 + 竞态 + 重试（QueryClient 默认配置）
-// - 提供乐观更新（delete / rename 时本地缓存先变，再等服务端确认）
-//
-// 设计依据（项目规范）：
-// - "Server state from IPC `invoke` (request-response) must use TanStack Query
-//    for caching, invalidation, and race condition handling"
-// - sessions 列表为 IPC invoke（请求-响应），不应在 Zustand 中持久化
-//   （SQLite 已是单一真源，localStorage 缓存会引入双份一致性问题）
-//
-// 缓存策略：
-// - queryKey: ['sessions'] - 会话列表
-// - queryKey: ['session', id] - 单个会话详情（含 messages）
-// - staleTime: 30s（默认，避免组件 remount 重复请求）
-// - delete / rename mutation 后 invalidate ['sessions']，触发列表刷新
-// ──────────────────────────────────────────────────────────────
-
 import type { SessionMeta } from '@code-agent/shared/renderer';
 import {
   type InfiniteData,
@@ -74,7 +53,6 @@ async function fetchSessionListPage({
 }: {
   pageParam: number;
 }): Promise<SessionListData> {
-  // E2E 浏览器模式下 window.api 未注入（无 preload），返回空列表
   if (!hasIpcBridge()) {
     return { sessions: [], total: 0 };
   }
@@ -117,15 +95,6 @@ export function useSessionsQuery() {
     queryFn: fetchSessionListPage,
     initialPageParam: 0,
     getNextPageParam: sessionListNextPageParam,
-    // 不启用 maxPages（2026-09-27 读 @tanstack/query-core@5.102.8 实证）：maxPages
-    // 在每次追加页时生效，裁「与拉取方向相反」的一端——fetchNextPage（forward，
-    // infiniteQueryObserver.js:21-25）走 addToEnd，超限 slice(1) 丢弃
-    // pages[0]/pageParams[0]（infiniteQueryBehavior.js:36-40 + utils.js:151-154）；
-    // 普通 refetch 又从 oldPageParams[0] 起逐页重放（infiniteQueryBehavior.js:52-58），
-    // 被裁页不会自愈。本查询单向 fetchNextPage，pages[0] 恰是最新一批会话（服务端
-    // updatedAt 倒序、置顶在前），Sidebar 平铺全部 pages 渲染——被裁端正是用户可见
-    // 数据。启用前提：接 fetchPreviousPage（backward 改裁尾端）或反转页序让最新页
-    // 落在尾端，使被裁端不再是可见数据。
   });
 }
 
@@ -196,13 +165,10 @@ export function useSessionDetail(id: string | null, includeMessages = false) {
     queryKey: SESSION_DETAIL_DATA_KEY(id ?? 'unknown', includeMessages),
     queryFn: async () => {
       if (id === null) {
-        // enabled: false 时不会执行，但 TS 无法推断分支不可达
-        // 此处抛错仅用于类型守卫，运行时不会进入
         throw new Error('id is null');
       }
       return fetchSessionDetail(id, includeMessages);
     },
-    // 仅当 id 不为 null 时启用查询
     enabled: id !== null,
   });
 }
@@ -237,8 +203,6 @@ export function useDeleteSession() {
       const response = await window.api.session.delete({ id });
       return unwrap(response);
     },
-    // 乐观更新：先本地移除，失败回滚（避免全量重拉的等待）
-    // P3：缓存形状为 InfiniteData——按 pages 逐页过滤
     onMutate: async (id: string) => {
       await queryClient.cancelQueries({ queryKey: SESSIONS_QUERY_KEY });
       const prev = queryClient.getQueryData<InfiniteData<SessionListData>>(SESSIONS_QUERY_KEY);
@@ -254,21 +218,15 @@ export function useDeleteSession() {
       return { prev };
     },
     onError: (error, _id, context) => {
-      // 回滚乐观更新，恢复原列表
       if (context?.prev !== undefined) {
         queryClient.setQueryData(SESSIONS_QUERY_KEY, context.prev);
       }
       toast.error(unwrapErrorMessage(error as Error, getErrorMessage));
     },
-    // 最终一致：无论成败都触发重新拉取（校验服务端真实状态）
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: SESSIONS_QUERY_KEY });
     },
     onSuccess: (_data, id) => {
-      // 删除成功后彻底移除该会话的详情缓存（removeQueries 而非 invalidate）：
-      // invalidate 只标记 stale，30s staleTime 内 deep-link 回到已删会话仍会命中
-      // 旧缓存渲染出已删除的内容（debt.md#d2 关联的缓存生命周期缺口）。
-      // gcTime 5min 只回收「无观察者」的缓存，不解决「数据已不存在」。
       void queryClient.removeQueries({ queryKey: SESSION_DETAIL_QUERY_KEY(id) });
     },
   });
@@ -298,14 +256,11 @@ export function useClearAllSessions() {
       return clearAllSessions();
     },
     onSuccess: () => {
-      // 详情/回合/最近目录缓存指向已删除数据：removeQueries 而非 invalidate
-      // （同 useDeleteSession 的 onSuccess 语义，放大到全量前缀）
       void queryClient.removeQueries({ queryKey: SESSION_ROOT_QUERY_KEY });
     },
     onError: (error) => {
       toast.error(unwrapErrorMessage(error as Error, getErrorMessage));
     },
-    // 最终一致：无论成败都重拉列表（校验服务端真实状态）
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: SESSIONS_QUERY_KEY });
     },
@@ -334,8 +289,6 @@ export function useRenameSession() {
       const response = await window.api.session.rename(params);
       return unwrap(response);
     },
-    // 乐观更新：先本地改标题，失败回滚（避免全量重拉的等待）
-    // P3：缓存形状为 InfiniteData——按 pages 逐页替换
     onMutate: async (params: { id: string; title: string }) => {
       await queryClient.cancelQueries({ queryKey: SESSIONS_QUERY_KEY });
       const prev = queryClient.getQueryData<InfiniteData<SessionListData>>(SESSIONS_QUERY_KEY);
@@ -353,13 +306,11 @@ export function useRenameSession() {
       return { prev };
     },
     onError: (error, _params, context) => {
-      // 回滚乐观更新，恢复原标题
       if (context?.prev !== undefined) {
         queryClient.setQueryData(SESSIONS_QUERY_KEY, context.prev);
       }
       toast.error(unwrapErrorMessage(error as Error, getErrorMessage));
     },
-    // 最终一致：无论成败都触发重新拉取（校验服务端真实状态）
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: SESSIONS_QUERY_KEY });
     },
@@ -413,7 +364,6 @@ export function useCreateSession() {
       return unwrap(response);
     },
     onSuccess: () => {
-      // 失效会话列表 + 最近目录列表缓存
       void queryClient.invalidateQueries({ queryKey: SESSIONS_QUERY_KEY });
       void queryClient.invalidateQueries({ queryKey: RECENT_DIRS_QUERY_KEY });
     },
@@ -455,13 +405,8 @@ export function usePinSession() {
       const response = await window.api.session.pin(params);
       return unwrap(response);
     },
-    // 乐观更新：直接改缓存内对应会话的 pinned（实测 invalidate 的 refetch 在
-    // 浏览器 mock 环境下时序不可靠，取消置顶后列表数据仍为旧值 → 会话不回文件夹）；
-    // 成功后再 invalidate 兜底重拉对齐服务端排序
     onMutate: async (params) => {
       await queryClient.cancelQueries({ queryKey: SESSIONS_QUERY_KEY });
-      // 快照用于失败回滚（2026-09-08 修复：此前不返回 context，
-      // IPC 失败时乐观值留在缓存里，置顶状态与 SQLite 不一致且用户无感知）
       const prev = queryClient.getQueryData<InfiniteData<SessionListData>>(SESSIONS_QUERY_KEY);
       queryClient.setQueryData(
         SESSIONS_QUERY_KEY,
@@ -471,13 +416,11 @@ export function usePinSession() {
       return { prev };
     },
     onError: (error, _params, context) => {
-      // 回滚乐观更新，恢复原列表
       if (context?.prev !== undefined) {
         queryClient.setQueryData(SESSIONS_QUERY_KEY, context.prev);
       }
       toast.error(unwrapErrorMessage(error, getErrorMessage));
     },
-    // 最终一致：无论成败都触发重新拉取（置顶分组重排）
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: SESSIONS_QUERY_KEY });
     },

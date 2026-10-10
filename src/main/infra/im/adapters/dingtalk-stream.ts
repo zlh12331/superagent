@@ -1,20 +1,3 @@
-// src/main/infra/im/adapters/dingtalk-stream.ts
-// 钉钉 Stream 模式接收器：企业应用长连接（对齐钉钉开放平台 Stream 协议收敛）
-// ──────────────────────────────────────────────────────────────
-// 协议流程（钉钉开放平台文档）：
-// 1. POST /v1.0/oauth2/accessToken（appKey/appSecret）→ accessToken
-// 2. GET  /v1.0/gateway/connections/open（Bearer token）→ { endpoint, ticket }
-// 3. WebSocket 连接 endpoint → 发 register 帧（ticket）→ 收 registered
-// 4. 收 data 帧（事件体）→ 解析为 ChannelIncomingMessage
-// 5. 心跳：每 30s 发 nop 帧（对齐网关保活要求）
-//
-// 设计：
-// - apiBaseUrl 可注入（测试用本地 HTTP 服务器；生产默认钉钉网关）
-// - 帧解析（parseDingTalkEvent）为纯函数（导出可测）
-// - 失败分类：token 无效 → IM_CHANNEL_INVALID_TOKEN；网络 → IM_CHANNEL_REQUEST_FAILED
-// - WS 层用 Node 22+ 全局 WebSocket（零依赖）
-// ──────────────────────────────────────────────────────────────
-
 import { AppError, type ChannelKind, ErrorCode } from '@code-agent/shared/main';
 import { logger } from '../../../utils/logger';
 import { proxiedFetch } from '../../network/proxied-fetch';
@@ -81,7 +64,6 @@ export function parseDingTalkEvent(frame: DingTalkEventFrame): ParsedDingTalkMes
   if (frame.type !== 'data' || frame.body === undefined) {
     return null;
   }
-  // 仅处理机器人消息事件（其余事件类型忽略）
   if (frame.body.eventType !== 'ChatbotMessage') {
     return null;
   }
@@ -89,7 +71,6 @@ export function parseDingTalkEvent(frame: DingTalkEventFrame): ParsedDingTalkMes
   if (data === undefined || typeof data !== 'object') {
     return null;
   }
-  // 文本消息判定：msgtype 或 content 形状
   const isText = data.msgtype === 'text' || data.msgtype === undefined;
   if (!isText) {
     return null;
@@ -169,11 +150,8 @@ export class DingTalkStreamReceiver {
     if (this.opened) {
       return;
     }
-    // 1. accessToken
     const accessToken = await this.fetchAccessToken();
-    // 2. 网关连接参数（endpoint + ticket）
     const { endpoint, ticket } = await this.fetchConnection(accessToken);
-    // 3. WebSocket 连接 + register
     const ws = new this.wsCtor(endpoint);
     this.ws = ws;
     await new Promise<void>((resolve, reject) => {
@@ -198,7 +176,6 @@ export class DingTalkStreamReceiver {
           resolve();
           logger.info({ kind: this.kind }, '钉钉 Stream 已注册（接收就绪）');
         }
-        // data 帧：解析并转发入站消息
         if (frame?.type === 'data') {
           this.dispatchFrame(frame);
         }

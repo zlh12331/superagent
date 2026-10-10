@@ -1,13 +1,3 @@
-// scripts/lib/file-metrics.ts
-// 文件体积度量纯函数：原始行数 + 净行数 + 扫描集收集（供 check-file-size / 门禁复用）
-// ──────────────────────────────────────────────────────────────
-// 为什么两种口径都要测（2026-08-30 审计结论）：
-// 只测净行会为「注释刷量」开门——service-container.ts 原始 1080 行被压到
-// 503 净行（注释密度 49%）而「通过 600 净行门槛」；净行同时奖励了
-// 「把该拆的文件写成注释文档」。原始行数是可文件化沟通的硬上限
-// （业界 eslint max-lines 默认口径即原始行），两者互补，缺一不可。
-// ──────────────────────────────────────────────────────────────
-
 import { type Dirent, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 
@@ -20,7 +10,6 @@ export const SKIP_DIR_NAMES: ReadonlySet<string> = new Set([
   'build',
   'coverage',
   '.vite',
-  // 外部参考代码（未入仓，39,625 文件）——所有自研门禁必须排除
   '_template',
 ]);
 

@@ -1,17 +1,3 @@
-// src/main/infra/im/channel/types.ts
-// IM 渠道抽象（领域层，零依赖）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - IChannelAdapter：渠道统一接口（连接/收消息/回发/生命周期）
-// - ChannelIncomingMessage：入站消息（渠道无关的领域形状）
-// - ChannelTarget：回发目标（chatId 维度）
-//
-// 设计（对齐"低耦合高内聚"）：
-// - 适配器只负责"渠道协议"：连接、接收、回发；不感知 agent/会话
-// - 消息 → agent 的桥接由 im-service（桥接层）负责，适配器保持纯净
-// - 回发是异步 fire-and-forget：失败由适配器内部重试/降级，不阻塞主流程
-// ──────────────────────────────────────────────────────────────
-
 import type { ChannelKind } from '@code-agent/shared/main';
 
 /**

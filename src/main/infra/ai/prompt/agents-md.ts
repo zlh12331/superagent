@@ -1,17 +1,3 @@
-// src/main/infra/ai/prompt/agents-md.ts
-// AGENTS.md 分层发现：从工作目录向上查找 AGENTS.md 文件
-// ──────────────────────────────────────────────────────────────
-// 设计参考 codex-rs 的 agents_md.rs：
-// - 从 cwd 向上逐级目录查找 AGENTS.md
-// - 收集路径上所有 AGENTS.md 内容并拼接
-// - 字节预算控制（避免上下文爆炸）
-//
-// 与 codex 的区别：
-// - codex 用 Rust 实现，这里用 Node.js fs API
-// - codex 向上查找直到文件系统根目录，这里同样
-// - codex 有字节预算（默认 8192），这里同样限制
-// ──────────────────────────────────────────────────────────────
-
 import { readFileSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 
@@ -60,12 +46,10 @@ function fileExists(filePath: string): boolean {
  * @returns 找到则返回文件路径，否则返回 null
  */
 function findAgentsMdInDir(dir: string): string | null {
-  // 优先匹配大写（约定俗成）
   const upperPath = join(dir, AGENTS_MD_FILENAME);
   if (fileExists(upperPath)) {
     return upperPath;
   }
-  // 兼容小写
   const lowerPath = join(dir, AGENTS_MD_FILENAME_LOWER);
   if (fileExists(lowerPath)) {
     return lowerPath;
@@ -128,7 +112,6 @@ function walkAgentsMdUpward(root: string, maxBytes: number): FoundAgentsMd[] {
   let remainingBudget = maxBytes;
   let currentDir = root;
 
-  // 防御：无限循环保护（最多 20 级目录）
   for (let i = 0; i < 20; i += 1) {
     const filePath = findAgentsMdInDir(currentDir);
     if (filePath !== null) {
@@ -141,12 +124,9 @@ function walkAgentsMdUpward(root: string, maxBytes: number): FoundAgentsMd[] {
             break;
           }
         }
-      } catch {
-        // 读取失败（权限不足等），跳过此文件
-      }
+      } catch {}
     }
 
-    // 到达文件系统根目录，停止向上查找
     const parentDir = dirname(currentDir);
     if (parentDir === currentDir) {
       break;

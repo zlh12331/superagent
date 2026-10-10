@@ -1,11 +1,3 @@
-// src/renderer/components/chat/use-composer-drag.ts
-// 输入框高度拖拽（自 ChatInput 提取的 DOM 交互 hook）
-// ──────────────────────────────────────────────
-// 对齐原型 composerDragHandle：向上拖变高（钳位 [dragMinH, 460]）、
-// 双击重置、键盘 ArrowUp/Down 20px 步进。
-// 拖拽下限 = 内容自然高度与 160 的较小者（拖小不能小于内容所需高度，避免裁剪）。
-// ──────────────────────────────────────────────
-
 import { type KeyboardEvent, type PointerEvent, type RefObject, useEffect, useRef } from 'react';
 
 /** 输入框拖拽高度上限（对齐原型 maxExtra 300 + 基础 160） */
@@ -43,13 +35,9 @@ interface GlobalDragContext {
 function startGlobalDrag(ctx: GlobalDragContext): () => void {
   const { el, state, dragRef } = ctx;
   const handleMove = (ev: globalThis.PointerEvent): void => {
-    // 方向对齐原型：向上拖（clientY 减小）→ dy 增大 → 高度增大（手柄在输入框上方，向上拉高）
     const dy = state.startY - ev.clientY;
     const clamped = Math.max(state.dragMinH, Math.min(COMPOSER_MAX_H, state.startH + dy));
     if (clamped <= state.dragMinH) {
-      // 触底档刻意让两值不等：height 贴合内容自然高度（不裁剪），maxHeight 回到基准档，
-      // 使后续自动增高仍走 COMPOSER_AUTO_MAX 档（见 ChatInput.autoResize 的 manualCap 判定）。
-      // 若此处把 maxHeight 也设为 dragMinH，拖到底后会永久压低自动增高上限
       el.style.maxHeight = `${DRAG_BASE_MAX}px`;
       el.style.height = `${state.dragMinH}px`;
     } else {
@@ -65,8 +53,6 @@ function startGlobalDrag(ctx: GlobalDragContext): () => void {
   };
   document.addEventListener('pointermove', handleMove);
   document.addEventListener('pointerup', stop);
-  // pointercancel（触摸板手势接管/窗口拖动等系统取消）不走 pointerup——
-  // 缺失会导致 dragRef 滞留，之后任意移动持续改写高度
   document.addEventListener('pointercancel', stop);
   return stop;
 }
@@ -94,10 +80,6 @@ export function useComposerDrag(textareaRef: RefObject<HTMLTextAreaElement | nul
   /** 当前拖拽的「结束」函数（正常结束时自清；组件卸载时由下方 useEffect 兜底调用） */
   const endDragRef = useRef<(() => void) | null>(null);
 
-  // 卸载兜底（2026-09-11 补）：拖拽进行中组件被卸载（切会话/关闭面板）时 pointerup
-  // 不会再派发，document 上的 pointermove/pointerup/pointercancel 监听与 dragRef 会滞留
-  // ——监听闭包同时持有 dragRef 与已分离的 textarea 引用，构成句柄泄漏。
-  // 回归守卫见同目录 use-composer-drag.test.tsx 的「拖拽进行中卸载组件」用例。
   useEffect(
     () => () => {
       endDragRef.current?.();
@@ -125,7 +107,6 @@ export function useComposerDrag(textareaRef: RefObject<HTMLTextAreaElement | nul
       return;
     }
     event.preventDefault();
-    // 指针捕获：拖拽过程中 pointer 移出手柄元素不丢失事件
     event.currentTarget.setPointerCapture(event.pointerId);
     const state: DragState = {
       startY: event.clientY,
@@ -156,8 +137,6 @@ export function useComposerDrag(textareaRef: RefObject<HTMLTextAreaElement | nul
     event.preventDefault();
     const delta = event.key === 'ArrowUp' ? KEYBOARD_STEP : -KEYBOARD_STEP;
     const current = el.offsetHeight;
-    // 下限与拖拽路径对齐：不低于内容自然高度（避免键盘把输入框缩到裁剪内容），
-    // 拖拽路径见 handleDragStart 的 dragMinH = min(naturalH, DRAG_BASE_MAX)
     const minH = Math.min(measureNaturalHeight(el), DRAG_BASE_MAX);
     const next = Math.max(minH, Math.min(COMPOSER_MAX_H, current + delta));
     el.style.maxHeight = `${next}px`;

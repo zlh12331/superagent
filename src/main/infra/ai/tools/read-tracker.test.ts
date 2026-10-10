@@ -1,12 +1,8 @@
-// src/main/infra/ai/tools/read-tracker.test.ts
-// 已读文件跟踪单测：会话隔离 + 记录/查询/清理
-
 import { beforeEach, describe, expect, it } from 'vitest';
 import { readTracker } from './read-tracker';
 
 describe('readTracker（编辑前必须先读）', () => {
   beforeEach(() => {
-    // 每个用例从干净状态开始（模块级单例）
     readTracker.clearSession('session-a');
     readTracker.clearSession('session-b');
   });
@@ -33,7 +29,6 @@ describe('readTracker（编辑前必须先读）', () => {
     readTracker.record('session-a', '/repo/a.ts');
     readTracker.clearSession('session-a');
     expect(readTracker.has('session-a', '/repo/a.ts')).toBe(false);
-    // 清除其它会话不受影响
     readTracker.record('session-b', '/repo/b.ts');
     expect(readTracker.has('session-b', '/repo/b.ts')).toBe(true);
   });

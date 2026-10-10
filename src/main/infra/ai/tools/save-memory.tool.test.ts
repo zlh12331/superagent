@@ -1,7 +1,3 @@
-// src/main/infra/ai/tools/save-memory.tool.test.ts
-// save_memory 工具单测：显式记忆条目经 capture 写入 L0
-// ──────────────────────────────────────────────────────────────
-
 import { describe, expect, it, vi } from 'vitest';
 import type { ZodType } from 'zod';
 

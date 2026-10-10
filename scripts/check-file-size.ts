@@ -1,27 +1,3 @@
-// scripts/check-file-size.ts
-// 文件体积门槛（工程化强制）：净行硬门槛 + 原始行告警 + 棘轮基线
-// ──────────────────────────────────────────────────────────────
-// 规则（对齐 typescript-dev-standards-ai.md 规则 9.2「单个文件净行不超过 600 行」）：
-//   NET_LIMIT = 600 净行——**唯一卡关口径**（净行 = 去掉空行与纯注释行）
-//   RAW_LIMIT = 600 原始行——**仅告警**（物理行数，提示注释密度/导航成本）
-//
-// 为什么原始行不卡关（2026-09-06 修正）：本项目用 check:comments 强制写注释，
-//   把原始行也当硬门槛等价于「600 行含注释」——文档写的是净行口径，实现曾比规范更严，
-//   结果 7 条存量里 5 条（net 578/564/445/421/333）只因注释多被永久锁死。
-//   原始行保留为告警，既能提示体积，又不惩罚文档化的代码。
-//
-// 范围：src/{main,renderer,preload} + packages/*/src（契约层曾长期在扫描范围外，
-//       definitions.ts 932 原始行无人管，2026-08-30 审计纠正）。
-//
-// 存量违规不再写在源码里的豁免清单（会漂移、会谎报行数），而是外置为
-// scripts/check-file-size.baseline.json，按 lib/ratchet.ts 的棘轮规则单向收紧：
-//   新增超限 / 基线值变大 / 基线条目已消解未清理 → 均卡关
-//
-// 运行：pnpm check:file-size
-//       pnpm check:file-size --update-baseline   # 重构后收紧基线
-//       （--force 才允许写高基线值，等价于「显式承认放宽」，diff 可见）
-// ──────────────────────────────────────────────────────────────
-
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { collectSourceFiles, discoverPackageSrcDirs, measureFile } from './lib/file-metrics';
@@ -75,7 +51,6 @@ function isRawWarning(m: { raw: number; net: number }): boolean {
 }
 
 function loadBaseline(): Record<string, Metrics> {
-  // 文件缺失 → 空基线（首次 --update-baseline 得以创建；普通运行把所有超限报成 new）
   if (!existsSync(BASELINE_PATH)) return {};
   try {
     return parseBaseline(readFileSync(BASELINE_PATH, 'utf8'), METRICS);

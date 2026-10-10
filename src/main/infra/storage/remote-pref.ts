@@ -1,16 +1,3 @@
-// src/main/infra/storage/remote-pref.ts
-// 远程控制绑定范围持久化（app_settings 表，主进程直读 SQLite）
-// ──────────────────────────────────────────────────────────────
-// 背景（2026-09-27 绑定范围设置，用户拍板 C 方案）：
-// 远程控制 HTTP 此前固定监听 0.0.0.0（LAN 直连是功能前提），部分用户只需
-// 本机使用、不愿向局域网暴露入口。绑定范围收敛为两态：
-// - lan：监听 0.0.0.0 + UDP 发现广播（现状默认，兼容存量行为）
-// - loopback：仅监听 127.0.0.1 + 停发 UDP 公告（仅本机模式不应向局域网广播自身存在）
-//
-// 存储：复用 app_settings 表（key = 'remote.bindScope'），与 im-allowlist-pref
-// 同模式：主进程直接读 SQLite，不经渲染层 settings 域白名单（SETTING_KEYS 不动）。
-// ──────────────────────────────────────────────────────────────
-
 import type { RemoteBindScope } from '@code-agent/shared/main';
 
 import { readSetting, writeSetting } from './settings-pref';

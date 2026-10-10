@@ -1,13 +1,3 @@
-// src/renderer/lib/settings-ops.ts
-// 设置域 IPC 桥（whitelist / tool / mcp / memory / skill / im / settings / update / session / app / browser）
-// ──────────────────────────────────────────────────────────────
-// 职责（direct-ipc 清迁，2026-09-26）：
-// - settings 各 .tsx 面板此前直连 window.api.*，收敛到本文件（lib 层豁免）
-// - 无桥（浏览器模式 / preload 缺失）的降级语义与原调用点逐一对齐：
-//   查询返回空结果、订阅返回 no-op、写操作按原路径抛错或本地空操作
-// - 不吞错误：IPC 错误响应经 unwrap 抛出（[CODE] 前缀），交调用方 onError/toast
-// ──────────────────────────────────────────────────────────────
-
 import type {
   ChannelListRes,
   ChannelOpRes,
@@ -81,8 +71,6 @@ export interface SessionExportAllRes {
   readonly path?: string;
 }
 
-// ── whitelist / tool ──────────────────────────────────────────
-
 /**
  * 列出命令白名单条目
  *
@@ -137,8 +125,6 @@ export async function listTools(): Promise<ToolListRes> {
   return unwrap(await window.api.tool.list({ permission: undefined }));
 }
 
-// ── mcp ───────────────────────────────────────────────────────
-
 /**
  * 列出 MCP 服务器
  *
@@ -183,8 +169,6 @@ export async function stopMcpServer(name: string): Promise<{ ok: boolean }> {
   }
   return unwrap(await window.api.mcp.stop({ name }));
 }
-
-// ── memory ────────────────────────────────────────────────────
 
 /**
  * 列出会话记忆条目
@@ -244,8 +228,6 @@ export async function clearAllMemories(): Promise<{ clearedSessions: number }> {
   return { clearedSessions: res.clearedSessions };
 }
 
-// ── skill ─────────────────────────────────────────────────────
-
 /**
  * 列出全部可用技能（内置 + 已学）
  *
@@ -294,8 +276,6 @@ export async function removeLearnedSkill(name: string): Promise<{ removed: boole
   return unwrap(await window.api.skill.removeLearned({ name }));
 }
 
-// ── im ────────────────────────────────────────────────────────
-
 /**
  * 列出 IM 渠道
  *
@@ -340,8 +320,6 @@ export async function stopImChannel(kind: ImChannelKind): Promise<ChannelOpRes> 
   return unwrap(await window.api.im.stop({ kind }));
 }
 
-// ── settings（IM 群聊白名单） ─────────────────────────────────
-
 /** 群聊执行白名单的 settings key（与主进程 im-allowlist-pref 约定一致） */
 export const IM_ALLOWED_GROUPS_SETTING_KEY = 'im.allowedGroups';
 
@@ -373,8 +351,6 @@ export async function saveImAllowedGroups(groups: readonly string[]): Promise<vo
   }
   unwrap(await window.api.settings.set({ key: IM_ALLOWED_GROUPS_SETTING_KEY, value: [...groups] }));
 }
-
-// ── update / session / app ────────────────────────────────────
 
 /**
  * 拉取更新缓存占用
@@ -502,8 +478,6 @@ export async function exportDiagnostics(): Promise<ExportDiagnosticsRes | null> 
   return unwrap(await window.api.app.exportDiagnostics());
 }
 
-// ── app 登录项（开机自启） ────────────────────────────────────
-
 /**
  * 读取开机自启状态（OS 登录项为唯一真源）
  *
@@ -544,8 +518,6 @@ export function subscribeLoginItemChanged(
   return window.api.app.subscribeLoginItemChanged(handler);
 }
 
-// ── session 用量 / 回合 ───────────────────────────────────────
-
 /**
  * 拉取 Token 用量汇总
  *
@@ -570,8 +542,6 @@ export async function getRecentTurns(limit: number): Promise<SessionRecentTurnsR
   return unwrap(await window.api.session.getRecentTurns({ limit })).turns;
 }
 
-// ── browser ───────────────────────────────────────────────────
-
 /**
  * 应用浏览器预览配置（严格沙箱切换；主进程值一致时幂等 no-op）
  *
@@ -583,8 +553,6 @@ export function configureBrowser(params: { readonly strictSandbox: boolean }): P
   }
   return window.api.browser.configure(params).then(() => true);
 }
-
-// ── proxy（34 号网络代理）─────────────────────────────────────
 
 /**
  * 测试代理连接（主进程经 proxiedFetch 探测轻量端点）

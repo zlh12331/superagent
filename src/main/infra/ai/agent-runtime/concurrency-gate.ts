@@ -1,25 +1,3 @@
-// src/main/infra/ai/agent-runtime/concurrency-gate.ts
-// 回合级并发公平调度：多会话共享执行槽位（FIFO 先来先得）
-// ──────────────────────────────────────────────────────────────
-// 背景：多会话可同时发起 Agent 回合，无并发上限时会同时打满供应商 API
-// （免费层极易触发 429）。本门提供全局槽位，超过上限的回合进入 FIFO 队列
-// 等待——先到先得即"平均分配"（不会出现某会话被持续饿死），队列内 abort
-// 立即让位。（历史背景：原 ChatService / AgentService 两路共用；ChatService
-// 已并入 agent-service 回合链路删除，现所有回合同走这一门。）
-//
-// 生产接线：
-// - 唯一生产实例在 ServiceContainer（readonly 字段，非 accessor），槽位数取
-//   DEFAULT_MAX_CONCURRENT_TURNS；agent-service 构造注入，可选——未注入时
-//   跳过并发门（保持原并发行为，测试兼容）
-// - 排队 TTL 全局统一（DEFAULT_ACQUIRE_TIMEOUT_MS），acquire 不暴露按回合配置
-//
-// 设计：
-// - 纯函数 + 零依赖（不依赖 logger / config / telemetry，便于单测）
-// - acquire 返回幂等释放函数（重复调用无害），调用方 finally 释放
-// - signal 贯穿：排队期间 abort → 移除队列并抛 AbortError（与回合
-//   中断同语义，走上层统一错误分类）
-// ──────────────────────────────────────────────────────────────
-
 /** 队列条目 */
 interface GateEntry {
   readonly sessionId: string;
@@ -120,10 +98,8 @@ function enqueueGateEntry(
       );
     }, timeoutMs);
     timeoutTimer.unref?.();
-    // 排队期间 abort：移除队列并拒绝（让位给后续会话）
     signal?.addEventListener('abort', entry.onAbort, { once: true });
     queue.push(entry);
-    // 注册后复查：命中则立即出队拒绝
     if (signal?.aborted === true) {
       entry.onAbort();
     }
@@ -153,7 +129,6 @@ export function createConcurrencyGate(maxConcurrent: number): ConcurrencyGate {
   }
 
   let running = 0;
-  // FIFO 等待队列（先入先出 = 公平调度，无饥饿）
   const queue: GateEntry[] = [];
 
   /** 出队下一个等待者（有空位时循环放行） */
@@ -180,16 +155,13 @@ export function createConcurrencyGate(maxConcurrent: number): ConcurrencyGate {
 
   return {
     acquire(sessionId, signal) {
-      // 已中断：直接失败（不排队）
       if (signal?.aborted === true) {
         return Promise.reject(createGateAbortError());
       }
-      // 有空位：立即放行
       if (running < maxConcurrent) {
         running += 1;
         return Promise.resolve(createRelease());
       }
-      // 排队等待（FIFO；带获取超时）
       return enqueueGateEntry(queue, sessionId, signal, DEFAULT_ACQUIRE_TIMEOUT_MS);
     },
     getStats: () => ({ running, queued: queue.length }),

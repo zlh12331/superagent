@@ -1,18 +1,3 @@
-// packages/shared/src/schemas/devtools.ts
-// DevTools 域 zod schema 单一真源（开发者工具集成）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 集中定义 DevTools 域 zod schema，作为 IPC 入参运行时校验的单一真源
-// - 当前提供 devtools:open（打开 Chromium DevTools，支持 mode 参数）
-//
-// 设计：
-// - devtools:open 入参为 { mode? }（可选，默认 'detach' 独立窗口）
-// - mode 仅支持 'detach' / 'right' / 'bottom' 三种常用模式
-//   （完整 Electron 支持 'left' | 'right' | 'bottom' | 'undocked' | 'detach'，
-//    本项目仅暴露常用三种，避免误用 'undocked' 与 'detach' 混淆）
-// - 返回 { ok: boolean } 表示是否成功打开
-// ──────────────────────────────────────────────────────────────
-
 import { z } from 'zod';
 
 /**

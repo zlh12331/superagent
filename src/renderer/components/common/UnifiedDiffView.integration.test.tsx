@@ -1,15 +1,3 @@
-// src/renderer/components/$1/UnifiedDiffView.integration.test.tsx
-// UnifiedDiffView 集成测试（真实渲染：解析器 + 自研 DiffRowsTable + 真实 ThemeProvider）
-// ──────────────────────────────────────────────
-// 与同目录 UnifiedDiffView.test.tsx 的分工：
-// - 单元测试 mock ThemeProvider/highlight，聚焦行结构与交互语义
-// - 本文件走真实主题环境，断言「解析 → 表格落地」整体链路
-//   （表结构、hunk 分组、空态重渲染）——补回归锚。
-//
-// 来源：原 components/$1/dev-common-gaps.test.tsx 的 UnifiedDiffView 段。
-// 纯解析断言（parseUnifiedDiff）由 lib/diff/unified-diff.test.ts 覆盖，不在此重复。
-// ──────────────────────────────────────────────
-
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { i18n } from '@/i18n';

@@ -1,12 +1,3 @@
-// src/renderer/lib/ipc.ts
-// IPC 响应解包工具（渲染层共用）
-// ──────────────────────────────────────────────────────────────
-// 设计动机（可维护性 · DRY）：
-// - unwrap 此前在 use-telemetry.ts / use-api-key.ts / SettingsDialog.tsx 各复制一份，
-//   逻辑完全相同。抽到此处单一真源，三处改 import。
-// - 基于 shared 的 IpcResponse（discriminated union：{ data } | { error }）。
-// ──────────────────────────────────────────────────────────────
-
 import type { IpcResponse } from '@code-agent/shared/renderer';
 
 /**
@@ -22,7 +13,6 @@ export function unwrap<T>(response: IpcResponse<T>): T {
     throw new Error(`[${response.error.code}] ${response.error.message}`);
   }
   if (response.data === undefined) {
-    // 既无 error 也无 data = 协议异常（正常响应必为 { data } | { error } 二选一）
     throw new Error('[INVALID_RESPONSE] IPC 响应缺少 data（协议异常）');
   }
   return response.data;
@@ -71,7 +61,6 @@ export function unwrapErrorMessage<C extends string>(
     return error.message;
   }
   try {
-    // 正则形态约束（[A-Z_] 大写码）与调用方错误码联合的契约收窄点
     return localize(code as C);
   } catch {
     return error.message;

@@ -1,18 +1,3 @@
-// src/main/infra/ai/providers/types.ts
-// Provider 路由层类型定义（Code Agent 模板核心扩展点）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 定义 ProviderKind 枚举（模型供应商标识）
-// - 定义 ProviderDefinition（供应商静态元数据：默认模型 / 是否需要 API Key）
-// - 定义 ProviderFactory（创建 LanguageModel 工厂的签名）
-//
-// 设计（对标 OpenCode 的 provider 路由）：
-// - 供应商列表集中注册在 registry.ts，新增供应商 = 在 BUILTIN_DEFINITIONS
-//   与 BUILTIN_FACTORIES 常量表中各加一条
-// - API Key 按 kind 分 key 存储在 keychain（settings 域已支持）
-// - 默认模型/默认供应商从模型领域层派生（builtin-models.ts 单一真源）
-// ──────────────────────────────────────────────────────────────
-
 import type { ModelApiFormat } from '@code-agent/shared/main';
 import type { LanguageModel } from 'ai';
 

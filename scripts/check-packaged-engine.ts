@@ -1,21 +1,3 @@
-// scripts/check-packaged-engine.ts
-// 安装包记忆引擎断言（防"发布缺引擎的包"事故复发）
-// ──────────────────────────────────────────────────────────────
-// 背景（2026-09-12 发现的事故）：记忆引擎源码先前未入仓，CI 构建拿不到上游 →
-//   prepare-memory-hub.mjs 生成**占位目录**并 exit 0 → 打包"成功"但产物不含引擎，
-//   而 README 承诺了该功能。用户下载到的安装包运行时静默降级为空实现。
-//
-// 本脚本把"最终打包产物里真的有可运行的引擎"变成机器闸，检查 electron-builder
-//   输出目录（win-unpacked / linux-unpacked / mac*/**.app）下的 resources/memory-hub：
-//   1. 目录存在（不是完全缺失）
-//   2. 引擎入口 src/gateway/server.ts（或 dist/gateway/server.js）在位
-//   3. node_modules 已安装（engine 以 tsx 直跑源码，依赖必须随包）
-//   4. 无占位标记文件（历史占位目录的识别物）
-//   5. 关键运行依赖存在（防裁剪逻辑误删必需包——此前可达性分析曾误判）
-//
-// 产物不存在时**失败**（在 CI 打包后运行；本地产物缺失说明未先打包）。
-// ──────────────────────────────────────────────────────────────
-
 import { existsSync, readdirSync } from 'node:fs';
 import { basename, join } from 'node:path';
 
@@ -31,9 +13,9 @@ const RELEASE_DIR = join(ROOT, 'release');
  * `tsx` 已随 dist 方案退役（打包产物为纯 JS，无需 TS loader），从哨兵移除。
  */
 const REQUIRED_ENGINE_DEPS: readonly string[] = [
-  '@node-rs/jieba', // 中文分词（FTS5 索引依赖；external 原生绑定）
-  '@reflink/reflink', // reflink 复制原生绑定（external）
-  'sqlite-vec', // 向量检索原生绑定（external）
+  '@node-rs/jieba',
+  '@reflink/reflink',
+  'sqlite-vec',
 ];
 
 /** 定位 electron-builder 的 unpacked 目录（跨平台） */
@@ -75,7 +57,6 @@ function resolveEngineDirs(unpackedDir: string): string[] {
         found.push(full);
         return;
       }
-      // 只深入有意义的层级：.app / Contents / Resources 与平台容器目录
       if (
         entry.name.endsWith('.app') ||
         entry.name === 'Contents' ||
@@ -99,14 +80,11 @@ function listResourcesCandidates(unpackedDir: string): string[] {
       if (entry.isDirectory() && entry.name === 'resources') {
         out.push(`${unpackedDir.replace(ROOT, '.')}/resources`);
       }
-      // macOS：<Product>.app/Contents/Resources
       if (entry.isDirectory() && entry.name.endsWith('.app')) {
         out.push(`${unpackedDir.replace(ROOT, '.')}/${entry.name}/Contents/Resources`);
       }
     }
-  } catch {
-    // 读取失败时返回已收集部分
-  }
+  } catch {}
   return out;
 }
 
@@ -119,7 +97,6 @@ interface CheckResult {
 function checkEngineDir(dir: string): CheckResult[] {
   const results: CheckResult[] = [];
 
-  // 1. 入口文件（优先 dist，回退 TS 源码——与 MemoryHubService.resolveEntry 一致）
   const distEntry = join(dir, 'dist', 'gateway', 'server.js');
   const srcEntry = join(dir, 'src', 'gateway', 'server.ts');
   results.push({
@@ -131,10 +108,6 @@ function checkEngineDir(dir: string): CheckResult[] {
         : '引擎入口缺失（dist/gateway/server.js 与 src/gateway/server.ts 均不存在）',
   });
 
-  // 1.5 运行时数据文件哨兵（仅 dist 模式——src 模式为 dev 回退，数据随源码在位）
-  //     bundle 内联 JS 后，按 __dirname 相对路径读取的散装数据文件不再跟随源码，
-  //     prepare-memory-hub.mjs 必须显式补拷；缺失的表现是运行时静默降级或抛错，
-  //     哨兵在此收口（2026-10-05 两起同类事故：tcvdb-text data/ #92、param-registry JSON）。
   if (existsSync(distEntry)) {
     const registryJson = join(dir, 'dist', 'gateway', 'metadata_config_params.json');
     results.push({
@@ -153,19 +126,16 @@ function checkEngineDir(dir: string): CheckResult[] {
     });
   }
 
-  // 2. node_modules 已安装
   results.push({
     ok: existsSync(join(dir, 'node_modules')),
     detail: 'node_modules（引擎依赖）',
   });
 
-  // 3. 无占位标记（历史占位目录的识别物）
   results.push({
     ok: !existsSync(join(dir, '.memory-hub-placeholder')),
     detail: '非占位目录（.memory-hub-placeholder 不存在）',
   });
 
-  // 4. 关键运行依赖（裁剪误伤哨兵）
   for (const dep of REQUIRED_ENGINE_DEPS) {
     results.push({
       ok: existsSync(join(dir, 'node_modules', dep)),
@@ -196,8 +166,6 @@ function main(): void {
   let failed = false;
   let checked = 0;
   const prefix = currentPlatformDirPrefix();
-  // 跨平台产物（如本机只打了 Windows 而 release/ 残留 mac 目录）不参与判定：
-  // 每个平台各自在 CI 上检查自己的产物，本地单平台检查不应因他平台缺失而失败。
   const platformDirs = unpackedDirs.filter((p) => basename(p).startsWith(prefix));
   const skipped = unpackedDirs.filter((p) => !basename(p).startsWith(prefix));
   for (const p of skipped) {
@@ -218,7 +186,6 @@ function main(): void {
   for (const unpacked of platformDirs) {
     const engineDirs = resolveEngineDirs(unpacked);
     if (engineDirs.length === 0) {
-      // macOS 的 .app 内路径未在本机实测过：给出可诊断信息而非静默失败
       const resourcesPath = listResourcesCandidates(unpacked);
       console.error(`[check-packaged-engine] ❌ ${unpacked} 下未找到 resources/memory-hub`);
       console.error(`  候选路径探测：${resourcesPath.join(' | ') || '(未发现 resources 目录)'}`);

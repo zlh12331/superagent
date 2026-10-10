@@ -1,11 +1,3 @@
-// src/renderer/components/settings/sections/dialogs/model-config-dialog.tsx
-// 模型配置弹窗（统一表单 · 服务商/自定义/编辑三模式）
-// ──────────────────────────────────────────────────────────────
-// 保存流程（文档 3.3.3 已定）：校验 → 连通性测试（失败阻止提交并标红）
-// → add/update → 失效 RUNTIME_MODELS_QUERY_KEY + MODELS_QUERY_KEY。
-// 高级配置区字段首版不持久化（文档 3.3.4 字段映射），仅表单交互。
-// ──────────────────────────────────────────────────────────────
-
 import type { ApiKeyProvider, RuntimeModelInfo } from '@code-agent/shared/renderer';
 import { Loader2, TriangleAlert } from 'lucide-react';
 import { type ReactElement, useEffect, useState } from 'react';
@@ -59,7 +51,6 @@ function createDefaultValues(): ModelConfigFormValues {
     displayName: '',
     requestUrl: '',
     apiKey: '',
-    // 默认 Chat Completions：兼容面最广，也是本字段引入前的历史行为
     apiFormat: 'openai-chat',
     timeoutSeconds: '',
     contextInput: '',
@@ -97,7 +88,6 @@ function trimOptionalFields(values: ModelConfigFormValues): {
   const timeoutRaw = values.timeoutSeconds.trim();
   return {
     displayName: displayName !== '' ? { displayName } : {},
-    // update / add 契约里请求地址字段名是 baseUrl
     requestUrl: requestUrl !== '' ? { baseUrl: requestUrl } : {},
     apiKey: apiKey !== '' ? { apiKey } : {},
     apiKeyValue: apiKey !== '' ? apiKey : undefined,
@@ -131,8 +121,6 @@ export function ModelConfigDialog({
   const [advancedExpanded, setAdvancedExpanded] = useState(false);
   const [testing, setTesting] = useState(false);
 
-  // 服务商模式：厂商内置模型全集（listBuiltin，不依赖 keychain——
-  // 配置页为未配置用户服务；此前误用 models:list 的"已配置才显示"过滤导致死锁）
   const { data: builtinData } = useBuiltinModelsQuery(
     mode === 'provider' ? values.providerKind : undefined,
   );
@@ -141,7 +129,6 @@ export function ModelConfigDialog({
   const isCustom = mode === 'custom';
   const isProviderMode = mode === 'provider';
 
-  // 打开时按模式初始化表单（编辑模式预填；切换弹窗重置）
   useEffect(() => {
     if (!open) return;
     if (isEdit && editingModel !== undefined) {
@@ -151,9 +138,7 @@ export function ModelConfigDialog({
         modelId: editingModel.modelId,
         displayName: editingModel.displayName ?? '',
         requestUrl: editingModel.baseUrl ?? '',
-        // 记录值回填；未设置（存量行）→ 默认 openai-chat（与历史行为一致）
         apiFormat: editingModel.apiFormat ?? 'openai-chat',
-        // 毫秒 → 秒回显（1500 → '1.5'）；未设置 → 空串（= 不限制）
         timeoutSeconds:
           editingModel.timeoutMs !== undefined ? String(editingModel.timeoutMs / 1000) : '',
       });
@@ -219,12 +204,8 @@ export function ModelConfigDialog({
       const res = await testMutation.mutateAsync({
         providerKind: values.providerKind,
         ...(effectiveModelId !== '' ? { modelId: effectiveModelId } : {}),
-        // 表单里填了请求地址就传给主进程探测——编辑模式下改地址同样要测新地址
-        // （此前 !isEdit 守卫导致编辑模式永远测默认端点，改了地址不生效）
         ...(values.requestUrl.trim() !== '' ? { baseUrl: values.requestUrl.trim() } : {}),
         ...(values.apiKey.trim() !== '' ? { apiKey: values.apiKey.trim() } : {}),
-        // 自定义模式带上所选格式：探测须按该格式的协议路径与请求体发起，
-        // 否则会「按 Chat Completions 测 Responses/Anthropic 端点」而假红
         ...(isCustom ? { apiFormat: values.apiFormat } : {}),
       });
       if (!res.ok) {
@@ -235,7 +216,6 @@ export function ModelConfigDialog({
       setTesting(false);
       return true;
     } catch (err) {
-      // 连通性测试抛错（网络/权限）：视为测试失败，阻止提交
       setErrors((prev) => ({ ...prev, test: err instanceof Error ? err.message : String(err) }));
       setTesting(false);
       return false;
@@ -273,7 +253,6 @@ export function ModelConfigDialog({
         ...fields.displayName,
         ...fields.requestUrl,
         ...fields.apiKey,
-        // '' → null：编辑弹窗清空超时即发送清除语义（回不限制）
         timeoutMs: fields.timeoutMs,
         apiFormat: values.apiFormat,
       });
@@ -281,10 +260,6 @@ export function ModelConfigDialog({
       return;
     }
     if (isProviderMode) {
-      // 服务商模式：API 密钥走提供商级 keychain（settings:setApiKey），
-      // 模型添加时省略 apiKey（主进程回退读 keychain 提供商 key）。
-      // 也不传 apiFormat——服务商模式的格式由 providerKind 决定（主进程按
-      // 默认格式路由），显式传会把「按 kind 决定」变成「按用户表单值决定」
       if (fields.apiKeyValue !== undefined) {
         await setApiKeyMutation.mutateAsync({
           provider: values.providerKind,
@@ -300,7 +275,6 @@ export function ModelConfigDialog({
       toast.success(t('settings.modelMgmt.modelAdded'));
       return;
     }
-    // 自定义模式：API 密钥走模型级 keychain（addRuntimeModel 的 apiKey 参数）
     await addMutation.mutateAsync({
       modelId: effectiveModelId,
       providerKind: values.providerKind,
@@ -343,9 +317,7 @@ export function ModelConfigDialog({
             onOpenApiKeyUrl={() => {
               const url = providerApiKeyUrl(values.providerKind);
               if (url !== '') {
-                openExternal(url).catch(() => {
-                  // 打开失败静默：非关键路径
-                });
+                openExternal(url).catch(() => {});
               }
             }}
           />

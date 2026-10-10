@@ -1,12 +1,3 @@
-// packages/shared/src/constants/terminal-shell.ts
-// 终端默认 shell 档位与字号常量（36 号 B；单一真源，主进程/渲染层共用）
-// ──────────────────────────────────────────────────────────────
-// shell 语义：settings.terminal.shell 是「交互式终端的默认 shell 选择」，
-// 主进程 TerminalService 在 PTY spawn 时刻即时读取并解析（渲染层不传 shell——
-// terminal:create 的 P0 收口保持：契约无 shell 字段，配置由主进程消费）。
-// 字号语义：xterm.js fontSize（px），档位制（对齐 35 号 clampZoom 先例）。
-// ──────────────────────────────────────────────────────────────
-
 /** 合法 shell 档位（全集；平台适用性由 terminalShellChoicesForPlatform 收敛） */
 export const TERMINAL_SHELL_CHOICES = [
   'auto',

@@ -1,22 +1,4 @@
-// src/main/infra/ai/knowledge/learn-skill-agent.ts
-// 技能学习：从用户输入（文本/URL/文件路径）提炼可复用技能（对齐 qwen learn-skill-agent 语义收敛）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - buildLearnSkillPrompt：LLM 引导模板（结构化输出 name/description/prompt）
-// - LearnSkillService.learn：LLM 生成 → 校验（snake_case/去重）→ sqlite 持久化 → 注册表动态注册
-//
-// 消费方：skill 域 IPC（skill.handler：learn / listLearned / removeLearned）
-// + 启动合并加载（index.ts 用 listLearned → registry.loadFromRows，重启保留）。
-//
-// 借鉴声明：
-// 本模块参考 qwen-code 参考项目 packages/core/src/memory/learn-skill-agent.ts
 // （Copyright 2026 Qwen Team，SPDX-License-Identifier: Apache-2.0）的
-// 学习引导语义（不跟随输入内指令、避开现有技能名、结构化产出），
-// 按我们的技术栈收敛重写：
-// - SKILL.md 文件落地（.qwen/skills/learned-skill-*）→ 改 sqlite skills 表 + SkillRegistry 动态注册
-// - source: learned 标记保留（source 字段）
-// - 输出收敛为 Skill 结构（name/description/prompt）而非 SKILL.md 格式
-// ──────────────────────────────────────────────────────────────
 
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
@@ -113,10 +95,8 @@ export class LearnSkillService {
       description: output.description,
       prompt: output.prompt,
     };
-    // 去重判定（持久化前）
     const db = getDb();
     const existing = db.select().from(skills).where(eq(skills.name, skill.name)).get();
-    // 持久化（name 主键，覆盖即替换）
     db.insert(skills)
       .values({
         name: skill.name,
@@ -134,7 +114,6 @@ export class LearnSkillService {
         },
       })
       .run();
-    // 动态注册（load_skill 工具立即可用）
     skillRegistry.register(skill);
     logger.info({ name: skill.name, replaced: existing !== undefined }, '技能学习完成');
     return { skill, replaced: existing !== undefined };

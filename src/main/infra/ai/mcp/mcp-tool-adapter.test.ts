@@ -1,16 +1,3 @@
-// src/main/infra/ai/mcp/mcp-tool-adapter.test.ts
-// mcp-tool-adapter 单测：MCP 工具适配器
-//
-// 测试要点：
-// 1. decideMcpToolPermission：权限决策（permissionOverride > readOnlyHint > 默认 'ask'）
-// 2. normalizeMcpToolResult：结果标准化（isError 抛错 / structuredContent 优先 / text 拼接）
-// 3. adaptMcpTool：适配 Tool 实例（命名空间、权限、execute 转发）
-//
-// 接线背景：生产消费方 = mcp-service.startServer（adaptMcpTool + client.callTool
-// 注入）。注意 tool.permission='auto' 不担保免审批——权限服务对 MCP 工具
-// （category 恒 'exec'）有额外防线，本文件断言的是适配层决策（适配器不感知
-// 权限服务）。
-
 import { AppError, ErrorCode } from '@code-agent/shared/main';
 import type { Schema } from 'ai';
 import type { WebContents } from 'electron';
@@ -27,13 +14,11 @@ import {
 } from './mcp-tool-adapter';
 import type { McpServerConfig } from './mcp-types';
 
-// Mock WebContents：测试不依赖事件推送，仅满足 ToolContext 类型契约
 const mockWebContents = {
   send: vi.fn(),
   isDestroyed: vi.fn(() => false),
 } as unknown as WebContents;
 
-// 构造默认 ToolContext
 function makeCtx(): ToolContext {
   return {
     workingDir: '/workspace',
@@ -167,9 +152,6 @@ describe('mcp-tool-adapter', () => {
     function makeDescriptor(
       overrides: Partial<Omit<McpToolDescriptor, 'name'>> = {},
     ): McpToolDescriptor {
-      // 注意：exactOptionalPropertyTypes 下，不能显式赋 undefined，
-      // 用条件展开跳过 undefined 字段
-      // description 默认值；可通过 overrides.description 显式省略
       const description = overrides.description ?? '读取文件内容';
       return {
         name: 'read_file',
@@ -229,7 +211,6 @@ describe('mcp-tool-adapter', () => {
       expect(result.output).toBe('file content');
       expect(result.title).toContain('mcp__filesystem__read_file');
       expect(result.metadata).toBeDefined();
-      // callTool 第一个参数为原始工具名（不含命名空间前缀）
       expect(mockCallTool).toHaveBeenCalledWith('read_file', { path: '/tmp/test.txt' }, ctx);
     });
 
@@ -251,7 +232,6 @@ describe('mcp-tool-adapter', () => {
       await expect(tool.execute({}, ctx)).rejects.toMatchObject({
         code: ErrorCode.TOOL_ABORTED,
       });
-      // 未调用 callTool
       expect(mockCallTool).not.toHaveBeenCalled();
     });
 
@@ -279,13 +259,11 @@ describe('mcp-tool-adapter', () => {
         vi.fn() as unknown as McpCallToolFn,
       );
       const schema = tool.inputSchema as Schema<unknown>;
-      // 参数定义原样进工具定义（模型据此生成入参）
       expect(schema.jsonSchema).toEqual({
         type: 'object',
         properties: { path: { type: 'string' } },
         required: ['path'],
       });
-      // 不挂客户端 validate：MCP server 是入参校验真源
       expect(schema.validate).toBeUndefined();
     });
 

@@ -1,7 +1,3 @@
-// packages/shared/src/__tests__/git-schema.test.ts
-// git schema 单测：P0 收口——remote/refspec/ref 透传曾可携带选项形参数
-// 与 `ext::` 传输串（git 直接运行本地命令）。锁死字符集边界。
-
 import { describe, expect, it } from 'vitest';
 import {
   GitDiffReqSchema,

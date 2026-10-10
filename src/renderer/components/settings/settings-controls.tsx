@@ -1,18 +1,3 @@
-// src/renderer/components/settings/settings-controls.tsx
-// 设置分区通用控件集（对齐参考项目 superagent SettingsControls + 原型 .setting-row）
-// ──────────────────────────────────────────────────────────────
-// 提供 4 个布局控件：
-// - SectionTitle  — 分区小标题（uppercase + letter-spacing）
-// - SettingRow    — 水平设置行（label 在左，控件在右，卡片底）
-// - ToggleRow     — 开关行（右侧 Switch）
-// - SegControl    — 分段控件（互斥选项切换，原型 .seg-control）
-//
-// 注：此前头注释声称还有第 5 个 SettingField（垂直堆叠字段），但该控件从未实现
-// ——多处分区因此各自手写「Label + 控件」的垂直堆叠（见 approval-mode-section /
-// im-allowlist-field / prompt-section）。已删除该虚假条目；若后续需要统一该形态，
-// 应按需新增而不是照注释去找。
-// ──────────────────────────────────────────────────────────────
-
 import type { ReactElement, ReactNode } from 'react';
 import { Switch } from '@/components/ui/switch';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
@@ -75,7 +60,6 @@ export function SettingRow({
           <p className="text-muted-foreground mt-0.5 text-xs leading-[1.5]">{description}</p>
         )}
       </div>
-      {/* shrink：允许控件区随容器收缩（SegControl 等可折行控件需要宽度约束） */}
       <div className="min-w-0 shrink">{children}</div>
     </div>
   );
@@ -164,7 +148,6 @@ export function SegControl({ value, options, onChange, className }: SegControlPr
       type="single"
       value={value}
       onValueChange={(next) => {
-        // 空串 = 用户点了已选中项（Radix 反选语义）：保持原值不回调
         if (next !== '') onChange(next);
       }}
       className={cn(

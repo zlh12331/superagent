@@ -1,26 +1,3 @@
-// src/main/infra/ai/llm-client/llm-client.ts
-// LLM 客户端统一出口：模型级路由 + per-model 缓存 + 重试
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - getModel(modelId)：模型级解析（ModelRegistry）→ 供应商工厂 → per-model 缓存
-// - generateText：会话外工具化调用（标题生成 / 工具入参修复），自带重试 + 降级链
-// - generateJson：结构化输出（命令分类 / 目标判定 / 技能学习）
-// - reset：清空 per-model 缓存（API Key / 模型切换后重建实例）
-//
-// side query 消费方（经 generateText/generateJson，单一链路）：
-// - session-title（标题生成，经 ITitleGenerator 鸭子匹配）
-// - repair-tool-call（工具入参修复）
-// - command-classifier / goal-judge / learn-skill-agent（generateJson）
-// （原注释的「摘要 / 子代理」无调用方——context-compression 纯本地、
-//  subagent-manager 不直连 LLM）
-//
-// 设计（对标 qwen-code BaseLlmClient）：
-// - 模型是路由最小单元：调用方传模型 id 即可，无需知道供应商
-// - per-model 缓存避免重复创建 LanguageModel 实例
-// - 供应商工厂通过 DI 注入（createProviderFactory），本层不感知 keychain / config
-// - generateText 走 retryWithBackoff（错误码感知 + 指数退避 + 遥测回调）
-// ──────────────────────────────────────────────────────────────
-
 import { AppError, ErrorCode, type ModelApiFormat } from '@code-agent/shared/main';
 import {
   APICallError,
@@ -72,7 +49,6 @@ function isFallbackEligibleError(error: unknown): boolean {
   if (error instanceof APICallError) {
     return error.isRetryable === true;
   }
-  // Node/undici 网络层错误 + 超时 + 流中断：可降级
   const code = getErrorCode(error);
   if (code !== undefined) {
     return (
@@ -189,19 +165,13 @@ export class LlmClient {
    * @returns LanguageModel 实例（供 streamText / generateText 使用）
    */
   async getModel(modelId?: string): Promise<LanguageModel> {
-    // 模型配置门禁：未配置任何启用模型时禁止一切 LLM 调用（对话/side-query/分类器）
-    // ——前端不显示配置模型 = 后端不可用，防止"默认模型直连"绕过配置直接调用 API
     if (this.deps.modelGate !== undefined) {
       await this.deps.modelGate();
     }
     const resolved = this.deps.modelRegistry.resolve(modelId);
-    // 停用模型拦截：用户关闭后不可路由（resolve 返回 available=false），
-    // 不得落入"任意 id 透传"兜底继续调用
     if (!resolved.available) {
       throw new AppError(ErrorCode.MODEL_DISABLED, undefined, undefined, { modelId });
     }
-    // 显式传入的 modelId 未注册（非内置条目、非运行时快照）：回退默认供应商透传。
-    // 生产上多为配置错误（拼错模型名），打 warn 便于定位（resolve 本身保持纯函数）。
     if (
       modelId !== undefined &&
       resolved.modelId === modelId &&
@@ -231,15 +201,12 @@ export class LlmClient {
               ...(resolved.explicitBaseUrl !== undefined
                 ? { baseUrl: resolved.explicitBaseUrl }
                 : {}),
-              // 自定义模型的 API 格式（服务商模式为 undefined → 工厂按 kind 默认）
               ...(resolved.apiFormat !== undefined ? { apiFormat: resolved.apiFormat } : {}),
             },
           ]
         : []),
     );
     const model = factory(resolved.modelId);
-    // 统一观测中间件：per-model 缓存 wrapped 实例，agent 主回合 / chat /
-    // side query 的所有调用零改动即可获得耗时与错误的统一打点
     const wrappedModel = wrapLanguageModel({
       model: model as WrapableModel,
       middleware: modelObservabilityMiddleware,
@@ -273,10 +240,7 @@ export class LlmClient {
     try {
       return await this.generateTextOnce(options);
     } catch (error) {
-      // ModelFallback 降级链（对齐 qwen modelConfigResolver 配置级降级语义）：
-      // 可降级错误（5xx / 网络 / 超时）且当前模型不是默认模型 → 降级默认模型重试一次
       const fallbackModel = this.deps.modelRegistry.resolve(undefined).modelId;
-      // 未显式指定模型（undefined = 默认模型）或已是默认模型：降级无意义，直接抛
       if (
         options.model === undefined ||
         options.model === fallbackModel ||
@@ -294,7 +258,6 @@ export class LlmClient {
 
   /** 单模型调用（含重试与遥测；降级链的底层执行单元） */
   private async generateTextOnce(options: LlmGenerateTextOptions): Promise<LlmGenerateTextResult> {
-    // gpt-tokenizer 精确估算 prompt + system（输出预算钳制用）
     const promptTokens =
       estimateTokenCount(options.prompt) +
       (options.system !== undefined ? estimateTokenCount(options.system) : 0);
@@ -377,13 +340,10 @@ export class LlmClient {
     const generationConfig = resolved.generationConfig;
     const model = await this.getModel(resolved.modelId);
 
-    // 总时长超时：模型自带 timeoutMs 优先，全局默认（deps.defaultTimeoutMs）兜底
     const timeout = createTimeoutSignal(
       generationConfig?.timeoutMs ?? this.deps.defaultTimeoutMs ?? DEFAULT_MODEL_TIMEOUT_MS,
     );
-    // 有效信号 = 用户信号 + 模型级超时（超时触发后与用户中断同语义：不重试）
     const effectiveSignal = combineAbortSignals([options.signal, timeout?.signal]);
-    // 重试次数：调用方显式 > 模型级 maxRetries（默认 2 次重试 = 3 次尝试）
     const maxAttempts = options.maxAttempts ?? (generationConfig?.maxRetries ?? 2) + 1;
 
     try {
@@ -403,7 +363,6 @@ export class LlmClient {
         },
       });
     } finally {
-      // 请求结束立即清理超时定时器（无论成功/失败/超时）
       timeout?.clear();
     }
   }

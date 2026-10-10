@@ -1,6 +1,3 @@
-// src/renderer/lib/app-actions.test.ts
-// App shell IPC bridge: no-bridge / success / unwrap failure
-
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { fetchAppInfo, openDataDir, openExternal, quitApp } from './app-actions';

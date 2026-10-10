@@ -1,27 +1,4 @@
-// src/main/infra/ai/agent/workflow-service.ts
-// 工作流编排：多步骤计划执行 + 预算软闸 + 执行日志（对齐 qwen workflow 域语义收敛）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - WorkflowRun：目标驱动的步骤序列容器（status 状态机）
-// - 步骤生命周期：pending → running → completed / failed（见 WorkflowStepStatus）
-// - 预算：步骤数软闸（isBudgetExhausted）；日志：执行轨迹（journal）
-// - runWorkflow：串行编排——逐步委派子代理，前一步产出注入下一步上下文
-//   （与 TeamService 的并行独立委派互补：workflow 面向依赖链任务）
-//
-// 现状（勿套用其他服务先例）：
-// - 纯内存编排：runs 存实例 Map，跨重启丢失；持久化是独立后置项，尚未实施
-//   （对比 task-service 已落 tasks 表、记忆引擎已落 userData/memory-hub）
-// - 非 ServiceContainer accessor：仅 run_workflow 工具经模块级单例调用
-//
-// 借鉴声明：
-// 本模块参考 qwen-code 参考项目 packages/core/src/agents/runtime/
-// workflow-orchestrator.ts + workflow-budget.ts + workflow-journal.ts
 // （Copyright 2026 Qwen Team，SPDX-License-Identifier: Apache-2.0）的
-// 编排语义，按我们的技术栈收敛重写：
-// - 移除沙箱/脚本执行/快照/存续恢复（强耦合 qwen 沙箱体系，桌面端由会话持久化覆盖）
-// - 保留核心语义：步骤状态机 + 预算软闸 + 执行日志
-// - 收敛为内存编排（持久化后置，见上「现状」）
-// ──────────────────────────────────────────────────────────────
 
 import { randomUUID } from 'node:crypto';
 import { logger } from '../../../utils/logger';
@@ -334,22 +311,19 @@ export class WorkflowService {
     let halted = false;
 
     for (const step of steps) {
-      // 父回合中断 → 取消工作流，剩余步骤计入 skipped
       if (options?.abortSignal?.aborted === true) {
         this.addJournal(runId, `中断取消：剩余 ${steps.length - results.length} 步未执行`);
         this.cancel(runId);
         return this.buildResult(runId, results, steps.length);
       }
-      // 预算软闸：剩余步骤跳过（软闸不抛错，journal 留痕）
       if (this.isBudgetExhausted(runId)) {
         this.addJournal(runId, `预算耗尽：剩余 ${steps.length - results.length} 步未执行`);
         break;
       }
       const stepId = this.addStep(runId, step.name);
       if (stepId === null) {
-        break; // 工作流已终端（防御：正常路径不会到达）
+        break;
       }
-      // 上一步产出注入下一步任务（截断；失败信息同样传递供后续步骤感知）
       const taskText =
         prevOutput !== null
           ? `${step.task}\n\n【上一步产出】\n${prevOutput.slice(0, PREV_OUTPUT_INJECT_LIMIT)}`
@@ -359,7 +333,6 @@ export class WorkflowService {
       this.startStep(runId, stepId);
       try {
         const result = await manager.run(agent, taskText, workingDir);
-        // journal/output 只存 300 字符摘要；results 保留完整产出（供工具展示）
         this.completeStep(runId, stepId, result.output.trim().slice(0, 300));
         results.push({
           name: step.name,
@@ -368,7 +341,6 @@ export class WorkflowService {
           output: result.output,
           durationMs: result.durationMs,
         });
-        // prevOutput 用完整产出（注入时再截断），供下一步拼接
         prevOutput = result.output.trim();
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
@@ -386,13 +358,10 @@ export class WorkflowService {
           halted = true;
           break;
         }
-        // continue：失败信息作为「上一步产出」注入下一步
         prevOutput = `步骤 ${step.name} 失败：${message}`;
       }
     }
 
-    // 收尾（halt 路径已在循环内 fail；此处处理正常完成 / continue 带失败）
-    // 预算软闸内全部成功视为正常完成（skipped 步骤经 journal 与结果计数体现）
     if (!halted) {
       const run = this.requireRun(runId);
       if (!TERMINAL_STATUSES.includes(run.status)) {
@@ -451,7 +420,6 @@ export class WorkflowService {
     if (step === undefined) {
       throw new Error(`步骤不存在：${stepId}`);
     }
-    // 终端步骤锁定（completed/failed 不可再变）
     if (step.status === WorkflowStepStatus.COMPLETED || step.status === WorkflowStepStatus.FAILED) {
       return;
     }

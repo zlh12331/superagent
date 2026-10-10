@@ -1,17 +1,3 @@
-// src/main/infra/storage/telemetry-pref.ts
-// 遥测级别用户偏好存储（非加密，明文 JSON）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 同步读写 userData/telemetry-pref.json（initTelemetry 在 whenReady 之前读取，需同步）
-// - 三档：off / error-only / full
-// - 默认 full（Sentry 已于 2026-09-13 移除；OTel 未配置 OTLP 端点时本身不外发）
-//
-// 与 keychain.ts 的区别：
-// - keychain.ts：加密存储敏感数据（API Key），异步 API
-// - telemetry-pref.ts：明文存储用户偏好，同步 API
-//   因为 OTel 初始化（读偏好）在 app.whenReady() 之前，需同步读取
-// ──────────────────────────────────────────────────────────────
-
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { TelemetryLevel } from '@code-agent/shared/main';
@@ -53,7 +39,6 @@ export function readTelemetryLevelSync(): TelemetryLevel {
     }
     return DEFAULT_LEVEL;
   } catch {
-    // 任何错误（文件不存在/JSON 解析失败/权限问题）都返回默认值
     return DEFAULT_LEVEL;
   }
 }
@@ -71,7 +56,5 @@ export async function writeTelemetryLevel(level: TelemetryLevel): Promise<void> 
     mkdirSync(dir, { recursive: true });
   }
   const pref: TelemetryPref = { level };
-  // 安全修复：mode 在文件创建时即生效——此前先以默认 0644 落盘再 chmod，
-  // 存在其他进程读到明文偏好的窗口期（Windows 忽略 mode，无副作用）
   writeFileSync(path, JSON.stringify(pref, null, 2), { encoding: 'utf8', mode: 0o600 });
 }

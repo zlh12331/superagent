@@ -1,13 +1,3 @@
-// src/main/infra/ai/agent/agent-ask-service.test.ts
-// AgentAskService 单测：提问推送/响应/超时/销毁守卫（ask_user_question 闭环核心）
-//
-// 测试要点：
-// 1. ask 推送 payload（sessionId/askId/questions）经 emitEvent 统一出口
-// 2. respond 匹配 pending → 回答返回；未匹配 → false
-// 3. webContents 已销毁 → 立即 resolve null（不挂满 60s 超时）
-// 4. 60s 无响应 → resolve null + pending 清理
-// 5. dispose 清理全部 pending（回合中断不挂起）
-
 import type { AgentAnswer, AgentQuestion } from '@code-agent/shared/main';
 import type { WebContents } from 'electron';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -74,7 +64,6 @@ describe('AgentAskService.ask（提问推送）', () => {
     const service = new AgentAskService();
     const promise = service.ask(makeWebContents(true), [{ question: '谁在？' }], 's1');
 
-    // 未经过 60s 即已 resolve（销毁守卫）
     await expect(promise).resolves.toBeNull();
     expect(service.getPendingCount()).toBe(0);
   });
@@ -96,7 +85,6 @@ describe('AgentAskService.ask（提问推送）', () => {
       askId,
       decision: 'timed-out',
     });
-    // 幂等：再次 expire 不抛错（pending 已清）
     expect(() => service.expireAsk(askId)).not.toThrow();
   });
 

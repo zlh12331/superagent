@@ -1,13 +1,3 @@
-// src/main/infra/ai/agent/repair-tool-call.test.ts
-// repairToolCall 单测：工具入参校验失败时的自动修复行为
-// ──────────────────────────────────────────────────────────────
-// 覆盖：
-// - InvalidToolInputError → 调用 llmClient.generateText 修复，返回修正 toolCall
-// - NoSuchToolError → 不修复，返回 null（工具不存在走 SDK 原逻辑）
-// - 修复输出解析失败 / 修复调用失败 → 返回 null（不阻塞主流程）
-// - extractRepairedToolCallJson：代码块包裹 / 尾随文本 / 非法 JSON 容错
-// ──────────────────────────────────────────────────────────────
-
 import { InvalidToolInputError, NoSuchToolError } from 'ai';
 import { describe, expect, it, vi } from 'vitest';
 

@@ -1,13 +1,3 @@
-// src/renderer/components/layout/Sidebar.test.tsx
-// 侧栏组装层集成测试（正向 / 边界 / 异常）：
-// 五态（loading/error/empty/ready/搜索空态）、会话选择与新建导航、
-// 搜索过滤、置顶标识、tab 计数、加载更多、文件树视图切换
-// ──────────────────────────────────────────────────────────────
-// mock 边界：会话数据域（useSessionsFlat / mutations）、useWorkingDir、
-// 搜索高亮副作用 hook、FileTreePanel（独立域已有自身测试）。
-// thread-item / folder-label / sidebar-account / sidebar-utils 走真实实现。
-// ──────────────────────────────────────────────────────────────
-
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
@@ -28,7 +18,6 @@ const { mockDeleteSession, mockPinSession } = vi.hoisted(() => ({
 const mockQuery = vi.hoisted(() => ({ value: undefined as Record<string, unknown> | undefined }));
 
 vi.mock('@/hooks/use-sessions', () => ({
-  // Sidebar 消费 useSessionsFlat：data 即平铺会话数组
   useSessionsFlat: () =>
     mockQuery.value ?? {
       data: [],
@@ -41,7 +30,6 @@ vi.mock('@/hooks/use-sessions', () => ({
     },
   useDeleteSession: () => ({ mutate: mockDeleteSession, isPending: false }),
   usePinSession: () => ({ mutate: mockPinSession, isPending: false }),
-  // thread-item 内联重命名使用（Sidebar 渲染 thread-item，故必须提供）
   useRenameSession: () => ({ mutateAsync: vi.fn().mockResolvedValue({ data: { ok: true } }) }),
 }));
 vi.mock('@/hooks/use-working-dir', () => ({ useWorkingDir: () => null }));
@@ -84,8 +72,6 @@ function readyQuery(sessions: readonly Record<string, unknown>[], hasNextPage = 
 }
 
 function renderSidebar(): ReturnType<typeof render> {
-  // Sidebar 使用 useNavigate（跳转）且内嵌 SidebarAccount（useTheme）——
-  // 需 Router + ThemeProvider 包裹
   return render(
     <MemoryRouter>
       <ThemeProvider>
@@ -114,7 +100,6 @@ describe('Sidebar · 五态渲染', () => {
       data: undefined,
     };
     renderSidebar();
-    // AsyncBoundary 骨架屏有 200ms 防闪烁延迟，需等待显示
     await waitFor(
       () => expect(document.querySelectorAll('[data-slot="skeleton"]')).toHaveLength(10),
       { timeout: 800 },
@@ -204,7 +189,6 @@ describe('Sidebar · 会话交互', () => {
     const user = userEvent.setup();
     renderSidebar();
 
-    // 打开行操作菜单 → 删除会话
     await user.click(screen.getByLabelText(t('sidebar.sessionActions')));
     await user.click(await screen.findByText(t('sidebar.deleteSession')));
 

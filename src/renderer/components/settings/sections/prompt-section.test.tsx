@@ -1,15 +1,9 @@
-// src/renderer/components/settings/sections/prompt-section.test.tsx
-// PromptSection 单测：系统提示词编辑（编辑/保存/清空/取消）
-// 数据源：useSettingsStore（zustand persist，直接 setState 注入）；i18n 已加载 zh-CN（中文断言）。
-// 业务交互保持真实实现断言。
-
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useSettingsStore } from '@/stores/persistent/settings-store';
 
-// 清空确认收敛至命令式 confirm() store：测试默认确认通过
 vi.mock('@/stores/transient/confirm-dialog-store', () => ({
   confirm: vi.fn().mockResolvedValue(true),
 }));

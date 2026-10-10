@@ -1,5 +1,3 @@
-// src/renderer/components/settings/sections/general-section.test.tsx
-// GeneralSection 测试：语言切换（i18n + SQLite 写穿透双写）与子区块组合
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -50,8 +48,6 @@ describe('GeneralSection', () => {
 
   it('边界：当前语言项带选中勾选（zh-CN 时简体中文高亮）', () => {
     renderWithQuery(<GeneralSection drawerOpen={false} />);
-    // 两个语言项都渲染；当前项应带 Check 图标（以按钮内 svg 数量区分过脆，
-    // 这里只断言两项都存在且可点击）
     expect(screen.getByRole('button', { name: /简体中文/ })).toBeDefined();
     expect(screen.getByRole('button', { name: /English/ })).toBeDefined();
   });

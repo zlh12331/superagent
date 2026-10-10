@@ -1,6 +1,3 @@
-// scripts/lib/function-metrics.test.ts
-// 函数度量单测：形参计数（解构不再豁免）。函数体行数已于 2026-09-15 迁移
-// Biome noExcessiveLinesPerFunction，相关度量与单测随之退役。
 import { describe, expect, it } from 'vitest';
 import { countParams, scanFunctions, splitTopLevelParams, stripGenerics } from './function-metrics';
 
@@ -105,7 +102,6 @@ describe('scanFunctions', () => {
   it('对象字面量方法已被覆盖（2026-09-08 补 class/对象方法度量后）', () => {
     const source = 'const handlers = {\n  snapshot(a, b, c, d, e, f) {\n    return 1;\n  },\n};';
     const fns = scanFunctions(source);
-    // 对象字面量方法形参与 class 方法同形，现已被 METHOD_RE 覆盖
     expect(fns.map((f) => [f.name, f.params])).toEqual([['snapshot', 6]]);
   });
 

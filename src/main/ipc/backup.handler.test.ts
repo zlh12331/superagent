@@ -1,10 +1,3 @@
-// src/main/ipc/backup.handler.test.ts
-// backup.handler 单测（37 号 B）：守卫与转发（三件套）
-// ──────────────────────────────────────────────────────────────
-// 测试策略：backup-store 与 db 以 vi.mock 注入 fake（真实 fs 语义在
-// backup-store.test.ts 覆盖）；此处只断言 handler 的守卫与转发契约。
-// ──────────────────────────────────────────────────────────────
-
 import type { BackupEntry } from '@code-agent/shared/main';
 import { ErrorCode } from '@code-agent/shared/main';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -73,7 +66,6 @@ describe('backup.handler（37-B）', () => {
 
     expect(res).toEqual({ ok: true });
     expect(mocks.stageRestore).toHaveBeenCalledWith('C:\\data\\sessions.db', 'sessions-a.db');
-    // relaunch/quit 在 setImmediate 中（先让 IPC ack 回渲染层）
     await new Promise((resolve) => setImmediate(resolve));
     expect(mocks.relaunch).toHaveBeenCalledOnce();
     expect(mocks.quit).toHaveBeenCalledOnce();

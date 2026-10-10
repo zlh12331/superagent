@@ -1,21 +1,4 @@
-// src/main/infra/ai/agent/team-service.ts
-// 团队协作：多代理并行委派 + 结果汇总（对齐 qwen team 语义收敛）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 并行委派多个成员子代理（复用 SubagentManager.run）
-// - 结果汇总（每个成员输出 + 状态）+ 失败隔离（单成员失败不阻断团队）
-//
-// 借鉴声明：
-// 本模块参考 qwen-code 参考项目 packages/core/src/agents/team/
 // （Copyright 2025 Qwen，SPDX-License-Identifier: Apache-2.0）的
-// TeamManager（团队协调）+ team-events（成员事件）语义，按我们的技术栈
-// 收敛重写：
-// - 移除 mailbox / identity / leaderPermissionBridge（qwen 专有消息总线，
-//   强耦合不搬运；我们的 onTurnEvent 总线按 sessionId 过滤已保证并发隔离）
-// - 收敛为"领导委派 → 成员并行执行 → 结构化汇总"（领导汇总后置）
-//
-// 入口：run_team 工具（src/main/infra/ai/tools/run-team.tool.ts）调用 runTeam。
-// ──────────────────────────────────────────────────────────────
 
 import { logger } from '../../../utils/logger';
 import { getSubagentManager, type SubagentManager } from './subagent-manager';
@@ -99,7 +82,6 @@ export class TeamService {
             durationMs: result.durationMs,
           } satisfies TeamMemberResult;
         } catch (err: unknown) {
-          // 失败隔离：记录错误不阻断团队
           logger.warn({ agent: member.agent, error: err }, '团队成员执行失败');
           return {
             agent: member.agent,
@@ -112,7 +94,6 @@ export class TeamService {
       }),
     );
 
-    // leader 汇总：成员结果序列化 → 领导子代理聚合回合
     let leaderSummary: string | null = null;
     if (leader !== undefined) {
       leaderSummary = await this.runLeaderSummary(leader.agent ?? 'general', results, workingDir);
@@ -138,7 +119,6 @@ export class TeamService {
     workingDir: string,
   ): Promise<string> {
     const manager = this.manager ?? getSubagentManager();
-    // 成员结果序列化（给领导子代理的结构化输入）
     const serialized = members
       .map((m) => `【${m.agent}】${m.success ? '成功' : '失败'}\n${m.output.trim().slice(0, 1500)}`)
       .join('\n\n');

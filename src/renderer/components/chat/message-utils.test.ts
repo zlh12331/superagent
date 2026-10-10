@@ -1,6 +1,3 @@
-// src/renderer/components/chat/message-utils.test.ts
-// 工具卡展示纯函数测试（状态映射 / JSON 格式化）——无 DOM 依赖高杠杆
-// extractText 的测试已随实现迁至 lib/chat/message-text.test.ts（2026-09-15）
 import type { TFunction } from 'i18next';
 
 import { describe, expect, it, vi } from 'vitest';
@@ -51,8 +48,6 @@ describe('mapToolStateToStatusClass', () => {
 });
 
 describe('状态映射表完整性（单一真源不变量）', () => {
-  // label 与 class 收敛到同一张 Record 后，两条映射必须对**每个** ToolCallState
-  // 都给出一致的分组（此前是两条平行 if 阶梯，新增状态只改一处会静默漂移）。
   const AllStates = [
     'input-streaming',
     'input-available',
@@ -94,13 +89,12 @@ describe('formatJson', () => {
     const big = { data: 'x'.repeat(500) };
     const result = formatJson(big, mockT);
     expect(result.length).toBeGreaterThan(200);
-    expect(result).toContain('\n…chat.truncatedJson'); // mockT 返回 key
+    expect(result).toContain('\n…chat.truncatedJson');
     expect(result.slice(0, 200)).toBe(JSON.stringify(big, null, 2).slice(0, 200));
   });
   it('循环引用（JSON.stringify 抛错）→ String(value)', () => {
     const circular: Record<string, unknown> = {};
     circular['self'] = circular;
-    // String(circular) 会转 'self' 循环——此处只需验证不抛错且返回字符串
     expect(() => formatJson(circular, mockT)).not.toThrow();
   });
 });

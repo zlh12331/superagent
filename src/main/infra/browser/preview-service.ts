@@ -1,26 +1,3 @@
-// src/main/infra/browser/preview-service.ts
-// 浏览器预览服务：主进程 WebContentsView 承载右面板「浏览器」tab 的页面预览
-// ──────────────────────────────────────────────────────────────
-// 为什么不用渲染层 iframe（v1 方案）：
-// - 主进程对 defaultSession 统一注入 CSP/X-Frame-Options（src/main/index.ts +
-//   src/main/security/csp.ts），onHeadersReceived 对会话内所有响应生效：
-//   ① CSP 无 frame-src → 回退 default-src 'self'，跨源 iframe 被嵌侧拦截；
-//   ② X-Frame-Options 被注入到远端响应本身（DENY/SAMEORIGIN），远端文档拒绝被嵌；
-//   ③ 注入的严格 CSP 污染远端文档（script-src/connect-src 全被限死）。
-//   三层叠加 ⇒ v1 在生产环境加载不了任何真实网页（jsdom 测试测不出）。
-// - v2：WebContentsView + 独立内存 session 分区（'browser-preview'），不在
-//   defaultSession 注入作用域内；sandbox/contextIsolation 开齐，权限/下载/弹窗全拒。
-//
-// 职责边界（与渲染层分工）：
-// - 渲染层：工具栏 UI、地址/历史展示状态、占位区测量 + 设备预设/缩放几何计算
-//   （browser-geometry.ts）→ browser:setViewport 推送矩形/缩放/可见性
-// - 本服务：视图生命周期（懒创建/保活/销毁）、setBounds/setZoomFactor 落地、
-//   webContents 事件收敛为 browser:event:state / browser:event:loadFailed 广播
-//
-// 页面保活策略：切 tab/折叠面板只 setVisible(false)，不销毁视图——切回时页面
-// 状态（滚动/表单/SPA 路由）原样保留；销毁仅发生在严格模式切换重建与退出清理。
-// ──────────────────────────────────────────────────────────────
-
 import {
   type BrowserConfigureReq,
   type BrowserNavigateReq,
@@ -79,9 +56,7 @@ let previewSessionConfigured = false;
 function ensurePreviewSession(): void {
   if (previewSessionConfigured) return;
   const ses = session.fromPartition(PREVIEW_PARTITION);
-  // 权限（摄像头/定位/通知/剪贴板读取等）一律拒绝：预览 pane 无需任何特权 API
   ses.setPermissionCheckHandler(() => false);
-  // 下载一律取消：预览 pane 不承担下载管理
   ses.on('will-download', (event) => {
     event.preventDefault();
   });
@@ -97,7 +72,6 @@ function createNativeView(options: { readonly javascript: boolean }): WebContent
       sandbox: true,
       contextIsolation: true,
       nodeIntegration: false,
-      // 严格沙箱：预览页 JS 整体禁用（远端代码无法运行；代价：SPA 渲染为静态骨架）
       ...(options.javascript ? {} : { javascript: false }),
     },
   });
@@ -133,7 +107,6 @@ export class BrowserPreviewService implements IBrowserPreviewService {
 
   /** @inheritDoc */
   async navigate(input: BrowserNavigateReq): Promise<{ ok: boolean }> {
-    // 双保险：定义表 zod 已拦一次；服务层自校验防绕过（直接调用服务的方法）
     if (!/^https?:\/\//i.test(input.url)) {
       throw new Error(`浏览器预览仅支持 http/https 地址：${input.url}`);
     }
@@ -141,7 +114,6 @@ export class BrowserPreviewService implements IBrowserPreviewService {
     if (view === null) {
       return { ok: false };
     }
-    // 不 await：慢站点不应阻塞 IPC 响应；主框架失败由 did-fail-load 推送
     void view.webContents.loadURL(input.url).catch(() => {});
     return { ok: true };
   }
@@ -191,7 +163,6 @@ export class BrowserPreviewService implements IBrowserPreviewService {
     this.strictSandbox = input.strictSandbox;
     const currentUrl = this.view?.webContents.getURL() ?? null;
     this.destroyView();
-    // 重建后回放几何与 URL：调用方（设置页）无需感知视图重建
     const view = this.ensureView();
     if (view !== null && currentUrl !== null && currentUrl !== '') {
       void view.webContents.loadURL(currentUrl).catch(() => {});
@@ -243,7 +214,6 @@ export class BrowserPreviewService implements IBrowserPreviewService {
 
   /** webContents 事件收敛：导航/加载/标题 → state 广播；主框架失败 → loadFailed 广播 */
   private wireWebContents(wc: WebContents): void {
-    // 预览页内 window.open/target=_blank：拒绝二级窗口，http(s) 转交系统浏览器
     wc.setWindowOpenHandler(({ url }) => {
       if (/^https?:\/\//i.test(url)) {
         void shell.openExternal(url);
@@ -259,7 +229,6 @@ export class BrowserPreviewService implements IBrowserPreviewService {
     wc.on('did-navigate-in-page', emitState);
     wc.on('page-title-updated', emitState);
     wc.on('did-fail-load', (_event, errorCode, errorDescription, validatedUrl, isMainFrame) => {
-      // 子框架失败（广告/统计脚本）不推送给用户
       if (!isMainFrame) return;
       this.broadcast(LOAD_FAILED_EVENT.channel, {
         errorCode,

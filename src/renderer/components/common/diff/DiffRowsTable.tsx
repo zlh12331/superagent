@@ -1,19 +1,3 @@
-// src/renderer/components/common/diff/DiffRowsTable.tsx
-// 自研 diff 双栏表格（2026-09 替换 react-diff-viewer-continued，消除其拖入的语言 chunk 依赖树）
-// ──────────────────────────────────────────────────────────────
-// 数据流：DiffRow 行模型（unified-diff 解析 / diff-rows 文本对装配）
-//   → 单 <table> 分组渲染（unified diff 每 hunk 一个 <tbody>，语义上仍是一张表）
-// 视觉：tokens 语义色（新增 success 混色 / 删除 error 混色 / 行号 text-faint），
-//   对齐既有 diff 行基调（cards.css 的 approval-diff-wrapper 与 FileChangeCard 配方）。
-// 高亮：shiki 按需加载（lib/highlight 单例）——异步为可见行计算 token 着色，
-//   失败/未收录语言一律退化为纯文本（fail-safe，不阻塞首帧）。
-// 词级：wordDiff 开启时，配对的 del/add 行内以 dmp 片段高亮变更词（词级优先于语法色）。
-// 大 diff：行数预算内渲染，超出折叠进「展开更多」按钮（键盘可达的原生 button），
-//   每次展开追加固定行数，避免一次性铺设超大 DOM。
-// a11y：语义 table/th/td；行号列 aria-hidden（读屏顺序读代码内容即可）；
-//   增删标记用真实文本「+/-」而非纯色（FileChangeCard 同款）。
-// ──────────────────────────────────────────────────────────────
-
 import { type ReactElement, useEffect, useState } from 'react';
 import type { BundledLanguage } from 'shiki/bundle/web';
 import type { ThemedToken } from 'shiki/core';
@@ -90,9 +74,8 @@ function CodeContent({
   readonly tokens: readonly ThemedToken[] | undefined;
   readonly segments: readonly WordSegment[] | undefined;
 }): ReactElement {
-  if (text === '') return <span>{'\u200B'}</span>; // 空行保高度
+  if (text === '') return <span>{'\u200B'}</span>;
   if (segments !== undefined) {
-    // key 用片段在行内的起始偏移（顺序拼接，天然唯一且语义稳定）
     let segOffset = 0;
     return (
       <>
@@ -112,7 +95,6 @@ function CodeContent({
     return (
       <>
         {tokens.map((token) => (
-          // shiki token 的 offset 为行内起始偏移（唯一）；输出为已转义文本 + 主题色
           <span key={token.offset} style={{ color: token.color }}>
             {token.content}
           </span>
@@ -147,13 +129,11 @@ function DiffSideCells({
   const number = side === 'old' ? row.oldNumber : row.newNumber;
   return (
     <>
-      {/* 行号冗余于读屏（代码顺序可读），aria-hidden 避免逐行念数字 */}
       <td className="diff-gutter" aria-hidden="true">
         {number}
       </td>
       <td className={cn('diff-code', rowToneClass(row.type))}>
         {row.type !== 'context' && (
-          // 增删标记：真实文本（读屏可感知）， FileChangeCard 同款语义
           <span className="diff-marker" aria-hidden="true">
             {row.type === 'add' ? '+' : '-'}
           </span>
@@ -205,10 +185,8 @@ export function DiffRowsTable({
   const [tokenLines, setTokenLines] = useState<readonly (readonly ThemedToken[])[] | null>(null);
   const limit = INITIAL_VISIBLE_ROWS + revealed * EXPAND_ROWS;
 
-  // 预算分配：按组序消费行数预算，末组可截断（后续组整体折叠）
   const { visibleGroups, hiddenCount } = allocateVisibleGroups(rowGroups, limit);
 
-  // 可见行的平铺文本（shiki 逐行 token 与可见行顺序 1:1 对应）
   const visibleText = visibleGroups.map((g) => g.map((r) => r.text).join('\n')).join('\n');
 
   useEffect(() => {
@@ -230,7 +208,6 @@ export function DiffRowsTable({
   return (
     <div className="diff-table-wrap" data-lang={lang}>
       <table className="diff-table">
-        {/* 固定布局下的列宽（双栏各半），保证增删行左右垂直对齐 */}
         <colgroup>
           <col className="diff-col-gutter" />
           <col className="diff-col-code" />
@@ -253,7 +230,6 @@ export function DiffRowsTable({
           <tbody key={tbodyKey(group)}>
             {group.map((row, ri) => (
               <DiffLineRow
-                // 双侧行号组合在组内天然唯一（del/add/context 行号均严格递增）
                 key={`${row.oldNumber}-${row.newNumber}`}
                 row={row}
                 prev={ri > 0 ? group[ri - 1] : undefined}
@@ -266,7 +242,6 @@ export function DiffRowsTable({
         ))}
       </table>
       {hiddenCount > 0 && (
-        // 折叠展开控件：Button 保证键盘可达（Enter/Space 触发）；密度由 .diff-more 收敛
         <Button
           type="button"
           variant="ghost"
@@ -335,8 +310,6 @@ async function computeTokenLines(
     const h = await getHighlighter();
     await ensureLangLoaded(h, lang);
     const { tokens } = h.codeToTokens(text, {
-      // lang 经 normalizeLang 收敛到「预载 ∪ 延迟表」内 canonical id，
-      // ensureLangLoaded 已确保加载；codeToTokens 的形参类型比运行时窄，此处收窄对齐
       lang: lang as BundledLanguage,
       theme: dark ? 'github-dark' : 'github-light',
     });

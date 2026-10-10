@@ -1,20 +1,3 @@
-// src/main/infra/telemetry/sdk-telemetry.ts
-// AI SDK 遥测 → OTel span 轻量 integration（模型调用级）
-// ──────────────────────────────────────────────────────────────
-// 覆盖粒度分工（避免重复埋点）：
-// - 回合级：agent-service withSpan('agent.streamText')（已存在）
-// - 工具级：ToolExecutor withSpan('tool.execute')（已存在）
-// - 模型级：本 integration —— 补上"单次 LLM 调用"粒度
-//   （provider / modelId / latency / usage / finishReason）
-//
-// 父子关系：withSpan 使用 startActiveSpan 激活 context，AI SDK 的事件回调
-// 在 streamText 的 async 链路上触发时继承 active context，本 integration
-// 用 tracer.startSpan 创建的模型 span 自动成为回合 span 的子 span。
-//
-// 安全：不记录 prompt / 输出内容（recordInputs/Outputs 不开启），
-// 对齐项目"错误脱敏"原则，避免敏感上下文进入遥测。
-// ──────────────────────────────────────────────────────────────
-
 import type { Span } from '@opentelemetry/api';
 import type { Telemetry as AiTelemetry } from 'ai';
 

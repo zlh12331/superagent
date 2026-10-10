@@ -1,5 +1,3 @@
-// scripts/lib/changelog-polish.test.ts
-// CHANGELOG 润色判定单测（fixture 取自真实 CHANGELOG.md 的机器原文形态）
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -66,10 +64,8 @@ describe('parseVersionSections', () => {
   it('正向：解析多版本段的版本号与行区间', () => {
     const sections = parseVersionSections(MULTI_VERSION);
     expect(sections.map((s) => s.version)).toEqual(['1.2.0', '1.1.1', '1.1.0']);
-    // 首段从标题行开始，止于下一段标题行（endLine 为不含的上界）
     expect(sections[0]?.startLine).toBe(2);
     expect(sections[0]?.endLine).toBe(8);
-    // 末段延伸至文件末尾
     expect(sections[2]?.endLine).toBe(MULTI_VERSION.split('\n').length);
   });
 

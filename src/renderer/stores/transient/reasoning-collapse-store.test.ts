@@ -1,6 +1,3 @@
-// src/renderer/stores/transient/reasoning-collapse-store.test.ts
-// 折叠态覆盖 store（纯状态逻辑，无 mock）
-
 import { beforeEach, describe, expect, it } from 'vitest';
 import { useReasoningCollapseStore } from './reasoning-collapse-store';
 

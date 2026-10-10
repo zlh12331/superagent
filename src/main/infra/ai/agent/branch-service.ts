@@ -1,21 +1,4 @@
-// src/main/infra/ai/agent/branch-service.ts
-// 会话分支：回退（rewind）分支分类与记录（对齐 qwen conversation-branches 语义收敛）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 分支分类纯函数：给定 turn 的父链关系 → ordinary / rewind-descendant / rewind-sibling / mixed-rewind
-// - 会话级分支记录（内存，会话运行时结构）
-//
-// 现状：BranchService 尚无生产调用方（仅单测使用）；会话持久化模型当前为线性
-// （schema.ts 的 turns 表无 parent 字段），故本模块是回退能力的预留地基，
-// 待会话模型引入 parent 关系时接入。勿据此注释假定已接入回合流程。
-//
-// 借鉴声明：
-// 本模块参考 qwen-code 参考项目 packages/core/src/utils/conversation-branches.ts
 // （Copyright 2026 Qwen Team，SPDX-License-Identifier: Apache-2.0）的
-// rewind 分支分类语义，按我们的技术栈收敛重写：
-// - 移除 ChatRecord 森林分析（强耦合聊天记录模型，桌面端会话线性 + 回退预留）
-// - 保留核心分类：ordinary / rewind-descendant / rewind-sibling / mixed-rewind
-// ──────────────────────────────────────────────────────────────
 
 /** 分支分类（四值互斥，判定优先级见 classifyBranch） */
 export type BranchClassification =

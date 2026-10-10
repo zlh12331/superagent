@@ -1,7 +1,3 @@
-// src/renderer/lib/theme-init.test.ts
-// theme-init 单测：FOUC 防护的初始主题应用
-// 直接操作 jsdom 的 localStorage / document.documentElement.classList 验证。
-
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import {
@@ -61,7 +57,6 @@ describe('resolveSystemTheme', () => {
 
 describe('applyInitialTheme', () => {
   beforeEach(() => {
-    // 重置 localStorage 与 .dark class，避免用例间污染
     window.localStorage.clear();
     document.documentElement.classList.remove('dark');
     mockSystemDark(false);

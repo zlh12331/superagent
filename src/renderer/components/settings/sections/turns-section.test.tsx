@@ -1,16 +1,3 @@
-// src/renderer/components/$1/turns-section.test.tsx
-// 回合记录区块测试（正向 / 边界 / 异常）
-// ──────────────────────────────────────────────────────────────
-// 覆盖动机：该文件此前 0% 覆盖（本轮覆盖率排查中确认）。它是「设置 → 用量」里
-// 的回合记录面板，四态（加载/错误/空/有数据）与状态文案映射此前无任何回归锚。
-//
-// 重点关注：
-// 1. 查询契约（limit 10）
-// 2. 四态分派 + 错误态可重试（此前历史上 error 被静默渲染成空态）
-// 3. turn 状态 → 本地化文案映射（含未知状态兜底）
-// 4. 元信息拼接：tokens / 秒数（本轮刚从模板字面量改为 i18n）
-// ──────────────────────────────────────────────────────────────
-
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
@@ -61,10 +48,8 @@ describe('TurnsSection', () => {
 
     await waitFor(() => expect(screen.getByText('deepseek-chat')).toBeDefined());
     expect(screen.getByText('#1')).toBeDefined();
-    // 状态与元信息同处一个 span（多个文本节点），故按行内容断言
     const row = screen.getByText('deepseek-chat').closest('li')?.textContent ?? '';
     expect(row).toContain(i18n.t('settings.turnStatusCompleted'));
-    // 元信息：tokens 与秒数走 i18n（3.4s → 3s）
     expect(row).toContain(i18n.t('chat.turnMetaTokens', { count: 1200 }));
     expect(row).toContain(i18n.t('chat.turnMetaDuration', { seconds: 3 }));
   });
@@ -129,7 +114,6 @@ describe('TurnsSection', () => {
     setupApi(async () => ({ error: { code: 'TURNS_FAILED', message: 'boom' } }));
     renderSection();
 
-    // unwrapErrorMessage 统一解析：未知码回退 i18n key，不再直出原始 message
     await waitFor(() => expect(screen.getByRole('alert')).toBeDefined());
     const all = document.body.textContent ?? '';
     expect(all).toContain('errors.TURNS_FAILED');

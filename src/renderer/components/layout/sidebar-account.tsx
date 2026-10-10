@@ -1,16 +1,3 @@
-// src/renderer/components/layout/sidebar-account.tsx
-// 侧栏底部账户触发器 + 下拉菜单（对齐参考项目 SidebarAccountSection + 原型 .account-trigger）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 固定在侧栏底部的账户触发器（头像 + 名称），点击展开下拉
-// - 下拉项（2026-09-04 重设计，共 4 项）：
-//   - 设置：打开全屏设置（与 Topbar 共用 ui-store.openSettings）
-//   - 语言 ▸：子菜单简体中文/English（changeLanguage 即时生效，持久化到 settings-store）
-//   - 主题 ▸：子菜单亮色/暗色/跟随系统（settings-store 持久化）
-//   - 报告问题：打开 GitHub issues 页（app.openExternal，真实仓库地址）
-// - 本地模式（local-user）：无真实登录后端，仅展示本地标识
-// ──────────────────────────────────────────────────────────────
-
 import { Check, ExternalLink, Languages, Monitor, Moon, Settings, Sun, User } from 'lucide-react';
 import type { ReactElement } from 'react';
 import { Button } from '@/components/ui/button';
@@ -42,7 +29,6 @@ const ISSUES_URL = 'https://github.com/zlh12331/superagent/issues';
 export function SidebarAccount(): ReactElement {
   const { t, i18n } = useTranslation();
   const { theme, setTheme } = useTheme();
-  // 全局 UI store：设置对话框入口（与 Topbar 共享）
   const openSettings = useUiStore((state) => state.openSettings);
 
   /** 当前语言（i18n.language 可能为 'en-US' 等扩展码，归一为 'en'） */
@@ -56,9 +42,7 @@ export function SidebarAccount(): ReactElement {
 
   /** 报告问题：打开 GitHub issues（仅 http/https，复用 app:openExternal 安全校验） */
   const handleReportIssue = (): void => {
-    openExternal(ISSUES_URL).catch(() => {
-      // 打开失败静默：非关键路径，用户可重试
-    });
+    openExternal(ISSUES_URL).catch(() => {});
   };
 
   return (
@@ -83,13 +67,11 @@ export function SidebarAccount(): ReactElement {
           <DropdownMenuLabel>{t('sidebar.accountMenu')}</DropdownMenuLabel>
           <DropdownMenuSeparator />
 
-          {/* 设置：打开全屏设置对话框（不带分区 = 落地默认分区） */}
           <DropdownMenuItem onClick={() => openSettings()}>
             <Settings className="size-3.5" />
             {t('topbar.settings')}
           </DropdownMenuItem>
 
-          {/* 语言 ▸：子菜单双语（本地化名，显式展示，不改语言） */}
           <DropdownMenuSub>
             <DropdownMenuSubTrigger>
               <Languages className="size-3.5" />
@@ -109,7 +91,6 @@ export function SidebarAccount(): ReactElement {
             </DropdownMenuSubContent>
           </DropdownMenuSub>
 
-          {/* 主题 ▸：子菜单三选一（当前项 check，选中即时生效） */}
           <DropdownMenuSub>
             <DropdownMenuSubTrigger>
               {theme === 'dark' ? (
@@ -142,7 +123,6 @@ export function SidebarAccount(): ReactElement {
 
           <DropdownMenuSeparator />
 
-          {/* 报告问题：跳转 GitHub issues（AppError 安全校验 http/https） */}
           <DropdownMenuItem onSelect={handleReportIssue}>
             <ExternalLink className="size-3.5" />
             {t('sidebar.reportIssue')}

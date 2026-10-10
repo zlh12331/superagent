@@ -1,17 +1,3 @@
-// src/main/infra/ai/tools/code-symbols.tool.ts
-// code_symbols 工具：解析源文件语法树，列出顶层符号（只读）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 接收 LLM 生成的 path 入参
-// - 通过 path-guard 把路径解析为 workingDir 内的绝对路径
-// - 调用 CodeAnalyzer（web-tree-sitter）提取符号（解析失败降级，不阻塞）
-//
-// 权限：'auto'（只读操作，无副作用，自动执行）
-//
-// 接线说明：CodeAnalyzer 此前建成未接线（实现 + 单测齐全但零生产消费者），
-// 本工具是其唯一生产入口——配合 read_file 使用可先看结构再按行读取，省 token。
-// ──────────────────────────────────────────────────────────────
-
 import { z } from 'zod';
 import { getCodeAnalyzer } from '../../code-analysis/code-analyzer';
 import { t } from '../../i18n';
@@ -36,7 +22,6 @@ export function createCodeSymbolsTool(): Tool<CodeSymbolsInput> {
     permission: 'auto',
     category: 'read',
     execute: async (input: CodeSymbolsInput, ctx: ToolContext): Promise<ToolResult> => {
-      // realTarget：分析器读文件用真实落点（TOCTOU，debt.md#d1）；metadata.path 保持输入形态
       const { resolved, realTarget } = resolveWithinWorkspace(input.path, ctx.workingDir);
       const result = await getCodeAnalyzer().analyze({ path: realTarget });
       if (result.parseFailed) {

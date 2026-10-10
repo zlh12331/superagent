@@ -1,5 +1,3 @@
-// src/main/ipc/browser.handler.test.ts
-// browser.handler 单测：请求转发（fake BrowserPreviewService DI 注入）
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { type BrowserHandlerDeps, createBrowserHandlers } from './browser.handler';

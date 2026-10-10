@@ -1,6 +1,3 @@
-// panel-notice.test.tsx
-// 面板告警条单测：单行/多行排布 / 关闭回调 / 空行不渲染
-// （合并自原 ChatPanel 内联的两条告警条：中断提示 + 历史回显缺口提示）
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -37,14 +34,12 @@ describe('PanelNotice', () => {
 
   it('边界：单行不产生多行列表包装（DOM 语义与合并前一致）', () => {
     const { container } = render(<PanelNotice lines={['单条']} onDismiss={vi.fn()} />);
-    // 单行走 truncate 分支：直接文本节点，无 flex-col 列表容器
     expect(container.querySelector('.flex-col')).toBeNull();
     expect(container.querySelector('.truncate')?.textContent).toBe('单条');
   });
 
   it('无障碍：动态出现的提示带 role=status（读屏可播报）', () => {
     render(<PanelNotice lines={['会话加载后才判定出的缺口']} onDismiss={vi.fn()} />);
-    // 提示是会话加载后异步出现，无 live 语义时读屏不会主动播报
     expect(screen.getByRole('status')).toBeDefined();
   });
 

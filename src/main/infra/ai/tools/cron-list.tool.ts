@@ -1,11 +1,3 @@
-// src/main/infra/ai/tools/cron-list.tool.ts
-// cron_list 工具：列出定时任务（对齐 qwen cron_list 工具语义）
-// ──────────────────────────────────────────────────────────────
-// 设计：
-// - 列出全部定时任务（创建时间倒序），精简展示
-// - permission='auto' / category='read'：只读
-// ──────────────────────────────────────────────────────────────
-
 import { z } from 'zod';
 import { t } from '../../i18n';
 import { cronService } from '../agent/cron-service';

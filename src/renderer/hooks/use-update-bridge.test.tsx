@@ -1,5 +1,3 @@
-// src/renderer/hooks/use-update-bridge.test.tsx
-// use-update-bridge 单测：唯一订阅点（getStatus 快照 + subscribeStatus 事件）
 import { renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -97,7 +95,6 @@ describe('use-update-bridge', () => {
       expect(window.api.update.subscribeStatus).toHaveBeenCalledOnce();
     });
     unmount();
-    // unsubscribe 已调用（subscribe 返回的清理函数生效）
     expect(useUpdateStore.getState().status).toBeNull();
   });
 

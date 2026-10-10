@@ -1,14 +1,3 @@
-// src/main/ipc/dialog.handler.test.ts
-// dialog.handler 单测（定义表驱动模式下直接测 handler 对象）
-//
-// 测试维度：正向 / 边界 / 异常
-//
-// 说明：handler 是纯业务函数（channel/schema 由定义表 + wrap 统一处理），
-// 测试直接调用 dialogHandlers.pickDirectory/pickFiles(input, ctx)，ctx 传入空对象即可。
-//
-// pickFiles 额外覆盖「用户手势授权」登记：对话框返回的选中路径必须进 user-grants，
-// 否则工作区收口后 file:read 会拒绝读取用户自己选的附件（可用性回归）。
-
 import { mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';

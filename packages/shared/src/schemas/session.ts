@@ -1,17 +1,3 @@
-// packages/shared/src/schemas/session.ts
-// 会话域 zod schema 单一真源
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 定义 session:list / get / delete / rename 请求-响应 zod schema
-// - 供主进程 SessionService 校验入参
-//
-// 设计：
-// - SessionService 基于 better-sqlite3 + drizzle-orm 持久化
-// - 表结构：sessions（会话元数据）/ messages（消息历史）/ tool_calls（工具调用记录）
-// - messages 字段为 JSON 数组（完整 ModelMessage 历史），由主进程序列化/反序列化
-// - SessionMetaSchema 是会话元数据，list 接口返回，不包含完整消息历史
-// ──────────────────────────────────────────────────────────────
-
 import { z } from 'zod';
 import type { ChatMessage } from './chat';
 
@@ -33,26 +19,17 @@ export const SessionListReqSchema = z.object({
  * 完整历史通过 session:get 获取。
  */
 export const SessionMetaSchema = z.object({
-  // 会话唯一 id（UUID）
   id: z.string(),
-  // 会话标题（用户可编辑，默认取首条用户消息前 50 字符）
   title: z.string(),
-  // 创建时间（Unix timestamp 毫秒）
   createdAt: z.number().int(),
-  // 最后更新时间（Unix timestamp 毫秒）
   updatedAt: z.number().int(),
-  // 最后一条用户消息预览（前 100 字符，用于列表展示）
   lastMessage: z
     .string()
     .optional()
     .transform((v) => v ?? undefined),
-  // 消息数量
   messageCount: z.number().int().nonnegative(),
-  // 会话级项目工作目录（绝对路径，agent 工具操作边界）
   workingDir: z.string(),
-  // 最近运行状态：idle=空闲，running=进行中，interrupted=异常中断（崩溃恢复识别）
   lastRunStatus: z.enum(['idle', 'running', 'interrupted']).default('idle'),
-  // 是否置顶（对齐参考项目 pinned-header 分组）
   pinned: z.boolean().default(false),
 });
 
@@ -120,7 +97,6 @@ export interface SessionClearAllRes {
 /** session:rename 入参 zod schema */
 export const SessionRenameReqSchema = z.object({
   id: z.string().min(1),
-  // 新标题（1-100 字符）
   title: z.string().min(1).max(100),
 });
 
@@ -142,9 +118,7 @@ export interface SessionPinRes {
 
 /** session:create 入参 zod schema */
 export const SessionCreateReqSchema = z.object({
-  // 项目工作目录（绝对路径，非空字符串）
   workingDir: z.string().min(1),
-  // 可选标题（省略时由 SessionService 自动生成）
   title: z.string().min(1).max(100).optional(),
 });
 
@@ -244,13 +218,11 @@ export interface SessionRecentTurnsRes {
 
 /** session:getRecentTurns 入参 zod schema */
 export const SessionGetRecentTurnsReqSchema = z.object({
-  // 返回条数上限（默认 10，上限 50）
   limit: z.number().int().positive().max(50).default(10),
 });
 
 /** session:listRecentDirs 入参 zod schema */
 export const SessionListRecentDirsReqSchema = z.object({
-  // 返回条数上限（默认 10，上限 50）
   limit: z.number().int().positive().max(50).default(10),
 });
 
@@ -279,8 +251,6 @@ export const SessionGetTurnMessagesReqSchema = z.object({
 export interface SessionGetTurnMessagesRes {
   readonly messages: readonly ChatMessage[];
 }
-
-// ── 响应契约 zod schema（R3：补齐全域 resSchema，防 handler 返回结构漂移） ──
 
 /** session:get 响应 schema */
 export const SessionGetResSchema = z.object({
@@ -426,10 +396,6 @@ export const SessionCompactResSchema = z.object({
   reclaimedTokens: z.number().int().nonnegative(),
   messages: z.array(z.unknown()),
 });
-
-// ── 会话导出文件格式（版本化，数据资产可迁移） ──────────────────────
-// SessionExportFileSchema 是导出文件的唯一契约真源：导出侧（SessionService.exportAll）
-// 按它产出，导入侧（session:import）按它校验——仅接受当前版本，无野外旧格式兼容。
 
 /** 当前会话导出文件格式版本（导入侧仅接受本版本） */
 export const SESSION_EXPORT_VERSION = 1;

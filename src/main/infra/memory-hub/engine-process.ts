@@ -1,17 +1,3 @@
-// src/main/infra/memory-hub/engine-process.ts
-// 记忆引擎子进程启动器（Electron utilityProcess 实现 + 句柄契约）
-// ──────────────────────────────────────────────────────────────
-// 职责：把引擎子进程拉起来，暴露最小句柄（pid / stderr 尾巴 / 退出回调 / 终止）。
-//   健康检查与配置生成仍在 MemoryHubService（职责单一）。
-//
-// 启动方式：Electron utilityProcess.fork（官方后台 Node 子进程 API）。
-//   经模块路径 + 参数数组启动，无 shell 参与；launcherPath 由本进程生成，
-//   execArgv 为模块级冻结常量，环境变量由调用方以固定键名构造。
-//
-// 访问方式：可指定 Electron 官方 helper（macOS 上经 Helper(Plugin) 可加载未签名
-//   原生库）——由 allowLoadingUnsignedLibraries 控制，默认关闭。
-// ──────────────────────────────────────────────────────────────
-
 import { utilityProcess } from 'electron';
 import { logger } from '../../utils/logger';
 import { buildEngineEnv } from './engine-env';

@@ -1,11 +1,3 @@
-// src/main/infra/im/adapters/feishu-stream-receiver.test.ts
-// FeishuStreamReceiver 单测：飞书长连接接收器（正向/边界/异常三件套）
-// ──────────────────────────────────────────────────────────────
-// 测试策略（遵循"业务逻辑不 mock、外部依赖注入 fake"）：
-// - EventDispatcherCtor / WSClientCtor 经构造注入 fake（SDK 外部依赖）
-// - register 回调捕获后手动触发，验证事件分发到订阅者
-// ──────────────────────────────────────────────────────────────
-
 import { describe, expect, it, vi } from 'vitest';
 import { FeishuStreamReceiver } from './feishu-stream';
 

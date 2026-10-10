@@ -1,24 +1,3 @@
-// src/main/infra/ai/mcp/mcp-service.ts
-// MCPService：管理多个 MCP server 的连接 + 工具注册
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - startServer(config)：启动单个 MCP server，把工具注册到 ToolRegistry
-// - stopServer(name)：停止 MCP server，从 ToolRegistry 注销工具
-// - stopAll()：停止所有 MCP server（用于 dispose）
-// - listServers()：返回所有 server 的运行时状态
-//
-// 启动链：唯一生产入口 = mcp:start IPC handler（mcp.handler 先 validate 后
-// startServer，双重防线）；应用启动不自动恢复 server——运行时状态不持久化，
-// 重启后由用户在设置页再次启动（mcp:list 仅反映本次运行的 Map 状态）。
-//
-// 设计原则：
-// - 单例：ServiceContainer lazy accessor 持有（getMcpService 创建；dispose 走
-//   stopAll + 置 null；setMcpService 供工具注册表重建时替换注入）
-// - 错误隔离：单个 server 启动失败不影响其他 server
-// - 工具命名空间：所有 MCP 工具名以 mcp__ 开头，便于按 server 名批量过滤
-// - 状态追踪：维护 serverName → { client, status, toolNames } 的 Map
-// ──────────────────────────────────────────────────────────────
-
 import {
   AppError,
   ErrorCode,
@@ -99,7 +78,6 @@ export class MCPService implements IMCPService {
   async startServer(config: McpServerConfig): Promise<void> {
     const { name } = config;
 
-    // 重名校验：同名 server 已存在时先停止旧的
     if (this.servers.has(name)) {
       logger.warn({ serverName: name }, 'MCP server 已存在，先停止旧实例');
       await this.stopServer(name);
@@ -114,15 +92,12 @@ export class MCPService implements IMCPService {
     this.servers.set(name, entry);
 
     try {
-      // 启动 MCP server 并完成握手
       await client.connect();
 
-      // 把 server 的工具注册到 ToolRegistry
       const tools = client.listTools();
       const registeredNames: string[] = [];
       for (const descriptor of tools) {
         const adaptedTool = adaptMcpTool(config, descriptor, client.callTool);
-        // 重名保护：若同名工具已注册（如多个 MCP server 工具冲突），跳过并 warn
         if (this.toolRegistry.get(adaptedTool.name) !== undefined) {
           logger.warn(
             { toolName: adaptedTool.name, serverName: name },
@@ -141,13 +116,10 @@ export class MCPService implements IMCPService {
         'MCP server 已启动并注册工具',
       );
     } catch (error) {
-      // 启动失败：保留 entry 以记录错误状态，便于 listServers 排查
       const message = error instanceof Error ? error.message : String(error);
       entry.status = 'error';
       entry.lastError = message;
       logger.error({ serverName: name, error: message }, 'MCP server 启动失败');
-      // 不重新抛出：单个 server 失败不应阻断其他 server 启动
-      // 调用方可通过 listServers() 查看状态，决定是否重试
     }
   }
 
@@ -155,17 +127,14 @@ export class MCPService implements IMCPService {
   async stopServer(name: string): Promise<void> {
     const entry = this.servers.get(name);
     if (entry === undefined) {
-      // 静默忽略未注册的 server（幂等）
       return;
     }
 
-    // 1. 从 ToolRegistry 注销此 server 注册的所有工具
     for (const toolName of entry.toolNames) {
       this.toolRegistry.unregister(toolName);
     }
     entry.toolNames = [];
 
-    // 2. 关闭 MCP client（终止子进程）
     try {
       await entry.client.close();
       entry.status = entry.status === 'error' ? 'stopped_with_error' : 'stopped';
@@ -176,7 +145,6 @@ export class MCPService implements IMCPService {
       logger.warn({ serverName: name, error: message }, 'MCP server 关闭失败');
     }
 
-    // 3. 从 Map 移除（停止后不再追踪）
     this.servers.delete(name);
   }
 
@@ -188,7 +156,6 @@ export class MCPService implements IMCPService {
     }
     logger.info({ count: names.length }, '正在停止所有 MCP server');
 
-    // 并行停止所有 server（每个 server 关闭互不影响）
     await Promise.allSettled(names.map((name) => this.stopServer(name)));
   }
 
@@ -196,15 +163,9 @@ export class MCPService implements IMCPService {
   listServers(): readonly McpServerInfo[] {
     const infos: McpServerInfo[] = [];
     for (const [, entry] of this.servers) {
-      // L2 修复：显式检查 client 连接状态后再读取 server 元数据
-      // - startServer 失败时 entry 保留在 Map（status='error'），但 client 已通过 closeQuietly 断开
-      // - 此时 getServerName/Version 虽不会抛错（仅返回 undefined），但显式检查避免依赖隐式约定
-      // - 也为未来 SDK 升级留出防御空间（新版本可能在断开后抛错）
       const isConnected = entry.client.isConnected();
       const serverName = isConnected ? entry.client.getServerName() : undefined;
       const serverVersion = isConnected ? entry.client.getServerVersion() : undefined;
-      // 注意：exactOptionalPropertyTypes 下，可选属性不能显式赋 undefined，
-      // 必须用条件展开（仅当值存在时才写入属性）
       infos.push({
         config: entry.client.getConfig(),
         status: entry.status,
@@ -262,7 +223,6 @@ export function validateMcpServerConfig(
   if (!config.name || config.name.length === 0) {
     throw new AppError(ErrorCode.INVALID_INPUT, 'MCP server name 不能为空');
   }
-  // 名称字符集约束：name 参与工具命名空间（mcp__name__tool），非法字符破坏命名空间解析
   if (!MCP_SERVER_NAME_PATTERN.test(config.name)) {
     throw new AppError(ErrorCode.INVALID_INPUT, 'MCP server 名称仅允许字母/数字/下划线/连字符');
   }
@@ -275,8 +235,6 @@ export function validateMcpServerConfig(
         `MCP server "${config.name}" 的 command 不能为空`,
       );
     }
-    // P0 安全：command 必须是裸可执行文件名（无路径分隔符/空白/引号），
-    // 阻断绝对路径/路径穿越/多段命令注入（与 shared MCP_COMMAND_PATTERN 同源，纵深防御）
     if (!MCP_COMMAND_PATTERN.test(command)) {
       throw new AppError(
         ErrorCode.INVALID_INPUT,
@@ -284,7 +242,6 @@ export function validateMcpServerConfig(
       );
     }
   } else {
-    // 远程传输：url 必填 + http(s) 协议白名单（阻断 file:/ftp: 等非 HTTP 场景）
     const url = config.url ?? '';
     let parsed: URL | undefined;
     try {
@@ -299,7 +256,6 @@ export function validateMcpServerConfig(
       );
     }
   }
-  // 重名保护：server name 不能与现有工具重名（避免 mcp__name__xxx 与现有工具冲突）
   if (existingToolNames?.has(config.name)) {
     throw new AppError(
       ErrorCode.INVALID_INPUT,

@@ -1,5 +1,3 @@
-// use-vim-mode.test.ts
-// vim hook 单测：消费判定（edit/move/noop+normal 消费、insert 透传）与光标回调
 import { act, renderHook } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 

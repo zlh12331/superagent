@@ -1,21 +1,3 @@
-// src/main/infra/ai/knowledge/session-title.ts
-// 会话标题生成
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - ITitleGenerator：标题生成窄接口（DI 注入，接口隔离）
-// - ensureSessionTitle：回合正常结束后异步生成标题（失败静默）
-// - firstUserMessageText / lastUserMessageText：从消息历史提取首条/末条
-//   user 文本（前者是标题生成输入，后者是权限决策的用户意图）
-//
-// 消费方：唯一生产调用点 = agent-service 的 finalizeCompletedTurn（正常完成
-// 收尾路径；aborted/error 不生成标题）。历史注释的「chat 对话共用」随
-// ChatService 并入删除，不再有独立 chat 流程。
-//
-// 设计：
-// - 仅当会话仍为默认标题时执行，不覆盖用户自定义标题
-// - 失败静默（logger.debug），不阻断主流程
-// ──────────────────────────────────────────────────────────────
-
 import type { ChatMessage } from '@code-agent/shared/main';
 import { logger } from '../../../utils/logger';
 import type { ISessionService } from '../../storage/session-service';
@@ -74,12 +56,10 @@ export async function ensureSessionTitle(params: {
       return;
     }
     const detail = await params.sessionService.get(params.sessionId);
-    // 会话已有自定义标题：不覆盖
     if (detail.session.title !== DEFAULT_SESSION_TITLE) {
       return;
     }
     const result = await params.titleGenerator.generateText({
-      // exactOptionalPropertyTypes：model 省略 = 默认模型
       prompt: `为以下用户消息生成一个简洁的对话标题（20 字以内，不要引号）：\n${params.firstUserText.slice(0, 200)}`,
       maxAttempts: 1,
     });
@@ -90,7 +70,6 @@ export async function ensureSessionTitle(params: {
     await params.sessionService.rename(params.sessionId, title);
     logger.debug({ sessionId: params.sessionId, title }, '会话标题已生成');
   } catch (err: unknown) {
-    // 标题生成失败不影响对话（静默）
     logger.debug({ sessionId: params.sessionId, error: err }, '标题生成失败（静默）');
   }
 }

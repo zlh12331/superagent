@@ -1,11 +1,3 @@
-// src/renderer/components/git/git-panel-parts.tsx
-// Git 面板的小型展示组件（分支信息 / 工作区干净 / 错误提示）
-// ──────────────────────────────
-// 拆分背景（2026-08 重构）：自 GitPanel 486 行按职责提取。
-// 三者都是无状态纯展示（仅消费 props），故同居一文件而非各占一个——
-// 体量小、无独立演化需求，拆散只会增加跳转成本。
-// ──────────────────────────────
-
 import type { GitStatusRes } from '@code-agent/shared/renderer';
 import { AlertCircle, CheckCircle2, GitBranch } from 'lucide-react';
 import type { ReactElement } from 'react';
@@ -18,7 +10,6 @@ interface BranchInfoProps {
 }
 /** 分支信息：加载中 / 失败 / 分支名 + ahead(↑)·behind(↓) 标记 */
 export function BranchInfo({ status, isLoading, error }: BranchInfoProps): ReactElement {
-  // 本地化文案
   const { t } = useTranslation();
   if (isLoading) {
     return (
@@ -50,7 +41,6 @@ export function BranchInfo({ status, isLoading, error }: BranchInfoProps): React
 
 /** 工作区干净提示（无变更时的空态） */
 export function CleanHint(): ReactElement {
-  // 本地化文案
   const { t } = useTranslation();
   return (
     <div className="text-muted-foreground flex flex-col items-center gap-1 p-4 text-center">
@@ -63,7 +53,6 @@ export function CleanHint(): ReactElement {
 
 /** 错误状态提示（错误消息单行截断，完整内容见 title） */
 export function ErrorHint({ message }: { readonly message: string }): ReactElement {
-  // 本地化文案
   const { t } = useTranslation();
   return (
     <div className="text-error-text flex flex-col items-center gap-1 p-3 text-center">

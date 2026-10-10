@@ -1,7 +1,3 @@
-// src/renderer/components/ui/button.tsx
-// 按钮组件（shadcn/ui new-york 风格）
-// 设计文档 §2.3 shadcn/ui 组件库
-
 import { Slot } from '@radix-ui/react-slot';
 import { cva, type VariantProps } from 'class-variance-authority';
 import type * as React from 'react';
@@ -77,7 +73,6 @@ export function Button({
   asChild = false,
   ...props
 }: ButtonProps): React.ReactElement {
-  // asChild 时把 props 合并到子元素（Radix Slot 机制）
   const Comp = asChild ? Slot : 'button';
   return (
     <Comp

@@ -1,12 +1,3 @@
-// src/main/infra/search/search-service.test.ts
-// SearchService 单测：ripgrep 内容搜索与文件查找（正向/边界/异常三件套）
-// ──────────────────────────────────────────────────────────────
-// 测试策略（遵循"业务逻辑不 mock、外部依赖注入 fake"）：
-// - spawnFn 经构造注入 fake（可编程 FakeChild + PassThrough stdout）
-// - 真实 JSON Lines 序列驱动 match/context 解析与组装逻辑
-// - 错误分类路径全枚举：exit 0/1 正常、2 参数错误、其他 INTERNAL、信号终止
-// ──────────────────────────────────────────────────────────────
-
 import type { spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
@@ -73,7 +64,6 @@ async function emitLines(child: FakeChild, lines: readonly string[], code = 0): 
   for (const line of lines) {
     child.stdout.write(`${line}\n`);
   }
-  // 等待 createInterface 处理完缓冲数据（流事件是异步的）
   await new Promise((resolve) => setImmediate(resolve));
   child.close(code);
 }
@@ -139,7 +129,7 @@ describe('SearchService.grep 参数构建（三件套）', () => {
     children[0]?.close(0);
     await p;
     const [file, args] = spawnFn.mock.calls[0] ?? [];
-    expect(file).toBeTruthy(); // rgPath
+    expect(file).toBeTruthy();
     expect(args).toEqual([
       '--json',
       '--line-number',
@@ -151,7 +141,6 @@ describe('SearchService.grep 参数构建（三件套）', () => {
       '-e',
       'foo',
       '-i',
-      // 2026-09-08 安全修复：路径前加 `--` 终止选项解析（防 --pre= 注入）
       '--',
       'C:\\a',
       'C:\\b',
@@ -220,7 +209,6 @@ describe('SearchService.grep 参数构建（三件套）', () => {
       '--',
       'C:\\work',
     ]);
-    // undefined 兜底（工具层 optional 字段未传）
     p = svc.grep(grepOptions({ exclude: undefined as unknown as readonly string[] }));
     children[1]?.close(0);
     await p;
@@ -268,8 +256,8 @@ describe('SearchService.grep 输出解析与组装（三件套）', () => {
     ]);
     const res = await p;
     expect(res.matches).toHaveLength(1);
-    expect(res.matches[0]?.beforeContext).toEqual(['ctx2', 'ctx3']); // 最近 2 行
-    expect(res.matches[0]?.afterContext).toEqual(['ctxA1', 'ctxA2']); // 最早 2 行
+    expect(res.matches[0]?.beforeContext).toEqual(['ctx2', 'ctx3']);
+    expect(res.matches[0]?.afterContext).toEqual(['ctxA1', 'ctxA2']);
   });
 
   it('边界：context 行用 lines 字段（旧版 ripgrep 兼容）', async () => {
@@ -281,7 +269,7 @@ describe('SearchService.grep 输出解析与组装（三件套）', () => {
     });
     await emitLines(child, [legacyCtx, matchLine('a.ts', 2, 'm')]);
     const res = await p;
-    expect(res.matches[0]?.beforeContext).toEqual(['legacy']); // 尾随换行被去除
+    expect(res.matches[0]?.beforeContext).toEqual(['legacy']);
   });
 
   it('边界：非法 JSON 行跳过（不阻塞搜索）', async () => {
@@ -316,7 +304,6 @@ describe('SearchService.grep 输出解析与组装（三件套）', () => {
   it('边界：parseMatchLine 抛错（data 缺 submatches 字段）→ 跳过该行，不阻塞', async () => {
     const p = svc.grep(grepOptions());
     const child = children[0] ?? new FakeChild();
-    // submatches 缺失 → data.submatches[0] 抛 TypeError → 被 try/catch 捕获跳过
     const malformed = JSON.stringify({
       type: 'match',
       data: { path: { text: 'a.ts' }, line_number: 1, line: { text: 'x' }, lines: { text: 'y' } },
@@ -356,7 +343,7 @@ describe('SearchService.grep 输出解析与组装（三件套）', () => {
     const res = await p;
     expect(res.matches).toHaveLength(2);
     expect(res.truncated).toBe(true);
-    expect(child.kill).toHaveBeenCalled(); // 达到上限主动终止
+    expect(child.kill).toHaveBeenCalled();
   });
 
   it('边界：match 恰好等于 maxResults → truncated=false', async () => {
@@ -373,12 +360,12 @@ describe('SearchService.grep 输出解析与组装（三件套）', () => {
     const child = children[0] ?? new FakeChild();
     await emitLines(child, [
       matchLine('a.ts', 1, 'm1'),
-      matchLine('a.ts', 2, 'm2'), // 超限：totalMatchCount=2 > 1
-      contextLine('a.ts', 3, 'late-ctx'), // 超限后 context：跳过
+      matchLine('a.ts', 2, 'm2'),
+      contextLine('a.ts', 3, 'late-ctx'),
     ]);
     const res = await p;
     expect(res.matches).toHaveLength(1);
-    expect(res.matches[0]?.afterContext).toEqual([]); // 超限 context 未被关联
+    expect(res.matches[0]?.afterContext).toEqual([]);
   });
 
   it('边界：畸形 context 行（缺 line/text 字段）→ 兜底空字符串不抛', async () => {
@@ -479,7 +466,6 @@ describe('SearchService.glob（三件套）', () => {
     const child = children[0] ?? new FakeChild();
     await emitLines(child, ['a.ts', 'b/c.ts']);
     const [, args] = spawnFn.mock.calls[0] ?? [];
-    // 2026-09-08 安全修复：path 前加 `--` 终止选项解析
     expect(args).toEqual(['--files', '-g', '**/*.ts', '--', 'C:\\work']);
     const res = await p;
     expect(res.files).toEqual(['a.ts', 'b/c.ts']);
@@ -537,13 +523,10 @@ describe('SearchService.dispose（生命周期）', () => {
     children[0]?.close(0);
     children[1]?.close(0);
     await Promise.all([p1, p2]);
-    // 挂起进程：dispose 时 kill 它，再模拟 kill 后退出
     const p3 = svc.grep(grepOptions());
     await svc.dispose();
-    // 2026-09-08：dispose 改为 terminateChild（child.kill() 默认 SIGTERM +
-    // 3s 未退出则 SIGKILL 升级），故断言无参 kill 被调用
     expect(children[2]?.kill).toHaveBeenCalledWith();
-    children[2]?.close(null, 'SIGTERM'); // 模拟 kill 生效后的 close
+    children[2]?.close(null, 'SIGTERM');
     await p3;
     const proc = svc as unknown as { activeProcesses: Set<unknown> };
     expect(proc.activeProcesses.size).toBe(0);
@@ -556,9 +539,9 @@ describe('SearchService.dispose（生命周期）', () => {
       throw new Error('kill failed');
     });
     await svc.dispose();
-    child.close(null, 'SIGTERM'); // 模拟退出，结束挂起 promise
+    child.close(null, 'SIGTERM');
     await p;
-    expect(svc).toBeDefined(); // dispose 完成不抛
+    expect(svc).toBeDefined();
   });
 
   it('正向：无活跃进程 → no-op 不抛', async () => {

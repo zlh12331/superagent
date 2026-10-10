@@ -1,21 +1,3 @@
-// src/main/infra/update/update-service.ts
-// 自动更新服务（electron-updater 封装，定义表驱动事件推送）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 注册 autoUpdater 事件监听，转换为 UpdateStatusPayload 推送渲染层并留快照
-// - 启动检查调度：每次启动一次 + 失败退避重试 + 长会话兜底
-// - 手动检查 / 取消下载 / 安装重启 / 状态快照
-//
-// 设计（见 docs/design/27-auto-update-spec.md）：
-// - 注入式：AutoUpdaterLike 抽象 electron-updater，测试注入 fake 实现（不 mock 模块）
-// - 开关：autoCheckEnabled 以 () => boolean 注入（index.ts 读 app_settings 的 update 域）
-// - 下载由本服务显式发起（start 置 autoDownload=false）：electron-updater 未暴露
-//   取消 API（cancellationToken 在 doCheckForUpdates 内部新建、外部不可达），只有
-//   自己持有 token 调 downloadUpdate 才能实现"取消下载"；库文档明确支持该用法
-// - 更新源：electron-updater 打包后自动读取 electron-builder 生成的 app-update.yml
-//   （由 electron-builder.yml 的 publish 配置生成），无需运行时 setFeedURL
-// ──────────────────────────────────────────────────────────────
-
 import type {
   UpdateCheckRes,
   UpdateErrorKind,
@@ -276,22 +258,14 @@ export class UpdateService implements IUpdateService {
   /** @inheritDoc */
   start(options: UpdateStartOptions = {}): void {
     this.started = true;
-    // 只读一次：注入的是同步读 SQLite 的函数，两次调用之间取值可能不同
     const autoCheckEnabled = (options.autoCheckEnabled ?? ((): boolean => true))();
     this.devUpdateForced = options.devUpdateEnabled === true;
-    // 「接收预发布」开关读取器：不在此处设置 allowPrerelease——它在 check() 入口
-    // 每次幂等重算（见 UpdateStartOptions 注释），避免捕获库字段被二次 start 污染
     this.allowPrereleaseEnabled = options.allowPrereleaseEnabled ?? null;
-    // 「自动检查更新」开关读取器：start 时读一次设置 autoInstallOnAppQuit；
-    // 运行中切换开关后由退出链 refreshAutoInstallOnAppQuit 重读（见该方法注释）
     this.autoCheckEnabled = options.autoCheckEnabled ?? null;
 
-    // 日志接管：库默认走主进程 console（打包后无处可看），接进项目 logger
     this.updater.logger = createUpdaterLogger();
-    // 下载改由本服务显式发起（只有自持 token 才能取消）
     this.updater.autoDownload = false;
     this.updater.autoInstallOnAppQuit = autoCheckEnabled;
-    // 开发模式调试：改读 dev-app-update.yml（默认关闭，dev 不发任何更新请求）
     this.updater.forceDevUpdateConfig = this.devUpdateForced;
 
     this.registerListeners();
@@ -310,14 +284,8 @@ export class UpdateService implements IUpdateService {
 
   /** @inheritDoc */
   async check(manual: boolean): Promise<UpdateCheckRes> {
-    // 每次检查前幂等重算「接收预发布」（用户开关 ‖ 当前版本含 prerelease 段）——
-    // 与库构造器的版本判定同语义（AppUpdater 构造器按 semver.prerelease 置初值），
-    // 每次直接按版本算、不捕获库字段：二次 start / 惰性重建实例都不会污染基线。
-    // UI 开启后立即手动检查即可收到 beta，无需重启（见 UpdateStartOptions 注释）
     this.updater.allowPrerelease =
       (this.allowPrereleaseEnabled?.() ?? false) || app.getVersion().includes('-');
-    // 开发模式（未打包）：electron-updater 无 app-update.yml，检查必失败。
-    // 例外：devUpdateEnabled 时已置 forceDevUpdateConfig，库改读 dev-app-update.yml。
     if (!this.isPackaged() && !this.devUpdateForced) {
       const message =
         '开发模式不支持自动更新（可用 CODE_AGENT_DEV_UPDATE=1 + dev-app-update.yml 调试）';
@@ -326,7 +294,6 @@ export class UpdateService implements IUpdateService {
       }
       return { status: 'error', message };
     }
-    // 会话内去重：在途检查不重复发起（连点"检查更新"不叠打远端）
     if (this.checkInFlight) {
       return { status: 'checking' };
     }
@@ -362,9 +329,7 @@ export class UpdateService implements IUpdateService {
     checkPromise: Promise<unknown>,
     onTimeout: () => void,
   ): Promise<void> {
-    void checkPromise.catch(() => {
-      // 超时后我们已不再 await 它；正常路径下 race 会照常收到本 rejection
-    });
+    void checkPromise.catch(() => {});
     let timer: NodeJS.Timeout | undefined;
     try {
       await Promise.race([
@@ -409,21 +374,12 @@ export class UpdateService implements IUpdateService {
 
   /** @inheritDoc */
   quitAndInstall(): void {
-    // Windows：两段式——本方法只置标记并触发退出，真正的向导安装在退出善后
-    // 完成（文件锁释放）后由 runDeferredInstall 发起。electron-updater 的
-    // quitAndInstall 是"先 spawn 安装器、后 app.quit()"，而 NSIS 辅助安装器启动
-    // 即尝试关闭应用，旧卸载器重试 5 次等不到退出就会弹「无法关闭。请手动关闭
-    // 它…」（1.1.2→1.2.0 实测出现）。先退出消除竞态。
     if (process.platform === 'win32') {
-      // 挂起标志存 quit-state（模块级）：退出链末端取到的 UpdateService 可能是
-      // 容器 dispose 后惰性新建的实例，实例字段会丢失（见 quit-state 注释）
       requestDeferredInstall();
-      // 渲染层入口已确认「重启会中断任务」：置关闭协商标志，退出链不再重复弹窗
       setCloseConfirmed();
       app.quit();
       return;
     }
-    // 非 Windows 保持库的原生路径（mac 解包替换 / AppImage 替换自身，无此竞态）
     this.updater.quitAndInstall(true, true);
   }
 
@@ -433,13 +389,6 @@ export class UpdateService implements IUpdateService {
       return;
     }
     clearDeferredInstall();
-    // 此刻应用已完全退出（文件锁释放），向导安装不会遇到「无法关闭」。
-    // isSilent=false 弹出安装向导：electron-builder 模板对 --updated 已自动跳过
-    // license/目录页，resources/installer.nsh 补跳「安装模式」页 ⇒ 向导直接进
-    // 安装进度页（自动开始、进度可见），完成页点「完成」启动新版——非静默下
-    // isForceRunAfter 被库忽略、由 autoRunAppAfterInstall（默认 true）接管。
-    // （2026-10-01 由静默 /S 改为向导式：静默安装全程无窗口，1.3.3→1.4.0 实测
-    // 用户侧表现为"应用退出后十余分钟毫无反应"，无从得知安装在进行）
     logger.info({ scope: 'auto-updater' }, '应用已退出，拉起安装向导');
     this.updater.quitAndInstall(false, false);
   }
@@ -456,10 +405,6 @@ export class UpdateService implements IUpdateService {
     this.cancelToken = null;
     this.pendingVersion = null;
     this.pendingReleaseNotes = null;
-    // dispose 发生在退出链中（disposeServices），此后 runDeferredInstall 只读
-    // 挂起标志拉起安装器、不再广播，故监听者在此一并释放。
-    // 挂起标志本身在 quit-state 模块级（不随实例释放丢失）——若它是实例字段，
-    // 退出链末端惰性新建的实例会看不到标记，Windows 更新安装被静默吞掉
     this.statusListeners.clear();
   }
 
@@ -489,7 +434,6 @@ export class UpdateService implements IUpdateService {
       logger.info({ scope: 'auto-updater', version: info.version }, '新版本下载完成');
       this.cancelToken = null;
       this.setTaskbarProgress(null);
-      // 就绪态继续展示更新说明（部分 provider 只在 downloaded 事件带 notes）
       const notes = toReleaseNotes(info.releaseNotes) ?? this.pendingReleaseNotes;
       this.emit({
         phase: 'downloaded',
@@ -518,13 +462,8 @@ export class UpdateService implements IUpdateService {
     const token = this.createCancellationToken();
     this.cancelToken = token;
     void (async (): Promise<void> => {
-      // 差分基线一致性：基准块图与基准安装包不同版本时，差分重建必然 sha512
-      // 失败并回退全量（1.2.1→1.3.0 实测：1019 块全错、328MB 重下）——
-      // 先剔除陈旧块图表，让库下载与基准文件同版本的块图
       await this.ensureDifferentialBaseline();
       if (token.cancelled) {
-        // 检查窗口内被取消：下载尚未发起，库不会推 update-cancelled，自行收尾
-        // （否则界面停在下载中态；语义与库事件分支一致）
         const version = this.pendingVersion;
         this.cancelToken = null;
         this.pendingVersion = null;
@@ -535,7 +474,6 @@ export class UpdateService implements IUpdateService {
       await this.updater.downloadUpdate(token);
     })()
       .catch((error: unknown) => {
-        // 用户取消：库会推 update-cancelled，这里不再重复报错
         if (token.cancelled) {
           return;
         }
@@ -626,7 +564,6 @@ export class UpdateService implements IUpdateService {
       try {
         listener(payload);
       } catch (err) {
-        // 监听者异常不阻断其余监听者与状态广播
         logger.warn({ scope: 'auto-updater', error: String(err) }, '状态监听器执行失败');
       }
     }
@@ -636,7 +573,6 @@ export class UpdateService implements IUpdateService {
           emitEvent(win.webContents, IPC_DEFINITIONS.update.subscribeStatus, payload);
         }
       } catch (err) {
-        // 单窗口广播失败（如 webContents 已销毁的竞态窗口）不阻断其余窗口
         logger.warn({ scope: 'auto-updater', error: String(err) }, '状态窗口广播失败');
       }
     }
@@ -719,7 +655,6 @@ export function classifyUpdateError(error: unknown): UpdateErrorKind {
   const code = readErrorField(error, 'code');
   const statusCode = readErrorField(error, 'statusCode');
 
-  // 限流：HTTP 403（无权限/被挡）与 429（请求过多）
   if (
     statusCode === 403 ||
     statusCode === 429 ||
@@ -728,15 +663,12 @@ export function classifyUpdateError(error: unknown): UpdateErrorKind {
   ) {
     return 'rate-limited';
   }
-  // 校验失败：sha512 / checksum 不匹配
   if (/sha512|checksum/i.test(message)) {
     return 'checksum';
   }
-  // 磁盘：Node fs 空间不足（ENOSPC）与超配额（EDQUOT）
   if (code === 'ENOSPC' || code === 'EDQUOT' || /ENOSPC|no space left/i.test(message)) {
     return 'disk';
   }
-  // 网络：Electron net 错误文本与 Node 网络错误码
   if (
     /net::ERR_|ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ECONNRESET|ETIMEDOUT|ENETUNREACH|socket hang up|timeout/i.test(
       message,

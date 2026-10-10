@@ -1,11 +1,3 @@
-// src/main/infra/ai/tools/run-team.tool.ts
-// run_team 工具：模型并行委派多个子代理并汇总（对齐 qwen Team 工具语义）
-// ──────────────────────────────────────────────────────────────
-// 设计：
-// - permission='ask' / category='exec'：成员回合可能产生副作用，保守审批
-// - 团队执行 = 并行委派（SubagentManager 按 sessionId 过滤保证并发隔离）
-// ──────────────────────────────────────────────────────────────
-
 import { z } from 'zod';
 import { t } from '../../i18n';
 import { teamService } from '../agent/team-service';
@@ -55,7 +47,6 @@ export function createRunTeamTool(): Tool<RunTeamInput> {
     category: 'exec',
     execute: async (input: RunTeamInput, ctx: ToolContext): Promise<ToolResult> => {
       try {
-        // exactOptionalPropertyTypes：leader.agent 可能为 undefined，条件展开
         const result = await teamService.runTeam(
           input.members,
           ctx.workingDir,

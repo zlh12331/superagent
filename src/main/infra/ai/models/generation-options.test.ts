@@ -1,10 +1,3 @@
-// src/main/infra/ai/models/generation-options.test.ts
-// buildGenerationOptions 单测：采样/思考强度/输出上限的单一真源构造
-//
-// 接线背景：生产消费方两路——llm-client.generateTextOnce（side query）与
-// agent-service.resolveTurnGeneration（主回合，用户 thinking/temperature
-// 覆盖经此传入）；本组用例守住两路共用的同一份配置逻辑（单一真源）。
-
 import { describe, expect, it } from 'vitest';
 import { BUILTIN_MODELS, DEFAULT_KIND, DEFAULT_MODEL_BY_KIND } from './builtin-models';
 import { buildGenerationOptions } from './generation-options';
@@ -27,12 +20,10 @@ describe('buildGenerationOptions', () => {
 
     expect(gen.providerOptions).toEqual({ deepseek: { reasoningEffort: 'max' } });
     expect(gen.samplingOptions).toEqual({});
-    // 输出上限：窗口钳制后取模型能力 384K 与窗口余量的较小值
     expect(gen.maxOutputTokens).toBe(384_000);
   });
 
   it('reasoning 模型无 reasoningEffort 配置：不注入 providerOptions', () => {
-    // deepseek-reasoner（旧版兼容条目）无 generationConfig
     const resolved = registry.resolve('deepseek-reasoner');
     const gen = buildGenerationOptions(resolved, 0);
 
@@ -40,7 +31,6 @@ describe('buildGenerationOptions', () => {
   });
 
   it('非 reasoning 模型配置采样参数：应用 temperature / topP / maxTokens', () => {
-    // 自定义注册表：gpt-4o 附加采样参数
     const customRegistry = new ModelRegistry({
       entries: BUILTIN_MODELS.map((entry) =>
         entry.id === 'gpt-4o'
@@ -58,7 +48,6 @@ describe('buildGenerationOptions', () => {
   });
 
   it('prompt 接近窗口：输出上限按窗口余量钳制', () => {
-    // gpt-4o 窗口 128K，prompt 110K → room = 128K - 110K - 10K = 8K
     const gen = buildGenerationOptions(registry.resolve('gpt-4o'), 110_000);
 
     expect(gen.maxOutputTokens).toBe(8_000);

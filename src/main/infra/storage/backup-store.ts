@@ -1,20 +1,3 @@
-// src/main/infra/storage/backup-store.ts
-// 数据库备份恢复点管理（37 号 B：备份可见性；自 db.ts 抽离 + 列表/手动/恢复暂存）
-// ──────────────────────────────────────────────────────────────
-// 职责（备份文件操作单点归属）：
-// - createBackupFile：热备份到 backups/sessions-<ts>.db（原子落盘 + 权限 + 轮转）
-// - listBackups：恢复点列表（文件名/时间/大小/quick_check 健康度，最新在前）
-// - stageRestore：把指定恢复点暂存为 sessions.db.restore-pending（重启生效）
-// - applyPendingRestore：启动期（initDb 顶部、连接打开前）消费暂存替换主库
-//
-// 设计（恢复语义）：
-// - **暂存 + 重启生效**而非热恢复——WAL 连接持有文件句柄，覆盖打开中的库是
-//   破坏性竞争；关连接→换文件→重开会让全部持有 getDb() 引用的服务失效。
-//   暂存把文件替换放在连接打开之前，与「更新安装=重启」的桌面成熟语义一致。
-// - 健康度是列表与恢复的分界：quick_check 失败的备份不可用于恢复
-//   （「假恢复点比没有备份更危险」，与 db.ts 自愈链同一判据）。
-// ──────────────────────────────────────────────────────────────
-
 import {
   chmodSync,
   closeSync,
@@ -68,9 +51,7 @@ function restrictBackupPermissions(filePath: string): void {
   }
   try {
     chmodSync(filePath, 0o600);
-  } catch {
-    // 权限设置失败不阻断
-  }
+  } catch {}
 }
 
 /** 备份文件名列表（旧→新；目录不存在返回空数组。导出供 db.ts 自愈链复用） */
@@ -80,7 +61,6 @@ export function listBackupNames(dbPath: string): string[] {
       .filter((name) => name.startsWith(BACKUP_PREFIX) && name.endsWith('.db'))
       .sort();
   } catch {
-    // 备份目录不存在（从未成功备份）
     return [];
   }
 }
@@ -135,22 +115,16 @@ export function isBackupHealthy(backupPath: string): boolean {
   } finally {
     try {
       probe?.close();
-    } catch {
-      // 已损坏连接的 close 可能失败，忽略
-    }
+    } catch {}
     if (!shmExisted) {
       try {
         unlinkSync(shmPath);
-      } catch {
-        // 未产生或已被清理
-      }
+      } catch {}
     }
     if (!walExisted) {
       try {
         unlinkSync(walPath);
-      } catch {
-        // 未产生或已被清理
-      }
+      } catch {}
     }
   }
 }
@@ -170,8 +144,6 @@ export function isBackupHealthy(backupPath: string): boolean {
 export async function createBackupFile(sqlite: Database.Database, dbPath: string): Promise<string> {
   const backupDir = backupDirPath(dbPath);
   mkdirSync(backupDir, { recursive: true });
-  // 毫秒精度（slice 到 23 = 'YYYY-MM-DDTHH-mm-ss-mmm'）：启动备份与手动备份
-  // 可能落在同一秒内，秒精度会同名覆盖（实测语义缺陷——轮转环丢失一份恢复点）
   const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 23);
   const name = `${BACKUP_PREFIX}${stamp}.db`;
   const backupPath = join(backupDir, name);
@@ -179,16 +151,13 @@ export async function createBackupFile(sqlite: Database.Database, dbPath: string
   if (process.platform !== 'win32') {
     try {
       closeSync(openSync(tmpPath, 'a', 0o600));
-    } catch {
-      // 预创建失败不阻断（backup 会按原逻辑创建，restrictBackupPermissions 兜底）
-    }
+    } catch {}
   }
   await sqlite.backup(tmpPath);
   restrictBackupPermissions(tmpPath);
   renameSync(tmpPath, backupPath);
   logger.info({ backupPath }, '数据库热备份完成');
 
-  // 轮转：删除超出保留份数的最旧备份
   const backups = listBackupNames(dbPath);
   const excess = backups.length - BACKUP_KEEP;
   for (let i = 0; i < excess; i++) {
@@ -207,9 +176,7 @@ export function cleanupBackupTmpFiles(dbPath: string): void {
         unlinkSync(join(backupDirPath(dbPath), name));
       }
     }
-  } catch {
-    // 备份目录尚未创建，无残留可清
-  }
+  } catch {}
 }
 
 /**
@@ -226,9 +193,7 @@ export function listBackups(dbPath: string): BackupEntry[] {
       let sizeBytes = 0;
       try {
         sizeBytes = statSync(fullPath).size;
-      } catch {
-        // 读取窗口内被轮转删除：size 0（healthy 探针同样会失败 → false）
-      }
+      } catch {}
       return {
         name,
         createdAtMs: resolveCreatedAtMs(name, fullPath),
@@ -247,7 +212,6 @@ export function listBackups(dbPath: string): BackupEntry[] {
  * @throws AppError(BACKUP_INVALID) 路径非法 / 备份不存在 / 备份损坏
  */
 export function stageRestore(dbPath: string, name: string): void {
-  // 路径穿越防御：裸名 + 无路径分隔符 + 无 '..' 段
   if (name.length === 0 || name !== name.trim() || /[\\/]/.test(name) || name.includes('..')) {
     throw new AppError(ErrorCode.BACKUP_INVALID, `非法备份名：${name}`);
   }
@@ -280,7 +244,6 @@ export function applyPendingRestore(dbPath: string): boolean {
     return false;
   }
   logger.warn({ pendingPath, dbPath }, '检测到待应用备份恢复，启动期替换主库');
-  // 主库与 WAL/SHM 残件一并清理（旧 WAL 与新库不匹配，SQLite 会误读）
   for (const suffix of ['', '-wal', '-shm'] as const) {
     try {
       rmSync(`${dbPath}${suffix}`, { force: true });

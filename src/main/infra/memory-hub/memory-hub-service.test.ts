@@ -1,10 +1,3 @@
-// src/main/infra/memory-hub/memory-hub-service.test.ts
-// MemoryHubService 单测：配置判定 / 未配置降级 / 生命周期幂等
-// ──────────────────────────────────────────────────────────────
-// 说明：真实 sidecar 拉起（spawn + /health）由 memory-hub.contract.test.ts 覆盖
-// （需 MEMORY_HUB_ROOT，CI 自动跳过）。本文件覆盖无需子进程的纯逻辑与降级语义。
-// ──────────────────────────────────────────────────────────────
-
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -15,7 +8,6 @@ import { broadcastInvalidation } from '../invalidation/invalidation';
 import { createDeferredMemoryPort, MemoryHubService } from './memory-hub-service';
 import type { MemoryPort } from './types';
 
-// 失效域广播替身（基础设施边界，规范允许 vi.mock；S8 断言用，见文件尾 describe）
 vi.mock('../invalidation/invalidation', () => ({ broadcastInvalidation: vi.fn() }));
 
 describe('MemoryHubService 配置判定', () => {
@@ -213,7 +205,6 @@ describe('MemoryHubService.removeL0JsonlBySession', () => {
     const removed = await service.removeL0JsonlBySession('sess-1');
     expect(removed).toBe(1);
 
-    // 其余数据完好（其他会话 + 损坏行不误伤）
     const remaining = readFileSync(`${dir}/data/conversations/2026-08-24.jsonl`, 'utf8')
       .split(/\r?\n/)
       .filter((l) => l.trim().length > 0);
@@ -251,7 +242,6 @@ describe('MemoryHubService.removeL0JsonlBySession', () => {
       ].join('\n'),
     });
     const service = createService(dir);
-    // 逐 key 两次调用 = 两次全扫；批量一次完成且移除行数相同
     const batchRemoved = await service.removeL0JsonlBySessions(['sess-1', 'sess-2']);
     expect(batchRemoved).toBe(2);
     const remaining = readFileSync(`${dir}/data/conversations/2026-08-24.jsonl`, 'utf8')
@@ -303,8 +293,6 @@ describe('createDeferredMemoryPort', () => {
     expect(ensureStarted).toHaveBeenCalledTimes(5);
   });
 });
-
-// ── 失效域声明（31 号 spec S8：memory 运行态变化） ──────────────────
 
 describe('MemoryHubService 失效域声明（S8）', () => {
   afterEach(() => {
@@ -365,7 +353,6 @@ describe('MemoryHubService 失效域声明（S8）', () => {
 
   it('sidecar 就绪 → 广播 memory（懒启动运行态缺口锚）', async () => {
     const fake = createLaunchFake();
-    // /health 探测替身：立即就绪（真实 fetch 由 contract test 覆盖）
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => ({ ok: true, json: async () => ({ status: 'ok' }) })),
@@ -406,7 +393,6 @@ describe('MemoryHubService 失效域声明（S8）', () => {
 
     await service.stop();
 
-    // exit 回调广播 + stop 尾部广播（真实进程语义下两处都发生）
     expect(broadcastInvalidation).toHaveBeenCalledWith(['memory']);
   });
 

@@ -1,7 +1,3 @@
-// use-session-compact.test.tsx
-// 会话上下文压缩 mutation 单测：成功路径（本地消息态替换 + 缓存失效 + 结果 toast）
-// 与失败路径（错误码本地化）
-
 import type { ChatMessage } from '@code-agent/shared/renderer';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react';
@@ -61,7 +57,6 @@ describe('useSessionCompact', () => {
     });
 
     expect(compact).toHaveBeenCalledWith({ sessionId: 's1' });
-    // setMessages 收到重建后的 UIMessage[]（历史重建产物）
     const rebuilt = setMessages.mock.calls[0]?.[0] as Array<{ id: string; role: string }>;
     expect(rebuilt).toHaveLength(1);
     expect(rebuilt[0]).toMatchObject({ id: 'hist-0', role: 'user' });
@@ -108,7 +103,6 @@ describe('useSessionCompact', () => {
     await waitFor(() => {
       expect(toast.error).toHaveBeenCalledTimes(1);
     });
-    // setMessages 不被调用（压缩失败不替换本地消息态）
     expect(setMessages).not.toHaveBeenCalled();
   });
 });

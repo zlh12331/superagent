@@ -1,10 +1,3 @@
-// src/main/infra/i18n/index.test.ts
-// 主进程 i18n 单测：双语 key 齐全 + 缺 key 回退 + 插值 + 语言态迁移
-// ──────────────────────────────────────────────────────────────
-// 「zh/en key 集合一致」在此守护（check-i18n 只扫渲染层语言包，主进程词典
-// 不在其扫描域）。
-// ──────────────────────────────────────────────────────────────
-
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { MAIN_DICTIONARIES } from './dictionaries';

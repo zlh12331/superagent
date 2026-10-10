@@ -1,19 +1,3 @@
-// src/main/infra/ai/agent-runtime/create-stream.ts
-// 请求级重试：streamText 创建 + 首 part 读取
-// ──────────────────────────────────────────────────────────────
-// 背景：主回合 streamText 无重试——网络/认证/首包失败直接抛错。
-// 唯一生产消费方 = turn-assembly.assembleAndRunTurn（主回合链路；
-// 原注释的"chat 主流程"随 ChatService 并入删除，不再有独立 chat 流）。
-// 重试语义（务实边界）：
-// - 覆盖"创建 + 首 part 读取"：连接失败 / 认证失败 / 首包超时（请求级失败）
-// - 首 part 成功后不重试：流中错误（半流/工具副作用已发生）重试会重复副作用
-// - 只兜传输层失败：HTTP 类错误（429/5xx）的重试真源是 SDK 的 model call 级
-//   maxRetries（每一步都生效且尊重 retry-after），本层再重试会把请求数放大成 N×M
-//
-// 调用方责任：
-// - 重试后把 { reader, firstPart } 传入 TurnRunner.run（复用 reader，避免重复 getReader）
-// ──────────────────────────────────────────────────────────────
-
 import { APICallError, RetryError } from 'ai';
 
 import { logger } from '../../../utils/logger';
@@ -62,7 +46,6 @@ export async function createStreamWithRetry<T extends MessageStreamSource>(
   let result: T | undefined;
   let stream: ReadableStream<unknown> | undefined;
   let reader: ReadableStreamDefaultReader<unknown> | undefined;
-  // 首 part（重试回调闭包写入，调用级隔离，避免并发串扰）
   let firstPart: { done: boolean; value?: unknown } = { done: true };
 
   await retryWithBackoff(
@@ -70,7 +53,6 @@ export async function createStreamWithRetry<T extends MessageStreamSource>(
       result = options.create();
       stream = result.toUIMessageStream();
       reader = stream.getReader();
-      // 首读：请求级错误（连接/认证/首包超时）在此暴露，可重试
       const first = await readWithIdleTimeout(
         reader,
         options.controller,
@@ -81,12 +63,6 @@ export async function createStreamWithRetry<T extends MessageStreamSource>(
     {
       maxAttempts: options.maxAttempts ?? 3,
       ...(options.controller.signal !== undefined ? { signal: options.controller.signal } : {}),
-      // 主流程重试语义：只兜 SDK 覆盖不到的传输层失败（裸 TypeError / undici 网络错误码）。
-      // HTTP 类错误（429/5xx/连接失败）已由 streamText 的 model call 级 maxRetries 重试：
-      // - APICallError：SDK 重试真源（指数退避 + 按 retry-after 头定时长）
-      // - RetryError：SDK 重试耗尽后的包装，再重试等于把两层尝试次数相乘
-      // side query 保持完整重试（含 HTTP 类），见 llm-client.runSideQuery——
-      // 两路重试边界刻意不同：side query 无工具副作用，可放心整段重试
       shouldRetryOnError: (error: unknown) => {
         if (APICallError.isInstance(error) || RetryError.isInstance(error)) {
           return false;

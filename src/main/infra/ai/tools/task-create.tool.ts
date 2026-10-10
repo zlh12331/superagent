@@ -1,12 +1,3 @@
-// src/main/infra/ai/tools/task-create.tool.ts
-// task_create 工具：创建任务条目（对齐 qwen task_create 工具语义）
-// ──────────────────────────────────────────────────────────────
-// 设计：
-// - 任务条目绑定当前会话（ctx.sessionId）；kind=agent（委派工作单元）
-// - permission='auto'：纯元数据写入，无副作用风险
-// - 集成 TaskService（sqlite 持久化）
-// ──────────────────────────────────────────────────────────────
-
 import { z } from 'zod';
 import { t } from '../../i18n';
 import { TaskKind, taskService } from '../agent/task-service';
@@ -30,8 +21,6 @@ export function createTaskCreateTool(): Tool<TaskCreateInput> {
       '创建一条任务记录（绑定当前会话，状态 pending）。用于把子任务登记到任务面板，供后续 task_list / task_update 跟踪。',
     inputSchema: TaskCreateInputSchema,
     permission: 'auto',
-    // 零副作用控制面（改 agent 自己的任务记账，不触碰工作区/外部系统）——
-    // plan 模式需可用（计划期维护 todo 列表正是 plan 的用途，2026-10-08）
     category: 'control',
     execute: async (input: TaskCreateInput, ctx: ToolContext): Promise<ToolResult> => {
       const taskId = taskService.create(ctx.sessionId, TaskKind.AGENT, input.description);

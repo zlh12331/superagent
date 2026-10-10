@@ -1,9 +1,3 @@
-// prompt-section.tsx（自 SettingsDialog 拆分）
-// 设置对话框 · Code Agent 系统提示词编辑
-// ──────────────────────────────────────────────
-// 拆分背景：SettingsDialog 1052 行多域混合，按域提取为独立文件（高内聚）
-// ──────────────────────────────────────────────
-
 import { MessageSquareText } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
@@ -42,7 +36,6 @@ export function PromptSection({ open }: { open: boolean }): React.ReactElement {
   };
 
   const handlePromptClear = (): void => {
-    // 清空提示词属破坏性操作：确认后才执行（此前直接执行无确认）
     void confirm({
       title: t('common.clear'),
       message: t('settings.promptResetConfirmDesc'),

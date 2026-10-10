@@ -1,38 +1,6 @@
-// src/renderer/lib/motion/variants.ts
-// 通用动画变体 · 业务组件复用
-// ──────────────────────────────────────────────────────────────
-// 设计原则：
-// - 变体命名遵循 motion 惯例：hidden / visible / exit
-// - 与 AnimatePresence 配合：AnimatePresence 会自动调用 exit 变体
-// - 每个变体内置默认 transition，业务方可覆盖
-//
-// 使用方式：
-//   import { AnimatePresence, motion } from 'motion/react';
-//   import { fadeInVariants } from '@/lib/motion/variants';
-//
-//   <AnimatePresence>
-//     {visible && (
-//       <motion.div
-//         variants={fadeInVariants}
-//         initial="hidden"
-//         animate="visible"
-//         exit="exit"
-//       />
-//     )}
-//   </AnimatePresence>
-//
-// 与 shadcn/ui 的边界：
-// - shadcn 组件继续使用 tw-animate-css 的 data-state 类（不重写）
-// - 业务自定义组件用 motion 变体（drawer / 通知 / 列表 stagger 等）
-// ──────────────────────────────────────────────────────────────
-
 import type { Variants } from 'motion/react';
 
 import { easeIn, easeOut, easePaper, microTransition, smoothEaseOut } from './transitions';
-
-/* ──────────────────────────────────────────────────────────────
-   单元素变体
-   ────────────────────────────────────────────────────────────── */
 
 /**
  * 淡入淡出变体（最常用）
@@ -168,10 +136,6 @@ export const blurUpVariants: Variants = {
   },
 };
 
-/* ──────────────────────────────────────────────────────────────
-   列表 stagger 变体（配合 children 使用）
-   ────────────────────────────────────────────────────────────── */
-
 /**
  * stagger 容器变体
  *
@@ -230,13 +194,6 @@ export const staggerContainerSlow: Variants = {
     },
   },
 };
-
-/* ──────────────────────────────────────────────────────────────
-   字母级变体（欢迎页品牌 / 标题逐字入场）
-   用法：容器元素 variants={letterContainerVariants} initial="hidden" animate="visible"，
-   子元素每个字符一个 <motion.span variants={letterUpVariants}>。
-   子元素 inline-block 包裹，父级需保留空格（渲染时对空格字符插入 \u00A0）。
-   ────────────────────────────────────────────────────────────── */
 
 /**
  * 字母 stagger 容器（逐字延迟 35ms 起笔）

@@ -1,18 +1,3 @@
-// src/main/infra/storage/db.perf.test.ts
-// SQLite 存储基准：真实 better-sqlite3 + Drizzle 全链路（对齐长会话桌面端场景）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 写入吞吐：appendMessage 批量追加（100 条/次，长会话增量写入）
-// - 读取延迟：会话列表分页 / 单会话全量消息读取（含 JSON 反序列化）
-// - 索引验证：EXPLAIN QUERY PLAN 断言 messages 查询走索引（防全表扫描回归）
-//
-// 数据规模（对齐 12-performance-spec §三：500 条/会话为消息列表决策阈值）：
-//   - 读取基准：10 会话 × 1000 条消息 = 10000 条（超阈值规模，虚拟化决策参考数据）
-//
-// 运行：pnpm test:perf:main（独立脚本，不阻塞常规 test:main——CI 机器波动可校准）
-// 阈值策略：多轮采样取中位数（抗抖动）+ 宽松基线（防明显回退，随优化渐进收紧）
-// ──────────────────────────────────────────────────────────────
-
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -27,7 +12,6 @@ const { mockApp } = vi.hoisted(() => ({
 vi.mock('electron', () => ({
   app: {
     ...mockApp,
-    // initDb 的 resolveMigrationsDir 需要：dev 环境指向项目根 drizzle/
     getAppPath: () => process.cwd(),
     isPackaged: false,
   },
@@ -80,12 +64,8 @@ describe('SQLite 存储基准（perf）', () => {
     await closeDb();
     try {
       rmSync(tempDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
-    } catch {
-      // Windows 句柄延迟释放时跳过清理
-    }
+    } catch {}
   });
-
-  // ── 写入基准（每轮独立会话，避免跨轮依赖） ────────────────
 
   describe('写入基准（appendMessage 批量追加）', () => {
     it('追加 100 条消息中位数 < 100ms', async () => {
@@ -117,13 +97,10 @@ describe('SQLite 存储基准（perf）', () => {
     });
   });
 
-  // ── 读取基准（固定 10000 条数据，只读） ──────────────────
-
   describe('读取基准（10000 条消息规模）', () => {
     let bigSessionId: string;
 
     beforeAll(async () => {
-      // 造 10 会话 × 1000 条消息（超消息列表虚拟化决策阈值）
       for (let s = 0; s < 10; s += 1) {
         const sessionId = await service.create({
           workingDir: '/bench',
@@ -162,12 +139,8 @@ describe('SQLite 存储基准（perf）', () => {
     });
   });
 
-  // ── 并发基准（多会话争用：同步驱动下并发 = 交错调度，测争用正确性与延迟） ──
-
   describe('并发基准（10 路并行）', () => {
     it('并发 10 会话 × 100 条追加：总数无丢失且总耗时 < 2000ms', async () => {
-      // 10 路并行创建 + 追加（模拟多会话同时流式写入；better-sqlite3 同步驱动
-      // 下实际为交错调度，事务保证不丢失——测的是争用正确性 + 延迟）
       const start = performance.now();
       const results = await Promise.all(
         Array.from({ length: 10 }, async () => {
@@ -182,7 +155,6 @@ describe('SQLite 存储基准（perf）', () => {
       const total = performance.now() - start;
 
       console.log(`[perf] 并发 10 路追加（10×100 条）总耗时: ${total.toFixed(0)}ms`);
-      // 每路返回追加后总数 = 100（事务原子性：无丢失无串扰）
       expect(results, '每路消息总数必须为 100（并发写入无丢失）').toEqual(Array(10).fill(100));
       expect(total, '并发 10 路 × 100 条应 < 2000ms（基线，渐进收紧）').toBeLessThan(2000);
     });
@@ -192,15 +164,13 @@ describe('SQLite 存储基准（perf）', () => {
       for (let round = 0; round < 5; round += 1) {
         const start = performance.now();
         await Promise.all(Array.from({ length: 10 }, () => service.list(50, 0)));
-        timings.push((performance.now() - start) / 10); // 单路均摊
+        timings.push((performance.now() - start) / 10);
       }
       const median = [...timings].sort((a, b) => a - b)[Math.floor(timings.length / 2)] ?? 0;
       console.log(`[perf] 并发 10 路 list 单路均摊中位数: ${median.toFixed(2)}ms`);
       expect(median, '并发争用下单路查询应 < 20ms（基线，渐进收紧）').toBeLessThan(20);
     });
   });
-
-  // ── 索引验证（防全表扫描回归） ─────────────────────────────
 
   describe('索引命中验证', () => {
     it('messages 按 session_id 查询走 uq_messages_session_seq 索引', () => {

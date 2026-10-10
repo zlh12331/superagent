@@ -1,9 +1,3 @@
-// scripts/check-commit-msg.test.ts
-// check-commit-msg 单测：路径安全判定（常规仓库 / linked worktree gitdir 指针 / 越界拒绝）
-//   + extractHeader 首行提取
-// （2026-09-27 worktree 修复的回归测试——指针文件此前被路径守卫一刀切拒绝；
-//   合并双方用例：wt/t3「路径守卫支持 linked worktree」+ wt/t5「校验兼容 git worktree 布局」）
-
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -33,10 +27,8 @@ function makeRoot(kind: 'repo' | 'worktree'): string {
   const mainGitDir = join(root, 'main-repo', '.git');
   mkdirSync(mainGitDir, { recursive: true });
   if (kind === 'repo') {
-    // 常规仓库：root 自身即仓库根，.git 为目录
     mkdirSync(join(root, '.git'), { recursive: true });
   } else {
-    // linked worktree：.git 为指针文件，gitdir 指向主仓 .git/worktrees/<name>
     const worktreeGitDir = join(mainGitDir, 'worktrees', 't3');
     mkdirSync(worktreeGitDir, { recursive: true });
     writeFileSync(join(root, '.git'), `gitdir: ${worktreeGitDir}\n`, 'utf8');

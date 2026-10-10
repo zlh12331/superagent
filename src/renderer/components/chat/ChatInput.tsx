@@ -1,13 +1,3 @@
-// src/renderer/components/chat/ChatInput.tsx
-// 聊天输入框 + 发送/停止按钮 · TraeWork
-// ─────────────────────────────────────────────
-// 约束（调用方须知）：
-// - 不在此组件内调用 useChat，所有状态由父组件（ChatPanel）传入
-// - 纯展示+交互，可在测试中独立 mock；sendMessage/stop 签名与 useChat 返回值对齐
-// - 本组件只做「编排 composer 各 hook + JSX」：input（值/附件/草稿）、
-//   drag（高度）、suggest（斜杠/提及）、vim（编辑模式）、send（发送管线）
-// ──────────────────────────────────────────────
-
 import { AtSign, Send, Slash, Square } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { type KeyboardEvent, type ReactElement, useEffect, useRef } from 'react';
@@ -134,11 +124,8 @@ export function ChatInput({
   injectedValue,
   rightSlot,
 }: ChatInputProps): ReactElement {
-  // 本地化文案
   const { t } = useTranslation();
-  // vim 模式（settings.editor.vimMode 真实消费——此前仅存储无行为）
   const vimEnabled = useSettingsStore((s) => s.editor.vimMode);
-  // 输入状态（值 + 附件 + 草稿，自 ChatInput 拆出：use-composer-input.ts）
   const {
     value,
     setValue,
@@ -152,18 +139,14 @@ export function ChatInput({
     onValueChange,
     injectedValue,
   });
-  // 占位符：props 优先，缺省走 i18n
   const effectivePlaceholder = placeholder ?? t('chat.inputPlaceholder');
 
-  // textarea ref：用于 auto-resize + 快捷 pill 预填后聚焦
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // vim 模式状态机（自 ChatInput 拆出：use-vim-mode.ts）
   const { vimState, pendingCursor, processKey, clearPendingCursor } = useVimMode({
     setValue,
   });
 
-  // vim 光标落点：值渲染完成后应用（受控/非受控通用；同时聚焦保持操作连续性）
   useEffect(() => {
     if (pendingCursor === null) return;
     const el = textareaRef.current;
@@ -184,7 +167,6 @@ export function ChatInput({
     const el = textareaRef.current;
     if (el === null) return;
     el.style.height = 'auto';
-    // 自动增长封顶：手动拖拽/键盘设置过 maxHeight 时跟随手动档，否则默认 240px
     const manualCap = Number.parseFloat(el.style.maxHeight);
     const cap =
       Number.isFinite(manualCap) && manualCap > 0
@@ -193,8 +175,6 @@ export function ChatInput({
     el.style.height = `${Math.min(el.scrollHeight, cap)}px`;
   };
 
-  // ── 斜杠/提及建议状态机（自 ChatInput 拆出：use-composer-suggest.ts）──
-  // 职责：触发检测 / 候选过滤 / 键盘高亮 / 应用建议（Esc 只清触发段保留其余输入）
   const {
     activeTrigger,
     suggestOpen,
@@ -215,30 +195,21 @@ export function ChatInput({
     onAfterChange: autoResize,
   });
 
-  // 值变化后 auto-resize
   // biome-ignore lint/correctness/useExhaustiveDependencies: 仅在 value 变化时 resize
   useEffect(() => {
     autoResize();
   }, [value]);
 
-  // 是否处于流式状态（显示停止按钮）
   const isStreaming = status === 'streaming' || status === 'submitted';
 
-  // onStop 经 ref 调用：window 监听 effect 不依赖函数身份（父级内联 () => stop()
-  // 每渲染新建会导致流式期间监听反复装卸）——统一走 useLatestRef
   const onStopRef = useLatestRef(onStop);
 
-  // 流式期间 window 级 Esc 监听：textarea 未聚焦时也可中断生成
-  // （对齐原型 composer-hint "Esc 中断"；disabled 元素收不到键盘事件的补充通道）
-  // useLatestRef 惯用法：经 ref 调最新闭包正是为让 effect 不随 onStop 身份重订阅
   // biome-ignore lint/correctness/useExhaustiveDependencies: ref.current 是受控的 latest-ref 读取
   useEffect(() => {
     if (!isStreaming) {
       return;
     }
     const onWindowKeyDown = (event: globalThis.KeyboardEvent): void => {
-      // IME 组合态内的 Esc 是「取消候选词」，不得中断生成
-      // （window 监听是 textarea 未聚焦时的补充通道，同样需要该判定）
       if (event.isComposing) return;
       if (event.key === 'Escape' && !event.defaultPrevented) {
         event.preventDefault();
@@ -251,8 +222,6 @@ export function ChatInput({
     };
   }, [isStreaming]);
 
-  // 发送管线（自 ChatInput 拆出：use-composer-send.ts）
-  // 职责：in-flight 守卫 / 超长拦截 / 附件拼接 / 清草稿与输入（三路径统一复位）
   const { canSend, handleSend } = useComposerSend({
     value,
     attachments,
@@ -269,9 +238,7 @@ export function ChatInput({
       const data = await pickFiles({ multiple: true });
       if (data.canceled || data.paths === undefined || data.paths.length === 0) return;
       pickAttachments(data.paths);
-    } catch {
-      // 选择器错误/取消：静默失败（非关键路径，用户可重试）
-    }
+    } catch {}
   };
 
   /** 输入框高度拖拽（use-composer-drag.ts：手柄事件 props） */
@@ -283,10 +250,7 @@ export function ChatInput({
    * @returns 是否已消费该按键（true = 调用方直接 return，不再走后续分支）
    */
   const handleVimKey = (event: KeyboardEvent<HTMLTextAreaElement>): boolean => {
-    // 流式中 Esc 仍走原逻辑（中断生成），vim 不吞掉
     const isStreamEsc = event.key === 'Escape' && isStreaming;
-    // 带修饰键的组合（复制/粘贴/全选/系统快捷键）不进 vim 状态机：
-    // vim 键表无修饰键概念，Ctrl+V 会命中 'v' 被吞，Ctrl+A 会误入 insert
     if (isStreamEsc || event.ctrlKey || event.metaKey || event.altKey) return false;
     const consumed = processKey(
       { key: event.key, selectionStart: event.currentTarget.selectionStart },
@@ -306,27 +270,18 @@ export function ChatInput({
    * - Esc（流式状态）：中断生成，对齐原型 composer-hint "Esc 中断"
    */
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    // ── IME 组合态优先（2026-09 审计修复）──
-    // 中文/日文输入法候选窗内的 Enter（选用候选词）与 Esc（取消候选）都会派发
-    // keydown，且 key 就是 'Enter'/'Escape'、无修饰键——若不拦，用户「打中文按
-    // Enter 选词」会直接把半截文本发出去。本项目自带 zh-CN 语言包，属主干路径。
-    // 判定用 nativeEvent.isComposing（React 合成事件不暴露该字段）。
     if (isImeComposing(event)) return;
 
-    // vim 模式分支（normal 态拦截全部按键；insert 态仅 Esc 切回 normal）
     if (vimEnabled && handleVimKey(event)) return;
 
-    // 流式状态按 Esc：中断生成
     if (event.key === 'Escape' && isStreaming) {
       event.preventDefault();
       onStop();
       return;
     }
-    // 建议面板键盘处理（方向键/录入/Esc）
     if (handleSuggestKeyDown(event)) {
       return;
     }
-    // Enter 且无 Shift / Ctrl / Cmd 同时按：发送
     if (isSendShortcut(event)) {
       event.preventDefault();
       handleSend();
@@ -334,17 +289,13 @@ export function ChatInput({
   };
 
   return (
-    // .composer：输入舱外壳（顶部渐变 + 底部 padding，由父级 footer 提供）
-    // 此处仅渲染 .composer-box 内层（外层 .composer 由 ChatPanel footer 提供）
     <div className={cn('composer-box relative', className)}>
-      {/* 输入框高度拖拽手柄（use-composer-drag.ts：拖拽/双击重置/键盘步进，语义 hr + separator） */}
       <hr
         className="composer-drag-handle"
         aria-label={t('chat.resizeComposer')}
         tabIndex={0}
         {...dragHandleProps}
       />
-      {/* 斜杠/提及建议下拉（自 ChatInput 拆出：slash-suggest-panel.tsx） */}
       <SlashSuggestPanel
         trigger={activeTrigger}
         slashSuggestions={filteredSuggestions}
@@ -353,9 +304,6 @@ export function ChatInput({
         onSelectCommand={applySuggestion}
         onSelectFile={applyMention}
       />
-      {/* 建议面板当前高亮项的播报：combobox 焦点模型在 textarea 上不合法
-          （ARIA in HTML 不允许覆盖 textbox 角色），故用 sr-only live region
-          满足 4.1.3 Status Messages——键盘上下移动高亮时读屏可听到当前项 */}
       <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">
         {suggestOpen && activeSuggestionLabel !== ''
           ? t('chat.suggestAnnounce', {
@@ -365,18 +313,12 @@ export function ChatInput({
             })
           : ''}
       </span>
-      {/* 附件 chip 列表（自 ChatInput 拆出：attachments-chips.tsx） */}
       <AttachmentsChips attachments={attachments} onRemove={removeAttachment} />
-      {/* 文本域：.composer-input（透明背景，focus 时 box 上浮发光）
-          ref 必须绑定：autoResize 依赖 textareaRef 调整高度（此前漏绑定导致多行不增高） */}
       <textarea
         ref={textareaRef}
         className="composer-input"
         rows={1}
         aria-label={t('chat.inputLabel')}
-        // 输入框 ↔ 建议面板的程序化关联（aria-controls 是 ARIA 全局属性，合法）；
-        // 不用 combobox 角色：ARIA in HTML 规定 textarea 不允许覆盖 textbox 角色，
-        // 故当前高亮项改由下方 sr-only live region 播报（见 suggestAnnounce）
         aria-controls={suggestOpen ? 'chat-input-suggest' : undefined}
         id="chat-input"
         spellCheck={false}
@@ -385,15 +327,11 @@ export function ChatInput({
         autoCapitalize="off"
         placeholder={effectivePlaceholder}
         value={value}
-        // 流式期间不禁用输入框（对齐原型：允许预输入下一条；
-        // disabled 会吞掉键盘事件导致 Esc 中断失效——Esc 由 window 级监听处理）
         disabled={disabled}
         onChange={(event) => setValue(event.target.value)}
         onKeyDown={handleKeyDown}
       />
-      {/* 工具栏：.composer-bar（顶部发丝分隔 + 右对齐按钮） */}
       <div className="composer-bar">
-        {/* 左侧：composer-tools（attach-btn + slash-btn，对齐原型输入舱工具按钮） */}
         <div className="composer-tools">
           <button
             type="button"
@@ -412,8 +350,6 @@ export function ChatInput({
             aria-label={t('chat.slashCommand')}
             title={`${t('chat.slashCommand')} (/)`}
             onClick={() => {
-              // 点击斜杠按钮：以 / 开头打开建议面板（对齐原型 suggest-pop）
-              // 已有输入时前缀而非覆盖——覆盖会吞掉用户已输入的全文（不可撤销）
               setValue(value.startsWith('/') ? value : `/${value}`);
               textareaRef.current?.focus();
               autoResize();
@@ -422,7 +358,6 @@ export function ChatInput({
             <Slash className="size-4" strokeWidth={1.5} />
           </button>
         </div>
-        {/* 快捷键提示（等宽字体 kbd） */}
         <span className="composer-hint">
           {vimEnabled && (
             <span
@@ -432,8 +367,6 @@ export function ChatInput({
               {vimState.mode === 'normal' ? t('chat.vimNormal') : t('chat.vimInsert')}
             </span>
           )}
-          {/* 快捷键提示：键名对读屏有意义（「Enter 发送 · Shift+Enter 换行」），
-              故不用 aria-hidden 抹掉字形，而是让 kbd 承载可读键名 */}
           <kbd>Enter</kbd> {t('chat.send')} · <kbd>Shift+Enter</kbd> {t('chat.newline')}
           {isStreaming ? (
             <>
@@ -442,11 +375,8 @@ export function ChatInput({
             </>
           ) : null}
         </span>
-        {/* 右区：模型选择 + 发送按钮（整体右对齐，用户要求模型紧贴发送按钮左侧） */}
         <div className="ml-auto flex shrink-0 items-center gap-1">
           {rightSlot}
-          {/* 发送/停止按钮切换：AnimatePresence 实现图标旋转淡入 + 弹簧按压缩放
-               （MotionVault button 类交互、motion.dev react-hover-animation 官方模式） */}
           <AnimatePresence mode="wait" initial={false}>
             {isStreaming ? (
               <motion.button

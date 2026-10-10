@@ -1,17 +1,3 @@
-// src/renderer/stores/transient/approvals-store.ts
-// 审批门状态管理（L2 客户端共享状态层 - transient）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 维护待审批队列（FIFO，主进程推送 approval 事件时入队）
-// - 提供 approve / reject / 取消 原子操作，回写主进程
-// - 单个会话可有多个待审批项（如批量文件编辑）
-//
-// 设计：
-// - 纯状态容器，不调用 IPC（业务 hook 监听队列变化后副作用执行）
-// - 决议后移入 resolved 列表（最多 20 条，内联卡回显最近一条；× 按钮 dismiss 移除），无自动出队
-// - 不持久化：审批决策是即时操作，跨重启保留意义不大
-// ──────────────────────────────────────────────────────────────
-
 import { create } from 'zustand';
 
 /**
@@ -101,7 +87,6 @@ interface ApprovalsState {
   /** 最近已决议的审批（用于 UI 反馈，最多保留 20 条） */
   readonly resolved: ApprovalItem[];
 
-  // ── 操作方法 ────────────────────────────────────────
   /** 入队新审批（主进程推送 approval 事件时调用） */
   readonly enqueue: (item: Omit<ApprovalItem, 'status' | 'resolvedAt'>) => void;
   /** 批准审批项 */
@@ -195,7 +180,6 @@ export const useApprovalsStore = create<ApprovalsState>()((set) => ({
   settleExternal: (id, decision) =>
     set((state) => {
       const item = state.pending.find((a) => a.id === id);
-      // 幂等：条目已被用户操作移出（approve/reject）或本就未入队 → no-op
       if (item === undefined) {
         return state;
       }
@@ -203,7 +187,6 @@ export const useApprovalsStore = create<ApprovalsState>()((set) => ({
         ...item,
         status: 'expired',
         resolvedAt: Date.now(),
-        // 决议细节留在描述位（UI 用 i18n 展示"审批超时/已中断"）
         externalDecision: decision,
       };
       return {

@@ -1,5 +1,3 @@
-// src/renderer/hooks/use-update.test.tsx
-// use-update 单测：读 update-store + 动作转发（订阅行为已由 use-update-bridge 负责）
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 

@@ -1,7 +1,3 @@
-// src/main/infra/ai/tools/glob.tool.ts
-// glob 工具：封装 SearchService.glob，供 Code Agent 按文件名模式查找文件
-// ──────────────────────────────────────────────────────────────
-
 import type { GlobRes } from '@code-agent/shared/main';
 import { z } from 'zod';
 import { t } from '../../i18n';
@@ -43,7 +39,6 @@ export function createGlobTool(searchService: ISearchService): Tool<GlobInput> {
     category: 'read',
     execute: async (input: GlobInput, ctx: ToolContext): Promise<ToolResult> => {
       const rawPath = input.path ?? '.';
-      // realTarget：IO 用真实落点（TOCTOU，debt.md#d1）；metadata.path 保持输入形态
       const { resolved, realTarget } = resolveWithinWorkspace(rawPath, ctx.workingDir);
 
       const result: GlobRes = await searchService.glob({

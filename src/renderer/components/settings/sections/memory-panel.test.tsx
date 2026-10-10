@@ -1,13 +1,3 @@
-// src/renderer/components/$1/memory-panel.test.tsx
-// 记忆管理面板测试（正向 / 边界 / 异常）
-// ──────────────────────────────────────────────────────────────
-// 覆盖动机：该文件此前 0% 覆盖（本轮覆盖率排查确认），却是设置里交互最重的
-// 面板之一（查询 + 开关 + 两级清除 + 确认弹窗 + 四态列表）。其清除路径的
-// 「ok=false 必须抛错」契约此前完全靠注释维系，无回归锚：
-// 主进程在引擎不可用时返回 `{ ok: false }`（不是 `{ error }`），若忘了判 ok，
-// 清除失败会被渲染成「已清除」的成功提示。
-// ──────────────────────────────────────────────────────────────
-
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -16,7 +6,6 @@ import { i18n } from '@/i18n';
 import { useActiveSessionStore } from '@/stores/persistent/sessions-store';
 import { useSettingsStore } from '@/stores/persistent/settings-store';
 
-// 仅 mock 确认弹窗（DialogHost 不在本测试渲染树内；store 层只关心 Promise 结果）
 const { mockConfirm } = vi.hoisted(() => ({ mockConfirm: vi.fn(async () => true) }));
 vi.mock('@/stores/transient/confirm-dialog-store', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/stores/transient/confirm-dialog-store')>()),
@@ -99,7 +88,6 @@ describe('MemoryPanel · 渲染与四态', () => {
     renderPanel();
 
     await waitFor(() => expect(screen.getByText(i18n.t('settings.memoryNoSession'))).toBeDefined());
-    // enabled=false：不发起 list 请求
     expect(api.list).not.toHaveBeenCalled();
   });
 
@@ -251,7 +239,6 @@ describe('MemoryPanel · 浏览器模式（无桥）', () => {
     (window as unknown as { api: undefined }).api = undefined;
     renderPanel();
 
-    // 有会话但无桥 → 列表空态；状态查询返回 null → 不渲染状态条
     await waitFor(() => expect(screen.getByText(i18n.t('settings.memoryEmpty'))).toBeDefined());
     expect(screen.queryByText(i18n.t('settings.memoryStatus'))).toBeNull();
   });

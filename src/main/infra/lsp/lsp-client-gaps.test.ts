@@ -1,14 +1,3 @@
-// src/main/infra/lsp/lsp-client-gaps.test.ts
-// lsp-client 缺口补全：配置缺省 / 生命周期事件 / hover 形状归一化 / 协议解析边界
-//
-// 测试要点：
-// 1. 构造：args/timeoutMs 缺省回退
-// 2. initialize：已释放抛错 / 未初始化请求抛错
-// 3. exit/error 事件：服务器退出拒绝未决请求
-// 4. hover：非对象 / 数组混合 / 单对象 value / 非法形状 → null
-// 5. drainFrames：头损坏丢弃 / 帧未收全等待
-// 6. dispatchFrame：错误响应 reject / 服务器通知记录 / 未知 id 忽略
-
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { LspClient, type LspPosition } from './lsp-client';
 
@@ -22,7 +11,6 @@ const mocks = vi.hoisted(() => {
   return { mockLogger };
 });
 
-// 注意：lsp-client 在 infra/lsp/ 下，logger 相对路径为 '../../utils/logger'
 vi.mock('../../utils/logger', () => ({
   logger: mocks.mockLogger,
 }));
@@ -137,7 +125,6 @@ describe('LspClient 批次11 缺口补全', () => {
   });
 
   it('hover 结果非对象（null）：返回 null', async () => {
-    // 独立 fake server：hover 返回 result=null（非对象形状）
     const nullHoverScript = `
 let buffer = '';
 function send(message) {
@@ -191,7 +178,6 @@ process.stdin.on('data', (chunk) => {
   it('服务器退出（exit 事件）：拒绝全部未决请求', async () => {
     const client = await createTestClient();
     clients.push(client);
-    // 发送 stall 请求（永不响应），随后杀死服务器 → exit 事件拒绝未决
     const requestPromise = client.requestRaw('textDocument/stall', null);
     const child = (client as unknown as { child: { kill: () => void } }).child;
     child.kill();
@@ -227,11 +213,9 @@ process.stdin.on('data', (chunk) => {
       drainFrames: () => void;
       loggerTag: string;
     };
-    // 头损坏：无 Content-Length 的帧头 → 丢弃并继续
     internals.readBuffer = Buffer.from('BROKEN-HEADER\r\n\r\nrest');
     internals.drainFrames();
     expect(internals.readBuffer.toString('utf8')).toBe('rest');
-    // 帧未收全：合法头但 body 不足 → 等待
     internals.readBuffer = Buffer.from('Content-Length: 100\r\n\r\nshort');
     internals.drainFrames();
     expect(internals.readBuffer.toString('utf8')).toBe('Content-Length: 100\r\n\r\nshort');

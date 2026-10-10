@@ -1,24 +1,18 @@
-// packages/shared/src/__tests__/errors.test.ts
-// AppError 与 ErrorCode 单元测试
 import { describe, expect, it } from 'vitest';
 import { AppError, ERROR_META, ErrorCode } from '../constants/errors';
 
 describe('ErrorCode', () => {
   it('包含所有通用基础设施错误码', () => {
-    // 通用
     expect(ErrorCode.UNKNOWN).toBe('UNKNOWN');
     expect(ErrorCode.INTERNAL_ERROR).toBe('INTERNAL_ERROR');
     expect(ErrorCode.INVALID_INPUT).toBe('INVALID_INPUT');
     expect(ErrorCode.NOT_FOUND).toBe('NOT_FOUND');
     expect(ErrorCode.UNAUTHORIZED).toBe('UNAUTHORIZED');
     expect(ErrorCode.RATE_LIMITED).toBe('RATE_LIMITED');
-    // IPC
     expect(ErrorCode.IPC_SENDER_INVALID).toBe('IPC_SENDER_INVALID');
     expect(ErrorCode.IPC_CHANNEL_NOT_FOUND).toBe('IPC_CHANNEL_NOT_FOUND');
-    // AI
     expect(ErrorCode.AI_API_KEY_MISSING).toBe('AI_API_KEY_MISSING');
     expect(ErrorCode.AI_RATE_LIMITED).toBe('AI_RATE_LIMITED');
-    // 文件系统
     expect(ErrorCode.FS_READ_FAILED).toBe('FS_READ_FAILED');
     expect(ErrorCode.FS_WRITE_FAILED).toBe('FS_WRITE_FAILED');
     expect(ErrorCode.FS_DISK_FULL).toBe('FS_DISK_FULL');

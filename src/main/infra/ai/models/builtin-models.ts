@@ -1,17 +1,3 @@
-// src/main/infra/ai/models/builtin-models.ts
-// 内置模型定义表（模型级路由的数据源）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 以模型为最小单元定义内置模型（区别于旧设计按供应商定义）
-// - 单一真源：providers/registry.ts 的 defaultModel / isDefault 均从本表的
-//   DEFAULT_MODEL_BY_KIND / DEFAULT_KIND 派生（方向：models → providers，
-//   避免双源维护导致 getModel 与 getAIProvider 路由分裂）
-//
-// 设计（对标 qwen-code modelsConfig + opencode 模型表）：
-// - 同一供应商可挂多个模型条目：默认模型（agent 主循环）+ 快模型（fastOnly）
-// - 能力元数据（reasoning / vision / contextWindowSize / fastOnly）驱动功能路由
-// ──────────────────────────────────────────────────────────────
-
 import { DEFAULT_MODEL, DEFAULT_PROVIDER } from '@code-agent/shared/main';
 
 import type { ProviderKind } from '../providers/types';
@@ -19,10 +5,6 @@ import type { ModelEntry } from './types';
 
 /** 内置模型条目表 */
 export const BUILTIN_MODELS: readonly ModelEntry[] = [
-  // ── DeepSeek（默认供应商，OpenAI Compatible 协议）──
-  // 官方文档：https://api-docs.deepseek.com/zh-cn/
-  // v4 系列思考模式默认开启；默认模型为 flash（成本/速度优先），
-  // pro 作为高性能档供用户手动选择；思考强度默认 max
   {
     id: 'deepseek-v4-flash',
     providerKind: 'deepseek',
@@ -32,7 +14,6 @@ export const BUILTIN_MODELS: readonly ModelEntry[] = [
       contextWindowSize: 1_000_000,
       maxOutputTokens: 384_000,
     },
-    // 官方默认思考强度即 high，此处显式声明为 max（用户偏好）
     generationConfig: { reasoningEffort: 'max' },
   },
   {
@@ -47,7 +28,6 @@ export const BUILTIN_MODELS: readonly ModelEntry[] = [
     generationConfig: { reasoningEffort: 'max' },
   },
 
-  // ── DeepSeek 旧版模型（兼容既有配置，非默认）──
   {
     id: 'deepseek-chat',
     providerKind: 'deepseek',
@@ -58,11 +38,9 @@ export const BUILTIN_MODELS: readonly ModelEntry[] = [
     id: 'deepseek-reasoner',
     providerKind: 'deepseek',
     displayName: 'DeepSeek Reasoner（旧版兼容）',
-    // 输出上限含思维链 token
     capabilities: { reasoning: true, contextWindowSize: 64_000, maxOutputTokens: 64_000 },
   },
 
-  // ── OpenAI ──
   {
     id: 'gpt-4o',
     providerKind: 'openai',
@@ -81,7 +59,6 @@ export const BUILTIN_MODELS: readonly ModelEntry[] = [
     },
   },
 
-  // ── Anthropic ──
   {
     id: 'claude-sonnet-4-20250514',
     providerKind: 'anthropic',
@@ -100,12 +77,10 @@ export const BUILTIN_MODELS: readonly ModelEntry[] = [
     },
   },
 
-  // ── Ollama（本地，无需 API Key）──
   {
     id: 'qwen2.5-coder:7b',
     providerKind: 'ollama',
     displayName: 'Qwen2.5 Coder 7B（本地）',
-    // 本地推理保守上限（默认 num_predict 受限）
     capabilities: { contextWindowSize: 32_000, maxOutputTokens: 8_192 },
   },
   {
@@ -114,7 +89,6 @@ export const BUILTIN_MODELS: readonly ModelEntry[] = [
     displayName: 'Qwen2.5 7B（本地快模型）',
     capabilities: { contextWindowSize: 32_000, maxOutputTokens: 8_192, fastOnly: true },
   },
-  // Moonshot Kimi（OpenAI Compatible 协议）
   {
     id: 'kimi-k2-0711-preview',
     providerKind: 'moonshot',
@@ -124,7 +98,6 @@ export const BUILTIN_MODELS: readonly ModelEntry[] = [
       maxOutputTokens: 8192,
     },
   },
-  // 智谱 GLM（OpenAI Compatible 协议）
   {
     id: 'glm-4.6',
     providerKind: 'zhipu',
@@ -134,7 +107,6 @@ export const BUILTIN_MODELS: readonly ModelEntry[] = [
       maxOutputTokens: 8192,
     },
   },
-  // 通义千问（OpenAI Compatible 协议）
   {
     id: 'qwen3-coder-plus',
     providerKind: 'qwen',
@@ -144,7 +116,6 @@ export const BUILTIN_MODELS: readonly ModelEntry[] = [
       maxOutputTokens: 8192,
     },
   },
-  // 豆包（火山方舟）（OpenAI Compatible 协议）
   {
     id: 'doubao-seed-1-6-250615',
     providerKind: 'doubao',
@@ -154,7 +125,6 @@ export const BUILTIN_MODELS: readonly ModelEntry[] = [
       maxOutputTokens: 8192,
     },
   },
-  // 硅基流动（OpenAI Compatible 协议）
   {
     id: 'deepseek-ai/DeepSeek-V3.1',
     providerKind: 'siliconflow',
@@ -164,7 +134,6 @@ export const BUILTIN_MODELS: readonly ModelEntry[] = [
       maxOutputTokens: 8192,
     },
   },
-  // OpenRouter（OpenAI Compatible 协议）
   {
     id: 'deepseek/deepseek-chat',
     providerKind: 'openrouter',

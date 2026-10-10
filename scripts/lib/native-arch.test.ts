@@ -1,11 +1,3 @@
-// scripts/lib/native-arch.test.ts
-// 二进制格式/架构识别单测
-// ──────────────────────────────────────────────────────────────
-// 覆盖动机：该模块是「架构错配」这一静默缺陷的唯一探针（构建日志不会报错），
-// 识别逻辑必须对三种格式、各架构、以及非二进制/截断输入都有确定行为。
-// 测试用合成头（按格式规范手工构造最小字节序列），不依赖真实二进制文件。
-// ──────────────────────────────────────────────────────────────
-
 import { describe, expect, it } from 'vitest';
 
 import { archMatches, detectBinaryInfo, expectedArchFromDirName } from './native-arch';
@@ -14,9 +6,9 @@ import { archMatches, detectBinaryInfo, expectedArchFromDirName } from './native
 function makeElf(machine: number): Buffer {
   const buf = Buffer.alloc(64);
   buf.writeUInt8(0x7f, 0);
-  buf.writeUInt8(0x45, 1); // 'E'
-  buf.writeUInt8(0x4c, 2); // 'L'
-  buf.writeUInt8(0x46, 3); // 'F'
+  buf.writeUInt8(0x45, 1);
+  buf.writeUInt8(0x4c, 2);
+  buf.writeUInt8(0x46, 3);
   buf.writeUInt16LE(machine, 18);
   return buf;
 }
@@ -24,12 +16,12 @@ function makeElf(machine: number): Buffer {
 /** 构造 PE 头（'MZ' + 偏移 0x3C 指向 PE 头 + Machine） */
 function makePe(machine: number): Buffer {
   const buf = Buffer.alloc(256);
-  buf.writeUInt8(0x4d, 0); // 'M'
-  buf.writeUInt8(0x5a, 1); // 'Z'
+  buf.writeUInt8(0x4d, 0);
+  buf.writeUInt8(0x5a, 1);
   const peOffset = 0x80;
   buf.writeUInt32LE(peOffset, 0x3c);
-  buf.writeUInt8(0x50, peOffset); // 'P'
-  buf.writeUInt8(0x45, peOffset + 1); // 'E'
+  buf.writeUInt8(0x50, peOffset);
+  buf.writeUInt8(0x45, peOffset + 1);
   buf.writeUInt8(0x00, peOffset + 2);
   buf.writeUInt8(0x00, peOffset + 3);
   buf.writeUInt16LE(machine, peOffset + 4);

@@ -1,16 +1,3 @@
-// src/main/infra/memory-hub/node-launcher.ts
-// 非 Electron 环境（vitest / 纯 Node）下的引擎启动器实现
-// ──────────────────────────────────────────────────────────────
-// 用途：契约测试要在 vitest（纯 Node，无 Electron 运行时）中"真实拉起引擎"，
-//   而生产的 utilityProcess 在该环境不可用。本实现以 spawn 的**数组参数**形式
-//   启动同一个 launcher 脚本，契约与生产一致（pid / stderr 尾巴 / 退出 / 终止）。
-//
-// 安全说明（供审计）：启动使用参数数组、不经 shell 解释；参数由本模块与
-//   MemoryHubService 在进程内构造（modulePath 为 dataDir 下的 launcher.mjs，
-//   loader 参数为冻结常量），无外部输入参与。生产环境**不使用本模块**
-//   （固定走 Electron utilityProcess，见 engine-process.ts）。
-// ──────────────────────────────────────────────────────────────
-
 import type { ChildProcess } from 'node:child_process';
 import type { EngineLauncher, EngineProcessHandle, LaunchEngineOptions } from './engine-process';
 

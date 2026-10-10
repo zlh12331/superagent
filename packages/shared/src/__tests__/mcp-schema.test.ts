@@ -1,7 +1,3 @@
-// packages/shared/src/__tests__/mcp-schema.test.ts
-// MCP schema 单测：transport 三态条件校验 / 向后兼容（无 transport 字段 = stdio）
-// / stdio args 执行跳板 deny-list（P0：bash -c / node -e / cmd /c 之类任意代码执行）
-
 import { describe, expect, it } from 'vitest';
 import { detectMcpExecTrampoline, McpServerConfigSchema } from '../schemas/mcp';
 

@@ -1,9 +1,3 @@
-// src/renderer/components/chat/ChatPanel.slash-dispatch.integration.test.tsx
-// ChatPanel 斜杠命令分发集成测试（全链）：
-// 用户输入 → ChatInput 建议面板 → executeSlashCommand → ChatPanel 动作回调 → IPC / store / AI SDK
-// ──────────────────────────────────────────────────────────────
-// 隔离面：仅 mock AI SDK 编排层（useAgentWithIpc）与 react-router 导航；
-// ChatPanel / ChatInput / 建议面板 / executeSlashCommand / ui-store / IPC mock 全部真实。
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -139,7 +133,6 @@ describe('ChatPanel 斜杠命令分发（集成）', () => {
     expect(compact).not.toHaveBeenCalled();
     expect(stopSpy).not.toHaveBeenCalled();
     expect(navigateSpy).not.toHaveBeenCalled();
-    // 普通消息通道兜底（非空文本发送）
     expect(sendMessageSpy).toHaveBeenCalledWith({ text: '/zzz' });
   });
 

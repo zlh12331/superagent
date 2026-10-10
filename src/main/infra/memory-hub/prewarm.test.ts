@@ -1,9 +1,3 @@
-// src/main/infra/memory-hub/prewarm.test.ts
-// 记忆引擎启动预热单测：决策分支 + 调度行为（幂等/失败静默/延迟）
-// ──────────────────────────────────────────────────────────────
-// 说明：scheduleMemoryPrewarm 有模块级幂等标记，故用 vi.resetModules() +
-//   动态 import 隔离各用例的模块状态。
-
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() }));
@@ -83,7 +77,6 @@ describe('scheduleMemoryPrewarm（调度）', () => {
     const service = fakeService();
     scheduleMemoryPrewarm({ service });
 
-    // 立即返回：延迟未到不应启动
     expect(service.ensureStarted).not.toHaveBeenCalled();
 
     await vi.advanceTimersByTimeAsync(PREWARM_DELAY_MS);

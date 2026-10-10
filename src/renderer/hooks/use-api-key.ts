@@ -1,19 +1,3 @@
-// src/renderer/hooks/use-api-key.ts
-// API Key 管理 hook（L3 服务端请求状态层）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 通过 TanStack Query 调用 settings:setApiKey IPC（配置入口在 model-config-dialog）
-// - 主进程通过 safeStorage 加密存储（Windows DPAPI / macOS Keychain / Linux libsecret）
-// - 成功后自动失效共享缓存（模型选择器立即刷新）
-//
-// 设计依据（项目规范）：
-// - "Server state from IPC `invoke` (request-response) must use TanStack Query
-//    for caching, invalidation, and race condition handling"
-// - API Key 在主进程 keychain 加密存储，渲染层只读写明文
-//
-// 历史：useApiKeyQuery / useDeleteApiKey 无生产消费方，已于 2026-08-27 审计后移除。
-// ──────────────────────────────────────────────────────────────
-
 import type { ApiKeyProvider } from '@code-agent/shared/renderer';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -48,7 +32,6 @@ export const API_KEY_QUERY_KEY = (provider: ApiKeyProvider) => ['api-key', provi
  * ```
  */
 export function useSetApiKey() {
-  // 本地化文案
   const { t } = useTranslation();
   const queryClient = useQueryClient();
 
@@ -58,9 +41,6 @@ export function useSetApiKey() {
       return unwrap<{ ok: boolean }>(response);
     },
     onSuccess: (_data, variables) => {
-      // 失效对应 provider 的查询缓存 + 共享 models 清单缓存：
-      // 保存 Key 后 composer 模型选择器必须立即出现该提供商的模型
-      //（此前仅失效 key 状态查询——聊天区选择器一直停留在「未配置模型」）
       void queryClient.invalidateQueries({ queryKey: API_KEY_QUERY_KEY(variables.provider) });
       void queryClient.invalidateQueries({ queryKey: MODELS_QUERY_KEY });
     },

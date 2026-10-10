@@ -1,13 +1,3 @@
-// src/renderer/lib/settings-bootstrap.ts
-// 设置启动引导（S1：localStorage → SQLite 单一真源迁移 + 快照加载）
-// ──────────────────────────────────────────────────────────────
-// 流程（main.tsx 顶层 await，render 前完成，无主题闪烁）：
-// 1. Electron：settings:getAll 拉 SQLite 快照
-// 2. SQLite 为空且 localStorage 有旧值 → 一次性迁移（写库 + 清理 localStorage）
-// 3. IPC 失败 / 浏览器模式 → 回退 localStorage 旧值
-// 4. 快照经 migrateShortcuts 应用 v3 快捷键归一化迁移
-// ──────────────────────────────────────────────────────────────
-
 import { SETTING_KEYS, type SettingKey } from '@code-agent/shared/renderer';
 import { unwrap } from '@/lib/ipc';
 import { SETTINGS_STORAGE_KEY } from '@/lib/theme-init';
@@ -39,8 +29,6 @@ async function migrateToMain(settings: Readonly<Record<string, unknown>>): Promi
   if (api === undefined || api.settings === undefined) {
     return false;
   }
-  // settings:set 已收紧为白名单键——legacy 里的未知键（旧版残留/元数据）
-  // 过滤掉再写，否则迁移永不完成（allWritten=false → localStorage 永不清）
   const whitelist = new Set<string>(SETTING_KEYS);
   const entries = Object.entries(settings).filter((entry): entry is [SettingKey, unknown] =>
     whitelist.has(entry[0]),
@@ -74,12 +62,8 @@ export async function bootstrapSettings(): Promise<{
           snapshot: migrated,
         };
       }
-      // SQLite 为空：迁移 legacy localStorage（一次性）
       if (legacy?.state !== undefined) {
         const migrated = migrateShortcuts(legacy.state);
-        // P2 修复（原子性）：全部写库成功才清 legacy——原实现 fire-and-forget
-        // 写库后同步删 localStorage，任一 set 失败或进程在落库前退出，
-        // 设置既不在 SQLite 也无副本，永久丢失回落默认值
         const allWritten = await migrateToMain(migrated);
         if (allWritten) {
           localStorage.removeItem(SETTINGS_STORAGE_KEY);
@@ -90,12 +74,9 @@ export async function bootstrapSettings(): Promise<{
         };
       }
       return { theme: 'dark', snapshot: {} };
-    } catch {
-      // IPC 失败 / 错误响应：回退 legacy（不阻断启动）
-    }
+    } catch {}
   }
 
-  // 浏览器模式 / IPC 失败回退：legacy localStorage
   if (legacy?.state !== undefined) {
     const migrated = migrateShortcuts(legacy.state);
     return {

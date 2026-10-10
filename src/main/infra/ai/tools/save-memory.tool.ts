@@ -1,13 +1,3 @@
-// src/main/infra/ai/tools/save-memory.tool.ts
-// save_memory 工具：主动保存记忆条目（对齐 qwen save_memory 工具语义收敛）
-// ──────────────────────────────────────────────────────────────
-// 设计：
-// - 模型显式声明值得跨会话保留的内容（绕过回合后自动提取的被动通道）
-// - 存储引擎：MemoryHub（TencentDB-Agent-Memory）——显式条目经 capture 进 L0，
-//   由蒸馏管线沉淀为 L1 结构化记忆
-// - 依赖注入：MemoryPort 由 ServiceContainer 提供（唯一边界见 infra/memory-hub）
-// ──────────────────────────────────────────────────────────────
-
 import { z } from 'zod';
 import { t } from '../../i18n';
 import { isMemoryEnabled } from '../../memory-hub/memory-pref';
@@ -36,7 +26,6 @@ export function createSaveMemoryTool(memoryPort: MemoryPort): Tool<SaveMemoryInp
     permission: 'auto',
     category: 'exec',
     execute: async (input: SaveMemoryInput, ctx: ToolContext): Promise<ToolResult> => {
-      // 用户关闭记忆功能时不接受写入（关闭语义 = 不捕获）
       if (!isMemoryEnabled()) {
         return {
           title: t('tools.saveMemory.disabled'),

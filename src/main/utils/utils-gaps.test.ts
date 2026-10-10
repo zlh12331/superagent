@@ -1,13 +1,3 @@
-// src/main/utils/utils-gaps.test.ts
-// utils 域 10 缺口补全：logger 生产分支/序列化边界/崩溃标记、window-state 字段校验/销毁守卫/防抖
-//
-// 测试要点：
-// 1. initLogger：prod 分支（file=info + console 关闭）
-// 2. error 序列化：非 Error 值 / Error.cause 递归
-// 3. unhandledRejection 非 Error / uncaughtException 崩溃标记
-// 4. clearCrashMarker：存在删除 / 不存在跳过
-// 5. window-state：非 number 字段回退 / isDestroyed 守卫 / bounds 缺坐标 / 防抖合并 / cleanup
-
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -76,7 +66,6 @@ describe('utils 域批次10 缺口补全', () => {
 
     it('error 传非 Error 值：String() 兜底序列化', () => {
       logger.error({}, '测试', 'plain-string-error');
-      // 不抛即可；serializeError 的 String 兜底路径执行
       expect(mocks.mockLog.error).toHaveBeenCalled();
     });
 
@@ -90,11 +79,9 @@ describe('utils 域批次10 缺口补全', () => {
     it('unhandledRejection 非 Error reason：记日志且不抛（不上报路径已移除）', () => {
       mocks.mockLog.error.mockClear();
       registerGlobalErrorHandlers();
-      // 触发非 Error 的 unhandledRejection（reason 为字符串）
       const listeners = process.listeners('unhandledRejection');
       const last = listeners[listeners.length - 1];
       expect(last).toBeDefined();
-      // 直接调用监听器（避免真实 unhandledRejection 干扰）：不抛错且落日志
       if (last !== undefined) {
         expect(() => last('string-reason', Promise.resolve())).not.toThrow();
       }
@@ -102,7 +89,6 @@ describe('utils 域批次10 缺口补全', () => {
     });
 
     it('clearCrashMarker：标记存在时删除 + 日志；不存在时跳过', () => {
-      // 标记不存在：不抛、无删除日志
       clearCrashMarker();
       expect(mocks.mockLog.info).not.toHaveBeenCalledWith(
         expect.objectContaining({ markerPath: expect.any(String) }),
@@ -193,7 +179,6 @@ describe('utils 域批次10 缺口补全', () => {
         } as never;
 
         trackWindowState(win, filePath);
-        // 连续触发 resize：防抖合并，只在防抖窗口到期后保存一次
         const resize = listeners.get('resize');
         expect(resize).toBeDefined();
         resize?.();

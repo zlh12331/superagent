@@ -1,21 +1,4 @@
-// packages/shared/src/schemas/codebase.ts
-// Codebase 域类型真源（服务层/Agent 工具共用）
-// ──────────────────────────────────────────────
-// 职责：
-// - 定义 codegraph CLI 查询的返回类型（query 结构化结果 + markdown 输出）
-// - CodebaseService 封装 codegraph CLI 子进程调用，返回上述类型
-// - 消费方：codebase Agent 工具（infra/ai/tools/codebase.tool.ts）
-//
-// 说明：
-// - path 必须为绝对路径（codegraph 索引的项目根目录）
-// - query 返回结构化 JSON（符号列表 + 相关度评分）
-// - explore/node/callers/callees/impact 返回 markdown 文本，直接喂给 LLM
-//   （这些命令的 JSON 结构复杂且易变，markdown 输出更稳定，对 LLM 友好）
-// ──────────────────────────────────────────────
-
 import { z } from 'zod';
-
-// ─── query：结构化符号搜索 ─────────────────────────────────────
 
 /**
  * codegraph 符号节点 zod schema
@@ -86,36 +69,26 @@ export interface CodebaseQueryRes {
   readonly results: readonly CodebaseQueryResult[];
 }
 
-// ─── explore：区域探索（markdown 输出） ─────────────────────────
-
 /** codebase:explore 响应 payload：markdown 文本（含相关符号源码 + 调用路径） */
 export interface CodebaseExploreRes {
   /** markdown 格式的探索结果（直接喂给 LLM 作为上下文） */
   readonly markdown: string;
 }
 
-// ─── node：符号详情（markdown 输出） ────────────────────────────
-
 /** codebase:node 响应 payload：markdown 文本（符号源码 + 调用链） */
 export interface CodebaseNodeRes {
   readonly markdown: string;
 }
-
-// ─── callers：调用方查询（markdown 输出） ───────────────────────
 
 /** codebase:callers 响应 payload：markdown 文本（调用方列表 + 调用位置） */
 export interface CodebaseCallersRes {
   readonly markdown: string;
 }
 
-// ─── callees：被调用方查询（markdown 输出） ──────────────────────
-
 /** codebase:callees 响应 payload：markdown 文本（被调用方列表 + 调用位置） */
 export interface CodebaseCalleesRes {
   readonly markdown: string;
 }
-
-// ─── impact：影响分析（markdown 输出） ──────────────────────────
 
 /** codebase:impact 响应 payload：markdown 文本（影响范围分析） */
 export interface CodebaseImpactRes {

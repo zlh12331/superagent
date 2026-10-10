@@ -1,6 +1,3 @@
-// src/renderer/components/chat/slash-commands.test.ts
-// 斜杠命令执行器纯分发回归（命令 → 动作唯一映射点）
-
 import { describe, expect, it, vi } from 'vitest';
 
 import { executeSlashCommand, type SlashCommandDeps } from './slash-commands';

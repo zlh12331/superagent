@@ -1,13 +1,3 @@
-// scripts/generate-build-info.mjs
-// 生成构建信息 resources/build-info.json（「关于」页渠道/构建时间/Commit 数据源）
-// ──────────────────────────────────────────────────────────────
-// 用途：发布构建（build:dist/win/mac/linux）前置，把版本/渠道/源码哈希/构建时间
-// 写入 resources/build-info.json；electron-builder extraResources 会把它打进安装包
-// （resources/build-info.json），主进程 app:getInfo 读取展示。
-// dev 直跑不执行本脚本：主进程 readBuildInfo 回退 channel='dev'。
-// 失败策略：非致命（打 warn），缺失时关于页仅不显示构建信息。
-// ──────────────────────────────────────────────────────────────
-
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';

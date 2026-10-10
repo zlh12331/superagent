@@ -1,12 +1,3 @@
-// src/renderer/components/chat/message-offsets.ts
-// 导航轨活跃态的布局测量与缓存（纯逻辑，可单测）
-// ──────────────────────────────────────────────
-// 缺陷背景：滚动事件里对每条已渲染消息做 querySelectorAll + offsetTop 读取，
-// 长会话（分页窗口最多 200 条）下每次滚动都强制一次整列表布局，O(n)/事件。
-// 策略：一次测量得到有序偏移快照，后续滚动只做二分查找；快照仅在内容高度
-// 变化（新增/删除消息、重排）或消息集变化后失效。
-// ──────────────────────────────────────────────
-
 /** 单条已渲染消息的测量结果 */
 export interface MeasuredMessage {
   /** 全量消息索引（非窗口内相对索引） */
@@ -36,7 +27,6 @@ export function measureMessages(el: HTMLElement, indexAttr: string): readonly Me
     if (!Number.isFinite(messageIndex)) continue;
     measured.push({ messageIndex, top: (node as HTMLElement).offsetTop });
   }
-  // 二分查找前置条件：按 top 升序（DOM 顺序本已如此，显式排序防自定义布局乱序）
   return measured.sort((a, b) => a.top - b.top);
 }
 

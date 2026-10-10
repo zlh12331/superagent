@@ -1,10 +1,3 @@
-// src/main/infra/remote/remote-agent-bridge.test.ts
-// 远程控制 → Agent 桥接单测：审批模式门控 / 串行控制 / 多轮上下文 / 结果回传
-// ──────────────────────────────────────────────────────────────
-// 依赖全部注入 stub（无网络、无 DB、无真实 agent）：远程控制服务只用作
-// onCommand 挂载点，回合完成由测试手动发射 TurnEvent 驱动。
-// ──────────────────────────────────────────────────────────────
-
 import type { ApprovalMode } from '@code-agent/shared/main';
 import { TurnEventType } from '@code-agent/shared/main';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -20,7 +13,6 @@ import type {
   RemoteTurnEvent,
 } from './remote-control';
 
-// 沙箱目录取 app.getPath('userData')/remote-workspace（使用点求值，W9）
 vi.mock('electron', () => ({
   app: {
     getPath: (name: string) => `/tmp/test-userdata/${name}`,
@@ -188,11 +180,11 @@ describe('RemoteAgentBridge', () => {
       stubs.sessionService,
     );
     bridge.mount();
-    bridge.mount(); // 幂等：不重复订阅
+    bridge.mount();
     expect(stubs.commandHandlers).toHaveLength(1);
 
     bridge.unmount();
-    bridge.unmount(); // 幂等
+    bridge.unmount();
     expect(stubs.commandHandlers).toHaveLength(0);
   });
 
@@ -209,16 +201,13 @@ describe('RemoteAgentBridge', () => {
     const result = await runCommand(stubs, '跑测试', { assistantText: '34 个文件全部通过' });
     expect(result).toEqual({ accepted: true, reply: '34 个文件全部通过', reason: 'completed' });
 
-    // 会话 id 必须是 sessionService.create 的返回值（create 内部自行生成 id）
     expect(stubs.startAgentCalls).toHaveLength(1);
     const call = stubs.startAgentCalls[0];
     if (call === undefined) throw new Error('startAgent 未被调用');
     expect(call.sessionId).toBe('session-1');
     expect(call.workingDir).toContain('remote-workspace');
     expect(call.maxSteps).toBe(20);
-    // 无头：不传 webContents（流式推送跳过）
     expect(call.webContents).toBeUndefined();
-    // 桥接不再自行落库（2026-09-08 修复 S1）：AgentService 是唯一写入方
     expect(stubs.mockAppendMessage).not.toHaveBeenCalled();
   });
 
@@ -253,7 +242,6 @@ describe('RemoteAgentBridge', () => {
     await runCommand(stubs, '第一条', { assistantText: '回答一' });
     await runCommand(stubs, '第二条', { assistantText: '回答二' });
 
-    // 会话只建一次（clientId → sessionId 映射复用）
     expect(stubs.mockCreate).toHaveBeenCalledTimes(1);
     expect(stubs.mockGet).toHaveBeenCalledWith('session-1');
     const second = stubs.startAgentCalls[1];
@@ -278,7 +266,6 @@ describe('RemoteAgentBridge', () => {
 
     emitTurn(stubs, { type: TurnEventType.TURN_END, sessionId: 'session-1', reason: 'completed' });
     await first;
-    // 首回合结束后同一客户端可继续执行
     const third = callHandler(stubs, command({ text: '后续' }));
     await vi.waitFor(() => expect(stubs.turnListeners.length).toBeGreaterThan(0));
     emitTurn(stubs, { type: TurnEventType.TURN_END, sessionId: 'session-1', reason: 'completed' });
@@ -298,7 +285,6 @@ describe('RemoteAgentBridge', () => {
     const pending = callHandler(stubs, command({ text: '任务' }));
     await vi.waitFor(() => expect(stubs.turnListeners.length).toBeGreaterThan(0));
 
-    // 桌面端并发会话的结束事件 + 文本增量必须被丢弃
     emitTurn(stubs, {
       type: TurnEventType.TEXT_DELTA,
       sessionId: 'other-session',
@@ -375,7 +361,6 @@ describe('RemoteAgentBridge', () => {
       stubs.sessionService,
     );
     bridge.mount();
-    // 即便 appendMessage 会失败，桥接也不再调用它（落库归 AgentService）
     stubs.mockAppendMessage.mockRejectedValue(new Error('SESSION_NOT_FOUND'));
 
     const pending = callHandler(stubs, command({ text: '任务' }));

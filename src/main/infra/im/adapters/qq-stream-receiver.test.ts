@@ -1,13 +1,3 @@
-// src/main/infra/im/adapters/qq-stream-receiver.test.ts
-// QqStreamReceiver 单测：QQ Gateway 协议长连接（正向/边界/异常三件套）
-// ──────────────────────────────────────────────────────────────
-// 测试策略（遵循"业务逻辑不 mock、外部依赖注入 fake"）：
-// - fetchTokenFn/fetchGatewayFn/WebSocketCtor 经构造注入 fake
-// - reconnectDelayMs/handshakeTimeoutMs 注入短值（生产 5s/15s 不可等待）
-// - 真实协议帧驱动：HELLO/IDENTIFY/READY/RESUME/INVALID_SESSION/
-//   HEARTBEAT/HEARTBEAT_ACK/DISPATCH 全链路
-// ──────────────────────────────────────────────────────────────
-
 import { ErrorCode } from '@code-agent/shared/main';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fetchQqGatewayUrl, QqStreamReceiver } from './qq-stream';
@@ -46,7 +36,6 @@ let currentWs: FakeWebSocket;
 
 class SharedWebSocketCtor {
   constructor(url: string) {
-    // 同步更新 url（endpoint 在异步链中才确定）——WebSocket.url 只读，类型断言绕过
     (currentWs as unknown as { url: string }).url = url;
     // biome-ignore lint/correctness/noConstructorReturn: 测试桩返回共享实例（保持 new 语义）
     return currentWs;
@@ -138,7 +127,6 @@ describe('QqStreamReceiver.open 握手（三件套）', () => {
     expect(fetchGatewayFn).toHaveBeenCalledWith('tok', 'https://api.sgroup.qq.com/gateway/bot');
     expect(ws.url).toBe('wss://gw.qq.com');
     expect(receiver.isOpen).toBe(true);
-    // identify 帧（首次连接）
     const identifySend = ws.send.mock.calls.find((c) => String(c[0]).includes('"op":2'));
     expect(identifySend).toBeDefined();
     expect(String(identifySend?.[0])).toContain('"token":"QQBot tok"');
@@ -147,10 +135,8 @@ describe('QqStreamReceiver.open 握手（三件套）', () => {
 
   it('边界：RESUME 路径——sessionId 已存在（断线重连）→ 发送 RESUME 复用会话', async () => {
     const { receiver, ws } = makeReceiver({ reconnectDelayMs: 5 });
-    // 首次握手：READY 记录 sessionId
     await completeHandshake(receiver, ws);
-    // 意外断线 → 自动重连 → 第二次握手走 RESUME
-    const p = receiver.open(); // opened=false 后可再次 open（reconnect 路径）
+    const p = receiver.open();
     await waitWs(ws);
     ws.emit('message', { data: frames.hello() });
     ws.emit('message', { data: frames.resumed() });
@@ -164,7 +150,6 @@ describe('QqStreamReceiver.open 握手（三件套）', () => {
   it('边界：INVALID_SESSION → 回退 identify（清空 sessionId 走首次流程）', async () => {
     const { receiver, ws } = makeReceiver();
     await completeHandshake(receiver, ws);
-    // 重新握手：HELLO → INVALID_SESSION → identify 回退
     const p = receiver.open();
     await waitWs(ws);
     ws.emit('message', { data: frames.hello() });
@@ -172,7 +157,7 @@ describe('QqStreamReceiver.open 握手（三件套）', () => {
     ws.emit('message', { data: frames.ready('sess-new') });
     await p;
     const identifySends = ws.send.mock.calls.filter((c) => String(c[0]).includes('"op":2'));
-    expect(identifySends.length).toBeGreaterThanOrEqual(2); // 首次 + 回退
+    expect(identifySends.length).toBeGreaterThanOrEqual(2);
     receiver.close();
   });
 
@@ -216,12 +201,10 @@ describe('QqStreamReceiver 心跳与 ack 监控（三件套）', () => {
     const { receiver, ws } = makeReceiver();
     const p = receiver.open();
     await waitWs(ws);
-    ws.emit('message', { data: frames.hello(10) }); // 10ms 心跳
-    ws.emit('message', { data: frames.ready('sess-1', 3) }); // 先 ready（seq=3）
-    ws.emit('message', { data: frames.groupAt() }); // 后 groupAt（seq=5 覆盖）
+    ws.emit('message', { data: frames.hello(10) });
+    ws.emit('message', { data: frames.ready('sess-1', 3) });
+    ws.emit('message', { data: frames.groupAt() });
     await p;
-    // 轮询等待 ≥2 次心跳（10ms 间隔）：固定 35ms 睡眠在 coverage 插桩下会因
-    // 定时器漂移只发出 1 次心跳而 flake
     const deadline = Date.now() + 1000;
     while (
       ws.send.mock.calls.filter((c) => String(c[0]).includes('"op":1')).length < 2 &&
@@ -231,7 +214,7 @@ describe('QqStreamReceiver 心跳与 ack 监控（三件套）', () => {
     }
     const heartbeatSends = ws.send.mock.calls.filter((c) => String(c[0]).includes('"op":1'));
     expect(heartbeatSends.length).toBeGreaterThanOrEqual(2);
-    expect(String(heartbeatSends[0]?.[0])).toContain('"d":5'); // 携带最新 lastSeq
+    expect(String(heartbeatSends[0]?.[0])).toContain('"d":5');
     receiver.close();
   });
 
@@ -242,7 +225,6 @@ describe('QqStreamReceiver 心跳与 ack 监控（三件套）', () => {
     ws.emit('message', { data: frames.hello(10) });
     ws.emit('message', { data: frames.ready() });
     await p;
-    // 每 10ms 心跳后 20ms ack 超时；及时回 ACK 则不断开
     for (let i = 0; i < 4; i += 1) {
       await new Promise((resolve) => setTimeout(resolve, 12));
       ws.emit('message', { data: frames.helloAck() });
@@ -258,10 +240,8 @@ describe('QqStreamReceiver 心跳与 ack 监控（三件套）', () => {
     ws.emit('message', { data: frames.hello(10) });
     ws.emit('message', { data: frames.ready() });
     await p;
-    // 心跳 10ms + ack 超时 20ms → 40ms 内应强制断开
     await new Promise((resolve) => setTimeout(resolve, 60));
     expect(ws.close).toHaveBeenCalled();
-    // 断开触发 close 事件 → 自动重连 → fetchToken 再次调用
     ws.emit('close');
     await vi.waitFor(() => expect(fetchTokenFn.mock.calls.length).toBeGreaterThanOrEqual(2));
     receiver.close();
@@ -334,7 +314,6 @@ describe('QqStreamReceiver.close（生命周期）', () => {
     receiver.close();
     expect(ws.close).toHaveBeenCalled();
     expect(receiver.isOpen).toBe(false);
-    // 手动关闭后 close 事件不触发重连
     ws.emit('close');
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(fetchTokenFn.mock.calls.length).toBe(1);

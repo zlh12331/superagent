@@ -1,10 +1,3 @@
-// src/main/infra/ai/tools/task-stop.tool.ts
-// task_stop 工具：中止任务（对齐 qwen-code task-stop）
-// ──────────────────────────────────────────────────────────────
-// 语义：将任务状态置为 CANCELLED（task_update 的语义化别名，
-// 面向"中止/取消"场景的专用入口，避免 LLM 混淆通用状态机）
-// ──────────────────────────────────────────────────────────────
-
 import { z } from 'zod';
 import { t } from '../../i18n';
 import { TaskStatus, taskService } from '../agent/task-service';
@@ -29,7 +22,6 @@ export function createTaskStopTool(): Tool {
     description:
       '中止任务：将任务状态置为已取消（CANCELLED）。用于任务不再需要继续执行、或需要终止长期运行任务时。',
     permission: 'auto' as const,
-    // 零副作用控制面（改 agent 自己的任务记账）——plan 模式需可用（2026-10-08）
     category: 'control' as const,
     inputSchema: TaskStopInputSchema,
     async execute(input: TaskStopInput, _ctx: ToolContext): Promise<ToolResult> {

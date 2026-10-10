@@ -1,11 +1,3 @@
-// src/renderer/components/chat/panel-notice.tsx
-// 面板告警条（自 ChatPanel 合并：中断提示 + 历史回显缺口提示）
-// ──────────────────────────────────────────────
-// 合并依据（2026-09-15 结构审计）：两条提示此前各自内联 ~20 行 JSX，
-// 结构逐字段同构（amber 边框/底色 + AlertTriangle + 关闭按钮 + 按会话记录关闭态），
-// 差异仅在单行（truncate）与多行（flex-col 列表）两种排布——属同一概念的两个实例。
-// ─────────────────────────────────────────────
-
 import { AlertTriangle, X } from 'lucide-react';
 import type { ReactElement } from 'react';
 
@@ -31,9 +23,6 @@ export function PanelNotice({ lines, onDismiss }: PanelNoticeProps): ReactElemen
   if (lines.length === 0) return null;
   const single = lines.length === 1;
   return (
-    // role="status"（隐含 aria-live="polite"）：本提示的两条消费路径都是「会话
-    // 加载后异步判定才出现」，此前无 live 语义，读屏不会主动播报。用 alert 过重
-    // （打断当前朗读），status 与「非紧急提示」语义相称。
     <div
       role="status"
       className={cn(
@@ -50,8 +39,6 @@ export function PanelNotice({ lines, onDismiss }: PanelNoticeProps): ReactElemen
         <span className="min-w-0 flex-1 truncate">{lines[0] ?? ''}</span>
       ) : (
         <span className="min-w-0 flex flex-1 flex-col gap-0.5">
-          {/* key 用行下标：文案行本身可能重复（collectHistoryNotices 不保证唯一），
-              以文本作 key 会在重复行时产生重复 key 警告 */}
           {lines.map((line, index) => (
             // biome-ignore lint/suspicious/noArrayIndexKey: 行序固定、无语重排，仅作稳定 key
             <span key={index} className="block">

@@ -1,6 +1,3 @@
-/* ──────────────────────────────────────────────────────────────
-   消息流 · TraeWork（对齐原型 .msg 系列）
-   ────────────────────────────────────────────────────────────── */
 .msg {
   display: flex;
   gap: 14px;
@@ -24,10 +21,6 @@
   display: none;
 }
 
-/* 助手头像：实心品牌方（禁双 accent 渐变/外发光）。
-   实底+白字场景按令牌分工用 --primary（暗色深档 #5D62FF 白字 4.51 达 AA；
-   原 --accent 暗色 #6A6FFF 配任何前景最高仅 3.94），与 send-btn/new-thread-btn
-   同配方。原 --ink 墨色字亮色对 accent 仅 2.73，已随实底统一迁白 */
 .msg-avatar.assistant {
   background: var(--primary);
   color: var(--on-accent);
@@ -68,7 +61,6 @@
   box-shadow: var(--shadow-soft);
 }
 
-/* 用户气泡：玻璃渐变底 + 发丝描边 + 内高光 */
 .msg-content {
   font-size: var(--font-size-md);
   line-height: 1.7;
@@ -82,29 +74,21 @@
   box-shadow:
     var(--shadow-card),
     inset 0 1px 0 color-mix(in srgb, white 4%, transparent);
-  /* 长文本换行（用户标注：无空格长串溢出） */
   overflow-wrap: break-word;
   word-break: break-word;
   min-width: 0;
-  /* Tab 宽度（37 号 A）：--code-tab-size 由 use-editor-code-style 写入
-     documentElement；tab-size 继承下沉到 pre/code（含行内 code） */
   tab-size: var(--code-tab-size, 8);
 }
 
-/* 用户消息：右对齐 + 气泡限宽（对齐设计「玻璃渐变气泡靠右」；
-   此前无 .msg.user 规则——用户消息渲染为通栏气泡）。
-   .msg-body 为 flex:1 撑满整行，需在 body 内再 flex-end 才能把气泡推右 */
 .msg.user .msg-body {
   display: flex;
   justify-content: flex-end;
 }
 
 .msg.user .msg-content {
-  /* 宽度占满对话区（用户要求） */
   max-width: 100%;
 }
 
-/* assistant 消息：开放排版，去掉气泡 */
 .msg.assistant .msg-content {
   background: transparent;
   border: none;
@@ -130,9 +114,6 @@
   color: var(--accent);
 }
 
-/* ── Markdown 元素样式 ── */
-
-/* 标题 */
 .msg-content h1,
 .msg-content h2,
 .msg-content h3,
@@ -163,7 +144,6 @@
   margin-top: 0;
 }
 
-/* 列表 */
 .msg-content ul,
 .msg-content ol {
   margin: 8px 0;
@@ -181,13 +161,11 @@
 .msg-content li:last-child {
   margin-bottom: 0;
 }
-/* 嵌套列表不需要额外缩进 */
 .msg-content li > ul,
 .msg-content li > ol {
   margin: 4px 0 0;
 }
 
-/* 引用块 */
 .msg-content blockquote {
   margin: 8px 0;
   padding: 4px 12px;
@@ -200,7 +178,6 @@
   margin-bottom: 4px;
 }
 
-/* 链接 */
 .msg-content a {
   color: var(--accent);
   text-decoration: none;
@@ -211,7 +188,6 @@
   border-color: var(--accent);
 }
 
-/* 表格 */
 .msg-content table {
   width: 100%;
   border-collapse: collapse;
@@ -232,17 +208,12 @@
   background: var(--bg-elev);
 }
 
-/* 分隔线 */
 .msg-content hr {
   border: none;
   border-top: 1px solid var(--border);
   margin: 12px 0;
 }
 
-/* ── 代码块（shiki 高亮） ── */
-
-/* shiki 生成的 <pre> 自带内联 style（背景色、文字颜色），
-   此处仅覆盖 margin / border-radius / overflow 等 */
 .msg-content pre.shiki {
   margin: 8px 0;
   border-radius: var(--radius);
@@ -258,11 +229,6 @@
   color: inherit;
 }
 
-/* loading-ui 终端光标：块状光标闪烁
-   复用既有 blink 关键帧（前 50% 亮 / 后 50% 灭的硬闪烁）——
-   此前该动画在组件内联 <style> 里私有复制了一份等价 keyframe，
-   是渲染层唯一的内联 <style>，且与「关键帧统一在 styles/*」的约定不符。
-   尺寸用 em 跟随字号，颜色走 currentColor 以便调用方用 className 控色。 */
 .loading-ui-terminal-cursor {
   display: inline-block;
   width: 0.5em;
@@ -271,7 +237,6 @@
   animation: blink 1s step-end infinite;
 }
 
-/* 打字指示器：三个 accent 点依次弹跳 */
 .typing-indicator {
   display: flex;
   align-items: center;
@@ -296,7 +261,6 @@
   animation-delay: 0.3s;
 }
 
-/* 消息微交互：hover 才浮现的操作行 */
 .msg-actions {
   display: flex;
   gap: 2px;
@@ -309,9 +273,6 @@
   opacity: 1;
 }
 
-/* 键盘可达性（2026-09-08 修复 WCAG 2.4.7）：仅 :hover 时 Tab 聚焦到内部
-   按钮会让父容器仍保持 opacity:0——按钮可聚焦但视觉不可见。
-   补 :focus-within 让键盘用户看到焦点落点（与 .ti-actions 的既有写法一致）。 */
 .msg:focus-within .msg-actions {
   opacity: 1;
 }
@@ -336,7 +297,6 @@
 }
 
 .msg-action-btn:hover {
-  /* hover 底色统一 L3 档（与 composer 域菜单一致，此前 L2 与其余档位分裂） */
   background: var(--bg-elev-3);
   color: var(--text);
   box-shadow: var(--shadow-soft);
@@ -347,7 +307,6 @@
   height: 12px;
 }
 
-/* 消息列表滚动容器：对齐原型 .messages */
 .messages {
   overflow-y: auto;
   padding: 28px 0;
@@ -356,7 +315,6 @@
   position: relative;
 }
 
-/* 消息列表内层：居中限宽 + 呼吸感间距 */
 .messages-inner {
   max-width: var(--content-w);
   margin: 0 auto;
@@ -366,7 +324,6 @@
   gap: 20px;
 }
 
-/* 消息入场动画 */
 .enter-anim {
   animation: msgEnter var(--duration-reveal) var(--ease-out) both;
 }

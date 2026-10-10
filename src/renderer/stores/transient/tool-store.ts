@@ -1,24 +1,3 @@
-// src/renderer/stores/transient/tool-store.ts
-// 工具调用状态管理（L4 流式推送状态层 - transient）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 维护工具调用队列（按 sessionId 分组，主进程推送 tool:call / tool:result 事件时更新）
-// - 提供 appendToolCall / appendToolResult / clearBySession 原子操作
-// - 单个会话可有多个工具调用（Agent 一次对话可能连续调用多个工具）
-//
-// 设计：
-// - 纯状态容器，不调用 IPC（业务 hook 监听 IPC 事件后调用 store 方法）
-// - toolCall 与 toolResult 通过 toolCallId 配对（主进程保证配对推送）
-// - 按 sessionId 分组：切换会话时仅展示当前会话的工具调用
-// - 不持久化：工具调用历史是运行时态，跨重启保留意义不大
-//   （持久化的会话历史中已包含 tool 调用，可通过 session:get 恢复）
-//
-// 状态机：
-// - pending：收到 tool:call，等待 tool:result
-// - success：收到 tool:result，无 error
-// - error：收到 tool:result，含 error
-// ──────────────────────────────────────────────────────────────
-
 import { create } from 'zustand';
 
 /**
@@ -94,7 +73,6 @@ interface ToolState {
   /** 工具调用列表（按 sessionId 分组的 Map，value 为该会话的工具调用数组） */
   readonly callsBySession: ReadonlyMap<string, readonly ToolCallItem[]>;
 
-  // ── 操作方法 ────────────────────────────────────────
   /** 入队工具调用（主进程推送 tool:call 时调用） */
   readonly appendToolCall: (
     item: Omit<ToolCallItem, 'status' | 'output' | 'error' | 'title' | 'createdAt' | 'resolvedAt'>,
@@ -140,8 +118,6 @@ export const useToolStore = create<ToolState>()((set) => ({
         createdAt: Date.now(),
         resolvedAt: null,
       };
-      // P3 修复：每会话环形淘汰（保留最近 MAX_CALLS_PER_SESSION 条），
-      // 回合结束不再清空后仍需防止长会话内存无限增长
       const next = [...existing, newItem];
       const trimmed =
         next.length > MAX_CALLS_PER_SESSION
@@ -155,7 +131,6 @@ export const useToolStore = create<ToolState>()((set) => ({
     set((state) => {
       const newMap = new Map<string, readonly ToolCallItem[]>();
       let updated = false;
-      // 遍历所有会话，找到对应 toolCallId 并更新
       for (const [sessionId, calls] of state.callsBySession) {
         const updatedCalls = calls.map((call) => {
           if (call.id !== toolCallId) {
@@ -173,7 +148,6 @@ export const useToolStore = create<ToolState>()((set) => ({
         });
         newMap.set(sessionId, updatedCalls);
       }
-      // 若未找到匹配的 toolCallId（不应发生），返回原 state
       return updated ? { callsBySession: newMap } : state;
     }),
 

@@ -1,36 +1,3 @@
-// src/main/infra/ai/agent/context-compression.ts
-// 上下文压缩 / token 预算模块
-// ──────────────────────────────────────────────────────────────
-// 职责：长对话中压缩消息历史、压低上下文占用，并给出窗口感知的
-// 压缩 / 拒止判定。对外两条压缩路径：
-// - 条数压缩 compressContext：按消息条数裁剪（轻量、不生成摘要）
-// - token 预算压缩 compressByTokenBudget：按 token 预算两档裁剪（主流程使用）
-//
-// 设计：
-// - 条数压缩（compressContext）：
-//   1. system message 全部保留（系统提示词不能丢）
-//   2. 带工具调用的 assistant 与其 tool 结果归入同列配对，交
-//      mergeToolMessages 合并（保留完整调用-结果对，末尾只留最近 20 条 ≈ 10 对）
-//   3. 其余消息只保留最近 recentMessages 条，更早的直接丢弃（不做摘要替换）
-// - token 预算压缩（compressByTokenBudget，agent 主流程与 /compact 共用）：
-//   用 gpt-tokenizer 统计 token，按预算从后往前保留消息，
-//   适合按 token 计费的 LLM 供应商做上下文预算控制。
-//   估算口径必须覆盖 provider 真实可见的文本（文本段 / 推理块 /
-//   工具入参 / 工具结果 / 多模态 part）——只数 text 段会把工具结果
-//   这类最大消耗估成 0，预算判定与 over-limit 拒止线双双失真
-// - 两档压缩（compressByTokenBudget，先廉价后昂贵）：
-//   1. 先裁剪低价值 token（旧推理块 + 窗口外的工具调用/结果）：SDK
-//      pruneMessages 按 toolCallId 成对删除，不会留下 provider 拒绝的孤儿
-//      tool_use，且能在保住对话轮次的前提下回收预算
-//   2. 裁剪后仍超预算，才从后往前整条丢弃（先丢最早的消息）。后缀切点
-//      可能把 tool-call 与它的 tool-result 劈开，留下孤儿 result →
-//      dropOrphanToolResults 按 id 剥掉这些段，补齐切片破坏的配对
-// - 压缩服务化（getCompactionBudget / getCompactionDecision /
-//   getTokenBudgetDecision）：对标 qwen chatCompressionService 阈值体系：
-//   压缩预算按模型窗口比例计算（75% 窗口 − 输出预留），warn 提前缓冲提醒，
-//   over-limit 硬拒止，避免一次性硬压缩
-// ──────────────────────────────────────────────────────────────
-
 import { type ModelMessage, pruneMessages } from 'ai';
 import { encode } from 'gpt-tokenizer';
 
@@ -78,15 +45,12 @@ export function compressContext(
     if (msg.role === 'system') {
       systemMessages.push(msg);
     } else if (msg.role === 'tool' || hasToolCalls(msg)) {
-      // 真实缺陷修复：带 toolCalls 的 assistant 必须与 tool 结果同列表配对，
-      // 否则 mergeToolMessages 收不到调用方 → 工具上下文在压缩时全部丢失
       toolMessages.push(msg);
     } else {
       earlyMessages.push(msg);
     }
   }
 
-  // 普通消息只保留最近 recentMessages 条（不足则全留）；slice(-n) 保序
   if (earlyMessages.length <= recentMessages) {
     recentMessagesList.push(...earlyMessages);
   } else {
@@ -95,7 +59,6 @@ export function compressContext(
 
   const compressedToolMessages = mergeToolMessages(toolMessages);
 
-  // 顺序固定为 system → 合并后的工具对 → 最近普通消息
   const result: ModelMessage[] = [
     ...systemMessages,
     ...compressedToolMessages,
@@ -143,7 +106,6 @@ export function estimateTokenCount(text: string): number {
   const key = tokenCacheKey(text);
   const cached = tokenCountCache.get(key);
   if (cached !== undefined) {
-    // LRU：命中后移到末尾（Map 迭代序 = 插入序，末尾为最近使用）
     tokenCountCache.delete(key);
     tokenCountCache.set(key, cached);
     return cached;
@@ -186,7 +148,6 @@ function messageToText(msg: ModelMessage): string {
   if (typeof content === 'string') {
     return content;
   }
-  // 非法形状（非 string 非数组）：String() 兜底，不抛错打断回合
   if (!Array.isArray(content)) {
     return String(content ?? '');
   }
@@ -261,15 +222,12 @@ function partToText(part: unknown): string {
     return typeof p.text === 'string' ? p.text : '';
   }
   if (kind === 'tool-call') {
-    // 入参由模型生成，provider 会看到序列化后的 JSON → 按文本计入
     return `${String(p.toolName ?? '')} ${stringifyToText(p.input)}`;
   }
   if (kind === 'tool-result') {
     return toolResultToText(p.output);
   }
   if (MULTIMODAL_PART_TYPES.has(kind)) {
-    // 资产本体不按字符计数（base64 会高估百倍）→ 由固定额度表达；
-    // 内联文本型 file 负载是 provider 真实可见文本 → 照常计入
     return inlineTextOf(p);
   }
   return '';
@@ -312,7 +270,6 @@ function isAssetPart(part: unknown): boolean {
   if (!isMultimodalPart(part)) {
     return false;
   }
-  // 内联文本型 file 负载已按文本精确计数，不再叠加固定额度
   return inlineTextOf(part as PartShape).length === 0;
 }
 
@@ -457,16 +414,13 @@ export function compressByTokenBudget(messages: ModelMessage[], maxTokens = 8000
     return messages;
   }
 
-  // system 无条件保留：先扣它占的额度，剩余才是对话预算
   const systemMessages = messages.filter((msg) => msg.role === 'system');
   const others = messages.filter((msg) => msg.role !== 'system');
   const conversationBudget = Math.max(0, maxTokens - estimateMessagesTokens(systemMessages));
 
   const pruned = pruneContext(others);
-  // 第一档只在真能省预算时才采用（裁剪后仍超预算则退回未裁剪列表）
   const candidates = estimateMessagesTokens(pruned) <= conversationBudget ? pruned : others;
 
-  // 从后往前累积 token（保留最新上下文），前缀超出预算的丢弃
   const kept: ModelMessage[] = [];
   let used = 0;
   for (let i = candidates.length - 1; i >= 0; i -= 1) {
@@ -482,7 +436,6 @@ export function compressByTokenBudget(messages: ModelMessage[], maxTokens = 8000
     used += tokens;
   }
 
-  // 倒序后 kept 为空说明单条消息就超预算：至少保留最后一条，避免空上下文
   if (kept.length === 0 && candidates.length > 0) {
     const last = candidates[candidates.length - 1];
     if (last !== undefined) {
@@ -494,8 +447,6 @@ export function compressByTokenBudget(messages: ModelMessage[], maxTokens = 8000
   if (stripped.length > 0) {
     return [...systemMessages, ...stripped];
   }
-  // 整条切片都是孤儿结果：有 system 就只发 system；连 system 都没有时
-  // 带回未剥离的切片——空 messages 会被 SDK 直接拒绝，比配对不全更糟
   return systemMessages.length > 0 ? systemMessages : kept;
 }
 
@@ -543,8 +494,6 @@ function mergeToolMessages(messages: ModelMessage[]): ModelMessage[] {
 
   return merged.slice(-20);
 }
-
-// ── 压缩服务化（对标 qwen chatCompressionService 阈值体系）──────────
 
 /** 压缩触发比例：上下文达到窗口 75% 时触发压缩（对标 qwen auto-compaction threshold） */
 export const COMPACTION_RATIO = 0.75;
@@ -604,8 +553,6 @@ export function getCompactionDecision(
   return 'ok';
 }
 
-// ── 回合级 token 预算调度（对齐 qwen TokenBudget 回合语义）──────────
-
 /** 回合级 token 预算等级：ok / warn（接近压缩线）/ compact（应压缩）/ over-limit（拒止） */
 export type TokenBudgetLevel = 'ok' | 'warn' | 'compact' | 'over-limit';
 
@@ -647,9 +594,6 @@ export function getTokenBudgetDecision(
   contextWindowSize: number,
 ): TokenBudgetDecision {
   const compactAt = getCompactionBudget(contextWindowSize);
-  // 硬上限：窗口 − 输出预留。与 models/token-limits.ts 的 clampOutputTokens
-  // 共同守护 prompt + output ≤ window（此处拦 prompt 侧，那边钳 output 侧，
-  // 两处预留口径独立：本处 min(20K, 5%)，那边 max(10K, 5%)）
   const reserve = Math.min(COMPACTION_RESERVE_TOKENS, Math.round(0.05 * contextWindowSize));
   const hardLimit = contextWindowSize - reserve;
 

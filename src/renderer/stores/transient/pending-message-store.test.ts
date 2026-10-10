@@ -1,6 +1,3 @@
-// src/renderer/stores/transient/pending-message-store.test.ts
-// 首条消息暂存 store：消费恰好一次 + 过期规则 + 会话隔离
-
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { PENDING_MESSAGE_TTL_MS } from '@/lib/pending-message';

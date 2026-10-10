@@ -1,14 +1,3 @@
-// src/renderer/components/$1/FileTreeNode.test.tsx
-// 文件树节点单测（正向 / 边界 / 异常）
-// ──────────────────────────────────────────────────────────────
-// 覆盖：目录展开/折叠（点击 + 键盘）、子区三态（空目录 / 加载中 / 新建输入）、
-// 新建确认经注入回调上报（类型/父目录/名称三元组）、文件节点打开（点击 + 键盘）、
-// 激活态与新建在途态类名、缩进、子区 ARIA group 语义。
-//
-// 依赖收敛（2026-09 file-tree 审计）：新建动作改为回调注入（onCreate），
-// 本文件不再 mock use-file-tree-ops —— 节点只上报意图，落盘由容器负责。
-// ──────────────────────────────────────────────────────────────
-
 import type { FileEntry } from '@code-agent/shared/renderer';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -137,7 +126,6 @@ describe('FileTreeNode · 目录节点', () => {
     store.setEntries('/root', [entry('sub', 'directory'), entry('a.ts', 'file')]);
     store.setExpanded('/root', true);
     renderDir();
-    // 根 + 子目录 + 子文件
     expect(screen.getAllByRole('treeitem')).toHaveLength(3);
     expect(screen.getByText('sub')).toBeDefined();
     expect(screen.getByText('a.ts')).toBeDefined();
@@ -183,10 +171,8 @@ describe('FileTreeNode · 目录节点', () => {
 
   it('边界：其他目录在新建时，本目录不受影响（creatingEntry 收窄正确）', () => {
     useFileTreeStore.getState().setExpanded('/root', true);
-    // 新建流程挂在别的目录下
     useFileTreeStore.getState().startCreate('/other', 'file');
     renderDir();
-    // 本目录不应渲染输入框，也不显示空目录占位之外的干扰
     expect(screen.queryByRole('textbox')).toBeNull();
     expect(screen.getByText(i18n.t('fileTree.emptyDir'))).toBeDefined();
   });
@@ -196,14 +182,12 @@ describe('FileTreeNode · 目录节点', () => {
     const input = screen.getByRole('textbox');
     fireEvent.change(input, { target: { value: 'new.ts' } });
     fireEvent.keyDown(input, { key: 'Enter' });
-    // 输入框嵌套在 DirNode 的 treeitem 内：Enter 冒泡会命中 isActivateKey → toggleExpand
     expect(useFileTreeStore.getState().expandedPaths.has('/root')).toBe(true);
   });
 
   it('异常：新建输入空格不冒泡到 treeitem（空格是文件名合法字符）', () => {
     renderCreating('file');
     fireEvent.keyDown(screen.getByRole('textbox'), { key: ' ' });
-    // treeitem 对 Space 调 preventDefault + toggleExpand：冒泡会折叠目录并阻断空格输入
     expect(useFileTreeStore.getState().expandedPaths.has('/root')).toBe(true);
   });
 
@@ -314,7 +298,6 @@ describe('FileTreeNode · 文件节点', () => {
   });
 
   it('边界：文件节点不订阅新建在途集合（无多余 store 依赖）', () => {
-    // 目录在途标记与文件无关：即便同名集合被填充，文件行 className 保持干净
     useFileTreeStore.getState().setPendingDir('/root/a.ts', true);
     const { container } = render(
       <FileTreeNode

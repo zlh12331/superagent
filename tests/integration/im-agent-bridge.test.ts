@@ -1,12 +1,3 @@
-// tests/integration/im-agent-bridge.test.ts
-// IM → Agent 回合闭环集成测试：真实 SessionService（内存 SQLite）落库验证
-// ──────────────────────────────────────────────────────────────
-// 单测（src/main/infra/im/im-agent-bridge.test.ts）用 stub sessionService 验证
-// "调用了 appendMessage"；本集成测试用真实 SessionService + 内存库验证
-// "transcript 真的落库并能查回来"（协作面：IM 桥接 × 会话存储）。AgentService
-// 是外部 LLM 边界，仍用 stub（集成不走真实 LLM）。
-// ──────────────────────────────────────────────────────────────
-
 import type { ApprovalMode } from '@code-agent/shared/main';
 import { TurnEventType } from '@code-agent/shared/main';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -18,7 +9,6 @@ import { resetDb } from '../../src/main/infra/storage/db';
 import { SessionService } from '../../src/main/infra/storage/session-service';
 import { createTestDb } from '../../src/main/infra/storage/test-utils';
 
-// 内存 DB 注入（真实 SessionService 落库用）
 vi.mock('../../src/main/infra/storage/db', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../src/main/infra/storage/db')>();
   let memoryDb: ReturnType<typeof createTestDb> | null = null;
@@ -31,12 +21,10 @@ vi.mock('../../src/main/infra/storage/db', async (importOriginal) => {
     resetDb: () => {
       memoryDb = null;
     },
-    // reclaimFreePages 引原 getDb（真实 dbInstance 未初始化）——集成用内存库，no-op
     reclaimFreePages: () => {},
   };
 });
 
-// IM 渠道入站消息形状
 function incoming(overrides: Partial<{ text: string; chatId: string }> = {}) {
   return {
     channel: 'telegram',
@@ -102,7 +90,6 @@ describe('IM → Agent 回合闭环（真实 SessionService 落库）', () => {
     im.messageHandlers[0]?.(incoming({ text: '帮我看看代码' }));
     await vi.waitFor(() => expect(agent.startAgent).toHaveBeenCalledTimes(1));
 
-    // 模拟回合事件流（startAgent 返回的 sessionId）
     const runArgs = agent.startAgent.mock.calls[0]?.[0] as {
       sessionId: string;
       messages: readonly { role: string; content: string }[];
@@ -130,10 +117,6 @@ describe('IM → Agent 回合闭环（真实 SessionService 落库）', () => {
       usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
     });
 
-    // 2026-09-08 修复 S1（重复落库）后的契约：桥接不再自行落库，
-    // AgentService 是唯一写入方（回合开始落 user、结束落 assistant 富 parts）。
-    // 本用例的 agentService 是 stub（不落库），因此断言：
-    // ① 桥接把用户消息原样交给 startAgent ② 桥接不再重复写库（消息数为 0）。
     expect(runArgs.messages).toEqual([{ role: 'user', content: '帮我看看代码' }]);
     await vi.waitFor(async () => {
       const { messages } = await sessionService.get(runArgs.sessionId);

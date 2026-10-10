@@ -1,10 +1,3 @@
-// src/renderer/lib/format-bytes.ts
-// 字节 / 时长格式化（更新进度展示用；纯函数，无第三方依赖）
-// ──────────────────────────────────────────────────────────────
-// 设计：单位文案保持语言中立（数字 + 国际单位制），避免在工具层硬编码中文
-// 文案——渲染层用 i18n 模板拼接（check:i18n 禁止硬编码文案）。
-// ──────────────────────────────────────────────────────────────
-
 /** 字节单位（1024 进制，与系统"文件大小"口径一致） */
 const BYTE_UNITS: readonly string[] = ['B', 'KB', 'MB', 'GB', 'TB'];
 
@@ -29,7 +22,6 @@ export function formatBytes(bytes: number): string {
     unitIndex += 1;
   }
   const unit = BYTE_UNITS[unitIndex] ?? 'B';
-  // 字节级不带小数（1023 B 比 1023.0 B 自然）
   return unitIndex === 0 ? `${Math.round(value)} ${unit}` : `${value.toFixed(1)} ${unit}`;
 }
 

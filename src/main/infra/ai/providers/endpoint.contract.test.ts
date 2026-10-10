@@ -1,16 +1,3 @@
-// src/main/infra/ai/providers/endpoint.contract.test.ts
-// 端点推导 ↔ AI SDK 实际请求 URL 的契约测试
-// ──────────────────────────────────────────────────────────────
-// 目的（本方案的核心价值）：证明 resolveProviderRequestUrl 预测的 URL 与
-// SDK 真实构造的 URL 逐字相同——端点归一化规则不是"我以为的规则"，而是与
-// SDK 源码行为绑定的稳定契约。SDK 换版本改了拼接规则 → CI 直接红，而不是
-// 等用户在保存模型时看到 404。
-//
-// 手法：真实工厂（不 mock @ai-sdk/*）+ stub 全局 fetch 捕获 SDK 构造的 URL
-// 后立即抛错（零网络零 token）。stub fetch 属基础设施替身，符合项目
-// 「业务逻辑不 mock、基础设施可替身」的分层原则。
-// ──────────────────────────────────────────────────────────────
-
 import type { ModelApiFormat } from '@code-agent/shared/main';
 import type { LanguageModel } from 'ai';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -68,9 +55,7 @@ async function captureRequestUrl(model: LanguageModel): Promise<string> {
         prompt: [{ role: 'user', content: [{ type: 'text', text: 'ping' }] }],
         maxOutputTokens: 1,
       });
-    } catch {
-      // 预期：captured fetch 抛错，或 SDK 对最小参数的其他拒绝——都只看捕获结果
-    }
+    } catch {}
     const url = capturedUrls[0];
     if (url !== undefined) {
       return url;
@@ -81,7 +66,6 @@ async function captureRequestUrl(model: LanguageModel): Promise<string> {
 
 /** 用例矩阵：kind + 用户可能填写的 baseUrl 形态 */
 const CASES: ReadonlyArray<{ kind: ProviderKind; baseUrl: string }> = [
-  // 2026-10-08 缺陷场景（自定义模式恒为 deepseek，用户按 OpenAI 习惯填 /v1）
   { kind: 'deepseek', baseUrl: 'http://127.0.0.1:9527/v1' },
   { kind: 'deepseek', baseUrl: 'http://127.0.0.1:9527' },
   { kind: 'deepseek', baseUrl: 'http://127.0.0.1:9527/' },

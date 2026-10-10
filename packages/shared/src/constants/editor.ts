@@ -1,11 +1,3 @@
-// packages/shared/src/constants/editor.ts
-// 编辑器代码面排版常量（37 号 A；单一真源，主进程/渲染层共用）
-// ──────────────────────────────────────────────────────────────
-// tabSize 语义：CSS tab-size 属性值——统一收敛文件查看器（查看/编辑叠加层）、
-// 聊天代码块、diff 行的全部代码渲染面（--code-tab-size CSS 变量单点消费）。
-// wordWrap 语义：FileViewerPanel 长行自动换行（textarea wrap + 双层 white-space）。
-// ──────────────────────────────────────────────────────────────
-
 /** 合法 Tab 宽度档位（升序；SegControl 选项与 clampEditorTabSize 共用） */
 export const EDITOR_TAB_SIZES: readonly number[] = [2, 4, 8];
 

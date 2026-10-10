@@ -1,9 +1,3 @@
-// data-section.tsx（自 SettingsDialog 拆分）
-// 设置对话框 · 数据区块（会话导出/导入 + 设置导出/导入 + 打开数据目录 + 更新缓存 + 清空全部会话，数据极致）
-// ──────────────────────────────────────────────
-// 拆分背景：SettingsDialog 1052 行多域混合，按域提取为独立文件（高内聚）
-// ──────────────────────────────────────────────
-
 import type { UpdateCacheInfo } from '@code-agent/shared/renderer';
 import { Database } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -44,25 +38,19 @@ export function DataSection(): React.ReactElement {
   const navigate = useNavigate();
   const closeSettings = useUiStore((s) => s.closeSettings);
   const clearAllSessionsMutation = useClearAllSessions();
-  // 更新缓存占用（path 为 null 表示无法解析缓存目录 → 隐藏该行，不展示猜测值）
   const [cache, setCache] = useState<UpdateCacheInfo | null>(null);
-  // 下载中禁止清理：缓存目录含 pending/ 下载中间态，清掉会破坏在途下载
   const downloading = useUpdateStore((s) => s.status?.phase === 'downloading');
 
-  // 挂载时读一次占用（失败静默：不影响本区块其他操作）
   useEffect(() => {
     void (async (): Promise<void> => {
       try {
         setCache(await getUpdateCacheInfo());
-      } catch {
-        // 读取失败（含无桥）：不展示该行
-      }
+      } catch {}
     })();
   }, []);
 
   const handleClearUpdateCache = async (): Promise<void> => {
     if (cache?.path == null || cache.fileCount === 0 || downloading) return;
-    // 危险操作：删除的是差分更新基线，先确认并说明后果
     const confirmed = await confirm({
       title: t('settings.clearUpdateCache'),
       message: t('settings.clearUpdateCacheConfirm'),
@@ -83,14 +71,11 @@ export function DataSection(): React.ReactElement {
       if (res.saved) {
         toast.success(t('settings.exportSuccess', { path: res.path ?? '' }));
       }
-      // 用户取消 / 无桥：静默
     } catch {
       toast.error(t('settings.exportFailed'));
     }
   };
 
-  // 导入走 confirm（导入入口统一确认）：同 id 会话自动跳过，属合并不覆盖，
-  // 故不标 danger；danger 留给真正覆盖式的设置导入
   const handleImportAll = async (): Promise<void> => {
     const confirmed = await confirm({
       title: t('settings.importSessions'),
@@ -113,13 +98,11 @@ export function DataSection(): React.ReactElement {
       if (res.saved) {
         toast.success(t('settings.exportSuccess', { path: res.path ?? '' }));
       }
-      // 用户取消 / 无桥：静默
     } catch {
       toast.error(t('settings.exportSettingsFailed'));
     }
   };
 
-  // 覆盖类危险操作：导入会用文件中的同名设置覆盖当前值，确认标红
   const handleImportSettings = async (): Promise<void> => {
     const confirmed = await confirm({
       title: t('settings.importSettings'),
@@ -137,10 +120,6 @@ export function DataSection(): React.ReactElement {
     }
   };
 
-  // 恢复默认（覆盖类危险操作）：先把在途写穿透落库（防 DELETE 后旧值复活），
-  // 再清空 app_settings 设置键；响应为空快照 → applySettingsSnapshot({}) 全量
-  // 回落默认（内部含主题首帧镜像）。applySettingsSnapshot 不切 i18n 实例
-  // （启动专用假设：此时 i18n 由 detector 读镜像初始化），运行时需显式切回。
   const handleResetAllSettings = async (): Promise<void> => {
     const confirmed = await confirm({
       title: t('settings.resetAllSettings'),
@@ -156,9 +135,7 @@ export function DataSection(): React.ReactElement {
       changeLanguage(language);
       try {
         localStorage.setItem(LANGUAGE_STORAGE_KEY, language);
-      } catch {
-        // 无痕模式等场景静默（SQLite 真源已是默认）
-      }
+      } catch {}
       toast.success(t('settings.resetAllSettingsDone'));
     } catch {
       toast.error(t('settings.resetAllSettingsFailed'));
@@ -173,15 +150,9 @@ export function DataSection(): React.ReactElement {
       } else {
         toast.error(t('settings.exportFailed'));
       }
-    } catch {
-      // 无桥 / IPC 失败：静默（与原「浏览器模式直接返回」一致，不误报）
-    }
+    } catch {}
   };
 
-  // 清空全部会话（36-D）：破坏性 danger 操作——confirm 明示不可恢复后调
-  // session:clearAll（运行中回合由主进程拒绝 SESSION_IN_USE）。成功后：激活
-  // 会话必已被删 → clearActiveSession + 回首页 + 关设置（对齐 Sidebar 删除
-  // 激活会话的回落行为），toast 报告真实删除数
   const handleClearAllSessions = async (): Promise<void> => {
     const confirmed = await confirm({
       title: t('settings.clearAllSessions'),
@@ -195,10 +166,7 @@ export function DataSection(): React.ReactElement {
       navigate(ROUTES.home);
       closeSettings();
       toast.success(t('settings.clearAllSessionsDone', { count: String(deleted) }));
-    } catch {
-      // 错误提示由 useClearAllSessions 的 onError 统一弹出（防双弹约定），
-      // 此处仅吞掉 mutateAsync 的 rejection
-    }
+    } catch {}
   };
 
   return (
@@ -218,7 +186,6 @@ export function DataSection(): React.ReactElement {
         <Button variant="outline" size="sm" onClick={handleOpenDataDir}>
           {t('settings.openDataDir')}
         </Button>
-        {/* 清空全部会话（36-D）：danger 覆盖式危险操作，与导出/导入同组 */}
         <Button
           variant="outline"
           size="sm"
@@ -260,7 +227,6 @@ export function DataSection(): React.ReactElement {
         </div>
       )}
 
-      {/* 启动备份（37-B）：恢复点可见性 + 手动备份 + 逐行恢复（子块独立文件控净行） */}
       <BackupBlock />
     </div>
   );

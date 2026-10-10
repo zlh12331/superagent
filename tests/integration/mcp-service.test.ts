@@ -1,17 +1,8 @@
-// tests/integration/mcp-service.test.ts
-// MCP 服务 → 工具注册闭环集成测试：真实 ToolRegistry × MCPService
-// ──────────────────────────────────────────────────────────────
-// 单测（src/main/infra/ai/mcp/mcp-service.test.ts）mock 掉 ToolRegistry 验证
-// "register 被调用"；本集成测试用真实 ToolRegistry 验证 MCP 工具真的注册进
-// 注册表、stopServer 注销、重名保护。MCPClient 是外部边界（子进程），仍 mock。
-// ──────────────────────────────────────────────────────────────
-
 import type { McpServerConfig } from '@code-agent/shared/main';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Tool } from '../../src/main/infra/ai/tools/tool';
 import { ToolRegistry } from '../../src/main/infra/ai/tools/tool-registry';
 
-// mock MCPClient（外部边界：子进程握手）——构造函数返回可配置实例
 const mocks = vi.hoisted(() => {
   const mockMcpClientInstance = {
     connect: vi.fn(async () => {}),
@@ -54,7 +45,6 @@ const baseConfig: McpServerConfig = {
 describe('MCPService × ToolRegistry 集成（真实注册表）', () => {
   let registry: ToolRegistry;
   let service: MCPService;
-  // MCP 工具名带命名空间前缀 mcp__${serverName}__${toolName}
   const readFileTool = 'mcp__filesystem__read_file';
   const writeFileTool = 'mcp__filesystem__write_file';
 
@@ -68,13 +58,11 @@ describe('MCPService × ToolRegistry 集成（真实注册表）', () => {
     ]);
     mocks.mockMcpClientInstance.connect.mockResolvedValue(undefined);
     mocks.mockMcpClientInstance.close.mockResolvedValue(undefined);
-    // listServers 读 client.getConfig()（config.name）——返回 baseConfig 快照
     mocks.mockMcpClientInstance.getConfig.mockReturnValue(baseConfig);
   });
 
   it('startServer：MCP 工具（带命名空间前缀）真实注册进 ToolRegistry', async () => {
     await service.startServer(baseConfig);
-    // 真实注册表断言（非 register 调用数——工具真的可查到）
     expect(registry.get(readFileTool)).toBeDefined();
     const names = registry.getAllNames();
     expect(names.has(readFileTool)).toBe(true);
@@ -90,7 +78,6 @@ describe('MCPService × ToolRegistry 集成（真实注册表）', () => {
   });
 
   it('重名保护：同名命名空间工具已被占用时跳过注册（不覆盖）', async () => {
-    // 预注册一个与 MCP 工具名冲突的工具（命名空间前缀相同）
     const existing: Tool = {
       name: readFileTool,
       description: '内置 read_file',
@@ -99,7 +86,6 @@ describe('MCPService × ToolRegistry 集成（真实注册表）', () => {
     };
     registry.register(existing);
     await service.startServer(baseConfig);
-    // 重名工具未覆盖：仍返回内置的（描述符不同可区分）
     expect(registry.get(readFileTool)?.description).toBe('内置 read_file');
   });
 

@@ -1,18 +1,3 @@
-// src/renderer/components/dev/InspectorPanel.tsx
-// 开发者工具检查器面板
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 提供按钮一键唤起 Chromium DevTools（通过 IPC 调用 webContents.openDevTools）
-// - 支持三种停靠模式：detach（独立窗口）/ right（右侧）/ bottom（底部）
-// - 展示 React DevTools 扩展安装说明（dev 模式自动注入）
-// - 调用结果反馈（内联状态条：成功/失败文案 + 图标，非 toast）
-//
-// 设计：
-// - 纯交互面板，无数据查询（不使用 TanStack Query）
-// - 按钮组风格与 LogsPanel 级别过滤按钮一致（小号等宽字体）
-// - 成功/失败状态通过本地 useState 管理，3s 后自动清除
-// ──────────────────────────────────────────────────────────────
-
 import { CheckCircle2, ExternalLink, Info, PanelBottom, PanelRight, XCircle } from 'lucide-react';
 import { type ReactElement, useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -57,15 +42,11 @@ interface InspectorPanelProps {
  * ```
  */
 export function InspectorPanel({ className }: InspectorPanelProps): ReactElement {
-  // 本地化文案
   const { t } = useTranslation();
   const { getErrorMessage } = useErrorMessage();
-  // 调用状态：idle / loading / success / error
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [statusMessage, setStatusMessage] = useState('');
-  // 当前正在加载的模式（用于按钮禁用）
   const [loadingMode, setLoadingMode] = useState<DevToolsMode | null>(null);
-  // 状态自动清除定时器：组件卸载时清理，避免 setState on unmounted component 内存泄漏
   const statusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(
     () => () => {
@@ -92,15 +73,10 @@ export function InspectorPanel({ className }: InspectorPanelProps): ReactElement
         setStatusMessage(t('dev.openFailedSender'));
       }
     } catch (err) {
-      // 错误响应（[CODE] message）/ 协议异常 / 调用异常统一提示。
-      // 经 unwrapErrorMessage 解析错误码：此前直出 err.message，IPC 失败会
-      // 把英文码原样展示（其余面板已统一走该出口）。
       setStatus('error');
       const error = err instanceof Error ? err : new Error(String(err));
       setStatusMessage(unwrapErrorMessage(error, getErrorMessage));
     }
-    // finally 语义（React Compiler 不优化 try/finally）：catch 不 rethrow，
-    // 成功/失败路径统一走到这里复位 + 3s 后自动清除状态
     setLoadingMode(null);
     if (statusTimerRef.current !== null) {
       clearTimeout(statusTimerRef.current);
@@ -114,7 +90,6 @@ export function InspectorPanel({ className }: InspectorPanelProps): ReactElement
 
   return (
     <div className={cn('flex h-full flex-col', className)}>
-      {/* 顶部：标题栏 */}
       <div className="border-border bg-muted/30 flex items-center gap-1.5 border-b px-2 py-1">
         <ExternalLink className="text-muted-foreground size-3" strokeWidth={1.5} />
         <span className="text-muted-foreground font-serif text-2xs tracking-wide">
@@ -123,7 +98,6 @@ export function InspectorPanel({ className }: InspectorPanelProps): ReactElement
       </div>
 
       <ScrollArea className="min-h-0 flex-1">
-        {/* Chromium DevTools 按钮组 */}
         <Section title={t('dev.chromiumDevtools')} description={t('dev.developerToolsDesc')}>
           <div className="flex items-center gap-0.5">
             {MODE_BUTTONS.map((btn) => {
@@ -153,7 +127,6 @@ export function InspectorPanel({ className }: InspectorPanelProps): ReactElement
           </div>
         </Section>
 
-        {/* React DevTools 说明 */}
         <Section title={t('dev.reactDevtools')} description={t('common.reactTreeDesc')}>
           <div className="flex items-start gap-1.5">
             <Info className="text-muted-foreground mt-0.5 size-3 shrink-0" strokeWidth={1.5} />
@@ -163,7 +136,6 @@ export function InspectorPanel({ className }: InspectorPanelProps): ReactElement
           </div>
         </Section>
 
-        {/* 状态反馈 */}
         {status !== 'idle' && (
           <div
             className={cn(
@@ -185,8 +157,6 @@ export function InspectorPanel({ className }: InspectorPanelProps): ReactElement
     </div>
   );
 }
-
-// ── 子组件：分区容器 ──────────────────────────────────────
 
 interface SectionProps {
   readonly title: string;

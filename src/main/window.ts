@@ -1,13 +1,3 @@
-// src/main/window.ts
-// 主窗口创建（自 index.ts 提取：窗口构造 + 安全基线 + DevTools 注入）
-// ──────────────────────────────────────────────────────────────
-// createWindow 自 index.ts 提取（129 行函数体），index.ts 保留应用生命周期编排。
-// 安全配置遵循 Electron Security 官方推荐：
-// - contextIsolation: true（XSS → RCE 防护）
-// - nodeIntegration: false
-// - sandbox: true（渲染层沙箱）
-// ──────────────────────────────────────────────────────────────
-
 import { join } from 'node:path';
 import { app, BrowserWindow, dialog, screen, shell } from 'electron';
 import { installExtension, REACT_DEVELOPER_TOOLS } from 'electron-devtools-installer';
@@ -21,10 +11,6 @@ import { logger } from './utils/logger';
 import { loadWindowState, trackWindowState, type WindowState } from './utils/window-state';
 import { markMaximizeOnNextShow } from './window-show';
 import { TITLE_BAR_SYMBOL } from './window-theme';
-
-// __dirname / __filename 由 electron-vite 6.x 在构建时自动注入
-// （基于 import.meta.dirname / import.meta.filename，Node 24 原生支持）
-// 详见 https://electron-vite.org/guide/dev#limitations-of-sandboxing
 
 /**
  * 关窗行为（settings.window.closeAction；缺失/损坏/读取失败 → 默认 minimize）
@@ -44,11 +30,6 @@ export function readCloseAction(): 'minimize' | 'quit' {
   }
 }
 
-// ── 关窗协商共享状态 ──
-// 已独立到 ./quit-state（close 路径与 before-quit 路径共享"用户已确认"标志；
-// 更新安装入口亦需置位该标志，为避免 update-service → window → service-container
-// 循环依赖，标志移出本文件）。
-
 /**
  * 运行中回合退出确认弹窗（close 协商与 before-quit 协商共用）
  *
@@ -63,13 +44,12 @@ export async function confirmInterruptRunningTurns(win: BrowserWindow): Promise<
       message: 'Agent 回合正在运行',
       detail: '现在退出将中断当前回合（已生成内容保留，下次启动可从中断处恢复）。确定退出吗？',
       buttons: ['取消', '退出'],
-      defaultId: 0, // 默认聚焦"取消"——误按 Enter 不至于丢回合
+      defaultId: 0,
       cancelId: 0,
       noLink: true,
     });
     return response === 1;
   } catch (err) {
-    // dialog 失败（窗口已销毁等）：保守放行，交给 before-quit 兜底清理
     logger.warn({ error: String(err) }, '关窗确认对话框失败，放行关闭（before-quit 兜底）');
     return true;
   }
@@ -82,7 +62,6 @@ export async function confirmInterruptRunningTurns(win: BrowserWindow): Promise<
  * 导航/新窗口限制 → 加载渲染层 → 状态跟踪 → dev DevTools 注入。
  */
 export function createWindow(): BrowserWindow {
-  // 窗口状态记忆：恢复上次尺寸/位置/最大化（校验不可见时回退系统默认）
   const windowState: WindowState = loadWindowState(
     join(app.getPath('userData'), 'window-state.json'),
     { width: 1280, height: 800 },
@@ -93,33 +72,21 @@ export function createWindow(): BrowserWindow {
     ...(windowState.y !== undefined ? { y: windowState.y } : {}),
     width: windowState.width,
     height: windowState.height,
-    // 最小窗口尺寸：低于 960 宽时主区被压缩至不可用（聊天输入区不可见）
     minWidth: 960,
     minHeight: 640,
     show: false,
     autoHideMenuBar: true,
-    // frameless 标题栏（对齐原型自绘标题栏设计，三端支持）：
-    // - 隐藏系统标题栏，渲染层顶部栏延伸到窗口顶部（顶栏即标题栏）
-    // - macOS：titleBarStyle hidden 保留红绿灯（系统绘制）
-    // - Windows/Linux：titleBarOverlay 保留窗口控件（系统绘制，原生交互全保留）
     titleBarStyle: 'hidden',
-    // 非 macOS 平台用 overlay 窗口控件（Electron 官方推荐平台分支写法）
-    // symbolColor 取暗色值（默认主题 dark）；启动时 syncTitleBarOverlayFromTheme
-    // 会按 SQLite 实际设置校正，主题切换实时联动
     ...(process.platform !== 'darwin'
       ? {
           titleBarOverlay: {
-            // 透明底：让顶栏玻璃背景统一延伸（深色实底会形成突兀黑块）
             color: '#00000000',
-            // stone-400：暗色玻璃背景上清晰可见（纯黑会隐身）
             symbolColor: TITLE_BAR_SYMBOL.dark,
-            // 与 --topbar-h（52px）对齐
             height: 52,
           },
         }
       : {}),
     webPreferences: {
-      // preload 输出为 .cjs（CJS 格式）：sandbox: true 要求 preload 必须是 CommonJS
       preload: join(__dirname, '../preload/index.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
@@ -128,9 +95,6 @@ export function createWindow(): BrowserWindow {
     },
   });
 
-  // 限制导航（Security #13）：只允许应用内导航
-  // P2 加固：dev 仅允许 electron-vite dev server 同源；prod（file:// 入口）
-  // 不再放行任意 http://localhost:*——本机其他端口的服务同样能借此导航窗口
   const navRendererUrl = process.env['ELECTRON_RENDERER_URL'];
   win.webContents.on('will-navigate', (event, url) => {
     let allowed = false;
@@ -149,7 +113,6 @@ export function createWindow(): BrowserWindow {
     }
   });
 
-  // 限制新窗口（Security #14）：外链走系统浏览器
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith('http')) {
       shell.openExternal(url);
@@ -157,8 +120,6 @@ export function createWindow(): BrowserWindow {
     return { action: 'deny' };
   });
 
-  // 开发环境加载 dev server，生产环境加载构建产物
-  // noPropertyAccessFromIndexSignature: process.env 必须用方括号访问
   const rendererUrl = process.env['ELECTRON_RENDERER_URL'];
   if (rendererUrl) {
     void win.loadURL(rendererUrl);
@@ -166,10 +127,6 @@ export function createWindow(): BrowserWindow {
     void win.loadFile(join(__dirname, '../renderer/index.html'));
   }
 
-  // 静默启动（开机自启）：Windows/Linux 由登录项携带 --hidden 参数、macOS 由
-  // wasOpenedAtLogin 判定（ServiceManagement 不透传 args，见 infra/autostart 头注释）。
-  // 判定在 ready-to-show 处生效：窗口照常创建（托盘/事件订阅依赖它）但不显示，仅驻留托盘；
-  // 唤回路径见 window-show.ts（托盘左键/菜单、二次启动、macOS Dock 三处共用同一实现）。
   const startHidden = resolveStartHidden(app);
   if (startHidden) {
     logger.info({}, '开机自启静默启动：窗口驻留托盘不显示');
@@ -178,23 +135,12 @@ export function createWindow(): BrowserWindow {
     if (startHidden) {
       return;
     }
-    // 最大化必须在 ready-to-show 之后：一是在首帧渲染前显示窗口会破坏 show:false 的防闪设计，
-    // 二是 maximize() 自身会显示窗口（见下），放在此处才能与静默启动互不干扰。
     if (windowState.isMaximized) {
       win.maximize();
     }
     win.show();
   });
 
-  // ── 关窗行为（docs/design/28-tray-spec.md §3）──
-  // minimize（默认）：点 X 隐藏窗口到托盘，进程与后台能力（回合/IM/定时任务）
-  //   继续运行——最小化不中断回合，因此不经过运行中回合协商。
-  // quit：点 X 走现行协商（有回合确认）后关闭。
-  // darwin：**不参与**（spec 28 §3.2:68-69 / §10:243）——macOS 原生惯例即"关窗不退出"，
-  //   不读 closeAction；此处直接放行 ⇒ 窗口被销毁、应用留存（window-all-closed 在 darwin
-  //   不退出，见 index.ts），重建由 Dock 点击 / 托盘 / 二次启动三条路径覆盖。
-  //   关窗 ≠ 退出，故也不走"中断回合"协商（退出仍由 before-quit 协商把关）。
-  // 真实退出流程（isQuitting / 用户已确认 / E2E 豁免）优先放行。
   win.on('close', (event) => {
     if (isQuitting() || isCloseConfirmed() || process.env['CODE_AGENT_SKIP_CLOSE_GUARD'] === '1') {
       return;
@@ -223,20 +169,10 @@ export function createWindow(): BrowserWindow {
     });
   });
 
-  // 恢复最大化状态：**静默启动时不可调用 maximize()** —— Electron 的 maximize() 会显示
-  // 尚未显示的窗口（electron.d.ts:3101），会让 --hidden 失效（2026-09-21 真机实测：
-  // 上次最大化过的用户，开机自启必然弹窗；E2E 的 P0-1 锚已覆盖该回归）。
-  // 改为记下 pending 标志，由 window-show.ts 在用户首次唤回时应用（在那之前窗口保持隐藏）。
   if (startHidden && windowState.isMaximized) {
     markMaximizeOnNextShow();
   }
 
-  // ── 渲染进程崩溃自愈（进程与窗口维度：渲染崩 ≠ 整窗死）──
-  // reason 分类（Electron webContents 'render-process-gone'）：
-  // - clean-exit：正常退出路径（如 win.close 流程），不处理
-  // - crashed / oom / killed / launch-failed 等：自动 reload 恢复窗口
-  //   数据真源在 SQLite + 持久 store，reload 仅丢 transient 内存态（可接受）
-  // 防循环：60s 窗口内最多 2 次自愈，超限停止 reload（避免"崩→reload→再崩"死循环）
   let crashRecoveryCount = 0;
   let crashWindowStart = 0;
   win.webContents.on('render-process-gone', (_event, details) => {
@@ -265,30 +201,14 @@ export function createWindow(): BrowserWindow {
     win.webContents.reload();
   });
 
-  // 窗口状态跟踪：move/resize 防抖 + 最大化即时 + close 同步落盘
   trackWindowState(win, join(app.getPath('userData'), 'window-state.json'));
 
-  // 方案 A + C：dev 模式自动安装 React DevTools 扩展 + 自动打开 Chromium DevTools
-  // - C：installExtension 从 Chrome Web Store 下载 React DevTools 并注入 session
-  //   失败容忍（网络问题/已安装）—— 仅 warn 不影响应用启动
-  // - A：openDevTools({ mode: 'detach' }) 打开独立 DevTools 窗口
-  //   生产环境不自动打开（打包后 app.isPackaged === true）
-  //
-  // 注意：electron-devtools-installer v4.0.0 使用废弃的 session.getAllExtensions API
-  // 导致 deprecated 警告，但不影响功能；React DevTools 需要联网下载
-  //
-  // M4 修复：
-  // - 用 `void` 显式标注 fire-and-forget Promise，避免 floating-promise lint 警告
-  // - catch 中保留完整 error 对象（含 stack），便于 logger 序列化排查网络/权限问题
-  // - openDevTools 不依赖 installExtension 成功（即使扩展安装失败，DevTools 仍可用）
   if (!app.isPackaged) {
     void installExtension(REACT_DEVELOPER_TOOLS)
       .then((name) => {
         logger.info({ name }, 'React DevTools 扩展已安装');
       })
       .catch((err: unknown) => {
-        // 错误容忍：网络问题 / 已安装版本冲突 / Chrome Web Store 不可达
-        // 不影响应用启动，DevTools 仍可用（openDevTools 不依赖扩展）
         logger.warn(
           {
             error: err instanceof Error ? err.message : String(err),

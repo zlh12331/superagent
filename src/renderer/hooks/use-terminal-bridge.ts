@@ -1,29 +1,3 @@
-// src/renderer/hooks/use-terminal-bridge.ts
-// 终端 IPC 桥接 Hook（L4 流式推送层）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 订阅 terminal:event:output / terminal:event:exit IPC 事件
-// - 将输出/退出事件写入 useTerminalStore，供 TerminalPanel 渲染
-//
-// 设计：
-// - 在 AppShell 根布局初始化一次，保证任意路由下都能接收终端事件
-// - 与 use-tool-bridge 类似的桥接模式：IPC 事件 → Zustand store
-// - 不处理 UI 展示（由 TerminalPanel 组件订阅 store 渲染）
-//
-// 事件处理：
-// - terminal:event:output 携带 { terminalId, data }
-//   data 为原始 ANSI 字符串，按「行」切分后追加到 buffer
-//   （切分策略：保留末尾不完整行至下次合并，避免行尾闪烁；
-//    简化实现：按 \n split，末尾若不为空则作为单独「未完成行」暂存）
-// - terminal:event:exit 携带 { terminalId, exitCode, signal? }
-//   仅标记终端已退出（alive=false），不删除 buffer（保留历史输出供查看）
-//
-// 性能考虑：
-// - 高频输出（如 ls -la 大目录）会触发大量 set 调用
-// - 当前实现：每个 output 事件触发一次 set，依赖 zustand 浅比较 + 环形截断
-// - 若后续出现性能瓶颈，可改为 requestAnimationFrame 批量合并
-// ──────────────────────────────────────────────────────────────
-
 import type {
   TerminalExitEventPayload,
   TerminalOutputEventPayload,
@@ -49,18 +23,11 @@ export function useTerminalBridge(): void {
   useEffect(() => {
     if (!hasIpcBridge()) return;
 
-    // 订阅终端输出事件：主进程推送 PTY 原始输出（含 ANSI 转义序列）
-    // 渲染层由 TerminalPanel 用 xterm.js 直接 write，不解码
-    // 此处仅写入 buffer 作为兜底（用于组件卸载重挂时恢复可见内容）
     const unsubscribeOutput = window.api.terminal.subscribeOutputEvent((payload) => {
       const typedPayload = payload as TerminalOutputEventPayload;
-      // P3 修复：原样累积原始 ANSI 字符串（不按 \n 切行——切行会拦腰截断
-      // 转义序列，恢复输出损坏）；字节级截断在 store 内完成
       useTerminalStore.getState().appendOutput(typedPayload.terminalId, typedPayload.data);
     });
 
-    // 订阅终端退出事件：PTY 进程结束（用户输入 exit 或被 kill）
-    // 标记 alive=false，UI 显示为已结束状态，但保留输出 buffer 供查看
     const unsubscribeExit = window.api.terminal.subscribeExitEvent((payload) => {
       const typedPayload = payload as TerminalExitEventPayload;
       useTerminalStore.getState().markExited(typedPayload.terminalId);

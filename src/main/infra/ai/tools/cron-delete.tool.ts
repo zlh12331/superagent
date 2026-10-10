@@ -1,10 +1,3 @@
-// src/main/infra/ai/tools/cron-delete.tool.ts
-// cron_delete 工具：删除定时任务（对齐 qwen cron_delete 工具语义）
-// ──────────────────────────────────────────────────────────────
-// 设计：
-// - 删除指定任务（幂等）；任务不存在返回明确提示
-// ──────────────────────────────────────────────────────────────
-
 import { z } from 'zod';
 import { t } from '../../i18n';
 import { cronService } from '../agent/cron-service';

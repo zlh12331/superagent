@@ -1,6 +1,3 @@
-// src/renderer/components/settings/sections/skills-section.test.tsx
-// SkillsSection 单测：已学技能列表 / 移除 / 学习 / 内置分组
-// 数据源：window.api.skill.listLearned/list/learn/removeLearned（全部 stub）
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -8,7 +5,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { SkillsSection } from './skills-section';
 
-// 删除确认收敛至命令式 confirm() store：测试默认确认通过
 vi.mock('@/stores/transient/confirm-dialog-store', () => ({
   confirm: vi.fn().mockResolvedValue(true),
 }));
@@ -93,7 +89,6 @@ describe('SkillsSection', () => {
       '描述你想固化的能力（如：用 TypeScript 写单元测试时先建 describe 骨架）…',
     );
     await userEvent.type(textarea, '写 red-green 测试');
-    // "学习新技能" 出现在标题与按钮 → 找按钮（type=button）
     const learnBtn = screen.getAllByText('学习新技能').find((el) => el.tagName === 'BUTTON');
     expect(learnBtn).toBeTruthy();
     await userEvent.click(learnBtn as HTMLElement);
@@ -104,7 +99,6 @@ describe('SkillsSection', () => {
 
   it('内置技能分组：全部 - 已学 = 内置（code-review）', async () => {
     renderSection();
-    // ts-unit 已学（列表块）；code-review 非已学 → 内置组
     expect(await screen.findByText('code-review')).toBeInTheDocument();
   });
 });

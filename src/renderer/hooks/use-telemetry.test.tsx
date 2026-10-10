@@ -1,6 +1,3 @@
-// src/renderer/hooks/use-telemetry.test.tsx
-// Telemetry level hooks: query degradation / mutation cache invalidation / no-bridge
-
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';

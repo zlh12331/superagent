@@ -1,17 +1,3 @@
-// src/main/infra/lsp/ls-config.ts
-// 语言服务器解析：扩展名 → 语言 → 服务器命令（内置默认 + 用户覆盖）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 内置默认服务器表（stdio 约定；对齐主流 LSP server 的启动方式）
-// - 文件扩展名 → 语言标识映射（工具入参只有文件路径）
-// - parseServerCommand：用户配置的命令行字符串 → 结构化 spec（空白分隔）
-// - resolveLsServer：按文件解析生效服务器（override 优先，缺省回落内置）
-//
-// 设计原则：
-// - 纯函数无副作用（可测性）；不校验命令存在性（启动失败由 manager/工具层兜底）
-// - 只收录 stdio 模式成熟的主流服务器；未收录语言明确报错（不伪造能力）
-// ──────────────────────────────────────────────────────────────
-
 /** 语言服务器启动规格 */
 export interface LsServerSpec {
   readonly command: string;
@@ -56,7 +42,6 @@ export function languageForFile(filePath: string): LsLanguage | undefined {
     return undefined;
   }
   const ext = filePath.slice(dot).toLowerCase();
-  // 扩展名后缀截断（如 ".d.ts" 命中 .ts；目录段中的点不影响 lastIndexOf 取尾）
   return EXT_TO_LANGUAGE[ext];
 }
 

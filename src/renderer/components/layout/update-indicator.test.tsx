@@ -1,11 +1,3 @@
-// src/renderer/components/layout/update-indicator.test.tsx
-// 顶栏更新指示测试：可见三态（隐藏 / 下载中 / 就绪）+ 点击行为 + 静默（跳过与稍后）
-// ──────────────────────────────────────────────
-// 覆盖动机：指示器此前 0 测试，而它承载"静默可见性"这一关键取舍——
-// 只在下中/就绪出现、下载中直达关于面板、就绪开操作菜单、跳过与稍后都不打扰。
-// 状态直接写 update-store（指示器读 store，不再自行订阅）。
-// ──────────────────────────────────────────────
-
 import type { UpdateStatusPayload } from '@code-agent/shared/renderer';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -80,7 +72,6 @@ describe('顶栏更新指示', () => {
     expect(
       screen.queryByRole('button', { name: t('update.indicatorReady', { version: '1.2.0' }) }),
     ).toBeNull();
-    // 仅本会话隐藏：settings 未被写入
     expect(useSettingsStore.getState().update.skippedVersion).toBeNull();
   });
 

@@ -1,17 +1,3 @@
-// src/main/infra/storage/keychain.ts
-// 敏感数据加密存储（API Key 等）
-// 设计文档 §1.2 决策 5：API Key 存钥匙串
-//
-// 使用 Electron 内置 safeStorage API（替代 keytar）：
-// - 基于 OS 加密（Windows DPAPI / macOS Keychain / Linux libsecret）
-// - 不需要 native rebuild，符合 Electron 官方安全建议
-// - 加密后的数据存储到 keychain.dat 文件（JSON 格式）
-//
-// 设计文档 §2.2 列出 keytar ^7，但 safeStorage 更优：
-// 1. 内置于 Electron，无需额外依赖
-// 2. 不需要 native rebuild（keytar 需要）
-// 3. 跨平台一致 API
-
 import { execFileSync } from 'node:child_process';
 import { chmodSync, promises as fs } from 'node:fs';
 import { join } from 'node:path';
@@ -55,7 +41,6 @@ export function isEncryptionAvailable(): boolean {
  * @returns resolve 后即为「已持锁」，resolve 值为释放锁的函数
  */
 function acquireLock(): Promise<() => void> {
-  // 登记必须同步完成（保证 FIFO），只有「等待」是异步的
   const waiting = lock;
   let release: () => void = () => {};
   const slot = new Promise<void>((resolve) => {
@@ -136,9 +121,7 @@ function salvageEntries(raw: string): { store: KeychainStore; candidates: number
       }
       safeStorage.decryptString(Buffer.from(parsed));
       store[JSON.parse(`"${rawKey}"`) as string] = parsed;
-    } catch {
-      // 单条不可解析/不可解密：跳过（计入 lost），不阻断其余条目
-    }
+    } catch {}
   }
   return { store, candidates };
 }
@@ -172,7 +155,6 @@ async function readStore(): Promise<KeychainStore> {
   try {
     content = await fs.readFile(filePath, 'utf8');
   } catch (error: unknown) {
-    // ENOENT = 首次使用（合法空态）
     if (error instanceof Error && error.message.includes('ENOENT')) {
       return {};
     }
@@ -186,7 +168,6 @@ async function readStore(): Promise<KeychainStore> {
     }
     throw new Error('keychain.dat 结构不符合契约');
   } catch {
-    // 结构损坏（半截写入 / 手工改坏）：先逐条抢救，再隔离原件，最后回写健康子集
     const { store: salvaged, candidates } = salvageEntries(content);
     const report: KeychainIntegrity = {
       corrupted: true,
@@ -201,9 +182,7 @@ async function readStore(): Promise<KeychainStore> {
     );
     try {
       await fs.rename(filePath, `${filePath}.corrupt`);
-    } catch {
-      // 重命名失败（权限等）不阻断：仍继续回写健康子集
-    }
+    } catch {}
     if (report.recoverable) {
       await writeStore(salvaged);
     }
@@ -229,14 +208,12 @@ async function writeStore(store: KeychainStore): Promise<void> {
     const handle = await fs.open(tmpPath, 'w', 0o600);
     try {
       await handle.writeFile(content, 'utf8');
-      // fsync：确保内容真正落盘后再 rename（rename 本身是原子的）
       await handle.sync();
     } finally {
       await handle.close();
     }
     await fs.rename(tmpPath, filePath);
   } catch (error) {
-    // 失败清理临时文件，避免残留（读路径只认 keychain.dat，不受影响）
     await fs.rm(tmpPath, { force: true }).catch(() => undefined);
     throw error;
   }
@@ -273,9 +250,7 @@ function restrictKeychainPermissions(filePath: string): void {
   if (process.platform !== 'win32') {
     try {
       chmodSync(filePath, 0o600);
-    } catch {
-      // 权限设置失败不阻断写入（只读文件系统等场景）
-    }
+    } catch {}
     return;
   }
   const user = resolveWindowsAccount();
@@ -284,7 +259,6 @@ function restrictKeychainPermissions(filePath: string): void {
     return;
   }
   try {
-    // 解析系统绝对路径（不依赖 PATH）：%SystemRoot%\System32\icacls.exe
     const icaclsExe =
       process.env['SystemRoot'] !== undefined
         ? join(process.env['SystemRoot'], 'System32', 'icacls.exe')
@@ -297,9 +271,6 @@ function restrictKeychainPermissions(filePath: string): void {
   }
 }
 
-// 2026-09-28：以 restrictFileAccessWin32 之名导出——sessions.db / -wal / -shm /
-// 备份（db.ts restrictFilePermissions 的 win32 分支）与 keychain.dat 共用同一套
-// ACL 收紧机制，此前 db 侧 Windows 完全跳过、纵深标准低于密钥文件（深读发现）
 export { restrictKeychainPermissions as restrictFileAccessWin32 };
 
 /**
@@ -332,10 +303,6 @@ export async function setSecret(key: string, value: string): Promise<void> {
  */
 export async function getSecret(key: string): Promise<string | null> {
   if (!safeStorage.isEncryptionAvailable()) {
-    // fail-silent 收口（2026-09-28 深读发现）：此前静默返 null——Linux 无 keyring
-    // 等场景下已保存的 Key 读出为「未配置」，用户视角密钥凭空消失且无任何线索。
-    // 现每进程告警一次（随诊断包导出）；仍返回 null 保持可用性——读抛错会卡死
-    // 设置页，而 set 侧的抛错语义不变（写入失败必须让用户知道）
     if (!warnedEncryptionUnavailable) {
       warnedEncryptionUnavailable = true;
       logger.warn(
@@ -346,8 +313,6 @@ export async function getSecret(key: string): Promise<string | null> {
     return null;
   }
 
-  // P1 修复：读路径同样持锁——此前 get 无锁，可与 set/delete 的「读-改-写」
-  // 以及损坏文件的 rename 交错，读到随即被隔离的孤儿快照（甚至丢条目）
   const release = await acquireLock();
   try {
     const store = await readStore();
@@ -369,8 +334,6 @@ export async function getSecret(key: string): Promise<string | null> {
  * @param key secret 名称
  */
 export async function deleteSecret(key: string): Promise<void> {
-  // P1 修复：delete 是读改写，必须与 setSecret 同锁——否则运行时模型删除密钥
-  // 与设置页保存密钥并发时，delete 的旧读会覆盖 set 刚写入的 key（丢更新）
   const release = await acquireLock();
   try {
     const store = await readStore();
@@ -389,7 +352,6 @@ export async function deleteSecret(key: string): Promise<void> {
  * @returns secret key 数组
  */
 export async function listSecrets(): Promise<string[]> {
-  // 读路径持锁：readStore 可能触发损坏抢救（rename + 回写），不能与 set/delete 交错
   const release = await acquireLock();
   try {
     const store = await readStore();

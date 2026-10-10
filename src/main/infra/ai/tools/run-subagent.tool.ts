@@ -1,12 +1,3 @@
-// src/main/infra/ai/tools/run-subagent.tool.ts
-// run_subagent 工具：模型委派任务给子代理（对齐 qwen Subagents 工具语义）
-// ──────────────────────────────────────────────────────────────
-// 设计：
-// - permission='ask' / category='exec'：子代理回合可能产生副作用（写文件），
-//   保守审批；auto 模式下无 command 字段 → 走"其余命令保守 ask"
-// - 子代理执行是嵌套回合（独立 sessionId，无头模式）
-// ──────────────────────────────────────────────────────────────
-
 import { z } from 'zod';
 import { t } from '../../i18n';
 import { getSubagentManager } from '../agent/subagent-manager';

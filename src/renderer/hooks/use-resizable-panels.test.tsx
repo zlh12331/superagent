@@ -1,17 +1,3 @@
-// src/renderer/hooks/use-resizable-panels.test.tsx
-// 面板宽度与分隔线交互测试（正向 / 边界 / 异常）
-// ──────────────────────────────────────────────────────────────
-// 该逻辑此前内联在 AppShell（约 100 行、5 个 state/ref/callback + 3 个 effect），
-// 是 AppShell 认知复杂度 25 的基线条目主因；提取后首次获得独立覆盖。
-//
-// 测试要点：
-// 1. 拖拽：mousedown 后按 clientX 位移调整宽度，且 clamp 在令牌上下限内
-// 2. 左右方向语义：左侧右移变宽；右侧右移**变窄**（符号相反）
-// 3. 键盘：←/→ 16px 步进、Home/End 跳极值；无关键不拦截
-// 4. 折叠联动：CSS 变量置 0px
-// 5. 清理：mouseup 与卸载都移除全局监听、去掉 body.resizing
-// ──────────────────────────────────────────────────────────────
-
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -94,7 +80,6 @@ describe('useResizablePanels', () => {
         document.dispatchEvent(new MouseEvent('mousemove', { clientX: 340 }));
       });
 
-      // 右移 40px → 宽度减少 40（且不低于下限）
       expect(result.current.rightPanelWidth).toBe(Math.max(start - 40, RIGHT_PANEL_WIDTH_MIN));
     });
 
@@ -148,7 +133,6 @@ describe('useResizablePanels', () => {
       expect(result.current.draggingSide).toBeNull();
       expect(document.body.classList.contains('resizing')).toBe(false);
 
-      // 结束后 mousemove 不应再改变宽度
       const after = result.current.sidebarWidth;
       act(() => {
         document.dispatchEvent(new MouseEvent('mousemove', { clientX: 900 }));

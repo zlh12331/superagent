@@ -1,25 +1,3 @@
-// src/renderer/components/file-tree/file-icon.tsx
-// 文件图标（按扩展名匹配图标与颜色）
-// ──────────────────────────────────────────────────────────────
-// 用途：搜索结果行（fuzzy-search-dialog）的文件图标——按扩展名给**语义配色**。
-//
-// 与文件树节点的分工（勿合并）：树节点行用统一的单色 lucide 图标
-// （FileTreeNode 直接渲染 `<File>`），强调「层级/结构」而非文件类型；
-// 本组件用彩色图标，服务于「在一堆搜索结果里一眼区分文件类型」。两者视觉
-// 意图不同，故各自实现是正确的，不是重复。
-//
-// 规则（扩展名一律经 lib/utils.fileExtension 归一化，口径与语言检测同源）：
-//   .rs → FileCode 橙     .ts/.tsx/.js/.jsx → FileCode 蓝
-//   .json → FileJson 黄    .md → FileText 灰
-//   .toml → FileCog 红     图片类 → Image 绿
-//   默认 → File 灰
-//
-// 已移除（2026-09 file-tree 审计）：isFolder / expanded 两个 prop 及其文件夹
-// 分支——生产代码零使用（唯一调用点固定传 isFolder={false}），且该分支重复了
-// 文件树既有的 Folder/FolderOpen 渲染。属未被消费的预留能力，按「不留死代码」
-// 移除；将来若需要带配色的文件夹图标再按需加回。
-// ──────────────────────────────────────────────────────────────
-
 import type { LucideIcon } from 'lucide-react';
 import { File, FileCode, FileCog, FileJson, FileText, Image as ImageIcon } from 'lucide-react';
 import type { ReactElement } from 'react';

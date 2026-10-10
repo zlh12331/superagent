@@ -1,25 +1,3 @@
-// src/renderer/components/dev/LogsPanel.tsx
-// 日志查看器面板
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 调用 useLogsReadQuery 获取 main.log 文件尾部 N 行日志
-// - 支持级别过滤（全部 / info / warn / error / debug）
-// - 支持行数选择（100 / 200 / 500）
-// - 手动刷新按钮 + 自动展示截断提示
-//
-// 设计：
-// - 纯只读面板，无写操作（日志由 electron-log 写入文件）
-// - 日志行按级别着色（error 红 / warn 琥珀 / info 默认 / debug 灰）
-// - 等宽字体展示日志文本，行级着色而非整行背景（降低视觉噪音）
-// - enabled 由 DevPanel 按**当前可见 tab** 传入（仅 dev/logs 子页启用查询，切走
-//   即停，省下无谓 IPC）——不是「折叠态」控制
-// - 级别/行数用分段控件（ToggleGroup）而非下拉：与面板内其他分段控件同款，
-//   窄面板下选项直接可见
-// - 级别/行数切换接 keepPreviousData（use-system）：同一日志文件的不同切片，
-//   isPlaceholderData 时列表容器降透明（opacity-50，与 InspectorPanel 加载降
-//   透明同款），旧切片驻留防闪空屏；首次加载/同 key 手动刷新不触发
-// ──────────────────────────────────────────────────────────────
-
 import type { ReadLogsRes } from '@code-agent/shared/renderer';
 import { AlertCircle, FileText, RefreshCw } from 'lucide-react';
 import { type ReactElement, useState } from 'react';
@@ -67,13 +45,10 @@ interface LogsPanelProps {
  * ```
  */
 export function LogsPanel({ enabled = true, className }: LogsPanelProps): ReactElement {
-  // 本地化文案
   const { t } = useTranslation();
-  // 本地状态：级别过滤 + 行数（用户可切换，切换后触发 refetch）
   const [level, setLevel] = useState<LogLevelFilter>('all');
   const [lines, setLines] = useState<LineOption>(200);
 
-  // 仅在级别非 'all' 时传 level 参数（避免 IPC 传 undefined 导致歧义）
   const queryLevel = level !== 'all' ? level : undefined;
   const { data, isLoading, error, refetch, isFetching, isPlaceholderData } = useLogsReadQuery(
     lines,
@@ -83,16 +58,11 @@ export function LogsPanel({ enabled = true, className }: LogsPanelProps): ReactE
 
   return (
     <div className={cn('flex h-full flex-col', className)}>
-      {/* 顶部：工具栏（级别过滤 + 行数 + 刷新）；窄面板（240-480px）下换行而非横向溢出（实测 284px 时统计/刷新被挤出面板） */}
       <div className="border-border bg-muted/30 flex flex-wrap items-center gap-2 border-b px-2 py-1">
-        {/* 级别过滤按钮组（单选） */}
         <ToggleGroup
           type="single"
           value={level}
           onValueChange={(v) => {
-            // 与行数选择同一套「按表校验」而非断言：Radix 单选点击已选项会
-            // 回传空串取消（断言版靠 `if (v)` 兜住），而断言本身不校验取值
-            // 是否在本表内。
             const next = LEVEL_FILTERS.find((option) => option === v);
             if (next !== undefined) {
               setLevel(next);
@@ -114,14 +84,10 @@ export function LogsPanel({ enabled = true, className }: LogsPanelProps): ReactE
 
         <div className="bg-border mx-0.5 h-3 w-px" />
 
-        {/* 行数选择按钮组（单选） */}
         <ToggleGroup
           type="single"
           value={String(lines)}
           onValueChange={(v) => {
-            // 只接受真实档位：Radix 单选点击已选项会回传空串取消，
-            // 而 `Number('')` 为 0（非 NaN）——此前仅判 NaN 会把行数置 0，
-            // 查询随之变成「读 0 行」，面板空白。
             const next = LINE_OPTIONS.find((option) => String(option) === v);
             if (next !== undefined) {
               setLines(next);
@@ -141,7 +107,6 @@ export function LogsPanel({ enabled = true, className }: LogsPanelProps): ReactE
           ))}
         </ToggleGroup>
 
-        {/* 右侧：行数统计 + 刷新按钮 */}
         <div className="ml-auto flex items-center gap-1.5">
           {data !== undefined && (
             <span className="text-muted-foreground font-mono text-2xs">
@@ -164,17 +129,12 @@ export function LogsPanel({ enabled = true, className }: LogsPanelProps): ReactE
         </div>
       </div>
 
-      {/* 日志列表：普通滚动容器（Radix ScrollArea 内层 display:table 会随最长日志行撑宽
-          到 391px，超出 283px 面板被裁剪且横向滚动条不可达——长行尾部永远看不到）。
-          isPlaceholderData：过滤切换瞬间旧切片驻留，降透明示意数据非最新 */}
       <div className={cn('min-h-0 flex-1 overflow-y-auto', isPlaceholderData && 'opacity-50')}>
         <LogsBody isLoading={isLoading} error={error} data={data} />
       </div>
     </div>
   );
 }
-
-// ── 子组件：内容区四态 ──────────────────────────────────────
 
 interface LogsBodyProps {
   readonly isLoading: boolean;
@@ -191,7 +151,6 @@ interface LogsBodyProps {
  */
 function LogsBody({ isLoading, error, data }: LogsBodyProps): ReactElement {
   const { t } = useTranslation();
-  // 错误文案统一经 unwrapErrorMessage 解析错误码（与其余面板一致）
   const { getErrorMessage } = useErrorMessage();
   if (isLoading) return <LogsSkeleton />;
   if (error !== null) {
@@ -206,8 +165,6 @@ function LogsBody({ isLoading, error, data }: LogsBodyProps): ReactElement {
   return <LogLines lines={data.lines} filePath={data.filePath} />;
 }
 
-// ── 子组件：日志行列表 ──────────────────────────────────────
-
 interface LogLinesProps {
   readonly lines: readonly string[];
   readonly filePath: string;
@@ -217,13 +174,11 @@ interface LogLinesProps {
 function LogLines({ lines, filePath }: LogLinesProps): ReactElement {
   return (
     <div className="flex flex-col">
-      {/* 文件路径提示（顶部细线） */}
       <div className="text-muted-foreground border-border truncate border-b px-2 py-0.5 font-mono text-2xs">
         <FileText className="mr-1 inline size-2.5" strokeWidth={1.5} />
         {filePath}
       </div>
 
-      {/* 日志行：日志内容可能重复，使用 index 作为 key 一部分是合理的 */}
       <pre className="text-foreground/80 overflow-x-auto p-1 text-2xs leading-relaxed font-mono">
         {lines.map((line, index) => (
           // biome-ignore lint/suspicious/noArrayIndexKey: 日志行内容可能重复，index 作为 key 一部分是必要的
@@ -249,8 +204,6 @@ function getColorForLogLevel(line: string): string {
   return 'text-muted-foreground';
 }
 
-// ── 子组件：加载中 / 空状态 / 错误状态 ─────────────────────────
-
 /** 加载中骨架屏（role=status 让读屏知道正在加载，而非一片静默的占位块） */
 function LogsSkeleton(): ReactElement {
   const { t } = useTranslation();
@@ -267,7 +220,6 @@ function LogsSkeleton(): ReactElement {
 
 /** 空日志提示 */
 function EmptyLogs({ filePath }: { readonly filePath: string }): ReactElement {
-  // 本地化文案
   const { t } = useTranslation();
   return (
     <div className="text-muted-foreground flex flex-col items-center gap-1 p-4 text-center">
@@ -281,7 +233,6 @@ function EmptyLogs({ filePath }: { readonly filePath: string }): ReactElement {
 
 /** 错误状态提示 */
 function ErrorHint({ message }: { readonly message: string }): ReactElement {
-  // 本地化文案
   const { t } = useTranslation();
   return (
     <div className="text-error-text flex flex-col items-center gap-1 p-3 text-center">

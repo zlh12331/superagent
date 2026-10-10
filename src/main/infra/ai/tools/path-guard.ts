@@ -1,34 +1,3 @@
-// src/main/infra/ai/tools/path-guard.ts
-// 路径安全守卫：统一处理 LLM 输入路径到绝对路径的解析与边界检查
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - resolveWithinWorkspace：把 LLM 提供的路径（相对或绝对）解析为绝对路径
-//   并确保在 workingDir 内（含符号链接真实落点校验），返回双形态：
-//   resolved（输入形态，对外展示）+ realTarget（真实落点，文件 IO 必用）
-// - 确保解析后的路径在 workingDir 内，防止路径遍历攻击（如 ../etc/passwd）
-//
-// 设计原则：
-// - 所有文件/搜索工具共享此守卫，避免每个工具重复实现边界检查
-// - 使用 path.relative 判断是否越界，比 startsWith 更健壮
-//   （处理 Windows 盘符大小写、尾部分隔符差异）
-// - 越界抛出 AppError(UNAUTHORIZED)，由 ToolExecutor 捕获转为 ToolResult.error
-//
-// TOCTOU（debt.md#d1，2026-09-25 专项落地）：
-// 工具层文件 IO 必须使用 realTarget——若用 resolved，攻击者可在校验通过后、
-// IO 执行前把路径组件换成指向外部的符号链接（校验看 A、打开的是 B）。
-// realTarget 的每个组件刚经 realpath 验证，换链窗口收缩到微秒级重放，
-// 残余风险（realTarget 解析后再被换链）需要本地并发攻击者且收益极低。
-// 对外展示保持 resolved：LLM 输入/输出的路径形态零漂移（symlink 路径
-// 不会被解析成真实路径回显），避免模型困惑与 UI 形态变化。
-//
-// 使用示例：
-// ```ts
-// const { realTarget } = resolveWithinWorkspace(input.path, ctx.workingDir);
-// await fileService.read({ path: realTarget, ... });  // IO 用 realTarget
-// // 对外展示/回传给模型用 resolved
-// ```
-// ──────────────────────────────────────────────────────────────
-
 import { realpathSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { AppError, ErrorCode } from '@code-agent/shared/main';
@@ -48,17 +17,11 @@ import { AppError, ErrorCode } from '@code-agent/shared/main';
 export function resolveRealTarget(p: string): string | null {
   const tail: string[] = [];
   let current = p;
-  // 上限防深路径死循环（正常路径解析次数远小于此）
   for (let i = 0; i < 64; i += 1) {
     try {
-      // 2026-09-08 修复：此前用 resolve(realpathSync(current), ...tail)——当
-      // realpathSync 返回绝对路径且 tail 非空时，resolve 会把 tail 当作新的
-      // 绝对路径段重新解析，产出畸形路径（实测 Windows：
-      // `<tmp>\src\C:\Users\...\alias\main.ts`）。改用 join 做纯字符串拼接。
       return join(realpathSync(current), ...tail);
     } catch {
       const parent = dirname(current);
-      // 2026-09-08：到根仍失败 → 返回 null（此前回退原路径，使边界检查退化）
       if (parent === current) return null;
       tail.unshift(basename(current));
       current = parent;
@@ -95,17 +58,12 @@ export function resolveWithinWorkspace(
   inputPath: string,
   workingDir: string,
 ): ResolvedWorkspacePath {
-  // 空路径校验（含纯空白路径：LLM 可能输出无意义空白）
   if (!inputPath || inputPath.trim().length === 0) {
     throw new AppError(ErrorCode.INVALID_INPUT, '路径不能为空');
   }
 
-  // 相对路径基于 workingDir 解析；绝对路径 resolve 会保持原样（仅标准化）
   const resolved = resolve(workingDir, inputPath);
 
-  // 路径遍历保护：计算 resolved 相对 workingDir 的相对路径
-  // - 若结果以 '..' 开头，表示 resolved 在 workingDir 之外
-  // - 若结果是绝对路径（Windows 跨盘符场景），也表示越界
   const rel = relative(workingDir, resolved);
   if (rel.startsWith('..') || isAbsolute(rel)) {
     throw new AppError(
@@ -114,14 +72,6 @@ export function resolveWithinWorkspace(
     );
   }
 
-  // P1 安全修复（2026-08 安全审计）：字符串级检查不解析符号链接——
-  // workingDir 内 symlink 指向外部时，实际 IO 发生在外部。
-  // 解析最终落点（realpath）后重新校验边界；仅校验落点，
-  // 不拒绝工作目录内的合法 symlink（如 pnpm node_modules 结构）。
-  //
-  // 2026-09-08 修复（fail closed）：resolveRealTarget 解析失败时此前回退原路径，
-  // 使边界检查退化为纯字符串比较（symlink 可绕过）。现在解析失败直接拒绝——
-  // 拿不到真实落点就无法证明路径在边界内，按拒绝处理。
   const realTarget = resolveRealTarget(resolved);
   if (realTarget === null) {
     throw new AppError(
@@ -129,10 +79,6 @@ export function resolveWithinWorkspace(
       `无法解析路径的真实落点（可能含损坏/循环符号链接）：${resolved}`,
     );
   }
-  // 2026-09-09 修复：工作目录同样做 realpath 规范化后与 realTarget 对称比较。
-  // 此前用 workingDir 原始字符串比较——macOS/Linux 的临时目录常是符号链接
-  // （macOS /tmp → /private/tmp、/var → /private/var），realTarget 已是真实路径，
-  // 两者前缀不一致导致 relative() 误判越界，整批解析型用例在 CI 失败。
   const realWorkingDir = resolveRealTarget(workingDir);
   if (realWorkingDir === null) {
     throw new AppError(ErrorCode.UNAUTHORIZED, `无法解析工作目录的真实落点：${workingDir}`);
@@ -145,7 +91,5 @@ export function resolveWithinWorkspace(
     );
   }
 
-  // 2026-09-25 D1 专项落地：返回双形态（此前仅返回 resolved——TOCTOU 残余窗口
-  // 登记于 debt.md#d1）。工具层 IO 用 realTarget、展示用 resolved，取舍见头注释。
   return { resolved, realTarget };
 }

@@ -1,12 +1,3 @@
-// src/renderer/components/layout/folder-label.tsx
-// 侧边栏 · 文件夹标签行（折叠开关 + 新建 + 右键菜单）
-// ──────────────────────────────
-// 拆分背景（2026-08 重构）：自 Sidebar 641 行按职责提取。
-// 职责：渲染一个文件夹分组标签——折叠/展开、组内新建会话入口、
-// 右键菜单（新建 / 在资源管理器中打开 / 删除整组）。
-// 纯展示：所有动作经 props 回调上报给 Sidebar，自身不触达 store 与 IPC。
-// ──────────────────────────────
-
 import { FolderOpen, Plus, Trash2 } from 'lucide-react';
 import type { ReactElement } from 'react';
 import {
@@ -41,13 +32,11 @@ export function FolderLabel({
   onOpenInExplorer,
   onDeleteFolder,
 }: FolderLabelProps): ReactElement {
-  // 本地化文案
   const { t } = useTranslation();
 
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>
-        {/* 文件夹标签行：折叠开关 + 独立"新建"按钮平级可聚焦（避免 button 内嵌 button / span 的嵌套交互） */}
         <div className="folder-label-cell">
           <button
             type="button"
@@ -89,7 +78,6 @@ export function FolderLabel({
               {folderName.length > 0 ? folderName : t('sidebar.unlabeled')}
             </span>
           </button>
-          {/* 独立"新建"按钮（由原内嵌 span 移出为平级 button，消除嵌套交互；hover 显示见 .folder-label-cell） */}
           <button
             type="button"
             className="fl-add-btn"

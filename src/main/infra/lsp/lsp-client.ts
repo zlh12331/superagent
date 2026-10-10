@@ -1,19 +1,4 @@
-// src/main/infra/lsp/lsp-client.ts
-// LSP 客户端：JSON-RPC over stdio（对齐 qwen NativeLspClient 语义收敛）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 语言服务器进程管理（spawn / shutdown / dispose）
-// - JSON-RPC 2.0 帧编解码（Content-Length 头）+ 请求-响应 id 匹配 + 超时
-// - 代码智能请求：definition / references / hover（对齐 qwen LspDefinition/LspReference/LspHoverResult）
-//
-// 借鉴声明：
-// 本模块参考 qwen-code 参考项目 packages/core/src/lsp/
 // （Copyright 2026 Qwen Team，SPDX-License-Identifier: Apache-2.0）的
-// NativeLspClient（原生 LSP 客户端）语义，按我们的技术栈收敛重写：
-// - 移除 vscode-languageserver-protocol 依赖（自写 JSON-RPC 帧，零依赖）
-// - 移除连接工厂/服务器管理（多服务器编排由调用方负责；本模块单服务器）
-// - 保留核心方法：initialize / definition / references / hover
-// ──────────────────────────────────────────────────────────────
 
 import { type ChildProcessWithoutNullStreams, spawn } from 'node:child_process';
 import { logger } from '../../utils/logger';
@@ -109,7 +94,7 @@ export class LspClient {
       throw new Error(`${this.loggerTag} 已释放`);
     }
     if (this.child !== null) {
-      return; // 幂等
+      return;
     }
     this.child = spawn(this.command, [...this.args], {
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -128,20 +113,17 @@ export class LspClient {
       this.failAllPending(new Error(`${this.loggerTag} 服务器退出：${reason}`));
       this.child = null;
     });
-    // spawn 失败（命令不存在等）：error 事件而非 exit，需单独处理
     this.child.on('error', (error: Error) => {
       logger.warn({ tag: this.loggerTag, error: error.message }, 'LSP 服务器启动失败');
       this.failAllPending(new Error(`${this.loggerTag} 服务器启动失败：${error.message}`));
       this.child = null;
     });
 
-    // initialize 握手
     await this.request('initialize', {
       processId: process.pid,
       rootUri: this.rootUri,
       capabilities: {},
     });
-    // initialized 通知（无响应）
     this.notify('initialized', {});
     this.initialized = true;
     logger.info({ tag: this.loggerTag }, 'LSP 服务器初始化完成');
@@ -208,12 +190,8 @@ export class LspClient {
     if (this.child !== null) {
       try {
         await this.request('shutdown', null);
-      } catch {
-        // shutdown 失败不阻断清理
-      }
+      } catch {}
       this.notify('exit', null);
-      // 2026-09-08 可靠性修复：SIGTERM → 3s SIGKILL 升级（此前只发一次 SIGTERM，
-      // 语言服务器忽略信号时会残留句柄，Electron 延迟退出）
       await terminateChild(this.child, this.loggerTag);
       this.child = null;
     }
@@ -288,14 +266,13 @@ export class LspClient {
       const header = this.readBuffer.subarray(0, headerEnd).toString('utf8');
       const match = /Content-Length: (\d+)/i.exec(header);
       if (match === null) {
-        // 头损坏：丢弃该帧头
         this.readBuffer = this.readBuffer.subarray(headerEnd + 4);
         continue;
       }
       const length = Number(match[1]);
       const frameStart = headerEnd + 4;
       if (this.readBuffer.length < frameStart + length) {
-        return; // 帧未收全（按字节）
+        return;
       }
       const body = this.readBuffer.subarray(frameStart, frameStart + length).toString('utf8');
       this.readBuffer = this.readBuffer.subarray(frameStart + length);
@@ -328,8 +305,6 @@ export class LspClient {
         entry.resolve(message.result);
       }
     } else {
-      // 服务器主动通知（window/logMessage 等）：记录日志
-      // 通知帧无 id；method 在请求体字段（ResponseMessage 类型不含，需类型扩展）
       logger.debug(
         {
           tag: this.loggerTag,

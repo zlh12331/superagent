@@ -1,43 +1,3 @@
-// src/main/infra/remote/remote-control.ts
-// 移动端远程控制（直连模式，不走云端）
-// ──────────────────────────────────────────────────────────────
-// 目标：移动端 App 通过局域网直连桌面端，远程驱动 Agent 执行。
-// 设计约束（用户明确）：直连模式、不依赖云端中继。
-//
-// 阶段 2 交付（传输层落地）：
-// - HTTP 桥接（node:http，零新依赖）：
-//   · POST /command——命令入口，JSON body { sessionToken, text, clientId }，
-//     令牌校验后经 validateAndRoute 路由（503 未启动 / 403 令牌不匹配 / 400 参数无效）
-//   · GET /info——配对元数据（服务标识 / 实例名 / 端口，不含令牌）
-// - 局域网发现（node:dgram UDP 广播）：运行中按间隔向 {broadcastAddress}:{discoveryPort}
-//   广播公告 { service, version, name, port, protocol }（不含令牌）；
-//   移动端在发现端口监听公告即可拿到直连地址
-//
-// 阶段 2.5 交付（可驱动 Agent）：
-// - 命令监听器返回 RemoteCommandResult { accepted, reply }：POST /command 同步等待
-//   桥接执行完成后把结果文本随响应回传（局域网直连可接受分钟级长请求）
-// - 活动计数（activeCommands / lastCommandAt）供设置面板展示执行状态
-// - stop() 不清命令订阅：订阅是桥接层的结构性挂载（与配对话轮无关），
-//   清掉会导致"关闭再开启"后命令被接收却无人执行
-//
-// 阶段 3 交付（增量回传 + 开箱可用客户端）：
-// - POST /command 支持 SSE（请求头 Accept: text/event-stream）：回合内逐帧回推
-//   hello / delta / tool / error，收尾以 end 携带完整 reply 与 reason。
-//   不带该头的客户端仍是原同步 JSON 语义（向后兼容，移动端可按能力择一）
-//   流式期间每 15s 发一次注释心跳，避免分钟级静默连接被客户端超时掐断；
-//   不引入 ws 依赖（SSE 是 HTTP 上的既有语义，断线由客户端重连）
-// - GET /：内置手机 Web 控制页（remote-web-client.ts），配对地址/二维码扫开即用
-//   —— 令牌经 URL fragment 传入（浏览器不会随请求发往服务端），页面读后即焚
-//
-// 安全设计：
-// - 会话令牌：每次 start 生成（移动端扫码/输码配对），命令路由前校验
-// - 令牌永不通过发现公告 / /info 泄露
-// - 命令体上限 64KB（防滥用）；未知路径 404
-// - 命令执行复用 IM 桥接同款无头执行路径（AgentService.startAgent 无头 +
-//   approvalMode 门控 + transcript 落库），不新开执行通道：
-//   由 RemoteAgentBridge 订阅 onCommand 挂载执行器，本层只管校验与路由
-// ──────────────────────────────────────────────────────────────
-
 import { randomUUID } from 'node:crypto';
 import { createSocket, type Socket as UdpSocket } from 'node:dgram';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
@@ -243,11 +203,9 @@ export class RemoteControlService implements IRemoteControlService {
       return this.sessionToken ?? '';
     }
     this.sessionToken = randomUUID();
-    // 新的配对话轮：活动计数归零（面板不残留上一轮的执行时间与在跑计数）
     this.activeCommands = 0;
     this.lastCommandAt = null;
     await this.startHttpServer();
-    // 仅本机模式不做局域网发现：广播自身存在与 loopback 语义矛盾
     if (this.bindScope === 'lan') {
       this.startDiscovery();
     }
@@ -273,8 +231,6 @@ export class RemoteControlService implements IRemoteControlService {
     this.sessionToken = null;
     this.activeCommands = 0;
     this.lastCommandAt = null;
-    // 不清 commandListeners：订阅是桥接层的结构性挂载（RemoteAgentBridge.unmount
-    // 负责解除）。此处清空会导致"关闭再开启"后命令被接收却无人执行。
     logger.info({}, '远程控制已停止');
   }
 
@@ -300,28 +256,23 @@ export class RemoteControlService implements IRemoteControlService {
 
   async setBindScope(scope: RemoteBindScope): Promise<void> {
     if (scope === this.bindScope) {
-      return; // 幂等：同值切换 no-op（不重启监听）
+      return;
     }
     if (!this.running) {
-      // 未运行：仅记录，下次 start() 按新范围监听
       this.bindScope = scope;
       logger.info({ scope }, '远程控制绑定范围已更新（未运行，下次启动生效）');
       return;
     }
     const previous: RemoteBindScope = this.bindScope;
-    // 运行中切换：停监听与广播 → 按新地址重启。配对话轮保留（令牌/订阅/活动
-    // 计数不动，无需重新配对）；随机端口下重启可能换端口，快照回读新端口。
     await this.stopDiscovery();
     await this.stopHttpServer();
     this.bindScope = scope;
     try {
       await this.startHttpServer();
-      // 仅本机模式不广播（与 start 同一语义）
       if (scope === 'lan') {
         this.startDiscovery();
       }
     } catch (err) {
-      // 新地址启动失败：回滚到原范围尽力恢复服务，原错误上抛（IPC 层提示用户）
       this.bindScope = previous;
       try {
         await this.startHttpServer();
@@ -330,7 +281,6 @@ export class RemoteControlService implements IRemoteControlService {
         }
         logger.error({ error: err, scope: previous }, '远程控制绑定范围切换失败，已回滚到原范围');
       } catch (rollbackErr) {
-        // 回滚也失败：以停止态收场（诚实暴露不可用，不虚报运行中）
         this.running = false;
         this.sessionToken = null;
         this.activeCommands = 0;
@@ -375,10 +325,6 @@ export class RemoteControlService implements IRemoteControlService {
     if (!this.running || this.sessionToken === null) {
       return { accepted: false };
     }
-    // 2026-09-08 加固（令牌暴力探测）：服务绑定 0.0.0.0 是 LAN 远程控制的功能
-    // 前提，但同网段任何设备都可无限次尝试令牌。这里做滑动窗口限流：
-    // 60s 内令牌不匹配超过 AUTH_FAIL_LIMIT 次 → 该窗口内直接拒绝，
-    // 使 122-bit UUID 令牌的在线爆破在算力上不可行。
     const now = Date.now();
     if (now - this.authWindowStartAt > AUTH_WINDOW_MS) {
       this.authWindowStartAt = now;
@@ -396,7 +342,6 @@ export class RemoteControlService implements IRemoteControlService {
       );
       return { accepted: false };
     }
-    // 认证成功：重置失败计数（合法客户端不受其他来源的失败影响）
     this.authFailCount = 0;
     const emitEvent = emit ?? NOOP_EMITTER;
     this.activeCommands += 1;
@@ -506,7 +451,6 @@ export class RemoteControlService implements IRemoteControlService {
     };
     const path = (req.url ?? '/').split('?')[0] ?? '/';
     if (req.method === 'GET' && path === '/') {
-      // 手机控制页：纯静态，令牌由页面自身从 URL fragment 读取（fragment 不入服务端）
       res.writeHead(200, {
         'Content-Type': 'text/html; charset=utf-8',
         'Cache-Control': 'no-store',
@@ -518,7 +462,6 @@ export class RemoteControlService implements IRemoteControlService {
       return;
     }
     if (req.method === 'GET' && path === '/info') {
-      // 配对元数据：不含令牌（令牌仅经用户显式配对动作分发）
       done(200, {
         service: DISCOVERY_SERVICE_TYPE,
         version: DISCOVERY_PROTOCOL_VERSION,
@@ -582,19 +525,15 @@ export class RemoteControlService implements IRemoteControlService {
         done(403, { error: 'forbidden' });
         return;
       }
-      // 校验全部通过后才按客户端能力分流：SSE 边执行边回推，JSON 同步等结果
       if (wantsEventStream(req)) {
         this.routeAsStream(command, res);
         return;
       }
-      // 同步等待桥接执行完成：结果文本随本响应回传（局域网直连，长请求可接受）
       void this.validateAndRoute(command).then((result) => {
         done(200, result);
       });
     });
-    req.on('error', () => {
-      // 客户端中断：响应已无意义，静默
-    });
+    req.on('error', () => {});
   }
 
   /**
@@ -615,10 +554,8 @@ export class RemoteControlService implements IRemoteControlService {
       if (closed || res.writableEnded) {
         return;
       }
-      // data 单行 JSON：换行已在字符串内转义，无需 SSE 多行 data 折行
       res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
     };
-    // 分钟级静默连接（长思考/长工具）易被客户端与代理判超时的保活注释帧
     const heartbeat = setInterval(() => {
       if (!closed && !res.writableEnded) {
         res.write(': ping\n\n');

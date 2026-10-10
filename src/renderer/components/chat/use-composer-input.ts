@@ -1,14 +1,3 @@
-// src/renderer/components/chat/use-composer-input.ts
-// composer 输入状态 hook（自 ChatInput 拆出）
-// ──────────────────────────────────────────────
-// 职责（单一内聚：共同构成「会话草稿」的状态）：
-// - 输入文本值（受控/非受控双模）
-// - 附件列表（选择/移除）
-// - 草稿持久化（恢复/保存/切换会话恢复）
-// - 发送后清空（clear）
-// 不含 autoResize/focus（渲染职责由调用方基于 value 触发）；不含发送逻辑。
-// ──────────────────────────────────────────────
-
 import { useEffect, useRef, useState } from 'react';
 
 import { useDraftStore } from '@/stores/persistent/draft-store';
@@ -72,7 +61,6 @@ export function useComposerInput({
 }: UseComposerInputDeps): UseComposerInputResult {
   const isControlled = controlledValue !== undefined;
   const [internalValue, setInternalValue] = useState(() => {
-    // 草稿恢复：非受控 + 有 chatId 时从 draft-store 初始化
     return (
       controlledValue ??
       (chatId !== undefined ? useDraftStore.getState().getDraft(chatId).text : '')
@@ -83,7 +71,6 @@ export function useComposerInput({
   );
   const value = isControlled ? controlledValue : internalValue;
 
-  // 操作函数：引用稳定性交给 React Compiler（捕获 props/state）
   const setValue = (next: string): void => {
     if (!isControlled) {
       setInternalValue(next);
@@ -118,8 +105,6 @@ export function useComposerInput({
     onAfterChange?.();
   };
 
-  // 外部注入值（编辑重提 / 目标预填）：非受控模式同步，保持草稿语义
-  // 受控模式跳过：value 由外部持有，setInternalValue 是无效写入（且会破坏受控语义）
   useEffect(() => {
     if (injectedValue === undefined || isControlled) {
       return;
@@ -128,8 +113,6 @@ export function useComposerInput({
     onAfterChange?.();
   }, [injectedValue, isControlled, onAfterChange]);
 
-  // 草稿保存：非受控 + 有 chatId 时，文本/附件变化写入 draft-store
-  // 切换帧守卫：chatId 变化的那次渲染 internalValue 仍是旧会话内容，跳过防交叉污染
   const draftSyncedChatIdRef = useRef(chatId);
   useEffect(() => {
     if (isControlled || chatId === undefined) {
@@ -145,7 +128,6 @@ export function useComposerInput({
     });
   }, [internalValue, attachments, chatId, isControlled]);
 
-  // 会话切换（chatId 变化）：恢复新会话草稿（prevThreadId 模式）
   const prevChatIdRef = useRef(chatId);
   useEffect(() => {
     if (chatId === prevChatIdRef.current || chatId === undefined || isControlled) {

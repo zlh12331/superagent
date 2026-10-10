@@ -1,11 +1,3 @@
-// scripts/lib/commit-header.test.ts
-// 提交标题严格校验单测
-// ──────────────────────────────────────────────────────────────
-// 覆盖动机：该模块是「发版通道静默阻断」的唯一防线——commitlint 会放行双 type
-// 标题（贪婪括号匹配），而 release-please 拒绝它并跳过提交（0 commits → 不开
-// Release PR）。用例包含真实事故标题作为回归锚。
-// ──────────────────────────────────────────────────────────────
-
 import { describe, expect, it } from 'vitest';
 
 import commitlintConfig from '../../commitlint.config.js';
@@ -88,7 +80,7 @@ describe('checkCommitHeader', () => {
     });
 
     it('type 前有空格 / 多余前缀被拒绝', () => {
-      expect(checkCommitHeader(' fix(x): 前导空格').ok).toBe(true); // trim 后合法
+      expect(checkCommitHeader(' fix(x): 前导空格').ok).toBe(true);
       expect(checkCommitHeader('[WIP] fix(x): 前缀').ok).toBe(false);
       expect(checkCommitHeader('FIX(x): 大写 type').ok).toBe(false);
     });

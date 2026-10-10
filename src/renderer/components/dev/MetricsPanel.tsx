@@ -1,19 +1,3 @@
-// src/renderer/components/dev/MetricsPanel.tsx
-// 运行时指标面板
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 调用 useSystemStatusQuery 获取主进程运行时状态（内存/CPU/uptime/版本）
-// - 以指标卡片网格展示，10s 自动刷新
-// - enabled 由 DevPanel 按**当前可见 tab** 传入（仅 dev/metrics 子页启用查询，
-//   切走即停，省下无谓 IPC）——不是「折叠态」控制
-//
-// 设计：
-// - 纯只读面板，无交互逻辑
-// - 内存/CPU/uptime 数值格式化为人类可读单位（字节 B/KB/MB/GB、微秒 ms/s、秒 h/m/s）
-// - 指标卡片用 2 列网格（窄面板下紧凑排布；宽度受 --right-panel-w clamp 约束）
-// - 等宽字体展示数值，衬线字体展示标签
-// ──────────────────────────────────────────────────────────────
-
 import type { SystemStatusRes } from '@code-agent/shared/renderer';
 import { Activity, AlertCircle, Cpu, MemoryStick, RefreshCw, Timer } from 'lucide-react';
 import type { ReactElement } from 'react';
@@ -45,13 +29,11 @@ interface MetricsPanelProps {
  * ```
  */
 export function MetricsPanel({ enabled = true, className }: MetricsPanelProps): ReactElement {
-  // 本地化文案
   const { t, i18n } = useTranslation();
   const { data, isLoading, error, refetch, isFetching } = useSystemStatusQuery(enabled);
 
   return (
     <div className={cn('flex h-full flex-col', className)}>
-      {/* 顶部：标题 + 刷新按钮 */}
       <div className="border-border bg-muted/30 flex items-center justify-between border-b px-2 py-1">
         <div className="text-muted-foreground flex items-center gap-1.5 text-2xs">
           <Activity className="size-3" strokeWidth={1.5} />
@@ -76,15 +58,12 @@ export function MetricsPanel({ enabled = true, className }: MetricsPanelProps): 
         </Button>
       </div>
 
-      {/* 指标卡片网格 */}
       <ScrollArea className="min-h-0 flex-1">
         <MetricsBody isLoading={isLoading} error={error} status={data} />
       </ScrollArea>
     </div>
   );
 }
-
-// ── 子组件：四态分派 ──────────────────────────────────────────
 
 interface MetricsBodyProps {
   readonly isLoading: boolean;
@@ -101,8 +80,6 @@ interface MetricsBodyProps {
  */
 function MetricsBody({ isLoading, error, status }: MetricsBodyProps): ReactElement {
   const { t } = useTranslation();
-  // 错误文案统一经 unwrapErrorMessage 解析错误码（与其余面板一致）：
-  // 此前直接显示 error.message，IPC 错误会露出英文码
   const { getErrorMessage } = useErrorMessage();
   if (isLoading) return <MetricsSkeleton />;
   if (error !== null && error !== undefined) {
@@ -112,19 +89,15 @@ function MetricsBody({ isLoading, error, status }: MetricsBodyProps): ReactEleme
   return <MetricsGrid status={status} />;
 }
 
-// ── 子组件：指标卡片网格 ──────────────────────────────────────
-
 interface MetricsGridProps {
   readonly status: SystemStatusRes;
 }
 
 /** 指标卡片网格：2 列布局，紧凑展示 */
 function MetricsGrid({ status }: MetricsGridProps): ReactElement {
-  // 本地化文案
   const { t } = useTranslation();
   return (
     <div className="grid grid-cols-2 gap-1.5 p-2">
-      {/* 内存指标 */}
       <MetricCard
         icon={MemoryStick}
         label={t('dev.rssMemory')}
@@ -144,7 +117,6 @@ function MetricsGrid({ status }: MetricsGridProps): ReactElement {
         hint={`ArrayBuffer ${formatBytes(status.memory.arrayBuffers)}`}
       />
 
-      {/* CPU 指标 */}
       <MetricCard
         icon={Cpu}
         label={t('dev.cpuUser')}
@@ -152,7 +124,6 @@ function MetricsGrid({ status }: MetricsGridProps): ReactElement {
         hint={t('dev.cpuSystemHint', { value: formatMs(status.cpu.system) })}
       />
 
-      {/* 运行时长 */}
       <MetricCard
         icon={Timer}
         label={t('dev.uptime')}
@@ -160,13 +131,10 @@ function MetricsGrid({ status }: MetricsGridProps): ReactElement {
         hint={`PID ${status.pid}`}
       />
 
-      {/* 版本信息 */}
       <VersionCard status={status} />
     </div>
   );
 }
-
-// ── 子组件：单个指标卡片 ──────────────────────────────────────
 
 interface MetricCardProps {
   readonly icon: typeof Cpu;
@@ -189,15 +157,12 @@ function MetricCard({ icon: Icon, label, value, hint }: MetricCardProps): ReactE
   );
 }
 
-// ── 子组件：版本信息卡片（跨 2 列） ──────────────────────────
-
 interface VersionCardProps {
   readonly status: SystemStatusRes;
 }
 
 /** 版本信息卡片：app/electron/node + platform/arch + isPackaged */
 function VersionCard({ status }: VersionCardProps): ReactElement {
-  // 本地化文案
   const { t } = useTranslation();
   return (
     <div className="border-border bg-muted/20 col-span-2 flex flex-col gap-0.5 rounded border px-2 py-1.5">
@@ -222,8 +187,6 @@ function VersionCard({ status }: VersionCardProps): ReactElement {
   );
 }
 
-// ── 子组件：加载中 / 错误状态 ─────────────────────────────────
-
 /** 加载中骨架屏 */
 function MetricsSkeleton(): ReactElement {
   return (
@@ -241,7 +204,6 @@ function MetricsSkeleton(): ReactElement {
 
 /** 错误状态提示 */
 function ErrorHint({ message }: { readonly message: string }): ReactElement {
-  // 本地化文案
   const { t } = useTranslation();
   return (
     <div className="text-error-text flex flex-col items-center gap-1 p-3 text-center">

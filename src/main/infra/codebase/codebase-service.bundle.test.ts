@@ -1,11 +1,3 @@
-// src/main/infra/codebase/codebase-service.bundle.test.ts
-// resolveCodegraphBundle dev 平台包解析单测（P2-37：进程内 memo）
-// ──────────────────────────────────────────────────────────────
-// 独立文件的原因：memo 用例需要 vi.mock('electron')（app.isPackaged=false）
-// 与 vi.mock('node:fs')（readdirSync 间谍），mock 作用域按文件隔离，
-// 不影响主测试文件「业务逻辑不 mock」的策略。
-// ──────────────────────────────────────────────────────────────
-
 import { readdirSync } from 'node:fs';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -35,7 +27,6 @@ describe('resolveCodegraphBundle（dev 平台包解析，P2-37 memo）', () => {
     const second = resolveCodegraphBundle();
     expect(vi.mocked(readdirSync)).toHaveBeenCalledTimes(1);
     expect(second).toBe(first);
-    // win32 平台包形态：node.exe + liftoff 入口
     if (process.platform === 'win32') {
       expect(first.command.endsWith('node.exe')).toBe(true);
       expect(first.args[0]).toBe('--liftoff-only');

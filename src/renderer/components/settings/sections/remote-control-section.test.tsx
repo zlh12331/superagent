@@ -1,11 +1,3 @@
-// src/renderer/components/$1/remote-control-section.test.tsx
-// RemoteControlSection 单测：启停开关 / 配对凭据与二维码 / 复制令牌 / 审批模式警告
-// ──────────────────────────────────────────────────────────────
-// 数据源 mock：window.api.remote.*（getStatus/start/stop）+ settings.getApprovalMode
-// 全部 stub；qrcode 只 stub 到 data URL 生成边界（本用例锁"编码了什么"，
-// 二维码点阵正确性由 qrcode 自身保证）。开关交互、凭据渲染规则走真实实现。
-// ──────────────────────────────────────────────────────────────
-
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -13,7 +5,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { RemoteControlSection } from './remote-control-section';
 
-// 二维码 stub：只 mock 到 data URL 生成边界，编码内容/参数由下方断言锁定
 const qrMock = vi.hoisted(() => ({
   encode: vi.fn(async (): Promise<string> => 'data:image/png;base64,QR'),
 }));
@@ -207,7 +198,6 @@ describe('RemoteControlSection 远程控制面板', () => {
     await waitFor(() => {
       expect(mocks.setBindScope).toHaveBeenCalledWith({ scope: 'loopback' });
     });
-    // 成功后直接写入返回快照（不等轮询）：端点切换为本机回环地址
     expect(await screen.findByText('http://127.0.0.1:45918')).toBeTruthy();
     expect(screen.queryByText('http://192.168.1.10:45918')).toBeNull();
   });

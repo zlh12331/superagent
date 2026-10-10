@@ -1,20 +1,3 @@
-// packages/shared/src/schemas/tool.ts
-// Tool 域 zod schema 单一真源（Code Agent 工具系统）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 集中定义 Tool 域 zod schema 与 TypeScript 接口，作为工具系统的类型契约
-// - 不直接定义 Tool 接口本身（Tool 接口在主进程 main/infra/ai/tool.ts 中定义，
-//   依赖 ZodType 与 execute 函数，属于主进程范畴）
-// - 本文件只定义可跨进程共享的元数据类型（ToolPermission / ToolDescriptor /
-//   ToolError / ToolResult / ToolListReq / ToolListRes）
-//
-// 设计原则：
-// - 渲染层不感知具体的工具实现，仅通过 ToolDescriptor 展示工具清单
-// - 工具入参 input / 输出 output 用 z.unknown()：具体结构由工具自身 schema 定义，
-//   IPC 层不强制校验（避免 shared 包耦合具体工具）
-// - 权限模式 ToolPermission 与用户决策对齐：白名单自动 + 危险询问
-// ──────────────────────────────────────────────────────────────
-
 import { z } from 'zod';
 
 /**

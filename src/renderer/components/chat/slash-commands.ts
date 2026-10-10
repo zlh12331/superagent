@@ -1,10 +1,3 @@
-// src/renderer/components/chat/slash-commands.ts
-// 斜杠命令执行器（自 ChatPanel 提取的纯分发层）
-// ──────────────────────────────────────────────
-// 命令 → 动作的唯一映射点：ChatPanel 只提供动作回调，不再自带 switch 分支。
-// 纯同步分发（无 React 依赖），可独立单测全部命令路径。
-// ──────────────────────────────────────────────
-
 import type { SlashAction } from './slash-suggestions';
 
 /** 斜杠命令执行依赖（由 ChatPanel 注入实际行为） */
@@ -54,21 +47,13 @@ export function executeSlashCommand(action: SlashAction, deps: SlashCommandDeps)
       deps.interrupt();
       break;
     case 'goal':
-      // /goal 斜杠建议：填入输入框（用户需求：唯一交互 = 输入 /goal 需求直接发送；
-      // 点建议后输入框预填 "/goal "，用户补需求回车即创建目标）
       deps.prefillGoal();
       break;
     case 'demo':
     case 'limit':
-      // mock 演示命令（前端开发专用）：直接发送触发 mock 流
       deps.sendMessage(action === 'demo' ? '/demo' : '/limit');
       break;
     default: {
-      // 穷尽性守卫（编译期）：新增 SlashAction 成员而未在此分发时，action 在本分支
-      // 不再收窄为 never，赋值即报类型错误——此前是静默 no-op（新增命令点建议后
-      // 无任何反应且无提示）。运行期不可达，故不抛错以维持既有行为。
-      // 注：函数返回 void，不能用 `return exhaustive`（触发 noVoidTypeReturn）；
-      // 赋值本身即完成校验，`void` 运算符显式表态「此值刻意不参与运行期逻辑」
       const exhaustive: never = action;
       void exhaustive;
     }

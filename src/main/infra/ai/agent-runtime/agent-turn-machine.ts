@@ -1,44 +1,3 @@
-// src/main/infra/ai/agent-runtime/agent-turn-machine.ts
-// Agent 回合状态机（XState v5 setup API）· 回合执行层唯一状态权威 + 编排者
-// ──────────────────────────────────────────────────────────────
-// 演进（38 号 spec）：2026-08 引入时为护栏模式（机器旁观记账、执行流仍是
-// streamToWebContents 过程式代码）；本版升级为编排者——模型解析/排队/回合
-// 执行的控制流全部由机器驱动，宿主效果经 TurnDeps 注入（AutostartDeps 同款
-// 依赖注入模式），机器保持纯层（不 import electron/db/infra；shared 仅
-// AppError/ErrorCode，供错误终态构造）。
-//
-// 状态空间：
-//   resolving       解析当前模型（轻量；失败 → error，不进并发队列）
-//   queued          等待并发槽位（FIFO 排队；排队期 abort 由 acquireGate 拒绝承载）
-//   running         回合执行（重装配 + streamText + TurnRunner 消费 + usage 等待）
-//     streaming             流执行中（文本/推理/工具调用不细分，避免过度建模）
-//     waitingApproval       等待用户审批（permission=ask；approval.responded 恢复）
-//     waitingInput          等待用户回答提问（ask_user_question 挂起；ask.responded 恢复）
-//   deciding        runDone 决策链（guard 有序：超时 → 空回复 → 中断 → 完成）
-//   completed       正常结束（final）
-//   aborted         用户中断（final）
-//   error           异常结束（final：模型解析失败 / 排队失败 / 超时 / 空回复 / 流异常）
-//
-// 事件与转换：
-// - 显式事件（send）：approval.requested/.responded、ask.requested/.responded
-//   （审批/提问生命周期推送，turn-subscriptions 按 sessionId 过滤后转发）、
-//   xstate.error.actor.*（invoke 平台错误事件，types 声明通配符做类型匹配）
-// - invoked services 的完成/失败走 onDone/onError 内联转换（非显式事件）：
-//   resolving 的 done/.failed、queued 的 acquired/.failed、running 的
-//   runDone/.runError——模型解析/槽位获取/回合执行的三个阶段
-//
-// 顺序敏感语义（历史坑，已固化为 guard/entry 顺序，改动前先读测试）：
-//   - deciding 决策链：isTimeout 先于 isEmptyResponse 先于 isAborted
-//     （2026-09-28：终态吞事件导致快照与落库分叉）
-//   - running.exit：先释放并发槽位后清模型超时定时器（让排队的下个回合尽早启动；
-//     clearModelTimeout 宿主当前为显式 no-op——定时器由 turn-assembly try/finally 自管）
-//   - 三终态 entry：flushForwarder 先于 finalize（合帧缓冲保序，P2-31）
-//
-// 宿主数据流分工：控制流相关数据（modelId/runOutput/error）进 context；
-// 高频流数据（text-delta 拼接、transcript 累积）留宿主闭包——逐字符事件进
-// 机器只有开销没有安全收益（rawPartCount 经 turn.runDone 输出回传供判据）。
-// ──────────────────────────────────────────────────────────────
-
 import { APPROVAL_TIMEOUT_MS, AppError, ASK_TIMEOUT_MS, ErrorCode } from '@code-agent/shared/main';
 import { assign, createActor, fromPromise, setup } from 'xstate';
 import { isAbortError } from '../tools/error-classifier';
@@ -198,13 +157,10 @@ export const agentTurnMachine = setup({
     input: {} as AgentTurnInput,
   },
   actors: {
-    // ⚠️ v5 invoked actor 回调实参为 { input, system, self, signal, emit }——没有
-    // context；父机器数据必须经 invoke.input 显式传入（见各状态的 invoke.input）
     resolveModel: fromPromise(({ input }: { input: TurnDeps }) => input.resolveModel()),
     acquireGate: fromPromise(({ input }: { input: TurnDeps }) => input.acquireGate()),
     executeTurn: fromPromise(({ input }: { input: TurnDeps }) => input.executeTurn()),
   },
-  // 命名延迟（after 转换引用；动态值从 context 取——审批超时可注入短值供测试）
   delays: {
     approvalTimeout: ({ context }: { context: AgentTurnContext }) => context.approvalTimeoutMs,
     askTimeout: ({ context }: { context: AgentTurnContext }) => context.askTimeoutMs,
@@ -244,8 +200,6 @@ export const agentTurnMachine = setup({
       isAbortError((event as { error?: unknown }).error),
   },
   actions: {
-    // 超时/空回复的错误构造（错误码真源在 shared；宿主 finalizeError 消费）。
-    // 决策链 guard 命中后进入 error 终态前赋值。
     stashTimeoutError: assign({
       error: new AppError(ErrorCode.AI_TIMEOUT, '模型级响应总时长超时'),
     }),
@@ -291,8 +245,6 @@ export const agentTurnMachine = setup({
     askTimeoutMs: input.askTimeoutMs ?? ASK_TIMEOUT_MS,
   }),
   states: {
-    // 模型解析（轻量）：失败直接 error（不进并发队列——排队前失败不占槽位）。
-    // onDone/onError 的内联 action 读取平台事件（DoneActorEvent.output / ErrorActorEvent.error）
     resolving: {
       invoke: {
         src: 'resolveModel',
@@ -307,7 +259,6 @@ export const agentTurnMachine = setup({
         ],
       },
     },
-    // 等待并发槽位（FIFO；排队期 abort 由 acquireGate 以 AbortError 拒绝承载）
     queued: {
       invoke: {
         src: 'acquireGate',
@@ -319,7 +270,6 @@ export const agentTurnMachine = setup({
         ],
       },
     },
-    // 回合执行：重装配 + 流消费在 executeTurn service 内（控制流在此，效果在宿主）
     running: {
       invoke: {
         src: 'executeTurn',
@@ -333,7 +283,6 @@ export const agentTurnMachine = setup({
           { target: 'error', actions: assign({ error: ({ event }) => event.error }) },
         ],
       },
-      // exit 顺序敏感：先释放槽位（排队的下个回合尽早启动）后清定时器
       exit: ['releaseGate', 'clearModelTimeout'],
       initial: 'streaming',
       states: {
@@ -341,29 +290,16 @@ export const agentTurnMachine = setup({
           on: {
             'approval.requested': {
               target: 'waitingApproval',
-              // 进入等待：首条审批入列（后续同轮请求由 waitingApproval 状态内
-              // 的 'approval.requested' 自转换累加）
               actions: assign({ pendingApprovalIds: ({ event }) => [event.approvalId] }),
             },
-            // 提问挂起（ask_user_question）：此前机器完全不感知，挂起期间显示
-            // streaming（状态失真）；38 号阶段 2 收尾补齐为 waitingInput 状态
             'ask.requested': {
               target: 'waitingInput',
-              // 进入等待：首条提问入列（后续同轮提问由 waitingInput 内自转换累加）
               actions: assign({ pendingAskIds: ({ event }) => [event.askId] }),
             },
           },
         },
         waitingApproval: {
           on: {
-            // 并行审批（2026-10-08 修复）：一轮模型回复可含多个 ask 工具调用，
-            // AI SDK 以 Promise.all 并行执行 → 多个 requestApproval 并发到达。
-            // 此前本状态只处理 responded，第 2 个 requested 被静默忽略：它既无
-            // 机器记账、也无 after 计时，其工具 Promise 永不 settle，回合永久挂起。
-            // 语义对齐 waitingApproval 的「等待全部待决审批」：
-            // - requested：累加 id（保持停留本状态；after 计时随状态重入而重置）
-            // - responded：移除该 id；**仍有待决则留在本状态**（继续计时），
-            //   全部决出才回 streaming
             'approval.requested': {
               actions: assign({
                 pendingApprovalIds: ({ context, event }) => [
@@ -372,11 +308,8 @@ export const agentTurnMachine = setup({
                 ],
               }),
             },
-            // 38 号阶段 2：responded 携带决策结果（approved/denied/timed-out/aborted），
-            // context 记录供快照审计——此前出口语义黑盒（机器只知道"结束了"）
             'approval.responded': [
               {
-                // 还有其它待决审批：仅移除本 id，留在 waitingApproval 继续计时
                 guard: 'hasMorePendingApprovals',
                 actions: assign({
                   approvalDecision: ({ event }) => event.decision,
@@ -389,23 +322,16 @@ export const agentTurnMachine = setup({
                 actions: [
                   assign({
                     approvalDecision: ({ event }) => event.decision,
-                    // 清空等待标记（exactOptional 语义下显式赋空数组）
                     pendingApprovalIds: (): readonly string[] => [],
                   }),
                 ],
               },
             ],
           },
-          // 声明式超时：进入/重入 waitingApproval 起算，approvalTimeoutMs 后自动触发；
-          // 提前全决退出该状态 → after 计时自动取消（无需手工 clearTimeout）。
-          // 计时源单一：permission-service 不再自设超时定时器（见 TurnDeps.expireApproval）。
-          // 并行语义：超时到点时**全部**待决审批一并过期（它们同时进入等待）。
           after: {
             approvalTimeout: {
               target: 'streaming',
               actions: [
-                // 顺序：先记决策（审计）→ 再让宿主以超时语义拒绝全部 pending →
-                // 最后清空 id 列表（内联 action 读取当时的 context）
                 assign({ approvalDecision: (): 'timed-out' => 'timed-out' }),
                 ({ context }: { context: AgentTurnContext }) => {
                   for (const approvalId of context.pendingApprovalIds) {
@@ -417,13 +343,6 @@ export const agentTurnMachine = setup({
             },
           },
         },
-        // 等待用户回答提问（ask_user_question 挂起；与 waitingApproval 同构）
-        //
-        // 并行提问（2026-10-08 对称修复）：与审批同理，一轮可含多个 ask 工具调用
-        // （AI SDK 并行执行），此前第 2 个 ask.requested 被忽略 → 其工具 Promise
-        // 永久挂起。此处采用与 waitingApproval 相同的「列表 + 全部决出才退出」语义。
-        // 前端 AskDialog 同步队列化（FIFO 逐条呈现队头，超时由决议事件放行），
-        // 两端对称：后端不再永久挂起，前端不再覆盖丢失。
         waitingInput: {
           on: {
             'ask.requested': {
@@ -451,9 +370,6 @@ export const agentTurnMachine = setup({
               },
             ],
           },
-          // 声明式超时（同 waitingApproval）：提前全答退出 → after 自动取消。
-          // 计时源单一：agent-ask-service 不再自设 setTimeout（见 TurnDeps.expireAsk）。
-          // 超时到点把**全部**待决提问一并过期（它们同时进入等待）。
           after: {
             askTimeout: {
               target: 'streaming',
@@ -471,7 +387,6 @@ export const agentTurnMachine = setup({
         },
       },
     },
-    // runDone 决策链：guard 有序（超时 → 空回复 → 中断 → 完成），首个匹配生效
     deciding: {
       always: [
         { guard: 'isTimeout', target: '#agentTurn.error', actions: 'stashTimeoutError' },
@@ -482,7 +397,6 @@ export const agentTurnMachine = setup({
     },
     completed: {
       type: 'final',
-      // entry 顺序敏感：flush 先于 finalize（合帧缓冲保序，P2-31）
       entry: ['flushForwarder', 'finalizeCompleted', 'cleanup'],
     },
     aborted: {

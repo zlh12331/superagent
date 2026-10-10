@@ -1,18 +1,3 @@
-// src/main/infra/network/proxied-fetch.ts
-// Node 栈代理 fetch（34 号网络代理 §2.1/§2.2）
-// ──────────────────────────────────────────────────────────────
-// 背景（探针实测，2026-09-29）：Electron 44 内嵌 Node 24.20 / undici 7.29，
-// 但**全局 fetch 不认 dispatcher 选项**（传入被静默忽略）——Node 栈代理必须
-// 用 npm undici 的 fetch + ProxyAgent 闭环，不能用全局 fetch 加选项。
-//
-// 职责：
-// - proxiedFetch(input, init)：AI SDK fetch 注入 / IM 适配器 fetchFn / MCP
-//   transport / postWebhook 的统一出口——非 fixed 模式直连全局 fetch（零开销），
-//   fixed 模式先过 shouldBypass（localhost 恒绕过）再经 ProxyAgent 发出。
-// - ProxyAgent 实例按代理 URL 缓存（连接池复用）；配置变更由 applyProxyChange
-//   调 clearProxyAgents() 重建（V5 免重启生效）。
-// ──────────────────────────────────────────────────────────────
-
 import { type Dispatcher, ProxyAgent, fetch as undiciFetch } from 'undici';
 
 import type { ProxyConfig } from './proxy-resolver';
@@ -37,9 +22,7 @@ export function setProxyFetchConfig(cfg: ProxyConfig | null): void {
 /** 清空 ProxyAgent 缓存（配置变更/测试复位用） */
 export function clearProxyAgents(): void {
   for (const agent of agentCache.values()) {
-    void agent.close().catch(() => {
-      // 关闭失败不阻断（连接池随进程退出回收）
-    });
+    void agent.close().catch(() => {});
   }
   agentCache.clear();
 }

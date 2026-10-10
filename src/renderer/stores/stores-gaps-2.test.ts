@@ -1,13 +1,3 @@
-// src/renderer/stores/stores-gaps-2.test.ts
-// stores 层批次2 缺口补全：confirm-dialog/ui/welcome/reasoning-collapse/sessions（激活会话）
-//
-// 测试要点（真实 Zustand store，无 mock；beforeEach 重置状态与 localStorage）：
-// 1. confirm-dialog：confirm/prompt 命令式 Promise、FIFO 排队、空态 _resolve 无副作用
-// 2. ui：设置/命令面板开关、侧栏视图、折叠切换置位 manual
-// 3. welcome：进入/退出欢迎模式、与激活会话的一致性约束
-// 4. reasoning-collapse：显式覆盖设置与清除
-// 5. sessions（激活会话）：设置/清空/持久化
-
 import { beforeEach, describe, expect, it } from 'vitest';
 import { useActiveSessionStore } from './persistent/sessions-store';
 import { confirm, prompt, useConfirmDialogStore } from './transient/confirm-dialog-store';
@@ -68,7 +58,6 @@ describe('stores 批次2 缺口补全', () => {
 
       useConfirmDialogStore.getState()._resolve(true);
       await expect(first).resolves.toBe(true);
-      // 第二个请求被激活
       expect(useConfirmDialogStore.getState().currentRequest?.confirmOptions?.title).toBe('二');
       expect(useConfirmDialogStore.getState().queue).toHaveLength(0);
 

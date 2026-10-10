@@ -1,7 +1,3 @@
-// src/renderer/hooks/use-async-view.test.tsx
-// useAsyncView 契约层单测：五态映射（loading / refreshing / error / empty / ready）
-// 无业务 mock：用真实 QueryClient + useQuery 驱动各状态。
-
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
@@ -78,7 +74,7 @@ describe('useAsyncView', () => {
     const queryFn = async (): Promise<string[]> => {
       call += 1;
       if (call === 1) return ['a'];
-      return pending(); // 第二次刷新挂起，维持 fetching
+      return pending();
     };
     const { result } = renderHook(() => useTestHook(queryFn), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.view.state).toBe('ready'));

@@ -1,13 +1,3 @@
-// src/main/notification.test.ts
-// 回合通知设置门控的单测（33 号系统通知设置）
-// ──────────────────────────────────────────────────────────────
-// 覆盖 docs/design/33-notification-settings-spec.md 验收标准 V1-V4/V7：
-// - V1 缺省（无设置行）→ 维持既有恒通知行为（fail-open 兜底全开）
-// - V2 总开关关 → 全不弹；V3 只关完成组；V4 只关出错组
-// - V7 前台有焦点窗口 → 无论开关一律不弹（既有规则优先）
-// - 反例 2：损坏值（非对象 / 部分字段损坏）→ fail-open / 字段级默认
-// ──────────────────────────────────────────────────────────────
-
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => {
@@ -32,7 +22,6 @@ vi.mock('electron', () => {
     }
   }
   return {
-    // 字符串键：规避 useNamingConvention 对 PascalCase 属性名的检查（window-show.test 同法）
     ['BrowserWindow']: {
       getAllWindows: () =>
         mocks.focusedWindows.map((focused) => ({

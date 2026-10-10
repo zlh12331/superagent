@@ -1,13 +1,3 @@
-// src/renderer/hooks/use-runtime-models.ts
-// 运行时模型管理 hook（L3 服务端请求状态层）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - settings:listRuntimeModels 查询（模型设置页列表数据源）
-// - add / update / remove mutation（成功后统一失效本 key + MODELS_QUERY_KEY，
-//   保证 ModelSelector 与设置页同源刷新）
-// - models:test 连通性测试 mutation（只读探测，不失效任何缓存）
-// ──────────────────────────────────────────────────────────────
-
 import type {
   ApiKeyProvider,
   ListRuntimeModelsRes,
@@ -63,7 +53,6 @@ export function useAddRuntimeModel() {
           ...(input.baseUrl !== undefined ? { baseUrl: input.baseUrl } : {}),
           ...(input.apiKey !== undefined ? { apiKey: input.apiKey } : {}),
           ...(input.displayName !== undefined ? { displayName: input.displayName } : {}),
-          // null 与省略同义（add 契约无「清除」形态——新记录本就无旧值可清）
           ...(input.timeoutMs ? { timeoutMs: input.timeoutMs } : {}),
           ...(input.apiFormat !== undefined ? { apiFormat: input.apiFormat } : {}),
         }),
@@ -103,7 +92,6 @@ export function useUpdateRuntimeModel() {
           ...(input.displayName !== undefined ? { displayName: input.displayName } : {}),
           ...(input.baseUrl !== undefined ? { baseUrl: input.baseUrl } : {}),
           ...(input.apiKey !== undefined ? { apiKey: input.apiKey } : {}),
-          // null !== undefined：条件展开不会误吞清除语义
           ...(input.timeoutMs !== undefined ? { timeoutMs: input.timeoutMs } : {}),
           ...(input.apiFormat !== undefined ? { apiFormat: input.apiFormat } : {}),
           ...(input.isEnabled !== undefined ? { isEnabled: input.isEnabled } : {}),

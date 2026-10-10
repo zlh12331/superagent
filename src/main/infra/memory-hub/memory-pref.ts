@@ -1,15 +1,3 @@
-// src/main/infra/memory-hub/memory-pref.ts
-// 记忆功能用户开关（settings.memory.enabled，SQLite 单一真源）
-// ──────────────────────────────────────────────────────────────
-// 语义（与设置页文案一致）：
-// - enabled=false：不捕获新记忆（capture-wire 跳过 + save_memory 拒绝）、
-//   不注入召回（agent.handler 预取 + recall_memory 工具拒绝）
-// - 不影响既有数据：关闭后已记录的记忆仍可列出/清除（用户可先关再清）
-//
-// 读取策略：设置写入是 fire-and-forget（settings:set），主进程侧需要读时
-// 从 SQLite 直接取（同步 API），并做短 TTL 缓存避免每个回合都查库。
-// ──────────────────────────────────────────────────────────────
-
 import { logger } from '../../utils/logger';
 import { readSetting } from '../storage/settings-pref';
 

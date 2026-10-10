@@ -1,7 +1,3 @@
-// packages/shared/src/constants/zoom.test.ts
-// 界面缩放纯函数单测（35 号 §2.7；V1 归一半 / V9 边界钳制 / V7 overlay 数值）
-// ──────────────────────────────────────────────────────────────
-
 import { describe, expect, it } from 'vitest';
 
 import { clampZoom, DEFAULT_ZOOM, overlayHeightFor, stepZoom, ZOOM_LEVELS } from './zoom';
@@ -62,6 +58,6 @@ describe('overlayHeightFor', () => {
     expect(overlayHeightFor(1)).toBe(52);
     expect(overlayHeightFor(1.25)).toBe(65);
     expect(overlayHeightFor(2)).toBe(104);
-    expect(overlayHeightFor(0.67)).toBe(35); // 34.84 → 35
+    expect(overlayHeightFor(0.67)).toBe(35);
   });
 });

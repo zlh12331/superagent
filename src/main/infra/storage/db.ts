@@ -1,21 +1,3 @@
-// src/main/infra/storage/db.ts
-// SQLite + Drizzle ORM 初始化
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 初始化 better-sqlite3 数据库连接（同步驱动，适合 Electron 主进程）
-// - 创建 drizzle-orm 实例并暴露 db 对象
-// - 自动建表（IF NOT EXISTS）+ 创建索引
-// - 应用退出时关闭连接（通过 dispose 函数）
-//
-// 设计：
-// - 数据库文件位置：%APPDATA%/<AppName>/sessions.db（与 keychain.dat 同目录）
-// - WAL 模式：提升并发读性能（better-sqlite3 默认开启）
-// - 单例模式：与 FileService / GitService 一致，便于统一生命周期管理
-// - Drizzle 的 better-sqlite3 driver 是同步的，无需 await
-// - 备份文件操作（创建/列表/暂存/启动应用）在 backup-store.ts（37 号 B 抽离），
-//   本文件只保留调度（pendingBackup 串行化）与自愈链
-// ──────────────────────────────────────────────────────────────
-
 import { chmodSync, copyFileSync, existsSync, mkdirSync, renameSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
@@ -68,9 +50,7 @@ function restrictFilePermissions(filePath: string): void {
   }
   try {
     chmodSync(filePath, 0o600);
-  } catch {
-    // 权限设置失败不阻断（只读文件系统等场景）
-  }
+  } catch {}
 }
 
 /**
@@ -86,13 +66,11 @@ function runBackup(sqlite: Database.Database, dbPath: string): Promise<void> {
       .then(() => undefined)
       .catch((error: unknown) => {
         cleanupBackupTmpFiles(dbPath);
-        // 备份失败不阻断启动（日志中可诊断）
         logger.error(
           { error: error instanceof Error ? error.message : String(error) },
           '数据库备份失败',
         );
       });
-  // 排队挂链：前序备份完成后才开始（同一轮转环计数 + pendingBackup 引用不脱落）
   const task = pendingBackup !== null ? pendingBackup.then(run, run) : run();
   pendingBackup = task;
   return task;
@@ -139,7 +117,6 @@ function scheduleStartupBackup(
     logger.warn({}, '本次启动重建了空数据库，跳过启动备份以保留既有健康备份');
     return;
   }
-  // runBackup 内部已捕获全部异常，返回的 Promise 永不 reject，可安全忽略
   void runBackup(sqlite, dbPath);
 }
 
@@ -159,7 +136,6 @@ function tryRestoreFromBackup(dbPath: string): boolean {
   if (backups.length === 0) {
     return false;
   }
-  // 从新到旧：优先最新健康备份（数据最新）
   for (const name of [...backups].reverse()) {
     const candidate = join(backupDir, name);
     try {
@@ -167,20 +143,16 @@ function tryRestoreFromBackup(dbPath: string): boolean {
         logger.warn({ backup: name }, '备份完整性校验失败，尝试更早备份');
         continue;
       }
-      // 覆盖主库（先清 WAL/SHM 残件：旧日志与恢复文件不匹配，SQLite 会误读）
       for (const suffix of ['', '-wal', '-shm'] as const) {
         try {
           rmSync(`${dbPath}${suffix}`, { force: true });
-        } catch {
-          // 忽略清理失败（文件可能被占用，copyFileSync 随后抛错会走 catch）
-        }
+        } catch {}
       }
       copyFileSync(candidate, dbPath);
       restrictFilePermissions(dbPath);
       logger.warn({ from: candidate }, '已从备份恢复数据库文件');
       return true;
     } catch (error) {
-      // 备份文件损坏/不可读：尝试更早一份
       logger.warn(
         { backup: name, error: error instanceof Error ? error.message : String(error) },
         '备份恢复尝试失败',
@@ -225,7 +197,6 @@ function restoreCorruptDatabase(sqlite: Database.Database | null, dbPath: string
     try {
       integrity = sqlite.pragma('quick_check', { simple: true }) as unknown;
     } catch (error) {
-      // 打开后 pragma 即失败（文件头损坏）→ 等同完整性校验失败
       integrity = error instanceof Error ? error.message : String(error);
     }
     const healthy = !(typeof integrity === 'string' && integrity !== 'ok');
@@ -236,9 +207,7 @@ function restoreCorruptDatabase(sqlite: Database.Database | null, dbPath: string
     logger.error({ result: integrity }, 'SQLite 完整性校验失败，进入损坏自愈流程');
     try {
       sqlite.close();
-    } catch {
-      // 连接已损坏时 close 可能抛错，忽略（下面会重开）
-    }
+    } catch {}
   } else {
     logger.error({ dbPath }, '数据库打开阶段失败，进入损坏自愈流程');
   }
@@ -249,25 +218,20 @@ function restoreCorruptDatabase(sqlite: Database.Database | null, dbPath: string
     return { sqlite: reopened, status: 'restored' };
   }
 
-  // 无健康备份：归档损坏文件（保留人工诊断可能性），重建空库保启动
   const corruptPath = `${dbPath}.corrupt-${Date.now()}`;
   try {
     renameSync(dbPath, corruptPath);
     logger.error({ corruptPath }, '数据库损坏且无可用备份，已归档损坏文件');
   } catch (error) {
-    // 归档失败（文件被占用等）：直接建空库（覆盖）
     logger.error(
       { error: error instanceof Error ? error.message : String(error) },
       '损坏数据库归档失败，直接重建',
     );
   }
-  // 归档失败时旧文件仍在，WAL/SHM 伴随文件也可能残留脏页 → 一并清理
   for (const suffix of ['-wal', '-shm']) {
     try {
       rmSync(`${dbPath}${suffix}`, { force: true });
-    } catch {
-      // 清理失败不阻断重建
-    }
+    } catch {}
   }
   const fresh = new Database(dbPath);
   restrictFilePermissions(dbPath);
@@ -283,15 +247,11 @@ function restoreCorruptDatabase(sqlite: Database.Database | null, dbPath: string
  * 避免两处 pragma 漂移。
  */
 function applyDefaultPragmas(sqlite: Database.Database, dbPath: string): void {
-  // 启用 WAL 模式（Write-Ahead Logging）：提升并发读性能
   sqlite.pragma('journal_mode = WAL');
   restrictFilePermissions(`${dbPath}-wal`);
   restrictFilePermissions(`${dbPath}-shm`);
-  // 启用外键约束（SQLite 默认关闭，drizzle schema 中 references 依赖此）
   sqlite.pragma('foreign_keys = ON');
-  // P2：外部工具（drizzle-kit studio / sqlite CLI）占用库文件时短暂等待
   sqlite.pragma('busy_timeout = 3000');
-  // WAL 标准搭配：NORMAL 在多数崩溃场景与 FULL 持久性等同，写入吞吐更优
   sqlite.pragma('synchronous = NORMAL');
 }
 
@@ -345,7 +305,6 @@ function normalizeLegacyRuntimeModels(sqlite: Database.Database): void {
   const table = sqlite
     .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'runtime_models'")
     .get();
-  // 表不存在：全新库由 0000 基线直接建出完整定义，无需补丁
   if (table === undefined) return;
 
   const columns = new Set(
@@ -375,14 +334,9 @@ function resolveMigrationsDir(): string {
   if (app.isPackaged) {
     return join(process.resourcesPath, 'drizzle');
   }
-  // dev / E2E：app.getAppPath() 随启动方式变化——`electron .` 为仓库根，
-  // 但 `electron out/main/index.js`（Playwright _electron.launch 即如此）会
-  // 返回入口文件目录 out/main，导致 drizzle 目录解析丢失（2026-08-27 实测）。
-  // 按优先级探测候选路径，取首个含 meta/_journal.json 的有效目录。
   const candidates = [
     join(app.getAppPath(), 'drizzle'),
     join(process.cwd(), 'drizzle'),
-    // appPath 为 out/main 时，上溯两级即仓库根（与 electron-vite 产物布局对齐）
     join(app.getAppPath(), '..', '..', 'drizzle'),
   ];
   for (const dir of candidates) {
@@ -408,9 +362,7 @@ function openWithDefaultPragmas(dbPath: string): Database.Database | null {
   let sqlite: Database.Database | null = null;
   try {
     sqlite = new Database(dbPath);
-    // 安全修复：限制数据库文件权限为仅属主可读写（含后续 WAL/SHM 伴随文件）
     restrictFilePermissions(dbPath);
-    // 统一默认 pragma（WAL / 外键 / busy_timeout / synchronous）
     applyDefaultPragmas(sqlite, dbPath);
     return sqlite;
   } catch (openError: unknown) {
@@ -420,9 +372,7 @@ function openWithDefaultPragmas(dbPath: string): Database.Database | null {
     );
     try {
       sqlite?.close();
-    } catch {
-      // 已损坏连接的 close 可能失败，忽略
-    }
+    } catch {}
     return null;
   }
 }
@@ -456,14 +406,11 @@ export function initDb(): DrizzleDB {
   }
 
   const dbPath = getDbPath();
-  // 确保父目录存在（dev 环境 userData 目录可能不存在）
   const dir = join(dbPath, '..');
   mkdirSync(dir, { recursive: true });
 
   logger.info({ dbPath }, '初始化 SQLite 数据库');
 
-  // 37 号 B：消费待应用恢复（备份恢复暂存 → 替换主库）——必须在任何连接
-  // 打开之前（WAL 句柄冲突）；替换后主库即为恢复点内容，走正常打开/自愈链
   try {
     applyPendingRestore(dbPath);
   } catch (error) {
@@ -473,22 +420,14 @@ export function initDb(): DrizzleDB {
     );
   }
 
-  // 打开连接（打开/pragma 失败降级为 null，交由自愈流程处理）
   const recovery = restoreCorruptDatabase(openWithDefaultPragmas(dbPath), dbPath);
   const sqlite = recovery.sqlite;
-  // 空间回收前提：一次性 VACUUM 必须在启动备份之前（否则与在途热备份抢同一份页）
   ensureIncrementalAutoVacuum(sqlite);
 
-  // 创建 drizzle 实例
   const db = drizzle(sqlite, { schema });
 
-  // 极老库兼容：迁移前补齐 runtime_models 缺失列（幂等，新库/已迁移库无操作）
   normalizeLegacyRuntimeModels(sqlite);
 
-  // 执行 drizzle-kit 生成的迁移（schema.ts 单一真源自动派生）：
-  // - migrate() 维护 __drizzle_migrations journal 表，幂等执行未应用的迁移
-  // - 全新库：应用基线迁移（建全部表/索引/约束）落位当前版本
-  // - 老库：仅应用 journal 中缺失的增量迁移
   const migrationsDir = resolveMigrationsDir();
   try {
     migrate(db, { migrationsFolder: migrationsDir });
@@ -498,17 +437,12 @@ export function initDb(): DrizzleDB {
       { error: error instanceof Error ? error.message : String(error), migrationsDir },
       'SQLite 迁移执行失败（迁移目录缺失或损坏）',
     );
-    // 迁移失败时关闭已打开的 SQLite 连接（测试/重试场景防句柄泄漏；
-    // 生产路径由 index.ts 启动失败 → app.exit 兜底）
     try {
       sqlite.close();
-    } catch {
-      // ignore
-    }
+    } catch {}
     throw error;
   }
 
-  // 备份调度：迁移成功后 + 非空库重建（结论复用自愈阶段的 quick_check）
   scheduleStartupBackup(sqlite, dbPath, recovery.status);
 
   dbInstance = db;
@@ -550,7 +484,6 @@ function ensureIncrementalAutoVacuum(sqlite: Database.Database): void {
   }
   const startedAt = Date.now();
   sqlite.pragma('auto_vacuum = INCREMENTAL');
-  // VACUUM 是 SQL 语句而非 PRAGMA：`pragma('vacuum')` 会被当作未知 pragma 静默忽略
   sqlite.exec('VACUUM');
   logger.info(
     { from: current, ms: Date.now() - startedAt },
@@ -602,7 +535,6 @@ export async function drainPendingBackups(): Promise<void> {
   const tail = pendingBackup;
   if (tail !== null) {
     await tail;
-    // await 期间若有新备份挂链，保留新链尾引用（置 null 会让下一次 drain 漏等）
     if (pendingBackup === tail) {
       pendingBackup = null;
     }

@@ -1,19 +1,3 @@
-// src/main/infra/ai/llm-client/llm-client.test.ts
-// LlmClient 单测：模型级路由 / per-model 缓存 / 运行时快照透传 / generateText 重试
-//
-// 测试要点：
-// 1. getModel(undefined) → 默认供应商默认模型
-// 2. getModel(显式 id) → 跨供应商解析（gpt-4o-mini → openai）
-// 3. per-model 缓存：同模型不重复创建工厂
-// 4. 未注册模型 → 默认供应商 + 原始 id 透传
-// 5. 运行时快照：explicitApiKey/baseUrl 透传到 createProviderFactory
-// 6. generateText：成功路径 + 可重试错误重试 + ModelFallback 降级链
-// 7. reset / invalidateModel：缓存清理
-//
-// mock 缝说明：仅替换 'ai' 的 generateText（APICallError 等保持真实导出）——
-// 结构化输出（Output.object）与错误分类走真实实现，mock 缝最小化。
-// 工厂 fake 返回合法 v4 model 形状（wrap 后 specificationVersion 检查才通过）。
-
 import type { LanguageModel } from 'ai';
 import { APICallError } from 'ai';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -38,8 +22,6 @@ const mocks = vi.hoisted(() => {
   return { mockGenerateText, mockLogger };
 });
 
-// mock 'ai'：保留 APICallError 等真实导出，仅替换 generateText
-// （2026-09-11：结构性输出已并入 generateText + Output.object，不再 mock generateObject）
 vi.mock('ai', async (importOriginal) => {
   const actual = await importOriginal<typeof import('ai')>();
   return {
@@ -48,7 +30,6 @@ vi.mock('ai', async (importOriginal) => {
   };
 });
 
-// mock logger：避免触发真实 electron-log 初始化
 vi.mock('../../../utils/logger', () => ({
   logger: mocks.mockLogger,
 }));
@@ -60,7 +41,6 @@ function createClient() {
     defaultModelByKind: DEFAULT_MODEL_BY_KIND,
     defaultKind: 'deepseek',
   });
-  // 合法 v4 model（wrap 后 modelId/provider 才是真实 SDK 语义；id 字段会被丢弃）
   const createProviderFactory = vi.fn(
     async (kind: ProviderKind): Promise<(modelId: string) => LanguageModel> => {
       return (modelId: string) =>
@@ -176,7 +156,6 @@ describe('LlmClient', () => {
       client.invalidateModel('deepseek-v4-flash');
 
       expect(client.getModelCacheSize()).toBe(1);
-      // 失效的模型重新创建，未失效的 gpt-4o 命中缓存
       await client.getModel('deepseek-v4-flash');
       await client.getModel('gpt-4o');
       expect(createProviderFactory).toHaveBeenCalledTimes(3);
@@ -248,7 +227,6 @@ describe('LlmClient', () => {
 
       await client.generateText({ prompt: 'hi', maxAttempts: 1 });
 
-      // 两层重试相乘会把 maxAttempts 放大成 maxAttempts × (1 + SDK maxRetries)
       expect(mocks.mockGenerateText).toHaveBeenCalledWith(
         expect.objectContaining({ maxRetries: 0 }),
       );
@@ -257,7 +235,6 @@ describe('LlmClient', () => {
     it('模型级 maxRetries：控制重试次数（maxRetries=1 → 最多 2 次尝试）', async () => {
       vi.useFakeTimers();
       try {
-        // 自定义注册表：deepseek-v4-flash 附加 maxRetries=1
         const registry = new ModelRegistry({
           entries: BUILTIN_MODELS.map((entry) =>
             entry.id === 'deepseek-v4-flash'
@@ -285,7 +262,6 @@ describe('LlmClient', () => {
         const assertion = expect(promise).rejects.toBe(retryable);
         await vi.advanceTimersByTimeAsync(5000);
         await assertion;
-        // maxRetries=1 → 首次 + 1 次重试 = 2 次调用
         expect(mocks.mockGenerateText).toHaveBeenCalledTimes(2);
       } finally {
         vi.useRealTimers();
@@ -296,8 +272,6 @@ describe('LlmClient', () => {
   describe('generateJson（结构化输出）', () => {
     it('成功路径：返回 schema 约束的对象', async () => {
       const { client } = createClient();
-      // 2026-09-11 迁移：结构化输出改走 generateText + Output.object，
-      // 结果位于 result.output（原 generateObject 的 result.object）
       mocks.mockGenerateText.mockResolvedValue({ output: { title: '测试' } });
 
       const schema = z.object({ title: z.string() });
@@ -305,15 +279,10 @@ describe('LlmClient', () => {
 
       expect(result).toEqual({ title: '测试' });
       expect(mocks.mockGenerateText).toHaveBeenCalledTimes(1);
-      // schema 经 Output.object 包装后传入 output 参数。
-      // 断言 output.name 而非内部 schema 字段：Output.object 是不透明的描述符
-      // （Object.keys = name/responseFormat/parseCompleteOutput/…），schema 封装在
-      // parse 闭包内，属实现细节；name 才是稳定契约。
       const args = mocks.mockGenerateText.mock.calls[0]?.[0] as
         | { output?: { readonly name?: string } }
         | undefined;
       expect(args?.output?.name).toBe('object');
-      // SDK 内置重试关闭：side query 重试由本层 retryWithBackoff 独占
       expect(args).toEqual(expect.objectContaining({ maxRetries: 0 }));
     });
 
@@ -361,19 +330,15 @@ describe('LlmClient', () => {
       const { client } = createClient();
       mocks.mockGenerateText.mockResolvedValue({ text: 'ok', usage: {} });
 
-      // 默认模型 flash 即 reasoning 模型，思考强度 max
       await client.generateText({ prompt: 'hi' });
 
       const args = getLastGenerateTextArgs();
-      // 思考强度经 providerOptions 注入（provider name = ProviderKind）
       expect(args['providerOptions']).toEqual({ deepseek: { reasoningEffort: 'max' } });
-      // 思考模式不支持采样参数：不传 temperature / topP
       expect(args['temperature']).toBeUndefined();
       expect(args['topP']).toBeUndefined();
     });
 
     it('reasoning 模型未配置 reasoningEffort：不注入 providerOptions', async () => {
-      // deepseek-reasoner（旧版兼容条目）无 generationConfig
       const { client } = createClient();
       mocks.mockGenerateText.mockResolvedValue({ text: 'ok', usage: {} });
 
@@ -391,12 +356,10 @@ describe('LlmClient', () => {
       await client.generateText({ model: 'deepseek-v4-flash', prompt: 'hi' });
 
       const args = getLastGenerateTextArgs();
-      // window 1M − prompt(≈2) − margin(50K) ≈ 950K；min(384K, 950K) = 384K
       expect(args['maxOutputTokens']).toBe(384_000);
     });
 
     it('非 reasoning 模型配置采样参数：应用 temperature / topP / maxTokens', async () => {
-      // 自定义注册表：给 gpt-4o 附加采样参数配置
       const registry = new ModelRegistry({
         entries: BUILTIN_MODELS.map((entry) =>
           entry.id === 'gpt-4o'
@@ -447,16 +410,12 @@ describe('LlmClient 批次2 缺口补全（降级链/覆盖透传/参数展开/�
       message: `HTTP ${statusCode ?? 'unknown'}`,
       url: 'https://api.example.com/v1/chat/completions',
       requestBodyValues: {},
-      // exactOptionalPropertyTypes：statusCode 为 undefined 时条件展开（不显式传 undefined）
       ...(statusCode !== undefined ? { statusCode } : {}),
       ...extra,
     });
   }
 
   describe('ModelFallback 降级链', () => {
-    // 5xx/网络错误是“可重试 + 可降级”双通道：内部 retryWithBackoff 会先重试。
-    // 为聚焦降级判定，统一传 maxAttempts: 1（禁重试），错误直接冒泡到降级层。
-
     it('显式模型 + 5xx：降级默认模型重试并成功', async () => {
       const { client } = createClient();
       mocks.mockGenerateText
@@ -467,7 +426,6 @@ describe('LlmClient 批次2 缺口补全（降级链/覆盖透传/参数展开/�
 
       expect(result.text).toBe('fallback ok');
       expect(mocks.mockGenerateText).toHaveBeenCalledTimes(2);
-      // 第二次调用使用默认模型（deepseek-v4-flash）
       const secondArgs = mocks.mockGenerateText.mock.calls[1]?.[0] as
         | { model: { modelId: string } }
         | undefined;
@@ -509,7 +467,6 @@ describe('LlmClient 批次2 缺口补全（降级链/覆盖透传/参数展开/�
         });
         expect(result.text).toBe('ok');
       }
-      // 5 个码各触发一次降级（每次 2 次调用）
       expect(mocks.mockGenerateText.mock.calls.length).toBe(10);
     });
 
@@ -747,7 +704,6 @@ describe('LlmClient 批次2 缺口补全（降级链/覆盖透传/参数展开/�
         await vi.advanceTimersByTimeAsync(200);
 
         await assertion;
-        // 超时中断：sleep 被 abort 打断立即重试一次，随后 signal.aborted 检查抛（不再退避重试）
         expect(mocks.mockGenerateText.mock.calls.length).toBeLessThanOrEqual(2);
       } finally {
         vi.useRealTimers();

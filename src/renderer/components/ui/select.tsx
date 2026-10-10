@@ -1,7 +1,3 @@
-// src/renderer/components/ui/select.tsx
-// 下拉选择组件（shadcn/ui new-york 风格，基于 @radix-ui/react-select）
-// 设计文档 §2.3 shadcn/ui 组件库
-
 import * as SelectPrimitive from '@radix-ui/react-select';
 import { CheckIcon, ChevronDownIcon, ChevronUpIcon } from 'lucide-react';
 import type * as React from 'react';

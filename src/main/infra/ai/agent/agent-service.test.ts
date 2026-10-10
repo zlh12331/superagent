@@ -1,20 +1,3 @@
-// src/main/infra/ai/agent-service.test.ts
-// agent-service 单测：streamText + tools + stopWhen 多轮工具调用循环
-//
-// 测试要点：
-// 1. startAgent：生成 sessionId 并立即返回（异步推送 part）
-// 2. startAgent 续传：传入 sessionId 时复用
-// 3. streamText 入参：tools + stopWhen(isStepCount) + system prompt + abortSignal
-// 4. 正常完成：推送所有 part + AGENT_STREAM_END (reason='completed')
-// 5. AbortError：推送 reason='aborted' 的 END，不推送 error
-// 6. 错误分类：按错误特征映射 ErrorCode 并推送 AGENT_STREAM_ERROR
-// 7. webContents.isDestroyed：停止推送
-// 8. abort：中断指定 sessionId，返回 true；不存在的返回 false
-// 9. abortAll：中断所有活跃 agent 对话
-// 10. dispose：等待所有活跃 stream 完成（带超时兜底）
-// 11. 工具 executeHook 注入：验证 ToolExecutor.execute 被调用，结果正确返回给 AI SDK
-// 12. systemPrompt 未传时：调用 PromptService.resolvePrompt 注入默认 prompt
-
 import type { ChatMessage } from '@code-agent/shared/main';
 import { IPC_CHANNELS } from '@code-agent/shared/main';
 import { APICallError } from 'ai';
@@ -30,8 +13,6 @@ import type { IToolExecutor } from '../tools/tool-executor';
 import type { IToolRegistry } from '../tools/tool-registry';
 import type { StartAgentOptions } from './agent-service';
 
-// vi.mock 会被 hoist，工厂函数内不能引用外部 const
-// 必须用 vi.hoisted 导出 mock 对象
 const mocks = vi.hoisted(() => {
   const mockStreamText = vi.fn();
   const mockModel = { __mockModel: true };
@@ -43,23 +24,19 @@ const mocks = vi.hoisted(() => {
     debug: vi.fn(),
   };
   const mockRandomUUID = vi.fn(() => 'test-session-id');
-  // withSpan mock：直接执行传入的函数（传 undefined span）
   const mockWithSpan = vi.fn(
     async <T>(_name: string, _attrs: unknown, fn: (span: unknown) => Promise<T>): Promise<T> =>
       fn(mockSpan),
   );
-  // mock span：验证 span?.setAttribute / end 链路（withSpan mock 传入真实形状对象）
   const mockSpan = {
     setAttribute: vi.fn(),
     end: vi.fn(),
   };
-  // 模型注册表动态化：默认无 capabilities（contextWindowSize 兜底 128K）且无超时/重试配置
   const mockResolveModel = vi.fn(() => ({
     modelId: 'test-model',
     generationConfig: {},
     capabilities: {},
   }));
-  // 生成选项动态化：默认空对象（无采样/输出上限/providerOptions 条件展开）
   const mockGenOptions = vi.fn(() => ({}));
   return {
     mockStreamText,
@@ -74,10 +51,6 @@ const mocks = vi.hoisted(() => {
   };
 });
 
-// mock ai：拦截 streamText（保留 isStepCount 等真实导出）
-// mock ../models：modelRegistry.resolve 返回无超时配置（真实单例在测试环境可能带
-// timeoutMs=0 → AbortSignal.timeout(0) 立即中断流，导致活跃会话测试无法挂起）
-// 注意：vi.mock 路径相对测试文件（infra/ai/）解析，models 是同级目录 → './models'
 vi.mock('../models', () => ({
   buildGenerationOptions: mocks.mockGenOptions,
   modelRegistry: {
@@ -94,8 +67,6 @@ vi.mock('ai', async (importOriginal) => {
   };
 });
 
-// electron 替身：BrowserWindow 供失效域广播捕获（31 号 spec §5.1）。
-// 不提供 app —— emit-event 对 app 的访问自带 try/catch（isPackaged 探测降级）。
 const invalidationMocks = vi.hoisted(() => {
   const sends: Array<[string, unknown]> = [];
   /** 广播 + options.webContents 推送的统一时间线（channel 顺序） */
@@ -114,29 +85,23 @@ const invalidationMocks = vi.hoisted(() => {
 });
 
 vi.mock('electron', () => ({
-  // 方括号键：规避 useNamingConvention 对 electron API 名（PascalCase）的误报
   ['BrowserWindow']: {
     getAllWindows: vi.fn(() => [invalidationMocks.win]),
   },
 }));
 
-// mock ai-provider：拦截 getModel
 vi.mock('../llm-client/ai-provider', () => ({
   getModel: mocks.mockGetModel,
 }));
 
-// mock logger
 vi.mock('../../../utils/logger', () => ({
   logger: mocks.mockLogger,
 }));
 
-// mock node:crypto
 vi.mock('node:crypto', () => ({
   randomUUID: mocks.mockRandomUUID,
 }));
 
-// mock telemetry/otel：拦截 withSpan，避免依赖 OTel 初始化状态
-// 注意：otel 在 infra/telemetry/ 下，相对测试文件（infra/ai/）为 '../telemetry/otel'
 vi.mock('../../telemetry/otel', () => ({
   withSpan: mocks.mockWithSpan,
 }));
@@ -195,10 +160,6 @@ async function flushAsync(): Promise<void> {
     // eslint-disable-next-line no-await-in-loop -- 测试需要顺序刷新微任务队列
     await Promise.resolve();
   }
-  // 38 号：回合控制流经 XState actor 信箱调度（fromPromise invoked service），
-  // 装配段跨宏任务边界——补一拍宏任务保证 actor 回调跑完。
-  // ⚠️ 仅真实定时器下执行：fake timers（vi.useFakeTimers）下 setTimeout(0) 排进
-  // fake 队列且无人 advance → 死锁（流空闲超时用例实测踩中）
   if (!vi.isFakeTimers()) {
     await new Promise((resolve) => setTimeout(resolve, 0));
   }
@@ -228,13 +189,9 @@ function createMockToolRegistry() {
     register: vi.fn(),
     unregister: vi.fn(() => false),
     get: vi.fn(() => undefined),
-    // 固定开销估算（estimateFixedOverheadTokens）会遍历工具名 → 空集即可
     getAllNames: vi.fn(() => new Set<string>()),
     list: vi.fn(() => []),
     toAISDKTools: vi.fn((_ctx, executeHook) => {
-      // 返回一个简单的 tools 对象，AI SDK 会接受
-      // executeHook 是 AgentService 传入的函数，用于包装 ToolExecutor.execute
-      // 工具名用计算属性名（biome useNamingConvention 不检查计算属性名）
       return { ['mock_tool']: { execute: executeHook } };
     }),
   };
@@ -268,8 +225,6 @@ function createMockPromptService() {
   };
 }
 
-// 崩溃恢复状态机：注入 fake sessionService（无 mock 规范，用真实接口最小实现）
-// 文件级共享：多个 describe（生命周期/缺口补全）复用同一实例
 const mockSessionService: ISessionService = {
   markRunning: vi.fn(async () => {}),
   markIdle: vi.fn(async () => {}),
@@ -313,8 +268,6 @@ describe('agent-service', () => {
       mockPromptService,
       mockSessionService,
     );
-    // 默认 streamText 返回单文本 part 流（真实 LLM 必然产出内容；
-    // 空流场景由「空回复防护」专用用例显式覆盖）
     mocks.mockStreamText.mockReturnValue(
       createMockStreamResult([{ type: 'text-delta', textDelta: 'hi' }]),
     );
@@ -334,9 +287,7 @@ describe('agent-service', () => {
       });
 
       expect(sessionId).toBe('test-session-id');
-      // randomUUID 调用 2 次：sessionId + 回合 turnId（回合事件系统）
       expect(mocks.mockRandomUUID).toHaveBeenCalledTimes(2);
-      // 38 号：控制流经 XState actor 调度，streamText 调用跨宏任务——补拍等待
       await flushAsync();
       expect(mocks.mockStreamText).toHaveBeenCalledTimes(1);
     });
@@ -353,7 +304,6 @@ describe('agent-service', () => {
       });
 
       expect(sessionId).toBe('custom-agent-id');
-      // 会话 id 复用，但每个回合仍生成独立 turnId
       expect(mocks.mockRandomUUID).toHaveBeenCalledTimes(1);
     });
 
@@ -369,7 +319,6 @@ describe('agent-service', () => {
         webContents: wc,
       });
 
-      // toAISDKTools 收到的基础上下文应携带 mode='plan'（38 号：跨宏任务，补拍等待）
       await flushAsync();
       const calls = mockRegistry.toAISDKTools.mock.calls;
       const ctx = calls[0]?.[0] as { mode?: string } | undefined;
@@ -387,7 +336,6 @@ describe('agent-service', () => {
         webContents: wc,
       });
 
-      // 38 号：控制流经 XState actor 调度，toAISDKTools 跨宏任务——补拍等待
       await flushAsync();
       const calls = mockRegistry.toAISDKTools.mock.calls;
       const ctx = calls[0]?.[0] as { mode?: string } | undefined;
@@ -412,8 +360,6 @@ describe('agent-service', () => {
 
       await flushAsync();
 
-      // 显式传解析结果的 modelId：此前传 undefined 会二次解析回默认模型，
-      // 导致「元数据取自解析结果、实际请求发给默认模型」的分裂（2026-10-08 修复）
       expect(mocks.mockGetModel).toHaveBeenCalledWith('test-model');
       expect(mocks.mockStreamText).toHaveBeenCalledTimes(1);
       const callArgs = mocks.mockStreamText.mock.calls[0];
@@ -435,7 +381,6 @@ describe('agent-service', () => {
       expect(opts.system).toBe('你是 Code Agent');
       expect(opts.allowSystemInMessages).toBe(true);
       expect(opts.abortSignal).toBeInstanceOf(AbortSignal);
-      // model call 级重试真源交 SDK：模型未配置时显式传默认 2 次重试
       expect(opts.maxRetries).toBe(2);
     });
 
@@ -463,7 +408,6 @@ describe('agent-service', () => {
       const opts = callArgs[0] as { maxRetries: number };
       expect(opts.maxRetries).toBe(5);
 
-      // clearAllMocks 不恢复实现：还原默认解析结果，避免污染后续用例
       mocks.mockResolveModel.mockImplementation(() => ({
         modelId: 'test-model',
         generationConfig: {},
@@ -486,7 +430,6 @@ describe('agent-service', () => {
       await flushAsync();
 
       expect(mockPromptService.resolvePrompt).toHaveBeenCalledWith(undefined, '/tmp/project');
-      // streamText 应该收到 system 参数
       const callArgs = mocks.mockStreamText.mock.calls[0];
       if (!callArgs) throw new Error('streamText 未被调用');
       const opts = callArgs[0] as { system: string };
@@ -512,7 +455,6 @@ describe('agent-service', () => {
 
       await flushAsync();
 
-      // 流式事件：2 个 part + 1 个 end
       expect(getNonTurnCalls(wc)).toHaveLength(3);
 
       const firstCall = getNonTurnCalls(wc)[0];
@@ -548,8 +490,6 @@ describe('agent-service', () => {
 
       await flushAsync();
 
-      // 3 条 text-delta 合并成 1 条 part + 1 条 END；无 webContents.send 定时器依赖
-      // （合帧在流收尾路径同步 flush，END 恒在最后一个文本 part 之后）
       expect(getNonTurnCalls(wc)).toHaveLength(2);
       const partCall = getNonTurnCalls(wc)[0];
       if (!partCall) throw new Error('webContents.send 未被调用');
@@ -583,7 +523,6 @@ describe('agent-service', () => {
 
       await flushAsync();
 
-      // tool-call 前落地「前文」，之后「后文」单独成条（不同段不跨合）
       const payloads = getNonTurnCalls(wc)
         .filter((c) => c[0] === IPC_CHANNELS.AGENT_STREAM_PART)
         .map((c) => c[1] as { part: { type: string; delta?: string; toolCallId?: string } });
@@ -636,7 +575,6 @@ describe('agent-service', () => {
 
       await flushAsync();
 
-      // isDestroyed=true 后停止推送 part，也不推送 END
       expect(wc.send).not.toHaveBeenCalled();
     });
 
@@ -659,13 +597,11 @@ describe('agent-service', () => {
 
       await flushAsync();
 
-      // 流式事件：仅 AGENT_STREAM_END（aborted）
       expect(getNonTurnCalls(wc)).toHaveLength(1);
       const call = getNonTurnCalls(wc)[0];
       if (!call) throw new Error('webContents.send 未被调用');
       expect(call[0]).toBe(IPC_CHANNELS.AGENT_STREAM_END);
       expect(call[1]).toEqual({ sessionId: 'session-abort', reason: 'aborted' });
-      // 不应该推送 AGENT_STREAM_ERROR
       const errorCalls = wc.send.mock.calls.filter((c) => c[0] === IPC_CHANNELS.AGENT_STREAM_ERROR);
       expect(errorCalls).toHaveLength(0);
     });
@@ -737,11 +673,8 @@ describe('agent-service', () => {
       vi.useFakeTimers();
       try {
         const wc = createMockWebContents();
-        // 永不推送数据的死流（pull 不 enqueue）
         const pendingStream = new ReadableStream({
-          pull() {
-            // 故意不调用 controller.enqueue / close，read() 永久挂起
-          },
+          pull() {},
         });
         mocks.mockStreamText.mockReturnValue({
           toUIMessageStream: () => pendingStream,
@@ -756,11 +689,9 @@ describe('agent-service', () => {
           webContents: wc,
         });
 
-        // 推进超过空闲超时阈值（600s）
         await vi.advanceTimersByTimeAsync(600_001);
         await flushAsync();
 
-        // 中断流后推送 AGENT_STREAM_ERROR（AI_TIMEOUT）
         const errorCalls = wc.send.mock.calls.filter(
           (c) => c[0] === IPC_CHANNELS.AGENT_STREAM_ERROR,
         );
@@ -789,10 +720,7 @@ describe('agent-service', () => {
 
       await flushAsync();
 
-      // toAISDKTools 应该被调用一次
       expect(mockRegistry.toAISDKTools).toHaveBeenCalledTimes(1);
-      // 第一个参数是 ctx
-      // 用 if 守卫替代 ! 非空断言（避免 biome noNonNullAssertion warning）
       const callArgs = mockRegistry.toAISDKTools.mock.calls[0];
       if (callArgs === undefined) {
         throw new Error('Expected toAISDKTools to have been called');
@@ -839,16 +767,12 @@ describe('agent-service', () => {
   describe('abortAll', () => {
     it('中断所有活跃 agent 对话', async () => {
       const wc = createMockWebContents();
-      // 用永不关闭的 stream 保持 session 活跃（否则空流立即 close，session 已被清理）
       mocks.mockStreamText.mockReturnValue({
         toUIMessageStream: () =>
           new ReadableStream({
-            start() {
-              // 不 close，不 enqueue，保持 session 活跃
-            },
+            start() {},
           }),
       });
-      // 每个会话消耗 2 个 UUID：sessionId + 回合 turnId
       mocks.mockRandomUUID
         .mockReturnValueOnce('session-a')
         .mockReturnValueOnce('turn-a')
@@ -874,12 +798,9 @@ describe('agent-service', () => {
 
       service.abortAll();
 
-      // abortAll 后 session 仍在 Map 中（直到 stream 真正结束才移除）
-      // abort 已被 abortAll 调用过的 controller 再次 abort 仍返回 true（session 存在）
       expect(service.abort('session-a')).toBe(true);
       expect(service.abort('session-b')).toBe(true);
 
-      // 清理：dispose 等待 stream 结束（带超时）
       await service.dispose(100);
     });
   });
@@ -887,7 +808,6 @@ describe('agent-service', () => {
   describe('dispose', () => {
     it('无活跃 stream 时立即返回', async () => {
       await service.dispose();
-      // 不抛错即可
     });
 
     it('有活跃 stream 时等待完成', async () => {
@@ -905,19 +825,15 @@ describe('agent-service', () => {
 
       await service.dispose(1000);
 
-      // dispose 后 Map 应清空
       expect(service.abort('session-dispose')).toBe(false);
     });
 
     it('超时后强制清空', async () => {
       const wc = createMockWebContents();
-      // 创建一个永不关闭的 stream
       mocks.mockStreamText.mockReturnValue({
         toUIMessageStream: () =>
           new ReadableStream({
-            start() {
-              // 不 close，不 enqueue，永不结束
-            },
+            start() {},
           }),
       });
 
@@ -930,14 +846,11 @@ describe('agent-service', () => {
         webContents: wc,
       });
 
-      // dispose 带极短超时
       const start = Date.now();
       await service.dispose(100);
       const elapsed = Date.now() - start;
 
-      // 应该在超时附近返回（允许一定余量）
       expect(elapsed).toBeLessThan(2000);
-      // 超时后 Map 应清空
       expect(service.abort('session-hang')).toBe(false);
     });
   });
@@ -965,9 +878,6 @@ describe('AgentService 生命周期补充（活跃会话分支）', () => {
         appendMessage: vi.fn(async () => 0),
       } as unknown as ISessionService,
     );
-    // deferred 流对象：保持会话活跃（可手动 close 结束）
-    // 注意：必须返回流结果对象（含 toUIMessageStream），裸 Promise 会让
-    // streamToWebContents 抛错并触发 finally 清理（测试踩坑实录）
     releaseStream = () => {};
     mocks.mockStreamText.mockReturnValue({
       toUIMessageStream: () =>
@@ -976,9 +886,7 @@ describe('AgentService 生命周期补充（活跃会话分支）', () => {
             releaseStream = () => {
               try {
                 controller.close();
-              } catch {
-                /* 已关闭 */
-              }
+              } catch {}
             };
           },
         }),
@@ -1053,7 +961,6 @@ describe('AgentService 生命周期补充（活跃会话分支）', () => {
       | ((tool: { name: string }, input: unknown, ctx: { callId: string }) => Promise<unknown>)
       | undefined;
     const reg = {
-      // 固定开销估算会遍历工具名（estimateFixedOverheadTokens）
       getAllNames: vi.fn(() => new Set<string>()),
       toAISDKTools: vi.fn((_ctx: unknown, hook: typeof capturedHook) => {
         capturedHook = hook;
@@ -1070,7 +977,6 @@ describe('AgentService 生命周期补充（活跃会话分支）', () => {
       } as unknown as ISessionService,
     );
     await svc.startAgent(options(undefined));
-    // 38 号：toAISDKTools 在 executeTurn（actor 宏任务）内被调——补拍等待
     await flushAsync();
     expect(capturedHook).toBeDefined();
     if (capturedHook === undefined) throw new Error('hook not captured');
@@ -1094,7 +1000,6 @@ describe('AgentService 生命周期补充（活跃会话分支）', () => {
       | ((tool: { name: string }, input: unknown, ctx: { callId: string }) => Promise<unknown>)
       | undefined;
     const reg = {
-      // 固定开销估算会遍历工具名（estimateFixedOverheadTokens）
       getAllNames: vi.fn(() => new Set<string>()),
       toAISDKTools: vi.fn((_ctx: unknown, hook: typeof capturedHook) => {
         capturedHook = hook;
@@ -1111,7 +1016,6 @@ describe('AgentService 生命周期补充（活跃会话分支）', () => {
       } as unknown as ISessionService,
     );
     await svc.startAgent(options(undefined));
-    // 38 号：toAISDKTools 在 executeTurn（actor 宏任务）内被调——补拍等待
     await flushAsync();
     if (capturedHook === undefined) throw new Error('hook not captured');
     const result = await capturedHook({ name: 'grep' }, {}, { callId: 'c2' });
@@ -1129,7 +1033,6 @@ describe('AgentService 生命周期补充（活跃会话分支）', () => {
       | ((tool: { name: string }, input: unknown, ctx: { callId: string }) => Promise<unknown>)
       | undefined;
     const reg = {
-      // 固定开销估算会遍历工具名（estimateFixedOverheadTokens）
       getAllNames: vi.fn(() => new Set<string>()),
       toAISDKTools: vi.fn((_ctx: unknown, hook: typeof capturedHook) => {
         capturedHook = hook;
@@ -1146,7 +1049,6 @@ describe('AgentService 生命周期补充（活跃会话分支）', () => {
       } as unknown as ISessionService,
     );
     await svc.startAgent(options(undefined));
-    // 38 号：toAISDKTools 在 executeTurn（actor 宏任务）内被调——补拍等待
     await flushAsync();
     if (capturedHook === undefined) throw new Error('hook not captured');
     await expect(capturedHook({ name: 'grep' }, {}, { callId: 'c3' })).rejects.toThrow(
@@ -1200,7 +1102,6 @@ describe('AgentService 生命周期补充（活跃会话分支）', () => {
       } as unknown as ISessionService,
       gen,
     );
-    // 注入 titleGenerator 后回合完成不抛（标题链内部失败静默；generateTitle 调用由集成测试覆盖）
     await expect(svc.startAgent(options(undefined))).resolves.toBeTruthy();
   }, 10_000);
 });
@@ -1222,13 +1123,10 @@ describe('agent-service 批次1 缺口补全（生命周期边界/事件/压缩/
       mockPromptService,
       mockSessionService,
     );
-    // 默认 streamText 返回单文本 part 流（真实 LLM 必然产出内容；
-    // 空流场景由「空回复防护」专用用例显式覆盖）
     mocks.mockStreamText.mockReturnValue(
       createMockStreamResult([{ type: 'text-delta', textDelta: 'hi' }]),
     );
     mocks.mockRandomUUID.mockReturnValue('test-session-id');
-    // 恢复默认模型解析（无 capabilities → 128K 兜底；无超时）与默认生成选项（空）
     mocks.mockResolveModel.mockImplementation(() => ({
       modelId: 'test-model',
       generationConfig: {},
@@ -1238,7 +1136,6 @@ describe('agent-service 批次1 缺口补全（生命周期边界/事件/压缩/
   });
 
   afterEach(() => {
-    // 恢复 spyOn（TurnRunner.run 的 aborted 用例专用），不影响 vi.fn 的 mockImplementation
     vi.restoreAllMocks();
   });
 
@@ -1264,15 +1161,12 @@ describe('agent-service 批次1 缺口补全（生命周期边界/事件/压缩/
             releaseOld = () => {
               try {
                 controller.close();
-              } catch {
-                /* 已关闭 */
-              }
+              } catch {}
             };
           },
         }),
     });
     await service.startAgent(baseOptions({ sessionId: 'dup-session', webContents: wc }));
-    // 旧流仍活跃时再次启动同一 sessionId → 应中断旧流并等待退出（不阻塞调用方）
     await service.startAgent(baseOptions({ sessionId: 'dup-session', webContents: wc }));
     expect(mocks.mockLogger.warn).toHaveBeenCalledWith(
       expect.objectContaining({ sessionId: 'dup-session' }),
@@ -1295,7 +1189,6 @@ describe('agent-service 批次1 缺口补全（生命周期边界/事件/压缩/
     invalidationMocks.sends.length = 0;
     invalidationMocks.order.length = 0;
     const wc = createMockWebContents();
-    // 单一时间线：webContents 推送与失效广播共用顺序数组（win.send 恒写 order）
     wc.send.mockImplementation(((channel: string) => {
       invalidationMocks.order.push(channel);
     }) as never);
@@ -1303,7 +1196,6 @@ describe('agent-service 批次1 缺口补全（生命周期边界/事件/压缩/
     await service.startAgent(baseOptions({ sessionId: 'session-invalidation', webContents: wc }));
     await flushAsync();
 
-    // 广播内容：turnEndInvalidationDomains(sessionId) 的 8 域逐字断言（防清单漂移）
     const invalidationCall = invalidationMocks.sends.find(
       ([channel]) => channel === 'invalidation:event:domains',
     );
@@ -1322,7 +1214,6 @@ describe('agent-service 批次1 缺口补全（生命周期边界/事件/压缩/
       sessionId: 'session-invalidation',
     });
 
-    // 顺序：渲染层须先登记「回合结束域已覆盖」再进 stream:end（渐进回落前提）
     const invalidationIndex = invalidationMocks.order.indexOf('invalidation:event:domains');
     const endIndex = invalidationMocks.order.indexOf(IPC_CHANNELS.AGENT_STREAM_END);
     expect(invalidationIndex).toBeGreaterThanOrEqual(0);
@@ -1477,8 +1368,6 @@ describe('agent-service 批次1 缺口补全（生命周期边界/事件/压缩/
       capabilities: { contextWindowSize: 2000 },
     }));
     const wc = createMockWebContents();
-    // 窗口 2000：不计固定开销时 hardLimit = 1900（1600 tokens 不超限）；
-    // 计入 system prompt 400 tokens 后有效窗口 1600 → hardLimit 1500 → 1600 tokens 超限
     await service.startAgent(
       baseOptions({
         messages: [{ role: 'user' as const, content: '字'.repeat(1600) }],
@@ -1500,7 +1389,6 @@ describe('agent-service 批次1 缺口补全（生命周期边界/事件/压缩/
       capabilities: { contextWindowSize: 2000 },
     }));
     const wc = createMockWebContents();
-    // 2000 窗口：hardLimit = 2000 − 100 = 1900；1950 tokens 超限
     const big = '字'.repeat(1950);
     await service.startAgent(
       baseOptions({
@@ -1514,7 +1402,6 @@ describe('agent-service 批次1 缺口补全（生命周期边界/事件/压缩/
     const errCalls = wc.send.mock.calls.filter((c) => c[0] === IPC_CHANNELS.AGENT_STREAM_ERROR);
     expect(errCalls).toHaveLength(1);
     expect((errCalls[0]?.[1] as { code?: string } | undefined)?.code).toBe('AI_CONTEXT_TOO_LARGE');
-    // 全量并发 + coverage 插桩下 gpt-tokenizer 编码 2K 字符可达 5s+，放宽超时
   }, 15_000);
 
   it('上下文 warn：记录接近压缩线日志', async () => {
@@ -1524,9 +1411,6 @@ describe('agent-service 批次1 缺口补全（生命周期边界/事件/压缩/
       capabilities: { contextWindowSize: 12000 },
     }));
     const wc = createMockWebContents();
-    // 窗口 12000：compact 线 = 0.75×有效窗口−600，有效窗口 = 12000 − 固定开销
-    // （system prompt + 工具定义，mock registry 无工具）⇒ compact 线 = 8397；
-    // 8000 tokens 落在 warn 区（且不触发 over-limit）
     const mid = '字'.repeat(8000);
     await service.startAgent(
       baseOptions({
@@ -1537,11 +1421,8 @@ describe('agent-service 批次1 缺口补全（生命周期边界/事件/压缩/
     );
     await flushAsync();
     expect(mocks.mockLogger.warn).toHaveBeenCalledWith(
-      // 有效窗口 = 12000 − 固定开销（resolvePrompt 返回的 system prompt 实测 4 tokens）
-      // ⇒ compact 线 = round(0.75×11996) − 600 = 8397
       expect.objectContaining({ contextTokens: 8000, compactAt: 8397 }),
       expect.stringContaining('接近压缩线'),
-      // 全量并发 + coverage 插桩下 gpt-tokenizer 编码 8K 字符可达 5s+，放宽超时
     );
   }, 30_000);
 
@@ -1564,8 +1445,6 @@ describe('agent-service 批次1 缺口补全（生命周期边界/事件/压缩/
     );
     const opts = mocks.mockStreamText.mock.calls[0]?.[0] as { messages: unknown[] } | undefined;
     expect(opts?.messages).toHaveLength(1);
-    // 全量并发 + coverage 插桩下 gpt-tokenizer 编码 8K 字符可达 5s+，放宽超时
-    // 本用例编码量（8600 字）高于 warn 用例（8000 字），超时预算须 ≥ warn 的 30_000
   }, 30_000);
 
   it('completed + 完整 usage：recordUsage 调用 + END 含 usage + span 属性', async () => {
@@ -1662,7 +1541,6 @@ describe('agent-service 批次1 缺口补全（生命周期边界/事件/压缩/
       capabilities: {},
     }));
     const wc = createMockWebContents();
-    // 流在超时信号触发后关闭：模型超时(50ms)先行触发 → 完成后检查点归类 AI_TIMEOUT
     mocks.mockStreamText.mockReturnValue({
       toUIMessageStream: () =>
         new ReadableStream({
@@ -1670,9 +1548,7 @@ describe('agent-service 批次1 缺口补全（生命周期边界/事件/压缩/
             setTimeout(() => {
               try {
                 controller.close();
-              } catch {
-                /* 已关闭 */
-              }
+              } catch {}
             }, 120);
           },
         }),
@@ -1686,8 +1562,6 @@ describe('agent-service 批次1 缺口补全（生命周期边界/事件/压缩/
   });
 
   it('装配段失败（模型解析抛错）→ 推送 AGENT_STREAM_ERROR（渲染层不悬挂）', async () => {
-    // 2026-09-28 深读回归：装配段此前在 try 之外，抛错只落纯日志 catch、
-    // 不推 AGENT_STREAM_ERROR——渲染层该回合永久 loading
     mocks.mockResolveModel.mockImplementationOnce(() => {
       throw new Error('no model configured');
     });
@@ -1700,8 +1574,6 @@ describe('agent-service 批次1 缺口补全（生命周期边界/事件/压缩/
   });
 
   it('旧流迟到收尾不回退新回合的 running 状态（CAS 门控 markIdle）', () => {
-    // 2026-09-28 深读回归：preempt 兜底超时（5s）后新回合可能已 register +
-    // markRunning，旧流的迟到 finally 若无条件 markIdle 会把 running 回退成 idle
     const svc = service as unknown as {
       registry: {
         register: (sessionId: string, controller: AbortController, stream: Promise<void>) => void;
@@ -1712,20 +1584,16 @@ describe('agent-service 批次1 缺口补全（生命周期边界/事件/压缩/
     const promiseA = Promise.resolve();
     const promiseB = Promise.resolve();
     svc.registry.register('s-cas', new AbortController(), promiseA);
-    // 新回合接管（覆盖注册；语义上新回合的 markRunning 已发生）
     svc.registry.register('s-cas', new AbortController(), promiseB);
 
-    svc.handleStreamSettled('s-cas', promiseA); // 旧流迟到收尾
+    svc.handleStreamSettled('s-cas', promiseA);
     expect(mockSessionService.markIdle).not.toHaveBeenCalled();
 
-    svc.handleStreamSettled('s-cas', promiseB); // 当前流收尾
+    svc.handleStreamSettled('s-cas', promiseB);
     expect(mockSessionService.markIdle).toHaveBeenCalledWith('s-cas');
   });
 
   it('TurnRunner 返回 aborted：推送 END(aborted)，不推 ERROR', async () => {
-    // runner 的 abort 归因（read 抛 AbortError → aborted）由 turn-runner.test 单独覆盖；
-    // 此处 mock runner.run 返回 aborted，验证 agent-service 的 aborted 分支
-    // （stream.aborted 状态机事件 + completeTurn(aborted) + END 推送）
     const runnerSpy = vi.spyOn(TurnRunner.prototype, 'run');
     runnerSpy.mockResolvedValue({ reason: 'aborted', durationMs: 42 });
     const wc = createMockWebContents();

@@ -1,17 +1,3 @@
-// src/renderer/components/$1/FileViewerPanel.test.tsx
-// 文件查看面板单测（2026-09-12 补覆盖：此前 0 测试，cx 46 全项目现存第二高）
-//
-// 测试要点（聚焦易回归的行为）：
-// 1. 未打开 → 渲染引导空态
-// 2. 数据到达 → 内容同步进 store（originalContent/editedContent）
-// 3. **脏数据保护**：data 后台刷新但 isDirty → 不覆盖用户未保存编辑（关键守卫）
-// 4. 超长内容（>5000 行）→ 跳过 shiki 高亮（性能降级）
-// 5. 保存：requestSave 桥接 → 真实 useFileWrite（含缓存失效）→ isDirty 复位
-//
-// mock 策略：只 mock shiki（重依赖）与 api 层（file.read/write）——
-// useFileContent / useFileWrite 走真实实现，使「保存 → 缓存失效 → 回读」的
-// 完整链路进入测试（此前若 mock 掉 use-file-write 会连失效行为一起 mock 掉）。
-
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactElement } from 'react';
@@ -29,14 +15,11 @@ const { getHighlighterMock, ensureLangLoadedMock, writeMock } = vi.hoisted(() =>
   ensureLangLoadedMock: vi.fn(),
   writeMock: vi.fn(),
 }));
-// 命令式确认（退出编辑的脏数据保护）用 mock 驱动：DialogHost 不在本测试的渲染树内
 const { mockConfirm } = vi.hoisted(() => ({ mockConfirm: vi.fn(async () => true) }));
 vi.mock('@/stores/transient/confirm-dialog-store', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/stores/transient/confirm-dialog-store')>()),
   confirm: mockConfirm,
 }));
-// shiki 高亮是重依赖（wasm/语言包），单测替换 getHighlighter/ensureLangLoaded；
-// 其余导出（normalizeLang 等纯函数）保留真实实现——file-viewer-utils 也依赖本模块
 vi.mock('@/lib/highlight', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/highlight')>()),
   getHighlighter: getHighlighterMock,
@@ -106,7 +89,6 @@ describe('FileViewerPanel', () => {
   describe('渲染门控', () => {
     it('open=false：渲染未选择文件的空态（不加载内容）', () => {
       const { container } = render(createWrapper());
-      // 组件在 open=false 时渲染引导空态（非 null——Dialog 宿主常驻）
       expect(container.textContent).toContain('从文件树选择文件');
       expect(getHighlighterMock).not.toHaveBeenCalled();
     });
@@ -118,7 +100,6 @@ describe('FileViewerPanel', () => {
       await waitFor(() =>
         expect(useFileViewerStore.getState().originalContent).toBe('old content'),
       );
-      // 同步进编辑缓冲（进入编辑态时的起点）
       expect(useFileViewerStore.getState().editedContent).toBe('old content');
       expect(container.innerHTML).not.toBe('');
     });
@@ -126,7 +107,6 @@ describe('FileViewerPanel', () => {
 
   describe('脏数据保护（关键守卫）', () => {
     it('data 后台刷新但 isDirty → 不覆盖用户未保存编辑', async () => {
-      // 用户已编辑（dirty）；挂载后 useQuery 拉到磁盘内容，但守卫应跳过同步
       useFileViewerStore.setState({
         open: true,
         filePath: 'C:\\proj\\src\\a.ts',
@@ -148,7 +128,6 @@ describe('FileViewerPanel', () => {
       render(createWrapper());
 
       await waitFor(() => expect(useFileViewerStore.getState().originalContent).toBe(diskContent));
-      // 内容就位后，shiki 不应被触碰（降级为纯文本渲染）
       expect(getHighlighterMock).not.toHaveBeenCalled();
     });
 
@@ -173,7 +152,6 @@ describe('FileViewerPanel', () => {
       });
       render(createWrapper());
 
-      // Ctrl+S 桥接：全局快捷键 → requestSave → 注册的 handleSave
       await act(async () => {
         useFileViewerStore.getState().requestSave();
       });
@@ -187,7 +165,6 @@ describe('FileViewerPanel', () => {
           createDirs: false,
         }),
       );
-      // markSaved：dirty 复位
       expect(useFileViewerStore.getState().isDirty).toBe(false);
       expect(toastMocks.toast.success).toHaveBeenCalled();
     });
@@ -203,8 +180,6 @@ describe('FileViewerPanel', () => {
       });
       render(createWrapper());
 
-      // 模拟连续编辑：注册生命周期不应随内容变化而抖动，
-      // 且快捷键触发时必须用最新缓冲（保存处理器经 ref 读最新闭包）
       await act(async () => {
         useFileViewerStore.getState().setEditedContent('v1');
       });
@@ -238,7 +213,6 @@ describe('FileViewerPanel', () => {
         useFileViewerStore.getState().requestSave();
       });
 
-      // useFileWrite onSuccess 失效 ['file', path] → 重新 read → 磁盘已是新内容
       await waitFor(() =>
         expect(useFileViewerStore.getState().originalContent).toBe('edited content'),
       );
@@ -283,7 +257,6 @@ describe('FileViewerPanel', () => {
       render(createWrapper());
 
       expect(await screen.findByText(i18n.t('common.emptyFile'))).toBeDefined();
-      // 空内容 → 复制按钮禁用
       expect(screen.getByLabelText(i18n.t('fileViewer.copyContent'))).toBeDisabled();
     });
 
@@ -299,12 +272,10 @@ describe('FileViewerPanel', () => {
       });
       const { container } = render(createWrapper());
 
-      // 新建空文件后进入编辑态：必须有输入面（此前只显示"空文件"占位 → 端到端死路）
       const textarea = await screen.findByLabelText(
         i18n.t('chat.editFileLabel', { name: 'empty.txt' }),
       );
       expect(textarea).toBeDefined();
-      // 空内容时给出引导占位（否则 textarea 全空，用户不知可输入）
       expect((textarea as HTMLTextAreaElement).placeholder).toBe(i18n.t('common.emptyFileEdit'));
       expect(container.querySelector('.file-viewer-empty')).toBeNull();
     });
@@ -339,9 +310,7 @@ describe('FileViewerPanel', () => {
 
       expect(await screen.findByText('hello')).toBeDefined();
       expect(container.querySelector('textarea')).not.toBeNull();
-      // 非 dirty → 保存按钮禁用（无可保存修改）
       expect(screen.getByLabelText(i18n.t('common.save'))).toBeDisabled();
-      // 有内容 → 复制可用
       expect(screen.getByLabelText(i18n.t('fileViewer.copyContent'))).toBeEnabled();
     });
 
@@ -356,11 +325,9 @@ describe('FileViewerPanel', () => {
       });
       const { container } = render(createWrapper());
 
-      // 非 dirty：无未保存点
       await screen.findByLabelText(i18n.t('chat.editFileLabel', { name: 'a.ts' }));
       expect(container.querySelector('.file-viewer-dirty-dot')).toBeNull();
 
-      // 编辑后 dirty → 出现未保存点（并带 title 提示）
       await act(async () => {
         useFileViewerStore.getState().setEditedContent('changed');
       });
@@ -430,7 +397,6 @@ describe('FileViewerPanel', () => {
       const { container } = render(createWrapper());
 
       await waitFor(() => expect(useFileViewerStore.getState().originalContent).toBe('a\nb'));
-      // 内容仅 2 行但磁盘 totalLines=7（如截断/权威统计）→ 显示 IPC 值
       expect(container.querySelector('.file-viewer-meta')?.textContent).toContain('7');
     });
 
@@ -456,9 +422,7 @@ describe('FileViewerPanel', () => {
 
       const metaText = (): string =>
         container.querySelector('.file-viewer-meta')?.textContent ?? '';
-      // 编辑缓冲 5 行（磁盘只有 3 行）→ 显示 5
       await waitFor(() => expect(metaText()).toContain('5'));
-      // 继续编辑（删到只剩一行）→ 行数同步为 1
       await act(async () => {
         useFileViewerStore.getState().setEditedContent('only');
       });
@@ -488,7 +452,6 @@ describe('FileViewerPanel', () => {
       });
       render(createWrapper());
 
-      // aria-label = chat.editFileLabel { name: 文件名 }
       const textarea = await screen.findByLabelText(i18n.t('chat.editFileLabel', { name: 'a.ts' }));
       fireEvent.change(textarea, { target: { value: 'typed by user' } });
 
@@ -554,7 +517,6 @@ describe('FileViewerPanel', () => {
       fireEvent.click(screen.getByLabelText(i18n.t('fileViewer.copyContent')));
 
       await waitFor(() => expect(writeText).toHaveBeenCalledWith('hello'));
-      // copied 反馈态：aria-label / 文案切换为「已复制」
       expect(screen.getByLabelText(i18n.t('common.copied'))).toBeDefined();
     });
 
@@ -594,7 +556,6 @@ describe('FileViewerPanel', () => {
     it('异常边界：错误非 Error 实例（如字符串）→ String(error) 兜底显示', async () => {
       window.api.file = {
         ...(window.api.file ?? {}),
-        // queryFn 直接透传 rejection → error 为非 Error 值
         read: vi.fn().mockRejectedValue('boom plain string'),
       } as never;
       openViewer('C:\\proj\\src\\a.ts');
@@ -621,7 +582,6 @@ describe('FileViewerPanel', () => {
     });
   });
 
-  // ── 37 号 A：自动换行（wordWrap 设置的真实消费） ─────────────
   describe('自动换行（37-A）', () => {
     it('wrap 关闭（默认）：textarea wrap=off，容器无 file-viewer-wrap', async () => {
       diskContent = 'hello';
@@ -657,7 +617,6 @@ describe('FileViewerPanel', () => {
 
       const textarea = await screen.findByLabelText(i18n.t('chat.editFileLabel', { name: 'a.ts' }));
       expect((textarea as HTMLTextAreaElement).wrap).toBe('soft');
-      // 编辑容器（textarea+高亮层）与查看容器（pre）都带类名
       expect(container.querySelectorAll('.file-viewer-wrap').length).toBeGreaterThanOrEqual(2);
     });
 

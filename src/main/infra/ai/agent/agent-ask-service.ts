@@ -1,28 +1,3 @@
-// src/main/infra/ai/agent/agent-ask-service.ts
-// Agent 交互式提问服务：ask_user_question 工具的「等待用户作答」闭环
-// ──────────────────────────────────────────────────────────────
-// 形态：模块级单例（非 Service Container accessor，与 cronService 同模式）——
-// 全局只应存在一份 pending 表，多会话共享；调用方直接 import 单例。
-//
-// 核心机制是「挂起容器」：ask() 注册 pending 后返回一个悬置 Promise，工具执行
-// 在此 await 停住（进而整个 streamText 停住），直到三个外部出口之一解除：
-//   ① 用户作答  → respond()      → resolve(answers)
-//   ② 机器超时  → expireAsk()    → resolve(null)（工具返回「未响应」，LLM 自行继续）
-//   ③ 应用退出  → dispose()      → resolve(null)
-// 本服务**不自设任何超时定时器**：超时由 agent 回合状态机的 after 转换计时
-// （38 号 spec 阶段 2），服务只提供「到期后如何解除挂起」这一出口。
-//
-// 生命周期订阅（onAskLifecycle）是状态机的数据源：提问会挂起回合，机器据此
-// 进入 waitingInput 状态——否则挂起期间机器显示 streaming，UI 状态失真。
-// 监听器形态刻意与 permission-service 的 onApprovalLifecycle 同构，两条
-// 「回合内等用户」路径语义一致。
-//
-// 与 IPC 的两端：
-// - 出：emitEvent(IPC_DEFINITIONS.agent.subscribeAsk) 推送提问（统一出口做
-//   dev 契约校验；channel 常量取自定义表，勿手写字面量）
-// - 入：渲染层 invoke('agent:ask:respond') → agent-ask.handler → respond()
-// ──────────────────────────────────────────────────────────────
-
 import { randomUUID } from 'node:crypto';
 import type { AgentAnswer, AgentQuestion, AskResolvedPayload } from '@code-agent/shared/main';
 import { IPC_DEFINITIONS } from '@code-agent/shared/main';
@@ -170,8 +145,6 @@ export class AgentAskService {
   ): Promise<AgentAnswer[] | null> {
     const askId = randomUUID();
     return new Promise((resolve) => {
-      // 先注册再推送：推送是同步 send，注册在前可避免「已推送但表里没有」
-      // 的窗口期（此时若渲染层极快作答，respond 会找不到条目）。
       this.pending.set(askId, {
         questions,
         resolve,
@@ -179,9 +152,6 @@ export class AgentAskService {
         webContents,
       });
 
-      // 窗口已销毁：无接收方，直接以「未响应」解除挂起并回收（否则条目会
-      // 一直留在 pending 表直到机器超时）。注意仍不发 onRequested——机器
-      // 不应为一次未真正展示的提问进入 waitingInput。
       if (webContents.isDestroyed()) {
         this.pending.delete(askId);
         logger.warn({ askId }, 'webContents 已销毁，提问直接返回未响应');
@@ -189,10 +159,6 @@ export class AgentAskService {
         return;
       }
 
-      // 推送提问：emitEvent 统一出口（dev 环境按定义表 payloadSchema 校验，
-      // 防「主进程改结构忘同步契约」；channel 取自 IPC_DEFINITIONS 常量表，
-      // 硬编码字符串会脱离真源链——曾因裸写 'agent:event:ask' 在 meta 改名后
-      // 静默发向死通道）。字段条件展开：exactOptionalPropertyTypes 下不可显式传 undefined。
       emitEvent(webContents, IPC_DEFINITIONS.agent.subscribeAsk, {
         sessionId,
         askId,
@@ -205,8 +171,6 @@ export class AgentAskService {
       });
       logger.info({ askId, questionCount: questions.length }, '提问已推送（ask_user_question）');
 
-      // 生命周期：真实推送后才通知（机器 → waitingInput）。与上方销毁分支
-      // 相对——未展示给用户的提问不改变机器状态。
       for (const listener of this.lifecycleListeners) {
         try {
           listener.onRequested({ sessionId, askId });
@@ -234,8 +198,6 @@ export class AgentAskService {
     this.pending.delete(askId);
     entry.resolve(answers);
     logger.info({ askId }, '提问已回答');
-    // 生命周期：决议完成（机器 → 回 streaming）；渲染层回推保证配对闭合
-    // （前端已自行移出队列时收到为幂等 no-op）
     this.emitResolved({ sessionId: entry.sessionId, askId, decision: 'answered' });
     this.emitResolvedToRenderer(entry, askId, 'answered');
     return true;
@@ -257,8 +219,6 @@ export class AgentAskService {
     this.pending.delete(askId);
     logger.warn({ askId }, '提问超时（机器 after 转换触发），返回未响应');
     this.emitResolved({ sessionId: entry.sessionId, askId, decision: 'timed-out' });
-    // 渲染层回推：超时是**非用户路径**，此前渲染层完全不知情——弹窗永久残留、
-    // 倒计时归零仍显示；队列化后更会阻塞后续提问（2026-10-08 修复）
     this.emitResolvedToRenderer(entry, askId, 'timed-out');
     entry.resolve(null);
   }

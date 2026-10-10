@@ -1,12 +1,3 @@
-// packages/shared/src/schemas/models.ts
-// 模型清单契约（models:list）
-// ──────────────────────────────────────────────────────────────
-// 背景：渲染层模型选择器此前硬编码内置模型表（MODEL_CONFIGS），
-// 与主进程 modelRegistry 真实注册表不一致（双源漂移）。
-// 本契约暴露主进程真实清单（内置 + 运行时合并），渲染层零硬编码——
-// 后端没有就是没有。
-// ──────────────────────────────────────────────────────────────
-
 import { z } from 'zod';
 
 import { ApiKeyProviderSchema, ModelApiFormatSchema } from './settings';
@@ -78,22 +69,17 @@ export const ModelsListBuiltinResSchema = ModelsListResSchema;
  */
 export const TestModelReqSchema = z.object({
   providerKind: ApiKeyProviderSchema,
-  // 模型 id（可选；用于请求体 model 字段，省略用占位值）
   modelId: z.string().min(1).max(100).optional(),
-  // 显式 baseUrl（可选；省略走主进程默认端点）
   baseUrl: z
     .string()
     .url()
     .optional()
     .transform((v) => v ?? undefined),
-  // 显式 API Key（可选；省略回退 keychain 提供商/运行时模型 key）
   apiKey: z
     .string()
     .min(1)
     .optional()
     .transform((v) => v ?? undefined),
-  // API 协议格式（可选；省略 = 按 providerKind 默认 / 已存记录值）
-  // 保存前测试时模型尚未落库，必须随请求传入才能测到用户选的格式
   apiFormat: ModelApiFormatSchema.optional(),
 });
 

@@ -1,18 +1,3 @@
-// src/renderer/components/common/CommandPalette.tsx
-// 命令面板 · ⌘P 全局快捷搜索（cmdk + fuse.js 实现）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 全局命令面板（⌘P 触发）：搜索 + 键盘导航 + 执行命令
-// - 基础命令：新建会话 / 切换主题 / 打开设置
-// - 文件命令：动态派生自文件树，点击打开文件
-// - 会话命令：动态派生自会话列表，点击切换激活会话并跳转
-//
-// 设计（cmdk 重写，2026-08）：
-// - 键盘导航（↑↓ / Enter / Esc）与选中态由 cmdk 内置处理（data-selected）
-// - 模糊搜索用 fuse.js（标题 + 分组字段），替代手写 includes 过滤
-// - 组件 props 接口不变（open / onOpenChange 受控），AppShell 零改动
-// ──────────────────────────────────────────────────────────────
-
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from 'cmdk';
 import Fuse from 'fuse.js';
 import {
@@ -131,10 +116,6 @@ interface BuildCommandsContext {
 function buildCommands(ctx: BuildCommandsContext): readonly CommandItemData[] {
   const { t, closePalette } = ctx;
   const isFileTree = ctx.sidebarView === 'fileTree';
-  // 「下一个主题」的展示元数据。
-  // 先取到局部变量再传给 t：check-i18n 的「间接引用」识别只匹配
-  // t(标识符 / 成员访问)，写成 t(THEME_META[x].titleKey)（含方括号）不会被识别，
-  // 会把三个主题 key 误报为「冗余」。
   const themeMeta = THEME_META[nextTheme(ctx.theme)];
 
   const baseCommands: readonly CommandItemData[] = [
@@ -143,7 +124,6 @@ function buildCommands(ctx: BuildCommandsContext): readonly CommandItemData[] {
       section: t('palette.sectionActions'),
       title: t('palette.newChat'),
       icon: Plus,
-      // 与 settings 默认快捷键一致，按平台显示修饰键（此前硬编码 Ctrl+N）
       shortcut: `${ctx.modKey}+N`,
       action: () => {
         ctx.clearActiveSession();
@@ -155,7 +135,6 @@ function buildCommands(ctx: BuildCommandsContext): readonly CommandItemData[] {
     {
       id: 'toggle-theme',
       section: t('palette.sectionActions'),
-      // 三态循环（dark→light→system）：标题与图标指向「下一个」主题（表驱动）
       title: t(themeMeta.titleKey),
       icon: themeMeta.icon,
       action: () => {
@@ -194,7 +173,6 @@ function buildCommands(ctx: BuildCommandsContext): readonly CommandItemData[] {
       },
     },
     {
-      // 对齐参考项目 show/hide-left-sidebar 命令（标题随折叠状态切换，快捷键 ⌘B/⌘1 另有绑定）
       id: 'toggle-sidebar',
       section: t('palette.sectionActions'),
       title: ctx.sidebarCollapsed ? t('palette.showSidebar') : t('palette.hideSidebar'),
@@ -205,7 +183,6 @@ function buildCommands(ctx: BuildCommandsContext): readonly CommandItemData[] {
       },
     },
     {
-      // 对齐参考项目 show/hide-right-sidebar 命令（标题随折叠状态切换，快捷键 ⌘J/⌘2 另有绑定）
       id: 'toggle-right-panel',
       section: t('palette.sectionActions'),
       title: ctx.rightPanelCollapsed ? t('palette.showRightPanel') : t('palette.hideRightPanel'),
@@ -216,13 +193,11 @@ function buildCommands(ctx: BuildCommandsContext): readonly CommandItemData[] {
       },
     },
     {
-      // 对齐参考项目 codex.openTerminal 命令（Ctrl+` 快捷键另有绑定）
       id: 'open-terminal',
       section: t('palette.sectionActions'),
       title: t('palette.openTerminal'),
       icon: TerminalSquare,
       action: () => {
-        // 展开右面板 + 切换到终端 tab
         useUiStore.getState().setRightPanelCollapsed(false);
         useUiStore.getState().setDevPanelTab('terminal');
         closePalette();
@@ -275,9 +250,7 @@ function buildSessionCommands(ctx: BuildCommandsContext): readonly CommandItemDa
 export function CommandPalette({ open, onOpenChange }: CommandPaletteProps): ReactElement | null {
   const navigate = useNavigate();
   const { theme, setTheme } = useTheme();
-  // 本地化文案
   const { t } = useTranslation();
-  // 平台修饰键：macOS ⌘ / Windows-Linux Ctrl（快捷键展示与 settings 默认一致）
   const isMac =
     typeof navigator !== 'undefined' && navigator.platform?.toLowerCase().includes('mac') === true;
   const modKey = isMac ? '⌘' : 'Ctrl';
@@ -292,25 +265,17 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps): Rea
   const openFile = useFileViewerStore((state) => state.openFile);
 
   const [query, setQuery] = useState('');
-  // 关闭时清空搜索词：本组件由 AppShell 常驻挂载（关闭只 `return null`，状态保留），
-  // 此前重新打开会带着上一次的搜索词与 cmdk 内部选中态。放在关闭分支里清，
-  // 而不是打开时清——避免打开首帧先渲染旧词再被重置的闪烁。
   useEffect(() => {
     if (!open) setQuery('');
   }, [open]);
-  // 全局 UI store：设置对话框入口（命令面板 / Topbar / 错误动作共享）
   const openSettings = useUiStore((state) => state.openSettings);
-  // 侧栏视图切换（文件树为独立视图：对齐参考项目 codex.openFileTree 命令）
   const sidebarView = useUiStore((state) => state.sidebarView);
   const setSidebarView = useUiStore((state) => state.setSidebarView);
-  // 面板折叠切换（对齐参考项目 show/hide-left/right-sidebar 命令：标题随状态切换）
   const sidebarCollapsed = useUiStore((state) => state.sidebarCollapsed);
   const rightPanelCollapsed = useUiStore((state) => state.rightPanelCollapsed);
   const setSidebarCollapsed = useUiStore((state) => state.setSidebarCollapsed);
   const setRightPanelCollapsed = useUiStore((state) => state.setRightPanelCollapsed);
 
-  // 命令列表（操作组 + 文件组 + 会话组）（依赖外部状态派生；React Compiler 自动缓存）
-  // 构建逻辑已外提为 buildCommands（见文件头「抽离动机」），组件只负责注入依赖
   const sessions = sessionsData ?? [];
   const commands = buildCommands({
     t,
@@ -337,13 +302,11 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps): Rea
     },
     openSettings,
     quitApp: () => {
-      // 退出走完整善后链（before-quit 协商 → dispose → 延迟安装）
       quitApp();
     },
     closePalette: () => onOpenChange(false),
   });
 
-  // fuse.js 模糊搜索（标题 + 分组字段；空查询时返回全部；React Compiler 自动缓存）
   const fuse = new Fuse([...commands], {
     keys: ['title', 'section'],
     threshold: FUSE_THRESHOLD,
@@ -366,13 +329,9 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps): Rea
       aria-label={t('topbar.commandPalette')}
       aria-modal="true"
       onClick={(e) => {
-        // 点击遮罩空白处关闭
         if (e.target === e.currentTarget) onOpenChange(false);
       }}
       onKeyDown={(e) => {
-        // 键盘可达性：Esc 关闭。cmdk 1.1.1 自身**不**处理 Escape（其 root
-        // onKeyDown 只覆盖 n/j/p/k/Arrow/Enter/Home/End，也不持有 onOpenChange），
-        // 故此处的显式处理是唯一路径，不是兜底重复。
         if (e.key === 'Escape') {
           e.preventDefault();
           onOpenChange(false);

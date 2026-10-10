@@ -1,30 +1,7 @@
-// src/renderer/i18n/config.ts
-// i18next 配置入口
-// ──────────────────────────────────────────────────────────────
-// 设计原则：
-// - 资源文件按 namespace 拆分（errors / common / 后续业务 namespace）
-// - 默认语言 zh-CN，fallback 也是 zh-CN（保证缺失 key 时显示中文而非 key 本身）
-// - 语言检测：localStorage > navigator > 默认
-// - 与 settings-store 协同：settings-store 不直接管理语言，
-//   而是由 LanguageDetector 持久化到 localStorage（key: code-agent:lang）
-//   这样 settings-store 不必引入 i18next 类型，保持职责单一
-//
-// 资源加载策略：
-// - 当前采用「全量打包」模式（所有语言资源都进 bundle）
-// - 适合 Electron 渲染层（无网络请求，本地资源）
-// - 未来语言增多可改为按需 import() + Suspense 懒加载
-//
-// i18next API 参考：
-// - use() 用于注册插件（initReactI18next / LanguageDetector）
-// - init() 返回 Promise，但资源已通过 import 内联时同步可用
-// - 全局 instance 共享，单次初始化
-// ──────────────────────────────────────────────────────────────
-
 import i18next from 'i18next';
 import LanguageDetector from 'i18next-browser-languagedetector';
 import { initReactI18next } from 'react-i18next';
 
-// 资源文件导入（Vite 支持 JSON 默认导入）
 import enCommon from './locales/en/common.json';
 import enErrors from './locales/en/errors.json';
 import zhCNCommon from './locales/zh-CN/common.json';
@@ -63,29 +40,21 @@ export const resources = {
 
 /** i18next 初始化配置 */
 export const i18nOptions = {
-  // 默认语言（也是 fallback）
   lng: DEFAULT_LANGUAGE,
-  // 回退语言：当当前语言缺失某个 key 时，回退到 zh-CN
   fallbackLng: DEFAULT_LANGUAGE,
-  // 资源
   resources,
-  // 默认命名空间
   defaultNS: 'common',
-  // 启用的命名空间
   ns: ['common', 'errors'],
-  // 插值：避免 XSS（默认已开启，显式声明）
   interpolation: {
-    escapeValue: false, // React 已自动转义，i18next 不需要再转义
+    escapeValue: false,
   },
-  // 语言检测
   detection: {
     order: ['localStorage', 'navigator'],
     lookupLocalStorage: LANGUAGE_STORAGE_KEY,
     cachesLocalStorage: ['localStorage'],
   },
-  // React 集成
   react: {
-    useSuspense: false, // Electron 渲染层不需要 Suspense（资源已打包）
+    useSuspense: false,
   },
 };
 
@@ -107,20 +76,14 @@ export function initI18n(): typeof i18next {
   }
   initialized = true;
 
-  // use() 返回 i18next 实例，链式调用
-  // init() 同步完成（资源已内联，无网络请求）
   void i18next.use(initReactI18next).use(LanguageDetector).init(i18nOptions);
 
-  // 2026-09-08 修复（a11y / WCAG 3.1.1）：<html lang> 此前硬编码为 zh-CN，
-  // 切到英文后屏幕阅读器仍按中文发音、搜索引擎/翻译工具也识别错误。
-  // 这里在语言变更（含首次初始化）时同步文档根节点的 lang 属性。
   const syncHtmlLang = (lng: string): void => {
     if (typeof document !== 'undefined') {
       document.documentElement.lang = lng;
     }
   };
   i18next.on('languageChanged', syncHtmlLang);
-  // 初始化可能已完成（资源内联），主动同步一次当前值
   if (i18next.language !== undefined) {
     syncHtmlLang(i18next.language);
   }

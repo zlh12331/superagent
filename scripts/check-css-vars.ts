@@ -1,21 +1,3 @@
-// scripts/check-css-vars.ts
-// CSS 变量引用完整性门禁：扫描 var(--x) 引用，断言每个都有定义
-// ──────────────────────────────────────────────────────────────
-// 背景（2026-09-14）：实测发现 5 处 var(--x) 引用了从未定义的令牌
-// （--z-dropdown / --z-raised / --bg-elev-1 / --text-muted / --accent-2-dim），
-// 导致对应 CSS 声明被浏览器静默丢弃——比裸色值更隐蔽：
-//   check:tokens 查「裸色值/裸 z 数字」能查，
-//   但查不出「引用了不存在的令牌」。
-// 本门禁补上这个盲区（与 check:csp-hash / check:compiler 同属「防静默失效」家族）。
-// 判据核在 scripts/lib/css-vars.ts（反例测试同目录）。
-//
-// 豁免（按需，均需给出理由）：
-// - 运行时注入：Radix 等库在运行时设置（--radix-*）；Tailwind v4 动态前缀（--spacing 等）
-// - 带 fallback 的引用：var(--x, fallback) 即使 --x 未定义也有确定取值，不算失效
-//
-// 运行：pnpm check:css-vars
-// ──────────────────────────────────────────────────────────────
-
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -47,7 +29,6 @@ function main(): void {
   const files = SCAN_DIRS.flatMap((d) => collectFiles(join(ROOT, d)));
   let referenceCount = 0;
 
-  // 两遍扫描：先并集全仓定义（tokens.css 的定义对全组件生效），再判缺失
   const scans = files.map((file) => {
     const scan = scanCssVars(readFileSync(file, 'utf8'));
     for (const name of scan.defined) defined.add(name);

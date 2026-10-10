@@ -1,11 +1,3 @@
-// src/main/window-show.test.ts
-// 主窗口唤回唯一实现的单测
-// ──────────────────────────────────────────────────────────────
-// 覆盖两条 2026-09-21 实测缺陷的修复语义：
-// - P0-1：静默启动时 maximize() 会显示窗口 ⇒ 改为 pending 标志，首次唤回时应用
-// - P0-2：隐藏窗口上 focus() 不显示 ⇒ 唤回必须经 showMainWindow（内含 show()）
-// ──────────────────────────────────────────────────────────────
-
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => {
@@ -32,7 +24,6 @@ const mocks = vi.hoisted(() => {
       },
       maximize(): void {
         calls.push('maximize');
-        // Electron 语义：maximize 会显示未显示的窗口（electron.d.ts:3101）
         win.visible = true;
       },
       show(): void {
@@ -49,7 +40,6 @@ const mocks = vi.hoisted(() => {
 });
 
 vi.mock('electron', () => ({
-  // 字符串键：避免 useNamingConvention 对 PascalCase 属性名的检查（与 devtools.handler.test 同法）
   ['BrowserWindow']: {
     getAllWindows: () => mocks.windows,
   },
@@ -83,10 +73,9 @@ describe('window-show（主窗口唤回唯一实现）', () => {
 
       expect(showMainWindow()).toBe(true);
 
-      // 关键：show() 必须被调用——此前 second-instance 只做 focus()，隐藏窗口唤不出
       expect(win.calls).toEqual(['show', 'focus']);
       expect(win.isVisible()).toBe(true);
-      expect(win.calls).not.toContain('restore'); // 未最小化时无需 restore
+      expect(win.calls).not.toContain('restore');
     });
 
     it('最小化窗口 → restore 在 show 之前', () => {
@@ -116,10 +105,6 @@ describe('window-show（主窗口唤回唯一实现）', () => {
 
       showMainWindow();
 
-      // maximize 与 show 都在：maximize 负责"回到最大化态"，show 负责"确保可见"。
-      // 实测（.tmp 探针，2026-09-21）：Electron 上 maximize 之后紧接 show() 不改变
-      // isMaximized 与 bounds（前后一致 1722×1034），故多这一次 show 无副作用；
-      // 反之若某平台 maximize() 不显示窗口，show() 是必要的兜底。
       expect(win.calls).toEqual(['maximize', 'show', 'focus']);
       expect(win.isVisible()).toBe(true);
     });
@@ -130,7 +115,7 @@ describe('window-show（主窗口唤回唯一实现）', () => {
       markMaximizeOnNextShow();
 
       showMainWindow();
-      win.calls.length = 0; // 清掉首次记录
+      win.calls.length = 0;
       showMainWindow();
 
       expect(win.calls).toEqual(['show', 'focus']);

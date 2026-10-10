@@ -1,20 +1,4 @@
-// src/main/infra/ai/tools/denial-tracking.ts
-// AUTO 模式拒绝跟踪状态机（信任衰减守卫）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 跟踪 auto 模式下用户的拒绝次数（连续 / 累计）
-// - 超阈值 → 下一次工具调用降级为手动确认（单次降级，会话保持 auto）
-// - 防止"模型反复尝试被拒操作"形成死循环
-//
-// 借鉴声明：
-// 本模块参考 qwen-code 参考项目 packages/core/src/permissions/denialTracking.ts
 // （Copyright 2025 Qwen Team，SPDX-License-Identifier: Apache-2.0）的
-// AUTO_MODE_DENIAL_LIMITS / createDenialState / recordDenial 状态机语义，
-// 按我们的技术栈收敛重写：
-// - 我们无 LLM 分类器（无 unavailable 概念）：合并为单一拒绝计数
-// - 阈值对齐 qwen 的 maxConsecutiveBlock=3 / maxTotalDenials=20
-// - 增加 recordAllowance（用户放行重置连续计数，对齐 qwen 交叉重置语义）
-// ──────────────────────────────────────────────────────────────
 
 /**
  * 拒绝跟踪状态

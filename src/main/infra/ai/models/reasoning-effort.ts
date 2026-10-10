@@ -1,26 +1,3 @@
-// src/main/infra/ai/models/reasoning-effort.ts
-// 思考强度阶梯：统一档位 + 归一化 + 按模型能力钳制
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 定义五档思考强度（low/medium/high/xhigh/max），对齐 qwen-code 的
-//   reasoning-effort 阶梯（源自 openclaw thinking-level 模型）
-// - normalizeReasoningEffort：用户自由输入 → 规范档位
-// - clampReasoningEffort：请求档位 → 模型实际支持的档位（钳制）
-// - DeepSeek v4 官方映射表（api-docs.deepseek.com/zh-cn/guides/thinking_mode）：
-//   | 请求档位 | v4-flash 实际 | v4-pro 实际 |
-//   | low    | low          | high        |
-//   | high   | high         | high        |
-//   | xhigh  | high         | max         |
-//   | max    | max          | max         |
-//
-// 接线现状：
-// - clampDeepSeekReasoningEffort 已接线：generation-options 构造思考强度时
-//   对 DeepSeek 模型应用官方逐档映射
-// - normalizeReasoningEffort / clampReasoningEffort 当前无生产调用方
-//   （仅桶导出与单测，预留能力——用户自定义思考强度输入的归一化与
-//   通用钳制未接线；接入点应在设置域模型配置的输入侧）
-// ──────────────────────────────────────────────────────────────
-
 /**
  * 统一思考强度档位（弱 → 强）
  *
@@ -113,12 +90,10 @@ export function clampReasoningEffort(
   const ranked = [...supportedSet].sort(
     (a, b) => REASONING_EFFORT_RANKS[a] - REASONING_EFFORT_RANKS[b],
   );
-  // 取 ≥ 请求档位的最小支持档；没有则取最强可用档（封顶）
   const stronger = ranked.find((tier) => REASONING_EFFORT_RANKS[tier] >= requestedRank);
   if (stronger !== undefined) {
     return stronger;
   }
-  // noUncheckedIndexedAccess 防御：supportedSet 非空（length > 0 分支已保证）
   return ranked[ranked.length - 1] ?? requested;
 }
 

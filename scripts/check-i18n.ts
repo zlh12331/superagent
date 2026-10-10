@@ -1,15 +1,3 @@
-// scripts/check-i18n.ts
-// i18n 审计（工程化强制）：t() 引用 vs 语言包 key 双向校验 + 双语一致性
-// ──────────────────────────────────────────────────────────────
-// 依据 docs/design/14-i18n-spec.md：
-//   1. 双语言文件结构必须完全一致（key 集合相同）
-//   2. 引用 key 必须存在于语言包（缺失 = 运行时泄漏 key 原文）
-//   3. 语言包 key 不得冗余（未引用 = 死文案）
-// 动态 key（t(`approval.${...}`) 模板串）跳过。
-//
-// 运行：pnpm check:i18n
-// ──────────────────────────────────────────────────────────────
-
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 
@@ -60,16 +48,13 @@ function collectStaticKeys(file: string): { direct: string[]; used: string[] } {
     const t = line.trim();
     if (t.startsWith('//') || t.startsWith('*') || t.startsWith('/*')) return;
     for (const m of line.matchAll(re)) {
-      // 捕获组在正则命中时必然存在；显式判 undefined 仅为满足 noUncheckedIndexedAccess
       const captured = m[1];
       if (captured !== undefined) direct.push(captured);
     }
-    // 非字符串实参的 t() 调用：t(labelKey) / t(item.labelKey) 等
     if (/\bt\(\s*[a-zA-Z_$][\w$.]*\s*\)/.test(line)) hasIndirectT = true;
   });
   const used = [...direct];
   if (!hasIndirectT) return { direct, used };
-  // key 形状：小写字母开头，点分 1-4 段（排除 channel/错误码/URL 等含冒号连字符的串）
   const keyRe = /^[a-z][a-zA-Z0-9]*(\.[a-zA-Z0-9]+){1,4}$/;
   for (const line of lines) {
     const t = line.trim();
@@ -107,7 +92,6 @@ function collectDynamicPrefixes(files: string[]): Set<string> {
 function collectHardcodedZhText(file: string): string[] {
   if (!file.endsWith('.tsx')) return [];
   const rel = relative(ROOT, file).split('\\').join('/');
-  // 测试文件不参与硬编码文案审计（此前按 __tests__ 目录排除，测试改为与源码同目录后按文件名排除）
   if (rel.includes('/test/') || rel.includes('.test.')) {
     return [];
   }
@@ -119,8 +103,6 @@ function collectHardcodedZhText(file: string): string[] {
 
 function loadLocale(lang: string): { common: Set<string>; errors: Set<string> } {
   const dir = join(LOCALES, lang);
-  // 语言包与命名空间一一对应、扁平无包装（2026-09-17 移除旧 translation 包装，
-  // 与 i18next-cli / IDE 插件的扁平解析预期对齐）
   const common = JSON.parse(readFileSync(join(dir, 'common.json'), 'utf8')) as Record<
     string,
     unknown
@@ -133,13 +115,11 @@ function loadLocale(lang: string): { common: Set<string>; errors: Set<string> } 
 }
 
 function main(): number {
-  // --strict：冗余 key 也卡关（默认仅缺失/双语不一致卡关，存量冗余可渐进清理）
   const strict = process.argv.includes('--strict');
   const en = loadLocale('en');
   const zh = loadLocale('zh-CN');
   const problems: string[] = [];
 
-  // 1. 双语 key 集合一致性（common + errors）
   for (const [name, enSet, zhSet] of [
     ['common', en.common, zh.common],
     ['errors', en.errors, zh.errors],
@@ -148,7 +128,6 @@ function main(): number {
     for (const k of zhSet) if (!enSet.has(k)) problems.push(`zh-CN ${name}.${k} 缺失于 en`);
   }
 
-  // 2. 渲染层引用校验
   const rendererFiles = walk(RENDERER).filter((f) => f.endsWith('.tsx') || f.endsWith('.ts'));
   const used = new Set<string>();
   const missing: string[] = [];
@@ -156,7 +135,6 @@ function main(): number {
     const { direct, used: fileUsed } = collectStaticKeys(file);
     for (const key of fileUsed) used.add(key);
     for (const key of direct) {
-      // errors 命名空间：useErrorMessage 用 t(`errors.${code}`)，code 无前缀
       const inCommon = en.common.has(key);
       const inErrors = key.startsWith('errors.') && en.errors.has(key.slice('errors.'.length));
       if (!inCommon && !inErrors) {
@@ -165,20 +143,15 @@ function main(): number {
     }
   }
 
-  // 3. 冗余 key（静态域内未被引用；动态模板前缀域（chat./approval./dev./git. 等）无法静态判定，豁免）
   const dynamicPrefixes = collectDynamicPrefixes(rendererFiles);
   const unused: string[] = [];
   for (const k of en.common) {
     const dynamic = [...dynamicPrefixes].some((p) => k.startsWith(p));
-    // 2026-09-08：i18next 复数形态（key_one / key_other / key_zero / key_two / key_few /
-    // key_many）在代码里以基础 key + { count } 调用，静态看不到后缀 key——
-    // 按基础 key 的引用情况判定，避免误报冗余。
     const baseKey = k.replace(/_(zero|one|two|few|many|other)$/, '');
     const pluralBase = baseKey !== k && used.has(baseKey);
     if (!used.has(k) && !pluralBase && !dynamic) unused.push(`en common.${k} 未被引用`);
   }
 
-  // 4. JSX 中文文案未走 t()（盲区：原只校验已写的 t() key，查不出「直接写死中文」）
   const hardcodedText: string[] = [];
   for (const file of rendererFiles) hardcodedText.push(...collectHardcodedZhText(file));
 

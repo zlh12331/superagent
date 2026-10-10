@@ -1,26 +1,4 @@
-// src/main/infra/ai/agent/stall-watchdog.ts
-// 停滞看门狗：无进展回合的检测 + 重试（对齐 qwen workflow-stall 语义收敛）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 委托执行期间由调用方喂入进度事件（progress / tool-start / tool-end），
-//   超阈值无进展即判定停滞
-// - 工具执行中暂停计时（长跑工具不被误判）
-// - 停滞时 abort 当前尝试（per-attempt AbortController）并重试，上限 maxAttempts；
-//   父取消立即传播且不重试
-//
-// 计时模型（runAttempt 内）：
-// - 轮询间隔 = min(stallMs, 1s)：阈值短于 1s 时按阈值轮询，长阈值按 1s 轮询以
-//   保证 abort 及时；每轮读 lastProgressAt，超过 stallMs 且无工具在飞 → abort('stalled')
-// - 刷新点：progress（任意推理进展）、tool-end（工具结束恢复计时）
-// - 暂停点：tool-start 置 toolInFlight=true，期间即使无进展也不 abort
-//
-// 借鉴声明：
-// 本模块参考 qwen-code 参考项目 packages/core/src/agents/runtime/workflow-stall.ts
 // （Copyright 2026 Qwen Team，SPDX-License-Identifier: Apache-2.0）的
-// stall watchdog 语义，按我们的技术栈收敛重写：
-// - 移除 env 解析 / debugLogger / AgentEventEmitter 强耦合（改为回调喂入）
-// - 保持核心不变式：无进展计时 + 工具飞行中暂停 + 停滞 abort 重试
-// ──────────────────────────────────────────────────────────────
 
 import { logger } from '../../../utils/logger';
 
@@ -94,7 +72,6 @@ export class StallWatchdog {
     const { dispatch, onEvent, signal, label } = options;
     const report = onEvent ?? ((): void => {});
 
-    // 父取消判定：读 signal.aborted（每次现读；闭包缓存会触发 TS 收窄误报且丢最新状态）
     const parentCancelled = (): boolean => signal?.aborted ?? false;
 
     try {
@@ -109,18 +86,15 @@ export class StallWatchdog {
         try {
           return await this.runAttempt(dispatch, report, signal, label);
         } catch (err: unknown) {
-          // 父取消（不重试）；停滞 abort 或委托自身失败（重试）
           if (parentCancelled()) {
             throw new Error('执行被父信号取消');
           }
           lastFailure = err;
         }
       }
-      // 全部尝试耗尽
       const message = lastFailure instanceof Error ? lastFailure.message : String(lastFailure);
       throw new Error(`${label} 停滞重试耗尽（${this.maxAttempts} 次）：${message}`);
     } finally {
-      // 无残留监听（父取消传播在 runAttempt 内管理）
     }
   }
 
@@ -142,11 +116,9 @@ export class StallWatchdog {
       parentSignal.addEventListener('abort', parentListener);
     }
 
-    // 计时状态
     let lastProgressAt = Date.now();
     let toolInFlight = false;
     let stalled = false;
-    // 轮询：阈值与 1s 取小（长阈值也保证 ~1s 内发现停滞）；stalled/工具在飞/已 abort 时跳过
     const timer = setInterval(
       () => {
         if (stalled || toolInFlight || controller.signal.aborted) {
@@ -162,8 +134,6 @@ export class StallWatchdog {
     );
 
     try {
-      // 进度桥接：按事件类型维护计时状态后透传给调用方
-      // tool-start 暂停计时；tool-end 恢复并刷新；其余（progress）刷新
       const bridged: (event: WatchdogEvent) => void = (event) => {
         if (event.type === 'tool-start') {
           toolInFlight = true;
@@ -178,8 +148,6 @@ export class StallWatchdog {
       return await dispatch(controller.signal, bridged);
     } finally {
       clearInterval(timer);
-      // 2026-09-08 修复：父 signal 监听此前从不移除——每次 guard 都会在
-      // 长生命周期的父 signal 上遗留一个监听器（重试次数 × 调用次数无界累积）。
       if (parentSignal !== undefined) {
         parentSignal.removeEventListener('abort', parentListener);
       }

@@ -1,6 +1,3 @@
-// src/main/infra/im/adapters/weixin-stream.test.ts
-// 微信消息单测：iLink 消息解析（纯函数）+ getupdates 协议（本地 HTTP 注入）
-
 import { createServer, type Server } from 'node:http';
 import { afterEach, describe, expect, it } from 'vitest';
 import {

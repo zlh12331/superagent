@@ -1,6 +1,3 @@
-// src/main/infra/ai/agent/turn-usage-report.test.ts
-// usage 投影与遥测上报（纯函数 + fake 注入，无 mock 框架）
-
 import { describe, expect, it, vi } from 'vitest';
 import { projectTurnUsage, reportTurnUsage } from './turn-usage-report';
 
@@ -97,6 +94,6 @@ describe('reportTurnUsage', () => {
       usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
     });
     await vi.waitFor(() => expect(deps.recordUsage).toHaveBeenCalled());
-    expect(deps.span.setAttribute).toHaveBeenCalled(); // 不被持久化失败阻断
+    expect(deps.span.setAttribute).toHaveBeenCalled();
   });
 });

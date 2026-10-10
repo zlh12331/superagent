@@ -1,27 +1,3 @@
-// src/main/infra/ai/providers/endpoint.ts
-// 供应商端点 URL 推导（单一真源，纯函数零依赖）
-// ──────────────────────────────────────────────────────────────
-// 背景（2026-10-08 缺陷修复）：端点 URL 此前有**两份独立实现**且规则不同——
-// - 调用路径（registry.ts 工厂）：trimTrailingSlash + withOpenAiV1（/v1 幂等）
-// - 连通性探测（models.handler.ts 的 buildTestUrl）：纯字符串拼接，既不 trim
-//   也不去重 → 用户填 `http://127.0.0.1:9527/v1`（自定义模式的常见填法）时
-//   探测打到 `/v1/v1/chat/completions` 得 404，**在保存前就拦住了本可正常
-//   使用的配置**（真实调用经 withOpenAiV1 反而是对的）。
-// 同类事故 2026-09-06 已修过一次（只修了调用路径），根因是"同一事实两处各算
-// 一遍"——本模块把它收敛为唯一实现，两条路径共用。
-//
-// 设计依据（AI SDK 源码实读，勿凭印象改）：
-// - `@ai-sdk/openai-compatible` 3.0.43：`baseURL = withoutTrailingSlash(options.baseURL)`
-//   （仅去单个尾部斜杠），URL = `new URL(`${baseURL}${path}`)`，chat path = `/chat/completions`
-// - `@ai-sdk/openai` 4.0.58：同形（`withoutTrailingSlash` + `/chat/completions`）
-// - `@ai-sdk/anthropic` 4.0.49：`normalizeBaseURL` **仅当 baseURL 恰为官方地址
-//   `https://api.anthropic.com` 时**补 `/v1`，自建网关原样透传；URL = `${baseURL}/messages`
-//
-// 本模块输出的是「交给 SDK 的 baseURL」与「该配置最终请求的完整 URL」两个口径：
-// 前者给工厂（SDK 会再拼协议路径），后者给连通性探测（自己拼协议路径）。
-// 两者共用同一份端点归一化规则，结构上不可能再漂移。
-// ──────────────────────────────────────────────────────────────
-
 import type { ModelApiFormat } from '@code-agent/shared/main';
 
 import type { ProviderKind } from './types';
@@ -49,14 +25,10 @@ interface EndpointPolicy {
 }
 
 const ENDPOINT_POLICIES: Record<ProviderKind, EndpointPolicy> = {
-  // 根地址 + SDK 拼 /chat/completions → 需要 /v1 段
   deepseek: { fillVersionSuffix: '/v1' },
   openai: { fillVersionSuffix: '/v1' },
   ollama: { fillVersionSuffix: '/v1' },
-  // anthropic 协议路径是 /messages；SDK 只对官方地址补 /v1，自建网关原样
-  // ——此处对齐 SDK 语义（否则探测 /v1/messages 与真实调用 /messages 不一致）
   anthropic: { fillVersionSuffix: '/v1', onlyWhenEquals: ANTHROPIC_OFFICIAL_URL },
-  // 默认地址已含版本段（/v1、/api/paas/v4、/compatible-mode/v1 等），不补
   moonshot: { fillVersionSuffix: null },
   zhipu: { fillVersionSuffix: null },
   qwen: { fillVersionSuffix: null },
@@ -86,17 +58,13 @@ export function resolveProviderBaseUrl(kind: ProviderKind, baseUrl: string): str
   if (onlyWhenEquals !== undefined && trimmed !== onlyWhenEquals) {
     return trimmed;
   }
-  // 幂等：已以该后缀结尾则不重复追加（`/v1/v1/…` → 404 的历史根因）
   return trimmed.endsWith(fillVersionSuffix) ? trimmed : `${trimmed}${fillVersionSuffix}`;
 }
 
 /** 协议路径（必须与 SDK 内部使用的 path 逐字一致，见各自源码依据） */
 const PROTOCOL_PATHS: Record<ModelApiFormat, string> = {
-  // @ai-sdk/openai-compatible 3.0.43 / @ai-sdk/openai 4.0.58：path: "/chat/completions"
   'openai-chat': '/chat/completions',
-  // @ai-sdk/openai 4.0.58（createResponsesModel）：path: "/responses"
   'openai-responses': '/responses',
-  // @ai-sdk/anthropic 4.0.49：`${baseURL}/messages`
   'anthropic-messages': '/messages',
 };
 

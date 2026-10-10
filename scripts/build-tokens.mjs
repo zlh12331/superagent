@@ -1,20 +1,8 @@
-// scripts/build-tokens.mjs
-// Aurora 令牌构建（Style Dictionary 5）：tokens/aurora.json → src/renderer/styles/tokens.css
-// ──────────────────────────────────────────────────────────────
-// 依据 DESIGN.md（仓库根；令牌契约单一真源：tokens/aurora.json）
-// 输出：:root（value）+ .dark（dark 扩展字段，仅差异令牌）
-// 用法：
-//   pnpm tokens:build    # 生成 tokens.css
-//   pnpm tokens:check    # 生成后校验无 diff（CI 用）
-// ──────────────────────────────────────────────────────────────
-
 import fs from 'node:fs';
 import StyleDictionary from 'style-dictionary';
 
-// SD 5 要求 source/buildPath 相对 cwd（绝对路径不解析）
 const SOURCE = 'tokens/aurora.json';
 const OUTPUT_REL = 'src/renderer/styles/tokens.css';
-// 自定义 format：:root 段（value）+ .dark 段（dark 扩展，仅差异）
 StyleDictionary.registerFormat({
   name: 'aurora/css',
   format: ({ dictionary }) => {

@@ -1,11 +1,3 @@
-// src/renderer/dev/mock-data.ts
-// dev mock 响应样板数据（自 mock-api.ts 拆分）
-// ──────────────────────────────────────────────────────────────
-// 背景：mock-api.ts 契约对齐后行数膨胀（新增字段/类型化），超文件棘轮基线。
-// 遂将纯响应样板数据（usage/system/models/git）拆到此模块，mock-api 仅引用。
-// 数据形状与 shared 契约一致（satisfies IpcApi 仍负责最终校验）。
-// ──────────────────────────────────────────────────────────────
-
 import type { GitFileStatus, ModelsListRes, UsageSummaryRes } from '@code-agent/shared/renderer';
 
 /** session:getUsageSummary 样板（近 90 天假数据） */

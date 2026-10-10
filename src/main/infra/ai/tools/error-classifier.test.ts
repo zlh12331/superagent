@@ -1,15 +1,3 @@
-// src/main/infra/ai/tools/error-classifier.test.ts
-// error-classifier 单测：AI 错误分类映射
-//
-// 测试要点：
-// 1. AppError 直接透传
-// 2. APICallError 按 statusCode 映射（401/403→KEY_INVALID, 404→MODEL_ERROR, 408→TIMEOUT,
-//    413→CONTEXT_TOO_LARGE, 429→RATE_LIMITED, 5xx→MODEL_ERROR, retryable→INTERRUPTED）
-// 3. LoadAPIKeyError → AI_API_KEY_MISSING
-// 4. TypeError → AI_STREAM_INTERRUPTED
-// 5. 未知错误 → INTERNAL_ERROR
-// 6. isAbortError 判断
-
 import { AppError, ErrorCode } from '@code-agent/shared/main';
 import { APICallError, LoadAPIKeyError } from 'ai';
 import { describe, expect, it } from 'vitest';
@@ -19,7 +7,6 @@ import { classifyError, isAbortError } from './error-classifier';
 function createApiError(statusCode: number | undefined, isRetryable: boolean): APICallError {
   return new APICallError({
     url: 'https://api.example.com/v1/chat/completions',
-    // exactOptionalPropertyTypes: statusCode 为 undefined 时不传该字段
     ...(statusCode !== undefined ? { statusCode } : {}),
     responseHeaders: {},
     requestBodyValues: {},
@@ -101,7 +88,6 @@ describe('classifyError', () => {
   });
 
   it('LoadAPIKeyError：→ AI_API_KEY_MISSING', () => {
-    // LoadAPIKeyError 构造器仅接受 { message }（AI SDK 定义）
     const loadError = new LoadAPIKeyError({ message: 'load failed' });
     const result = classifyError(loadError);
     expect(result.code).toBe(ErrorCode.AI_API_KEY_MISSING);
@@ -112,7 +98,6 @@ describe('classifyError', () => {
   });
 
   it('TimeoutError（AbortSignal.timeout）：→ AI_TIMEOUT', () => {
-    // Node 20+ 的 AbortSignal.timeout 超时抛 DOMException TimeoutError
     const timeoutError = new DOMException('The operation timed out', 'TimeoutError');
     expect(classifyError(timeoutError).code).toBe(ErrorCode.AI_TIMEOUT);
   });

@@ -1,13 +1,3 @@
-// scripts/scaffold/lib/naming.ts
-// 命名转换与校验（IPC domain / tool name 的规范约束）
-// ──────────────────────────────────────────────
-// 约定（与现有代码一致）：
-// - IPC domain：camelCase（app / session / codebase）
-// - tool name（LLM 可见）：snake_case（read_file / git_commit）
-// - tool 文件名：kebab-case（read-file.tool.ts）
-// - 工厂函数 / 类型：PascalCase（createReadFileTool / ReadFileInput）
-// ──────────────────────────────────────────────
-
 const SNAKE_NAME_RE = /^[a-z][a-z0-9]*(_[a-z0-9]+)*$/;
 const DOMAIN_RE = /^[a-z][a-zA-Z0-9]*$/;
 
@@ -23,13 +13,10 @@ export function isValidDomain(domain: string): boolean {
 
 /** snake_case → PascalCase（read_file → ReadFile） */
 export function snakeToPascal(name: string): string {
-  return (
-    name
-      .split('_')
-      // 分支已保证 seg 非空，charAt(0) 与 seg[0] 等价（后者受 noUncheckedIndexedAccess 影响为 string | undefined）
-      .map((seg) => (seg === '' ? seg : seg.charAt(0).toUpperCase() + seg.slice(1)))
-      .join('')
-  );
+  return name
+    .split('_')
+    .map((seg) => (seg === '' ? seg : seg.charAt(0).toUpperCase() + seg.slice(1)))
+    .join('');
 }
 
 /** snake_case → kebab-case（read_file → read-file） */

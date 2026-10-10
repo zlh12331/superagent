@@ -1,23 +1,3 @@
-// src/renderer/stores/persistent/draft-store.ts
-// 输入草稿持久化（L2 persistent）——对齐参考项目 useDraftStore
-// ──────────────────────────────────────────────────────────────
-// 背景：切换会话/重启后输入草稿丢失——用户在 A 会话输入到一半切到 B，
-// 回来时内容清空（同类软件均保留草稿）。
-//
-// 持久化真源决策（2026-09-01）：草稿刻意保留在 localStorage，不迁 SQLite。
-// 理由：
-// - 草稿是渲染层私有的 UX 输入缓冲（非领域数据），无多窗口/多进程并发写；
-// - 单一来源即 localStorage（不存在与 SQLite 的双写一致性问题）；
-// - 设置（S1）迁 SQLite 是为了解决「localStorage + SQLite 双份一致性」，
-//   草稿仅一份，无此问题；迁移只会引入 IPC 往返与失败路径。
-// 若未来出现多窗口共享草稿/跨设备同步需求，再迁 SQLite 并走 IPC。
-//
-// 设计：
-// - key：chatId → { text, attachments }（附件为路径列表，可跨重启恢复）
-// - persist 到 localStorage（zustand persist v3 协议）
-// - 发送成功后由 ChatInput 调用 clearDraft（草稿只保留未发送内容）
-// ──────────────────────────────────────────────────────────────
-
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
@@ -65,7 +45,6 @@ export const useDraftStore = create<DraftState>()(
     {
       name: 'code-agent:drafts',
       storage: createJSONStorage(() => localStorage),
-      // 版本化：结构变更时通过 migrate 兼容（当前 v1 无迁移）
       version: 1,
     },
   ),

@@ -1,17 +1,3 @@
-// src/renderer/components/settings/sections/provider-labels.ts
-// 提供商显示名映射（显示名走 i18n 语言包，官网地址为静态数据）
-// ──────────────────────────────────────────────────────────────
-// kind 集合单一真源为 shared ApiKeyProviderSchema；本文件仅维护
-// kind → 官网地址的静态映射 + 显示名的 i18n 解析（ProvidersSection /
-// 添加模型弹窗共用）。
-//
-// 2026-09-27 纳管 i18n：显示名 key 化（providers.<kind>，双语语言包顶层组），
-// 组件以 providerLabel(kind, t) 取译文——t 由调用方传入（useTranslation），
-// 语言切换后随组件重渲染即时生效；未收录 kind 回退 kind 原文。
-// 模板串内联在 t() 调用处：check-i18n 据此收集动态前缀（providers.），
-// 豁免该域 key 的冗余校验。
-// ──────────────────────────────────────────────────────────────
-
 import type { ApiKeyProvider } from '@code-agent/shared/renderer';
 
 /** t() 的最小结构签名（避免本数据模块依赖 i18next 实例） */

@@ -1,18 +1,3 @@
-// src/main/infra/ai/agent-runtime/active-session-registry.ts
-// 活跃会话注册表（R2 去重）
-// ──────────────────────────────────────────────────────────────
-// 背景（R2 去重，30 号后台驻留期收敛）：ChatService 与 AgentService 此前各自
-// 维护 activeSessions/activeStreams 双 Map 与同一套防重/中断/等待收尾逻辑
-// （约 100 行重复），语义修正需双处同步。本类收敛为共享实现：
-// - preemptExisting：防重（abort 旧会话 + 等待旧 stream 退出，超时兜底）
-// - abort：立即删除 controller 再 abort（配合 CAS 删除避免误删新会话）
-// - removeXIfCurrent：CAS 删除（旧 stream finally 时只删自己的条目）
-// - dispose：abortAll + 等待全部 stream 完成（超时兜底后强制清空）
-//
-// 生产实例现状：ChatService 已并入 agent-service 回合链路删除，唯一生产实例
-// 在 agent-service（registry 字段）；本类留在 agent-runtime 供后续回合类宿主复用。
-// ──────────────────────────────────────────────────────────────
-
 import { logger } from '../../../utils/logger';
 
 /** 等待旧 stream 退出的兜底超时（防重检查用） */
@@ -59,7 +44,6 @@ export class ActiveSessionRegistry {
     existingController.abort();
     const existingStream = this.streams.get(sessionId);
     if (existingStream !== undefined) {
-      // 等待旧 stream 真正退出（最多 PREEMPT_WAIT_MS 兜底，避免卡死调用方）
       await Promise.race([
         existingStream,
         new Promise<void>((resolve) => setTimeout(resolve, PREEMPT_WAIT_MS)),
@@ -126,16 +110,13 @@ export class ActiveSessionRegistry {
    * @param timeoutMs 超时毫秒数，默认 3000ms
    */
   async dispose(timeoutMs = 3000): Promise<void> {
-    // 1. 触发所有 abort 信号
     this.abortAll();
 
-    // 2. 收集所有活跃 stream Promise
     const streams = Array.from(this.streams.values());
     if (streams.length === 0) {
       return;
     }
 
-    // 3. 等待所有 stream 完成或超时（allSettled：stream 内部已 catch，双保险）
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
     const timeoutPromise = new Promise<void>((resolve) => {
       timeoutId = setTimeout(() => {
@@ -155,7 +136,6 @@ export class ActiveSessionRegistry {
       }
     }
 
-    // 4. 清空 Map（即使超时也清空，避免内存泄漏；后续注册同 id 不会冲突）
     this.controllers.clear();
     this.streams.clear();
   }

@@ -1,7 +1,3 @@
-// packages/shared/src/ipc/response.ts
-// IPC 统一返回结构 + IpcContext
-// 设计文档 §7.4 错误处理流程：handler wrap() 返回 { data } | { error }
-
 import type { IpcError } from '../constants/errors';
 
 /**

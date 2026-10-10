@@ -1,14 +1,3 @@
-// src/main/infra/im/adapters/dingtalk-adapter.ts
-// 钉钉渠道：webhook 发送（markdown；可选加签）+ Stream 模式接收（企业应用长连接）
-// ──────────────────────────────────────────────────────────────
-// 接入配置（token 格式，三选一）：
-// 1. 仅发送：webhook 完整 URL（https://oapi.dingtalk.com/robot/send?access_token=xxx）
-// 2. 发送+加签：URL#secret（secret 为机器人安全设置中的加签密钥）
-// 3. 发送+接收：appKey:appSecret:webhookUrl（Stream 模式接收企业应用机器人消息）
-//
-// 接收说明：Stream 模式需要企业应用（非个人），入站消息为应用机器人接收的群聊/单聊文本。
-// ──────────────────────────────────────────────────────────────
-
 import { logger } from '../../../utils/logger';
 import type { ChannelIncomingMessage } from '../channel/types';
 import { DingTalkStreamReceiver, parseDingTalkEvent } from './dingtalk-stream';
@@ -44,7 +33,6 @@ export class DingTalkAdapter extends WebhookChannelAdapter {
         appKey.length > 0 &&
         appSecret.length > 0 &&
         webhookUrl.length > 0 &&
-        // 严格判定：appKey 为纯字母数字（钉钉 appKey 形状），webhookUrl 为 http(s) 地址
         /^[a-zA-Z0-9]+$/.test(appKey) &&
         (webhookUrl.startsWith('http://') || webhookUrl.startsWith('https://'))
       ) {

@@ -1,18 +1,3 @@
-// src/renderer/components/chat/ChatPanel.tsx
-// 聊天面板主容器 · 集成 useAgentWithIpc + ChatMessageList + ChatInput
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 调用 useAgentWithIpc 获取 useChat 完整状态（Agent 模式）
-// - 透传 messages / status 给 ChatMessageList
-// - 透传 status + sendMessage + stop 给 ChatInput
-// - 错误处理：onError 兜底写入 turn-error-store，对话区 TurnErrorNotice 常驻显示（2026-10-09 起替代瞬时 toast）
-//
-// 设计：
-// - 三段式布局：顶部标题栏 / 中间消息列表 / 底部输入框
-// - workingDir 为必填 prop（Agent 工具操作边界）
-// - 工具调用已 inline 渲染在 ChatMessageList（ToolCallView）
-// ──────────────────────────────────────────────────────────────
-
 import type { ChatMessage } from '@code-agent/shared/renderer';
 import { type ReactElement, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
@@ -111,19 +96,11 @@ export function ChatPanel({
   interrupted = false,
   className,
 }: ChatPanelProps): ReactElement {
-  // 路由导航（斜杠命令 /new 回欢迎页）
   const navigate = useNavigate();
-  // 快捷键帮助对话框（/help 斜杠命令触发）：状态收敛 ui-store，
-  // 实例由 AppShell 单一 lazy 挂载（此前 ChatPanel 双份 state + 双份挂载）
   const openShortcutHelp = useUiStore((s) => s.openShortcutHelp);
-  // 中断提示条关闭状态（按 chatId 记录：切换会话后重新提示——
-  // 此前单一 boolean 跨会话复用，A 会话关过一次后 B 会话的中断信号被静默抑制）
   const [interruptedDismissedFor, setInterruptedDismissedFor] = useState<string | null>(null);
-  // 历史回显缺口提示的已关闭会话（按 chatId 记录：切换会话后重新提示）
   const [historyNoticeDismissedFor, setHistoryNoticeDismissedFor] = useState<string | null>(null);
-  // 编辑重提注入（P2-10）：审批拒绝后把命令填入 composer（对齐参考项目）
   const [injectedComposerValue, setInjectedComposerValue] = useState<string | undefined>(undefined);
-  // 注入复位定时器（卸载/会话切换时清理，避免对已卸载组件 setState）
   const injectResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(
     () => () => {
@@ -133,7 +110,6 @@ export function ChatPanel({
     },
     [],
   );
-  // /models 斜杠命令：受控打开 composer 项目栏的模型选择下拉
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
 
   /**
@@ -152,30 +128,14 @@ export function ChatPanel({
       setInjectedComposerValue(undefined);
     }, 0);
   };
-  // 本地化文案（声明置于组件前部：派生文案在渲染前即需使用）
   const { t } = useTranslation();
 
-  // 错误处理回调（useChat onError）：写入 turn-error-store，由对话区 TurnErrorNotice
-  // 常驻显示具体错误（2026-10-09 用户要求：回合错误不再走瞬时 toast——SDK 脱敏后
-  // 文案泛化（'An error occurred.'）且转瞬即逝）。
-  // 此处为兜底写入（ensure，缺位才写）：权威条目来自 use-agent-bridge 的 stream-error
-  // 事件（AppError 分类后的 code + 消息原文）；两路触发顺序不定、且 onError 的文案
-  // 可能已被 SDK 脱敏，已有权威条目不覆盖。
   const handleError = (error: Error): void => {
     useTurnErrorStore.getState().ensure(chatId, 'UNKNOWN', error.message);
   };
 
-  // 历史重建（纯派生，交给 React Compiler 记忆化）：session:get 返回 ModelMessage 形态（role/content），
-  // v7 只导出 UIMessage→ModelMessage，反向需手写；重建保留存储里真实存在的
-  // tool/reasoning/file part，并如实登记无法回显的类型（见 history-parts.ts）。
   const history = reconstructHistory(initialMessages ?? NO_STORED_MESSAGES);
 
-  // useAgentWithIpc：Agent 模式专用 hook
-  // - id: 控制消息状态隔离
-  // - workingDir: agent 工具操作边界（注入 IpcAgentTransport）
-  // - messages: 历史消息回显（v7 字段名，仅首次挂载生效；非空才传）
-  // - onError: 统一 toast 提示（不阻塞 UI）
-  // - regenerate: AI SDK v7 内置，自动截断目标 assistant 消息及后续 → 重发请求
   const { messages, sendMessage, status, stop, regenerate, setMessages } = useAgentWithIpc({
     id: chatId,
     workingDir,
@@ -183,14 +143,7 @@ export function ChatPanel({
     onError: handleError,
   });
 
-  // 向上补页：更早回合消息 prepend 进本地消息态（setMessages 函数式更新，
-  // 避免与流式 append 竞态丢增量）。前置检查/重建逻辑在 prependEarlierPage
-  // （chat-panel-derives.ts，认知复杂度棘轮）；回调由路由层提供（回合分页
-  // useInfiniteQuery 的 fetchNextPage 包装）。toUiMessages 按批次注入递增
-  // idPrefix——挂载批（hist-N）与各补页批（earlier-k-N）的 UIMessage id
-  // 不共用索引空间，防 id 撞车破坏 React key 与 regenerate 定位。
   const earlierSeqRef = useRef(0);
-  // 引用稳定性交给 React Compiler（捕获 loadEarlier/setMessages/ref）
   const handleLoadEarlier = (): Promise<void> => {
     if (loadEarlier === undefined) return Promise.resolve();
     return prependEarlierPage({
@@ -203,9 +156,6 @@ export function ChatPanel({
     });
   };
 
-  // 回合运行态发布到全局（更新"重启并安装"等危险操作需要先确认）；判定与
-  // ChatMessageList 的 isStreaming 保持一致。卸载时复位：残留 true 会让后续
-  // 安装永远多弹一次确认。
   const setAgentRunning = useAgentRunStore((s) => s.setRunning);
   const agentRunning = status === 'streaming' || status === 'submitted';
   useEffect(() => {
@@ -213,10 +163,6 @@ export function ChatPanel({
     return () => setAgentRunning(false);
   }, [agentRunning, setAgentRunning]);
 
-  // 欢迎页首条消息透传：home.tsx 创建会话后 stash，本组件挂载后 consume 一次并发送。
-  // useAgentWithIpc 的 transport configure effect 先于本 effect 执行（同组件内按声明
-  // 顺序），发送时 transport 已就绪。consume 先删后判：StrictMode 双挂载 /
-  // sendMessage 引用变化导致的重复执行均为 no-op。
   const consumePendingMessage = usePendingMessageStore((state) => state.consume);
   useEffect(() => {
     const text = consumePendingMessage(chatId);
@@ -224,36 +170,26 @@ export function ChatPanel({
     void sendMessage({ text });
   }, [chatId, sendMessage, consumePendingMessage]);
 
-  // 会话目标（use-chat-goals.ts：goal:list/create/clear + active→completed 展示策略）
   const { currentGoal, isGoalCompleted, createGoal, clearGoal } = useChatGoals(chatId);
 
-  // 会话内搜索状态（对齐参考项目 useConversationSearch：受控模式）
   const search = useConversationSearch(messages);
-  // 当前匹配消息索引（供 ChatMessageList 滚动 + 高亮；无匹配/关闭时为 -1）
   const searchActiveIndex =
     search.visible && search.currentMatch >= 0
       ? (search.matchIndexes[search.currentMatch] ?? -1)
       : -1;
 
-  // 历史回显能力缺口（纯派生见 chat-panel-derives.ts：如实告知，不假装历史完整）
   const historyNotices = collectHistoryNotices(history, t);
   const showHistoryNotice = historyNotices.length > 0 && historyNoticeDismissedFor !== chatId;
 
-  // 派生：状态指示文本（用于状态条右侧）
   const statusText = statusLabel(status);
 
-  // 模型选择（右区插槽：输入框内发送按钮左侧，用户要求）
   const defaultProvider = useSettingsStore((state) => state.ai.defaultProvider);
   const defaultModel = useSettingsStore((state) => state.ai.defaultModel);
   const updateAi = useSettingsStore((state) => state.updateAi);
-  // 编辑器设置：字体大小真实消费（消息区字号）
   const editorFontSize = useSettingsStore((s) => s.editor.fontSize);
 
-  // /compact 上下文压缩（use-session-compact.ts：mutation + 缓存失效 + 本地消息态替换 + toast）
   const { compact } = useSessionCompact({ chatId, setMessages });
 
-  // 长会话自动压缩（实验性 opt-in，默认关）：消息达阈值且回合空闲时自动 compact
-  // （压缩会替换本地消息态，消息数骤降后不再触发；失败也不风暴——水位线机制见 hook）
   useAutoCompact({
     chatId,
     messages,
@@ -261,22 +197,15 @@ export function ChatPanel({
     compact,
   });
 
-  // 重新生成回调：透传给 ChatMessageList → MsgActions
-  // useChat.regenerate({ messageId }) 会自动移除该 assistant 消息及后续所有消息，
-  // 然后用截断后的 messages 重新发起请求（transport 复用同一 sessionId，AgentService 自动中断旧 stream）
   const handleRegenerate = (messageId: string): void => {
     void regenerate({ messageId });
   };
 
-  // 回合错误卡的重试目标：最后一条消息
-  // （regenerate 会自动截断该消息之后的内容并重发；失败回合可能未产生 assistant
-  //  消息，此时最后一条即触发失败的用户消息，同样适用）
   const lastMessageId = messages.at(-1)?.id;
   const retryFailedTurn = (): void => {
     if (lastMessageId !== undefined) handleRegenerate(lastMessageId);
   };
 
-  // 发送 / 斜杠命令（提取自本组件，压低认知复杂度）
   const { handleSend, handleSlashCommand } = createChatComposerActions({
     chatId,
     createGoal,
@@ -297,18 +226,14 @@ export function ChatPanel({
       className={cn('flex h-full flex-col', className)}
       style={{ fontSize: `${editorFontSize}px` }}
     >
-      {/* 顶部状态条：等宽字体遥测带（右侧状态指示器） */}
       <ChatStatusBar status={status} statusText={statusText} onOpenSearch={search.actions.open} />
 
-      {/* 内联审批卡：当前会话 pending 审批就地呈现（对齐参考项目 InlineApprovalCard） */}
       <InlineApprovalCard
         sessionId={chatId}
         onEditResubmit={(command) => {
-          // 注入后下一轮复位：相同命令二次「编辑重提」时 state 能再次变化触发注入 effect
           injectComposerValue(command);
         }}
       />
-      {/* 会话内搜索栏（受控：状态由 useConversationSearch 持有） */}
       <ConversationSearchBar
         visible={search.visible}
         query={search.query}
@@ -318,25 +243,19 @@ export function ChatPanel({
         onNavigate={search.actions.navigate}
         onClose={search.actions.close}
       />
-      {/* 中断提示条：上次回合异常中断（崩溃恢复），用户可关闭（panel-notice.tsx） */}
       {interrupted && interruptedDismissedFor !== chatId && (
         <PanelNotice
           lines={[t('chat.runInterrupted')]}
           onDismiss={() => setInterruptedDismissedFor(chatId)}
         />
       )}
-      {/* 限流提示横幅：429 限流时显示（RateLimitBanner 订阅 rate-limit-store）
-          位于状态条原位置（用户要求：与顶部状态条互换） */}
       <RateLimitBanner />
 
-      {/* 回合错误卡：具体错误常驻对话区（turn-error-store 由 use-agent-bridge 写入；
-          重试 = regenerate 截断失败回合后重发） */}
       <TurnErrorNotice
         sessionId={chatId}
         {...(lastMessageId !== undefined ? { onRetry: retryFailedTurn } : {})}
       />
 
-      {/* 历史回显缺口提示：重开会话时明确告知「哪些内容没落库/没回显」，避免用户误以为工具调用消失是渲染 bug（panel-notice.tsx） */}
       {showHistoryNotice && (
         <PanelNotice
           lines={historyNotices}
@@ -344,11 +263,8 @@ export function ChatPanel({
         />
       )}
 
-      {/* 中间消息列表 */}
       <div className="min-h-0 flex-1">
         <ChatMessageList
-          // key=chatId：会话切换强制重挂载——分页状态/底部状态不跨会话滞留
-          //（此前切到大分会话时旧 windowStart 滞留，分页被旁路且落点错位）
           key={chatId}
           messages={messages}
           status={status}
@@ -360,7 +276,6 @@ export function ChatPanel({
         />
       </div>
 
-      {/* 会话目标栏（GoalBar.tsx：左 GOAL 徽标 · 中条件 · 右 编辑/删除——仅存在 active/completed 目标时显示） */}
       {currentGoal !== undefined && (
         <GoalBar
           goal={currentGoal}
@@ -369,7 +284,6 @@ export function ChatPanel({
           onClear={clearGoal}
         />
       )}
-      {/* 底部输入框：.composer 提供顶部渐变 + padding，内部 .composer-box 由 ChatInput 渲染 */}
       <footer className="composer">
         <ChatInput
           status={status}
@@ -379,7 +293,6 @@ export function ChatPanel({
           onSlashCommand={handleSlashCommand}
           onSend={handleSend}
           onStop={() => {
-            // stop 是同步操作，但返回 Promise（兼容 abortSignal）
             void stop();
           }}
           rightSlot={

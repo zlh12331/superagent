@@ -1,16 +1,3 @@
-// src/renderer/stores/transient/turn-error-store.ts
-// 对话区回合错误状态（L2 客户端共享状态 - transient）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 记录各会话最近一次回合失败的错误详情（code + message）——权威来源是
-//   主进程 agent:event:stream-error 载荷（AppError 分类后的 code 与原文），
-//   不是 AI SDK useChat 脱敏后的文案（'An error occurred.'）
-// - TurnErrorNotice 订阅本 store，在对话区渲染具体的错误提示卡——替代原先
-//   的瞬时 toast（2026-10-09 用户要求：错误常驻对话区、内容具体）
-// - 不持久化、不自动消失：手动关闭或下一回合开始（use-agent-bridge 清除）
-// 先例：rate-limit-store.ts（同层同形态）
-// ──────────────────────────────────────────────────────────────
-
 import { create } from 'zustand';
 
 /** 单会话回合错误条目 */

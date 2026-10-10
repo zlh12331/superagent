@@ -1,10 +1,3 @@
-// message-utils.ts
-// 工具卡展示纯函数：状态映射（ToolCallState → 类名/文案键）+ JSON 预览格式化
-// ──────────────────────────────
-// 自 ChatMessageList 拆分；extractText 已于 2026-09-15 迁至 lib/chat/message-text.ts
-// （跨特性共享，留在本文件会形成 hooks → 特性内部实现的目录级循环）
-// ──────────────────────────────
-
 import type { TFunction } from 'i18next';
 
 /**

@@ -1,26 +1,4 @@
-// src/main/infra/ai/agent/task-service.ts
-// 任务状态机：委派工作单元的生命周期跟踪（对齐 qwen tasks 语义收敛）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 任务注册表（sqlite 持久化，会话级）：create / update / list / get
-// - 任务状态机：pending → running → completed / failed / cancelled
-// - 集成：SubagentManager 委派时创建任务（create）并随回合结束更新状态（update）
-//
-// 借鉴声明：
-// 本模块参考 qwen-code 参考项目 packages/core/src/agents/tasks/types.ts
 // （Copyright 2026 Qwen Team，SPDX-License-Identifier: Apache-2.0）的
-// TaskBase envelope（id/kind/status/startTime/endTime）语义，按我们的
-// 技术栈收敛重写：
-// - 移除 outputFile / outputOffset（流式输出文件，桌面端由回合事件覆盖）
-// - 移除 abortController 联合（我们的中断经 agent-service AbortController 统一管理）
-// - 持久化用 sqlite（对齐项目存储体系）
-//
-// 存储语义（与 schema.ts 的 tasks 表定义一致，勿想当然）：
-// tasks.session_id **刻意不加外键**——任务可关联任意 id（含子代理内部回合的
-// sessionId）。因此删除会话不会级联删除任务行（session-service.delete 仅删
-// sessions 行，级联只覆盖有 FK 的 messages/turns/goals），任务历史按 sessionId
-// 独立留存。本文件不提供删除接口，也没有任何其它模块删除 tasks 行。
-// ──────────────────────────────────────────────────────────────
 
 import { randomUUID } from 'node:crypto';
 import { eq } from 'drizzle-orm';
@@ -120,14 +98,12 @@ export class TaskService {
     if (existing === undefined) {
       return false;
     }
-    // 终端状态锁定
     if (TERMINAL_STATUSES.includes(existing.status as TaskStatus)) {
       return false;
     }
     db.update(tasks)
       .set({
         status,
-        // exactOptionalPropertyTypes：非终端状态不写 endTime（保持 null）
         ...(TERMINAL_STATUSES.includes(status) ? { endTime: Date.now() } : {}),
       })
       .where(eq(tasks.id, taskId))

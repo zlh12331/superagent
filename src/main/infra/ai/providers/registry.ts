@@ -1,19 +1,3 @@
-// src/main/infra/ai/providers/registry.ts
-// Provider 注册表（Code Agent 模板核心扩展点）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 集中注册内置供应商（内置 10 家：deepseek/openai/anthropic/ollama/
-//   moonshot/zhipu/qwen/doubao/siliconflow/openrouter）
-// - 提供按 kind 查找定义与创建 LanguageModel 工厂的入口
-// - 提供注册表快照（list，当前生产零调用、仅单测）
-//
-// 设计（对标 OpenCode 的 provider 路由）：
-// - 新增供应商 = 在 BUILTIN_DEFINITIONS 与 BUILTIN_FACTORIES 常量表中各加一条
-// - deepseek / ollama / 其余 6 家复用 OpenAI Compatible 协议（@ai-sdk/openai-compatible）
-// - openai 使用官方 @ai-sdk/openai，anthropic 使用官方 @ai-sdk/anthropic
-// - 每个供应商的 API Key 独立存储（keychain，key 前缀 = kind）
-// ──────────────────────────────────────────────────────────────
-
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
@@ -22,7 +6,6 @@ import type { LanguageModel } from 'ai';
 
 import { getAppConfig } from '../../../config';
 import { proxiedFetch } from '../../network/proxied-fetch';
-// 单一真源：默认模型 / 默认供应商由模型领域层定义（避免双源维护路由分裂）
 import { DEFAULT_KIND, DEFAULT_MODEL_BY_KIND } from '../models/builtin-models';
 import { defaultApiFormat, resolveProviderBaseUrl } from './endpoint';
 import type {
@@ -159,23 +142,14 @@ const BUILTIN_FACTORIES: Record<ProviderKind, ProviderFactory> = {
     return createOpenAICompatible({
       name: 'deepseek',
       baseURL: resolveProviderBaseUrl('deepseek', resolvedBaseUrl),
-      // exactOptionalPropertyTypes: apiKey 为 undefined 时不传该字段（ollama 等本地场景）
       ...(apiKey !== undefined ? { apiKey } : {}),
       includeUsage: true,
       ...sdkFetch,
-      // DeepSeek 深度适配（官方文档 https://api-docs.deepseek.com/zh-cn/）：
-      // 1. transformRequestBody：思考模式显式开启（v4 默认开启，此处兜底确保语义明确）
-      // 2. convertUsage：DeepSeek 非标准 usage 字段（prompt_cache_hit_tokens /
-      //    prompt_cache_miss_tokens，KV cache 计费）映射为 AI SDK 标准
-      //    inputTokens.cacheRead / noCache
       transformRequestBody: (args) => ({
         ...args,
-        // noPropertyAccessFromIndexSignature：Record 类型属性需方括号访问
         ...(args['thinking'] === undefined ? { thinking: { type: 'enabled' as const } } : {}),
       }),
       convertUsage: (usage) => {
-        // DeepSeek 非标准 usage 字段（loose schema 透传）：
-        // 统一经宽松 Record 方括号访问（snake_case 字段名规避命名规范）
         const raw = usage as Record<string, unknown> | null | undefined;
         const promptDetails = (raw?.['prompt_tokens_details'] ?? {}) as Record<string, unknown>;
         const completionDetails = (raw?.['completion_tokens_details'] ?? {}) as Record<
@@ -194,13 +168,11 @@ const BUILTIN_FACTORIES: Record<ProviderKind, ProviderFactory> = {
             total: (raw?.['prompt_tokens'] as number | undefined) ?? 0,
             noCache: promptCacheMiss,
             cacheRead: promptCacheHit,
-            // DeepSeek 无 cache write 概念（KV cache 自动构建）
             cacheWrite: 0,
           },
           outputTokens: {
             total: (raw?.['completion_tokens'] as number | undefined) ?? 0,
             text: undefined,
-            // null → undefined（LanguageModelV4Usage 不接受 null）
             reasoning: (completionDetails['reasoning_tokens'] as number | undefined) ?? undefined,
           },
         };
@@ -210,33 +182,20 @@ const BUILTIN_FACTORIES: Record<ProviderKind, ProviderFactory> = {
   openai: ({ apiKey, baseUrl }) => {
     const resolvedBaseUrl = baseUrl ?? getAppConfig().providers.openai;
     const provider = createOpenAI({
-      // exactOptionalPropertyTypes: apiKey 为 undefined 时不传该字段
       ...(apiKey !== undefined ? { apiKey } : {}),
       baseURL: resolveProviderBaseUrl('openai', resolvedBaseUrl),
       ...sdkFetch,
     });
-    // ⚠️ 必须显式 .chat()：@ai-sdk/openai 4.x 的 provider 可调用对象默认返回
-    // **Responses API** 模型（`/responses`，见 SDK 类型定义：`(modelId) => OpenAILanguageModel`
-    // 实际委托 createResponsesModel），而产品 UI 标注与连通性探测（models:test
-    // 的 /chat/completions 请求体）都按 Chat Completions 语义——不显式选 chat
-    // 会让真实调用与探测/标注三方分裂（2026-10-08 契约测试实证）
     return provider.chat as unknown as (modelId: string) => LanguageModel;
   },
   anthropic: ({ apiKey, baseUrl }) => {
     const resolvedBaseUrl = baseUrl ?? getAppConfig().providers.anthropic;
     return createAnthropic({
-      // exactOptionalPropertyTypes: apiKey 为 undefined 时不传该字段
       ...(apiKey !== undefined ? { apiKey } : {}),
-      // 归一化后 SDK 的 normalizeBaseURL 成为无害空转（它只特判官方地址补
-      // /v1，输入已归一化时不改变结果）——自建网关原样透传，与探测路径一致
       baseURL: resolveProviderBaseUrl('anthropic', resolvedBaseUrl),
       ...sdkFetch,
     }) as unknown as (modelId: string) => LanguageModel;
   },
-  // 以下 6 家 OpenAI-compatible 供应商补 includeUsage:true（2026-09-06 审计修复）：
-  // OpenAI 兼容协议流式响应默认不回传 usage，必须带 stream_options.include_usage
-  // 才能拿到 token 用量；此前只有 deepseek 开了，导致这 6 家的用量/费用统计
-  // 落 0 或缺失（渲染层 usage 面板无法对账）。
   moonshot: ({ apiKey, baseUrl }) => {
     const resolvedBaseUrl = baseUrl ?? getAppConfig().providers.moonshot;
     return createOpenAICompatible({
@@ -303,7 +262,6 @@ const BUILTIN_FACTORIES: Record<ProviderKind, ProviderFactory> = {
       name: 'ollama',
       baseURL: resolveProviderBaseUrl('ollama', resolvedBaseUrl),
       apiKey: 'ollama',
-      // 本地模型不按 token 计费，且 Ollama 的 OpenAI 兼容端点不保证回传 usage
       includeUsage: false,
       ...sdkFetch,
     }) as unknown as (modelId: string) => LanguageModel;
@@ -336,7 +294,6 @@ function createFactoryByFormat(
   const baseUrl = context.baseUrl ?? getAppConfig().providers[kind];
   const apiKey = context.apiKey;
 
-  // 格式 = 原生默认：直通 builtin 工厂（保留 kind 特化）
   if (apiFormat === defaultApiFormat(kind)) {
     return BUILTIN_FACTORIES[kind](context);
   }
@@ -347,11 +304,9 @@ function createFactoryByFormat(
       baseURL: resolveProviderBaseUrl('anthropic', baseUrl),
       ...sdkFetch,
     });
-    // anthropic 的 provider 可调用对象即 messages 模型（无 chat/responses 分叉）
     return provider as unknown as (modelId: string) => LanguageModel;
   }
 
-  // openai-compatible 协议族（chat 与 responses 共用 createOpenAI 的官方实现）
   const provider = createOpenAI({
     ...(apiKey !== undefined ? { apiKey } : {}),
     baseURL: resolveProviderBaseUrl(apiFormat === 'openai-responses' ? 'openai' : kind, baseUrl),
@@ -405,7 +360,6 @@ export class ProviderRegistry {
         return entry.definition.kind;
       }
     }
-    // 无 isDefault 标记时回落到第一个注册的供应商
     const [first] = this.providers.keys();
     if (first === undefined) {
       throw new Error('Provider 注册表为空，无法确定默认供应商');
@@ -432,7 +386,6 @@ export class ProviderRegistry {
     if (entry === undefined) {
       throw new Error(`未知模型供应商：${kind}`);
     }
-    // 显式格式（自定义模型）→ 走格式分发；省略 → 走该 kind 的原生工厂
     return context.apiFormat !== undefined
       ? createFactoryByFormat(kind, context.apiFormat, context)
       : entry.factory(context);

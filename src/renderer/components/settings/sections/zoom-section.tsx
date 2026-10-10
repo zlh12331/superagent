@@ -1,11 +1,3 @@
-// zoom-section.tsx
-// 设置 · 界面缩放（35 号 spec §2.6：Select 11 档 + store 单真源）
-// ──────────────────────────────────────────────
-// 设计（CP2 D5 修正）：11 档 SegControl 会溢出（11×~40px > 行宽），改 ui/select
-// 下拉枚举；选择即写 store → AppShell useZoomEffect 单点应用（无需重启）。
-// 快捷键（Ctrl+±0）与 Select 同一出口（store），回显天然同步。
-// ──────────────────────────────────────────────
-
 import { ZOOM_LEVELS } from '@code-agent/shared/renderer';
 import { ZoomIn } from 'lucide-react';
 import type { ReactElement } from 'react';

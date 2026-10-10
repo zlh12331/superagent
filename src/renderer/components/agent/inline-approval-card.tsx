@@ -1,12 +1,3 @@
-// src/renderer/components/agent/inline-approval-card.tsx
-// 内联审批卡片（对齐参考项目 superagent InlineApprovalCard + 原型 .card.paused）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 在消息流中内联展示审批请求（对齐参考项目：审批不弹窗打断，就地呈现）
-// - 三态：pending（左 warn 边条 + 批准/拒绝按钮）/ approved / rejected（状态徽章）
-// - 数据源：approvals-store（单一真源；全局弹窗 ApprovalDialog 已移除，卡片是唯一审批 UI）
-// ──────────────────────────────────────────────────────────────
-
 import { APPROVAL_TIMEOUT_MINUTES, REMEMBER_TTL_MINUTES } from '@code-agent/shared/renderer';
 import { Check, Pencil, ShieldCheck, X } from 'lucide-react';
 import { type ReactElement, useEffect, useState } from 'react';
@@ -118,7 +109,6 @@ function PendingActions({
         <X className="size-3" />
         {t('approval.reject')}
       </Button>
-      {/* 白名单仅对支持记忆的类型显示（run_command/write_file/edit_file） */}
       {meta.canRemember && (
         <Button
           variant="outline"
@@ -134,7 +124,6 @@ function PendingActions({
       <Button
         size="sm"
         className={cn(
-          // 彩色实底按钮前景用 primary-foreground（双主题恒白）：success/error-emphasis 底均达 AA
           'ml-auto gap-1 px-2 py-1',
           dangerous
             ? 'bg-error-emphasis hover:bg-error-emphasis/90'
@@ -223,14 +212,11 @@ async function respondToApproval(args: {
   } else {
     reject(item.id);
   }
-  // 浏览器模式守卫：无 window.api 时仅更新本地状态（预览不崩溃）。
-  // 统一走 lib/ipc.ts 的 hasIpcBridge（单一真源），不再手抄字面量判断。
   if (!hasIpcBridge()) {
     return;
   }
   const ok = await respondApproval(item.id, approved, rememberDecision);
   if (!ok) {
-    // useTranslation 在模块级不可用：i18next 实例直取（t 为引用稳定函数）
     toast.error(i18n.t('approval.responseFailed'));
   }
 }
@@ -262,26 +248,14 @@ function CardHeader({
   return (
     <div className="flex items-center gap-2">
       <Icon className={cn('size-3.5 shrink-0', dangerous && 'text-error')} strokeWidth={1.5} />
-      <span
-        className={cn(
-          'min-w-0 flex-1 truncate font-medium',
-          // 类型徽章（语义令牌类，来自 APPROVAL_META 单表）
-          meta.className,
-        )}
-      >
-        {/* 类型标签：i18n 协议键收进 approval.types 子段（与 UI 键的 camelCase 分区），
-            键 = ApprovalType 字面量，零映射层 */}
-        {typeLabel}
-      </span>
+      <span className={cn('min-w-0 flex-1 truncate font-medium', meta.className)}>{typeLabel}</span>
       {isExpired ? (
         <span className="bg-muted text-muted-foreground shrink-0 rounded-full px-1.5 py-0.5 font-mono text-2xs">
-          {/* key 必须是 t() 的字面量实参（check:i18n 静态扫描；三元/拼接会被判冗余） */}
           {expiredReason === 'aborted' ? t('approval.aborted') : t('approval.timedOut')}
         </span>
       ) : (
         !isPending && <StatusBadge approved={isApproved} />
       )}
-      {/* 已决回显的关闭按钮：从 resolved 列表移除（此前 dismiss 无任何 UI 调用方） */}
       {!isPending && (
         <Button
           variant="ghost"
@@ -313,17 +287,10 @@ export function InlineApprovalCard({
   sessionId,
   onEditResubmit,
 }: InlineApprovalCardProps): ReactElement | null {
-  // 本会话的待审批列表（FIFO）+ 已决最近一条（无 pending 时回显）
-  // ⚠️ 必须包 useShallow：selector 内 filter/find 每次返回**新数组引用**，
-  // 裸用会触发 "getSnapshot should be cached" 无限重渲染（React 19 + zustand 5，
-  // 实测报 Maximum update depth exceeded）；useShallow 按元素浅比较后引用稳定
   const items = useApprovalsStore(
     useShallow((state) => {
       const pending = state.pending.filter((p) => p.sessionId === sessionId);
       if (pending.length > 0) return pending;
-      // resolved 已是「最新在前」（store 用 [resolved, ...state.resolved] 前插）——
-      // 此前这里也 reverse 了一次，导致 find 命中**最旧**一条：刚批准/拒绝的卡片
-      // 不显示，界面回显一条陈旧审批（2026-09 审计修复）
       const latest = state.resolved.find((r) => r.sessionId === sessionId);
       return latest !== undefined ? [latest] : NO_ITEMS;
     }),
@@ -332,7 +299,6 @@ export function InlineApprovalCard({
   if (items.length === 0) {
     return null;
   }
-  // 队列渲染：每张卡独立持有倒计时/跳过态（key=item.id 保证状态随条目切换重置）
   return (
     <div className="flex flex-col">
       {items.map((item) => (
@@ -363,12 +329,9 @@ function ApprovalCard({
   const approve = useApprovalsStore((state) => state.approve);
   const reject = useApprovalsStore((state) => state.reject);
   const dismiss = useApprovalsStore((state) => state.dismiss);
-  // 本地跳过（对齐参考项目 P2-10：卡片半透明 + toast 提示）
   const [skipped, setSkipped] = useState(false);
-  // 超时倒计时（38 号阶段 2：主进程 5 分钟兜底可见化）；已决/超时态内部短路
   const timeout = useTimeoutHint(item.createdAt, item.status === 'pending');
 
-  // 响应审批（副作用见模块级 respondToApproval 注释）
   const respond = (approved: boolean, rememberDecision: boolean): void => {
     void respondToApproval({
       item,
@@ -379,15 +342,11 @@ function ApprovalCard({
     });
   };
 
-  // 类型元数据单一入口（图标/徽章类/危险标记/白名单支持；图标消费在 CardHeader）
   const meta = getApprovalMeta(item.type);
   const isPending = item.status === 'pending';
   const isApproved = item.status === 'approved';
   const isExpired = item.status === 'expired';
   const dangerous = meta.dangerous;
-  // 编辑重提命令：run_command 类型从 input.command 提取（其他类型无命令语义，不显示；
-  // 复用 getNonEmptyField 读取，空命令按「无命令」处理——getField 对 `''` 返回空串，
-  // 此前 `?? null` 兜不住 → 渲染出「编辑后重提」按钮却回传空命令（点了没意义））
   const resubmitCommand =
     item.type === 'run_command' ? (getNonEmptyField(item.input, 'command') ?? null) : null;
 
@@ -398,18 +357,12 @@ function ApprovalCard({
         isPending && 'border-l-4 border-l-warn',
         isApproved && 'border-l-4 border-l-success',
         item.status === 'rejected' && 'border-l-4 border-l-error',
-        // 超时/中断（主进程判定，非用户操作）——中性灰边条：既非成功也非用户拒绝
         isExpired && 'border-l-4 border-l-muted-foreground/50',
         skipped && 'opacity-40',
       )}
-      // role="alert"：审批请求是「需要用户立刻处理的插队信息」，出现即应被朗读。
-      // 此前同时写了 aria-live="polite"，与 alert 隐含的 assertive 冲突（两个
-      // 播报优先级自相矛盾）；改为只留 role，并设 aria-atomic="false"——否则
-      // 卡片状态变化（pending → approved）会按 atomic 语义重播整张卡片。
       role="alert"
       aria-atomic="false"
     >
-      {/* 头部：图标 + 类型 + 状态 */}
       <CardHeader
         meta={meta}
         dangerous={dangerous}
@@ -421,7 +374,6 @@ function ApprovalCard({
         onClose={() => dismiss(item.id)}
       />
 
-      {/* 描述 + 结构化预览 */}
       {item.description !== '' && (
         <p className="text-muted-foreground mt-1 leading-relaxed whitespace-pre-wrap">
           {item.description}
@@ -433,10 +385,8 @@ function ApprovalCard({
         </div>
       )}
 
-      {/* 超时提示（pending 态；最后 1 分钟切警示色 + 「即将超时」） */}
       {isPending && <TimeoutHint minutesLeft={timeout.minutesLeft} expiring={timeout.expiring} />}
 
-      {/* pending 操作按钮：拒绝 / 白名单 / 批准（对齐原型 .card.paused 三按钮） */}
       {isPending && (
         <PendingActions
           meta={meta}
@@ -444,7 +394,6 @@ function ApprovalCard({
           onRespond={(approved, rememberDecision) => void respond(approved, rememberDecision)}
         />
       )}
-      {/* 拒绝后操作：编辑重提（run_command）+ 跳过（对齐参考项目 P2-10） */}
       {item.status === 'rejected' && !skipped && (
         <RejectedActions
           resubmitCommand={resubmitCommand}

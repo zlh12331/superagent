@@ -1,22 +1,3 @@
-// src/renderer/components/file-tree/FileViewerPanel.tsx
-// 文件查看器面板（右面板「文件」tab 内容）· 组装层
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 受控视图（open / filePath 来自 useFileViewerStore）
-// - 通过 useFileContent 拉取文件内容（TanStack Query 缓存）
-// - 双模式：只读查看（shiki 高亮） / 编辑（textarea + shiki 叠加高亮）
-// - 复制按钮 + 文件路径 + 行数显示
-// - Ctrl+S 保存 + 脏数据未保存时阻止退出编辑
-//
-// 设计：
-// - 编辑态用 textarea + shiki 叠加方案（零新依赖，符合项目惯例避免 Monaco/CodeMirror）
-//   textarea 文字透明、caret 不透明，与下层 shiki 高亮对齐
-// - 主题跟随：shiki 双主题（github-dark / github-light）随 useTheme 切换
-// - 路径推断语言：基于扩展名映射到 shiki 标准 lang ID
-//
-// 拆分背景（2026-08 重构）：原文件 427 行，纯函数提取为 file-viewer-utils
-// ──────────────────────────────────────────────────────────────
-
 import { Check, Copy, Eye, FileText, Pencil, Save } from 'lucide-react';
 import { type ReactElement, type RefObject, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
@@ -39,13 +20,10 @@ const MAX_HIGHLIGHT_LINES = 5000;
 
 /** 文件查看面板（右面板）：shiki 高亮查看/编辑/保存，超 5000 行降级纯文本 */
 export function FileViewerPanel(): ReactElement {
-  // 本地化文案
   const { t } = useTranslation();
-  // 受控状态
   const open = useFileViewerStore((s) => s.open);
   const filePath = useFileViewerStore((s) => s.filePath);
 
-  // 编辑模式状态
   const editMode = useFileViewerStore((s) => s.editMode);
   const isDirty = useFileViewerStore((s) => s.isDirty);
   const originalContent = useFileViewerStore((s) => s.originalContent);
@@ -56,32 +34,24 @@ export function FileViewerPanel(): ReactElement {
   const setEditedContent = useFileViewerStore((s) => s.setEditedContent);
   const markSaved = useFileViewerStore((s) => s.markSaved);
 
-  // 拉取文件内容（filePath 为 null 时跳过查询）
   const { data, isLoading, error } = useFileContent(open ? filePath : null);
 
-  // 写入 mutation
   const { mutateAsync: saveFile, isPending: isSaving } = useFileWrite();
 
-  // 主题跟随
   const { resolvedTheme } = useTheme();
   const theme: 'github-dark' | 'github-light' =
     resolvedTheme === 'dark' ? 'github-dark' : 'github-light';
 
-  // 推断语言（filePath 变化时重新计算，React Compiler 自动缓存）
   const lang = filePath !== null ? detectLangFromPath(filePath) : 'text';
 
-  // IPC 数据到达后同步到 store
   useEffect(() => {
     if (data !== undefined) {
-      // 有未保存修改（isDirty）时不同步：useQuery 后台刷新（缓存失效/重取）
-      // 不得覆盖用户正在编辑的内容。非编辑态下 isDirty 恒为 false，故照常同步。
       if (!isDirty) {
         setLoadedContent(data.content);
       }
     }
   }, [data, isDirty, setLoadedContent]);
 
-  // shiki 异步高亮（基于当前显示的内容：编辑态用 editedContent，查看态用 originalContent）
   const [html, setHtml] = useState<string | null>(null);
   const displayContent = editMode ? editedContent : originalContent;
   useEffect(() => {
@@ -89,9 +59,6 @@ export function FileViewerPanel(): ReactElement {
       setHtml(null);
       return;
     }
-    // 大文件降级（2026-08 性能审计）：shiki 整文件 tokenize 在大文件上主线程卡顿
-    // （2MB 上限内仍可近 2 万行）；超过阈值跳过高亮渲染纯文本，保 UI 流畅
-    // （行数口径走 lineCount 单一真源，勿在此内联 split）
     if (lineCount(displayContent) > MAX_HIGHLIGHT_LINES) {
       setHtml(null);
       return;
@@ -101,13 +68,11 @@ export function FileViewerPanel(): ReactElement {
       try {
         const h = await getHighlighter();
         if (cancelled) return;
-        // 2026-09 优化：首见延迟语言（go/rust 等）按需 loadLanguage，而非静态降级 'text'
         await ensureLangLoaded(h, lang);
         if (cancelled) return;
         const result = h.codeToHtml(displayContent, { lang, theme });
         setHtml(result);
       } catch {
-        // lang 不支持等异常：降级为纯文本 pre
         if (!cancelled) setHtml(null);
       }
     })();
@@ -116,13 +81,11 @@ export function FileViewerPanel(): ReactElement {
     };
   }, [displayContent, lang, theme, open]);
 
-  // 复制反馈统一走 useCopy（copied 2s 复位 + 失败 toast，文案收敛 common.copyFailed）
   const { copied, copy } = useCopy();
   const handleCopy = async (): Promise<void> => {
     await copy(displayContent);
   };
 
-  // 保存处理
   const handleSave = async (): Promise<void> => {
     if (filePath === null || !isDirty || isSaving) return;
     try {
@@ -134,16 +97,9 @@ export function FileViewerPanel(): ReactElement {
       });
       markSaved();
       toast.success(t('fileViewer.saved'), { description: basename(filePath) });
-    } catch {
-      // onError 已在 use-file-write 中 toast 错误
-    }
+    } catch {}
   };
 
-  // 保存逻辑经 ref 暴露给全局快捷键，使「注册生命周期」与「回调身份」解耦：
-  // - 注册只在编辑态开关变化时发生（此前依赖 handleSave 身份，而它随每次
-  //   编辑缓冲变化 → 每敲一个字都要注销+重注册一次，纯属无效抖动）
-  // - 回调内读 ref，故始终调用最新闭包（不会捕获过期状态）
-  // 这样也无需依赖「React Compiler 是否缓存了 handleSave」这一隐式前提。
   const saveHandlerRef = useRef<() => void>(() => undefined);
   useEffect(() => {
     saveHandlerRef.current = () => {
@@ -151,9 +107,6 @@ export function FileViewerPanel(): ReactElement {
     };
   });
 
-  // 全局 Ctrl+S 桥接：编辑态打开时把保存处理器注册到 file-viewer-store，
-  // AppShell 的全局快捷键（settings.shortcuts.saveFile，可自定义）→ requestSave() 触发；
-  // 退出编辑态/关闭/卸载时注销，避免无查看器时快捷键误触。
   useEffect(() => {
     if (!editMode || !open) {
       useFileViewerStore.getState().registerSaveHandler(null);
@@ -165,15 +118,11 @@ export function FileViewerPanel(): ReactElement {
     return () => useFileViewerStore.getState().registerSaveHandler(null);
   }, [editMode, open]);
 
-  // textarea ref（用于滚动同步）
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const highlightRef = useRef<HTMLDivElement>(null);
 
-  // 编辑器设置：自动换行（37 号 A：查看/编辑双层同步——编辑态 textarea wrap +
-  // 高亮层/查看态 pre-wrap，双层同字体/同宽/同内边距保证逐行对齐）
   const wordWrap = useSettingsStore((s) => s.editor.wordWrap);
 
-  // textarea 滚动同步：编辑态下滚动 textarea 时同步高亮层
   const handleTextareaScroll = (): void => {
     if (textareaRef.current !== null && highlightRef.current !== null) {
       highlightRef.current.scrollTop = textareaRef.current.scrollTop;
@@ -181,12 +130,6 @@ export function FileViewerPanel(): ReactElement {
     }
   };
 
-  // 自动换行占位对齐（37 号 A）：wrap 模式下 textarea 纵向滚动条（占用宽度因
-  // 平台/滚动条形态而异）会减少其可用换行宽度，而高亮层隐藏滚动条不占位 →
-  // 两层折行点不一致。此处运行时测量 textarea 真实占位，补给高亮层的
-  // padding-right（不硬编码 8px：Classic 占位 / Overlay 零占位在测量处收敛）。
-  // 换行算法一致性由 CSS 层保证（file-tree.css .file-viewer-wrap 注释）。
-  // 依赖 html：高亮层在 shiki 就绪前不渲染，就绪后需补测
   // biome-ignore lint/correctness/useExhaustiveDependencies: ref.current 是受控读，html 为高亮层挂载信号
   useEffect(() => {
     const highlight = highlightRef.current;
@@ -205,15 +148,11 @@ export function FileViewerPanel(): ReactElement {
     };
   }, [editMode, wordWrap, html]);
 
-  // 渲染
   const fileName = filePath !== null ? basename(filePath) : '';
-  // 行数：查看态优先用 IPC 返回的 totalLines（磁盘权威值，空文件为 0）；
-  // 编辑态必须随编辑缓冲实时变化——此前固定显示磁盘行数，增删行后工具栏数字陈旧
   const totalLines = editMode
     ? lineCount(editedContent)
     : (data?.totalLines ?? lineCount(displayContent));
 
-  // 未选择文件时显示引导（右面板"文件"tab 空态）
   if (!open) {
     return (
       <div className="text-muted-foreground flex h-full flex-col items-center justify-center gap-1.5 p-3 text-xs">
@@ -242,7 +181,6 @@ export function FileViewerPanel(): ReactElement {
         onCopy={() => void handleCopy()}
       />
 
-      {/* 内容区：文件内容（侧边栏文件树已提供目录导航——面板只显示内容） */}
       <div className="file-viewer-layout">
         <div className={cn('file-viewer-body', wordWrap && 'file-viewer-wrap')}>
           <ViewerBody
@@ -266,8 +204,6 @@ export function FileViewerPanel(): ReactElement {
     </div>
   );
 }
-
-// ── 子组件：内容区五态分派 ────────────────────────────────────
 
 /** 编辑态 DOM 绑定（textarea 与其下方 shiki 高亮叠加层） */
 interface EditorBindings {
@@ -306,7 +242,6 @@ function EditorView({
   const { t } = useTranslation();
   return (
     <div className={cn('file-viewer-editor', wordWrap && 'file-viewer-wrap')}>
-      {/* 高亮层（背景，pointer-events: none） */}
       {html !== null && (
         <div
           ref={highlightRef}
@@ -315,7 +250,6 @@ function EditorView({
           dangerouslySetInnerHTML={{ __html: html }}
         />
       )}
-      {/* textarea 层（前景，文字透明、caret 不透明） */}
       <textarea
         ref={textareaRef}
         className="file-viewer-editor-textarea"
@@ -327,7 +261,6 @@ function EditorView({
         autoCapitalize="off"
         autoCorrect="off"
         wrap={wordWrap ? 'soft' : 'off'}
-        // 空文件在编辑态给一句引导（textarea 自身无内容时全空，用户不知可输入）
         {...(value === '' ? { placeholder: t('common.emptyFileEdit') } : {})}
         aria-label={t('chat.editFileLabel', { name: fileName })}
       />
@@ -382,7 +315,6 @@ function ViewerBody({
       </div>
     );
   }
-  // 编辑态优先：空文件也必须可编辑（textarea 为空串即可正常输入）
   if (editMode) {
     return <EditorView {...editor} html={html} fileName={fileName} wordWrap={wordWrap} />;
   }
@@ -401,8 +333,6 @@ function ViewerBody({
     </pre>
   );
 }
-
-// ── 子组件：标题栏 / 工具栏 ──────────────────────────────────
 
 interface ViewerHeaderProps {
   readonly fileName: string;
@@ -490,7 +420,6 @@ function ViewerToolbar({
         {lang !== 'text' ? ` · ${lang}` : ''}
       </span>
       <div className="file-viewer-actions">
-        {/* 模式切换按钮 */}
         {editMode ? (
           <button
             type="button"
@@ -518,7 +447,6 @@ function ViewerToolbar({
           </button>
         )}
 
-        {/* 保存按钮（仅编辑态可见） */}
         {editMode && (
           <button
             type="button"
@@ -533,7 +461,6 @@ function ViewerToolbar({
           </button>
         )}
 
-        {/* 复制按钮（始终可见） */}
         <button
           type="button"
           className={cn('file-viewer-copy-btn', copied && 'copied')}

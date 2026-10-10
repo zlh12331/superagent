@@ -1,7 +1,3 @@
-// src/renderer/components/ui/scroll-area.tsx
-// 滚动区域组件（shadcn/ui new-york 风格，基于 @radix-ui/react-scroll-area）
-// 设计文档 §2.3 shadcn/ui 组件库
-
 import * as ScrollAreaPrimitive from '@radix-ui/react-scroll-area';
 import type * as React from 'react';
 

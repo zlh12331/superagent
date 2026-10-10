@@ -1,6 +1,3 @@
-// src/main/infra/ai/branch-service.test.ts
-// 会话分支服务单测：分类纯函数 + 记录/摘要
-
 import { describe, expect, it } from 'vitest';
 import { BranchService, classifyBranch } from './branch-service';
 

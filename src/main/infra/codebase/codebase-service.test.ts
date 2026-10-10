@@ -1,14 +1,3 @@
-// src/main/infra/codebase/codebase-service.test.ts
-// CodebaseService 单测：codegraph CLI 封装（正向/边界/异常三件套）
-//  + resolveCodegraphBundle dev 平台包解析 memo（P2-37）
-// ──────────────────────────────────────────────────────────────
-// 测试策略（遵循"业务逻辑不 mock、外部依赖注入 fake"）：
-// - spawnFn 经构造注入 fake（返回可编程 ChildProcess 模拟），不 mock 业务代码
-// - timeoutMs 注入短值（50ms）验证超时路径（生产默认 60s）
-// - args 断言验证 CLI 参数构造正确性（各方法的正/边界分支）
-// - bundle memo 用例：electron/node:fs 仅在该 describe 的 mock 层替换
-// ──────────────────────────────────────────────────────────────
-
 import type { ChildProcess, spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
@@ -41,7 +30,6 @@ function createFakeChild(behavior: FakeChildBehavior = {}): ChildProcess {
     return true;
   });
 
-  // 微任务派发输出 + close（让 Promise 链先建立监听）
   queueMicrotask(() => {
     if (behavior.spawnError !== undefined) {
       child.emit('error', behavior.spawnError);
@@ -56,7 +44,6 @@ function createFakeChild(behavior: FakeChildBehavior = {}): ChildProcess {
     if (behavior.exitCode !== undefined) {
       child.emit('close', behavior.exitCode);
     }
-    // exitCode undefined：不 close（等待超时）
   });
   return child;
 }
@@ -71,7 +58,6 @@ function createService(behavior: FakeChildBehavior = {}): {
   const service = new CodebaseService({
     spawnFn: spawnMock,
     timeoutMs: 50,
-    // 平台包定位注入 fake：保持断言针对命令参数本身（真实 resolve 只在生产/真实调用路径生效）
     resolveBundle: () => ({ command: 'codegraph', args: [] }),
   });
   return { service, spawnMock };
@@ -157,7 +143,7 @@ describe('CodebaseService.query（结构化符号搜索）', () => {
   });
 
   it('异常：超时（50ms 无 close）→ INTERNAL_ERROR（超时消息）', async () => {
-    const { service } = createService({ stdoutText: '' }); // exitCode undefined
+    const { service } = createService({ stdoutText: '' });
     await expect(
       service.query({ path: '/repo', search: 'x', limit: 5, kind: undefined }),
     ).rejects.toMatchObject({ code: INTERNAL, message: expect.stringContaining('超时') });
@@ -367,21 +353,19 @@ describe('CodebaseService.callers/callees/impact', () => {
 
 describe('CodebaseService.dispose（生命周期）', () => {
   it('正向：有残留进程 → 全部 kill + Set 清空', async () => {
-    // 造一个永不 close 的进程（留在 activeProcesses）
     const { service, spawnMock } = createService({ stdoutText: '' });
     const pending = service
       .query({ path: '/repo', search: 'x', limit: 5, kind: undefined })
       .catch(() => {});
-    await new Promise((resolve) => setTimeout(resolve, 10)); // 等 spawn 建立
+    await new Promise((resolve) => setTimeout(resolve, 10));
     expect(spawnMock).toHaveBeenCalledTimes(1);
 
     await service.dispose();
     const child = spawnMock.mock.results[0]?.value as ChildProcess & {
       kill: ReturnType<typeof vi.fn>;
     };
-    // 2026-09-08：dispose 改为 terminateChild（无参 kill = SIGTERM，3s 后升级 SIGKILL）
     expect(child.kill).toHaveBeenCalledWith();
-    await pending; // 超时 reject 已被吞
+    await pending;
   }, 5_000);
 
   it('边界：空 Set → no-op 不抛', async () => {
@@ -396,7 +380,7 @@ describe('CodebaseService.dispose（生命周期）', () => {
       .catch(() => {});
     await new Promise((resolve) => setTimeout(resolve, 10));
     await service.dispose();
-    await service.dispose(); // 第二次：Set 已空
+    await service.dispose();
     expect(spawnMock).toHaveBeenCalledTimes(1);
     await pending;
   }, 5_000);
@@ -407,7 +391,7 @@ describe('CodebaseService.dispose（生命周期）', () => {
       .query({ path: '/repo', search: 'x', limit: 5, kind: undefined })
       .catch(() => {});
     await new Promise((resolve) => setTimeout(resolve, 10));
-    await expect(service.dispose()).resolves.toBeUndefined(); // kill 抛错被吞
+    await expect(service.dispose()).resolves.toBeUndefined();
     await pending;
   }, 5_000);
 });

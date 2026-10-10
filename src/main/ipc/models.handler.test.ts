@@ -1,11 +1,3 @@
-// src/main/ipc/models.handler.test.ts
-// models.handler 单测：models:list 过滤语义 + models:test 连通性探测
-// ──────────────────────────────────────────────────────────────
-// 测试策略（遵循"业务逻辑不 mock、外部依赖注入 fake"）：
-// - modelRegistry/keychain/config 为外部依赖 → vi.mock
-// - fetch 为网络边界 → vi.stubGlobal 注入 fake（业务判定逻辑保持真实）
-// ──────────────────────────────────────────────────────────────
-
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { modelsHandlers } from './models.handler';
@@ -14,11 +6,9 @@ import { modelsHandlers } from './models.handler';
 const PLACEHOLDER_CREDENTIAL = 'placeholder-not-real';
 
 const mocks = vi.hoisted(() => ({
-  // 返回类型显式标注：避免 vi.fn(() => []) 推导 never[] 导致 mockReturnValue 赋值报错
   listModels: vi.fn((): Array<Record<string, unknown>> => []),
   findBuiltin: vi.fn((_modelId: string) => undefined as Record<string, unknown> | undefined),
   listRuntimeModels: vi.fn(async (): Promise<Array<Record<string, unknown>>> => []),
-  // 运行时模型单条查询（test 的 apiFormat 回退来源：已存记录值）
   getRuntimeModel: vi.fn(
     async (_modelId: string): Promise<Record<string, unknown> | undefined> => undefined,
   ),
@@ -90,7 +80,6 @@ describe('models:listBuiltin（配置页厂商下拉数据源）', () => {
         capabilities: {},
       },
     ]);
-    // keychain 全空（新用户场景）——list 会过滤掉全部，listBuiltin 必须返回
     const res = await modelsHandlers.listBuiltin({ providerKind: 'deepseek' });
     expect(res.models).toHaveLength(1);
     expect(res.models[0]?.id).toBe('deepseek-v4-flash');
@@ -146,7 +135,6 @@ describe('models:list（模型清单 = 用户配置且启用的模型记录，�
       providerKind: 'deepseek',
       isRuntime: true,
     });
-    // list 不做 keychain 探测（厂商内置模型全量绝不凭空并入——配置一个显示一个）
     expect(mocks.getSecret).not.toHaveBeenCalled();
   });
 
@@ -166,7 +154,6 @@ describe('models:list（模型清单 = 用户配置且启用的模型记录，�
     const res = await modelsHandlers.list();
     expect(res.models[0]?.label).toBe('我的模型');
 
-    // 无 displayName + 无内置条目 → 回退 modelId
     mocks.findBuiltin.mockReturnValue(undefined);
     mocks.listRuntimeModels.mockResolvedValue([
       runtimeModel({ modelId: 'b', displayName: undefined }),
@@ -229,7 +216,6 @@ describe('models.handler test（连通性探测）', () => {
     const [url, init] = mocks.fetch.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe('http://127.0.0.1:9527/v1/responses');
     const body = JSON.parse(init.body as string) as Record<string, unknown>;
-    // Responses 用 max_output_tokens + input（无 messages）
     // biome-ignore lint/style/useNamingConvention: 供应商 API 协议字段（snake_case）
     expect(body).toMatchObject({ model: 'gpt-5', max_output_tokens: 1, input: 'ping' });
     expect(body).not.toHaveProperty('messages');
@@ -254,7 +240,6 @@ describe('models.handler test（连通性探测）', () => {
   });
 
   it('apiFormat 省略但 modelId 命中已存记录：用记录的格式探测', async () => {
-    // 编辑历史模型时表单未显式下发格式，主进程按已存记录值探测
     mocks.getRuntimeModel.mockResolvedValueOnce({ apiFormat: 'openai-responses' });
     mocks.fetch.mockResolvedValueOnce(respond(200));
     await modelsHandlers.test({
@@ -276,10 +261,8 @@ describe('models.handler test（连通性探测）', () => {
       baseUrl: undefined,
       apiKey: undefined,
     });
-    // 错误文案带实际探测 URL（拼接/协议选错类问题一眼可辨）
     expect(res.ok).toBe(false);
     expect(res.error).toContain('HTTP 500');
-    // openrouter 默认地址已含 /v1：不重复拼接
     const [url] = mocks.fetch.mock.calls[0] as unknown as [string];
     expect(url).toBe('https://openrouter.ai/api/v1/chat/completions');
     expect(res.error).toContain(url);
@@ -329,7 +312,6 @@ describe('models.handler test（连通性探测）', () => {
 
   it('显式 baseUrl：覆盖默认端点', async () => {
     mocks.fetch.mockResolvedValueOnce(respond(200));
-    // 2026-09-08：显式 baseUrl 必须同时提供 apiKey（防用真实密钥探测任意端点）
     await modelsHandlers.test({
       providerKind: 'deepseek',
       modelId: undefined,
@@ -352,8 +334,6 @@ describe('models.handler test（连通性探测）', () => {
   });
 
   it('显式 baseUrl 指向本机环回：放行（本地 Ollama / 自建推理服务）', async () => {
-    // 2026-10-07 修正：环回不再借用 web_fetch 的 SSRF 一律拦截——测试的
-    // 发起方是用户本人，本地推理端点（含自定义端口）是合法探测目标
     mocks.fetch.mockResolvedValue(respond(200));
     for (const baseUrl of [
       'http://127.0.0.1:11434',

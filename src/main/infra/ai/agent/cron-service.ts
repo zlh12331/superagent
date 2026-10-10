@@ -1,26 +1,4 @@
-// src/main/infra/ai/agent/cron-service.ts
-// 定时任务服务：cron 表达式调度 + sqlite 持久化（对齐 qwen cronScheduler durable 语义收敛）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - create/delete/list：cron 任务管理（sqlite 持久化，重启保留）
-// - 调度：croner 成熟库（v10）实例化调度——每个任务一个 Cron 实例，
-//   秒级内部精度、分钟级表达式天然不重复触发（替代原自研 30s tick）
-// - 触发语义：fire 时更新 next_fire_at（下次触发时间）
-//
-// 归属与消费方（原位于 ai/ 根，2026-10-03 迁入 agent/——fire 驱动 agent 回合，
-// 与 agent-ask-service 同为「模块级单例、非容器 accessor」模式）：
-// - ServiceContainer：initCronScheduler 订阅 onFire（fire → runCronTurn 无头
-//   执行 agent 回合）+ start；dispose/reset 走 stop（先于 AgentService 收尾）
-// - tools/cron-create / cron-list / cron-delete：任务管理入口
-//
-// 借鉴声明：
-// 本模块参考 qwen-code 参考项目 packages/core/src/services/cronScheduler.ts
 // （Copyright 2026 Qwen Team，SPDX-License-Identifier: Apache-2.0）的
-// 调度语义，按我们的技术栈收敛重写：
-// - 文件持久化改 sqlite（对齐项目存储体系）
-// - 自写 cron-parser 替换为 croner（成熟调度库：校验/时区/秒级精度）
-// - 保留核心：表达式调度 + durable 任务 + 到期触发
-// ──────────────────────────────────────────────────────────────
 
 import { randomUUID } from 'node:crypto';
 import { Cron } from 'croner';
@@ -58,10 +36,6 @@ export class CronService {
    */
   create(sessionId: string, expression: string, description: string): string {
     const id = randomUUID();
-    // 2026-09-08 修复（首次触发丢失）：此前 createJob(id, expression, false) 直接
-    // 启动，而 DB insert 在其后——若触发点落在两者之间，fire() 读不到任务行会
-    // early-return，首次触发被静默吞掉。现在先以 paused 创建（校验表达式 +
-    // 取得 nextRun），insert 成功后再 resume 启动。
     const job = this.createJob(id, expression, true);
     const db = getDb();
     const now = Date.now();
@@ -79,12 +53,9 @@ export class CronService {
         })
         .run();
     } catch (err: unknown) {
-      // 回滚调度实例：insert 失败不留幽灵 job（否则 delete 对无 DB 行
-      // early-return，运行中实例永远无法清除，周期空转）
       this.stopJob(id);
       throw err;
     }
-    // DB 行就位后启动调度
     job.resume();
     logger.info({ id, expression, nextFireAt }, '定时任务已创建');
     return id;
@@ -94,7 +65,6 @@ export class CronService {
    * 删除定时任务（幂等）：停止调度实例 + 删除记录
    */
   delete(taskId: string): boolean {
-    // 先停调度实例再查 DB：即使 DB 行缺失（历史幽灵 job）也能清除运行中实例
     this.stopJob(taskId);
     const db = getDb();
     const existing = db.select().from(cronTasks).where(eq(cronTasks.id, taskId)).get();
@@ -129,7 +99,6 @@ export class CronService {
     }
     const job = this.jobs.get(taskId);
     if (enabled) {
-      // 恢复/新建调度实例：重新计算下次触发
       const active = job ?? this.createJob(taskId, existing.expression, true);
       active.resume();
       const nextFireAt = active.nextRun()?.getTime() ?? null;
@@ -169,7 +138,6 @@ export class CronService {
         this.createJob(row.id, row.expression, true);
         restored += 1;
       } catch (err: unknown) {
-        // 表达式异常（历史脏数据）：停用任务，防反复失败
         logger.error({ error: err, taskId: row.id }, '定时任务恢复失败，已停用');
         db.update(cronTasks).set({ enabled: 0 }).where(eq(cronTasks.id, row.id)).run();
       }
@@ -192,8 +160,6 @@ export class CronService {
     this.started = false;
   }
 
-  // ── 内部 ──────────────────────────────────────────────
-
   private started = false;
   private fireHandlers: CronFireHandler[] = [];
 
@@ -204,10 +170,7 @@ export class CronService {
     const job = new Cron(
       expression,
       {
-        paused: initialPaused, // 本地时区（与 sqlite next_fire_at 语义一致）
-        // 2026-09-08 可靠性修复：此前未设 protect——上一次 fire 的 handler 还在跑
-        // 时下一次触发会重叠（同一会话并发回合）。protect 让 croner 跳过
-        // 上一次尚未结束的触发。
+        paused: initialPaused,
         protect: true,
       },
       (self) => {
@@ -227,7 +190,6 @@ export class CronService {
       try {
         job.stop();
       } catch (error: unknown) {
-        // 2026-09-08：此前空 catch 吞掉异常，stop 失败无任何痕迹
         logger.warn(
           { taskId, error: error instanceof Error ? error.message : String(error) },
           '定时任务停止失败（忽略，继续移除引用）',

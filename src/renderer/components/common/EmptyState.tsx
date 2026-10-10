@@ -1,18 +1,3 @@
-// src/renderer/components/common/EmptyState.tsx
-// 通用空状态组件 · TraeWork
-// ──────────────────────────────────────────────────────────────
-// 设计：
-// - 图标用 size-12 圆形 + 暖米底 + strokeWidth=1.5
-// - 标题用衬线字体
-// - 描述用衬线字体 + 行高放宽
-// ──────────────────────────────────────────────────────────────
-//
-// 职责：
-// - 展示空状态图标 + 标题 + 描述 + 可选操作按钮
-// - 用于列表为空、无搜索结果等场景
-//
-// 注意：此组件为展示型组件，不包含业务逻辑，所有内容通过 props 传入。
-
 import { Inbox } from 'lucide-react';
 import type { ReactElement, ReactNode } from 'react';
 
@@ -61,13 +46,10 @@ export function EmptyState({
       )}
     >
       <div className="bg-muted text-muted-foreground flex size-12 items-center justify-center rounded-full">
-        {/* 默认 Inbox 图标 + strokeWidth=1.5 */}
         {icon ?? <Inbox className="size-6" strokeWidth={1.5} data-testid="empty-default-icon" />}
       </div>
       <div className="text-center">
-        {/* 标题用衬线字体 */}
         <p className="text-foreground font-serif text-sm font-medium tracking-wide">{title}</p>
-        {/* 描述用衬线字体 + 行高放宽 */}
         {description !== undefined && (
           <p className="text-muted-foreground mt-1 font-serif text-xs leading-relaxed">
             {description}

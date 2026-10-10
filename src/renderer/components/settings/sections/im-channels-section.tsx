@@ -1,7 +1,3 @@
-// im-channels-section.tsx（自 SettingsDialog 拆分）
-// 设置对话框 · ImChannelsSection 独立面板（高内聚）
-// ──────────────────────────────────────────────
-
 import type { ChannelListRes } from '@code-agent/shared/renderer';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { MessageSquareText } from 'lucide-react';
@@ -29,7 +25,6 @@ export function ImChannelsSection(): ReactElement {
   const [tokenInputs, setTokenInputs] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
 
-  // P3 修复：im:list 改走 TanStack Query（此前 useState 手动拉取）
   const {
     data: channelsData,
     isPending: channelsLoading,
@@ -58,7 +53,6 @@ export function ImChannelsSection(): ReactElement {
     },
   });
 
-  // 停止 mutation：成功后失效渠道列表
   const stopMutation = useMutation({
     mutationFn: (kind: ImChannelKind) => stopImChannel(kind),
     onSuccess: () => {
@@ -74,11 +68,7 @@ export function ImChannelsSection(): ReactElement {
     setBusy(kind);
     try {
       await startMutation.mutateAsync(kind as ChannelListRes['channels'][number]['kind']);
-    } catch {
-      // 启动失败：onError 已 toast，这里补 catch 防未处理的 rejection 冒泡
-    }
-    // finally 语义（React Compiler 不优化 try/finally）：catch 吞掉全部异常，
-    // 成功/失败路径都落到这里复位忙碌状态
+    } catch {}
     setBusy(null);
   };
 
@@ -86,9 +76,7 @@ export function ImChannelsSection(): ReactElement {
     setBusy(kind);
     try {
       await stopMutation.mutateAsync(kind as ChannelListRes['channels'][number]['kind']);
-    } catch {
-      // 停止失败：onError 已 toast，这里补 catch 防未处理的 rejection 冒泡
-    }
+    } catch {}
     setBusy(null);
   };
 
@@ -125,7 +113,6 @@ export function ImChannelsSection(): ReactElement {
         ))}
       </ul>
       <div className="mt-2">
-        {/* 群聊白名单：私聊默认放行，群聊需登记 */}
         <ImAllowlistField />
       </div>
     </div>
@@ -171,7 +158,6 @@ function ImChannelRow(props: {
           </Button>
         </div>
       </div>
-      {/* 未配置 token 的已实现渠道：显示 token 输入（首次启动） */}
       {channel.implemented && !channel.configured && (
         <div className="mt-1.5 flex gap-1.5">
           <Input

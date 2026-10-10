@@ -1,11 +1,3 @@
-// packages/shared/src/schemas/dialog.ts
-// Dialog 域 zod schema（原生对话框）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 定义 dialog:pickDirectory / dialog:pickFiles 请求-响应 zod schema
-// - 供主进程 DialogHandler 校验入参
-// ──────────────────────────────────────────────────────────────
-
 import { z } from 'zod';
 
 /** dialog:pickDirectory 入参 zod schema（无入参） */

@@ -1,7 +1,3 @@
-// src/renderer/components/ui/alert.tsx
-// 警示横幅组件（shadcn/ui new-york 风格，基于 div + role="alert"）
-// 设计文档 §2.3 shadcn/ui 组件库
-
 import { cva, type VariantProps } from 'class-variance-authority';
 import type * as React from 'react';
 
@@ -13,8 +9,6 @@ const alertVariants = cva(
     variants: {
       variant: {
         default: 'bg-card text-card-foreground',
-        // 此前带 *:data-[slot=alert-description]:text-error-text/90——本文件不导出
-        // AlertDescription，全仓也无该 slot，选择器永远匹配不到（已移除）
         destructive: 'text-error-text bg-card [&>svg]:text-current',
       },
     },

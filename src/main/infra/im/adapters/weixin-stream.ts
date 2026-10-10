@@ -1,20 +1,4 @@
-// src/main/infra/im/adapters/weixin-stream.ts
-// 微信渠道：iLink 智能机器人 API（长轮询接收 + 消息发送）
-// ──────────────────────────────────────────────────────────────
-// 协议（腾讯 iLink Bot API，参考 qwen weixin 包收敛）：
-// 1. 接收：POST {baseUrl}/ilink/bot/getupdates { get_updates_buf(游标), base_info } 长轮询
-//    —— 游标续传 + 40s 超时（AbortError 继续）+ errcode -14 会话过期暂停
-// 2. 发送：POST {baseUrl}/ilink/bot/sendmsg { to_user_id, client_id, context_token, item_list }
-// 3. 消息形状：message_id / from_user_id / session_id / item_list（text_item.text / voice_item.text）
-//
-// 借鉴声明：
-// 本模块参考 qwen-code 参考项目 packages/channels/weixin/src/
 // （Copyright 2026 Qwen Team，SPDX-License-Identifier: Apache-2.0）的
-// api.ts（getUpdates/sendmsg 协议）+ monitor.ts（长轮询游标循环）语义，
-// 按我们的技术栈收敛重写：
-// - 移除账号文件持久化（凭据走 keychain）/媒体下载（保留扩展位）
-// - 保留核心：getupdates 游标长轮询 + 消息归一化
-// ──────────────────────────────────────────────────────────────
 
 import { randomUUID } from 'node:crypto';
 import { AppError, ErrorCode } from '@code-agent/shared/main';
@@ -180,7 +164,6 @@ export class WeixinStreamReceiver {
     this.abortController = new AbortController();
     const signal = this.abortController.signal;
     logger.info({}, '微信 iLink 轮询已启动（接收就绪）');
-    // 轮询循环不阻塞 open（后台运行）
     void this.pollLoop(signal);
   }
 
@@ -209,7 +192,6 @@ export class WeixinStreamReceiver {
           signal,
         });
         if (response.errcode === -14) {
-          // 会话过期：暂停后继续（token 需重新配置）
           logger.warn({}, '微信 iLink 会话过期，暂停 30s');
           await sleep(this.sessionPauseMs, signal);
           continue;
@@ -273,7 +255,6 @@ export async function fetchWeixinUpdates(options: {
     );
   } catch (err: unknown) {
     if (err instanceof Error && err.name === 'AbortError') {
-      // 轮询超时（长轮询正常返回）：视为空结果继续
       return { ret: 0, msgs: [], get_updates_buf: cursor };
     }
     throw err;
@@ -298,8 +279,8 @@ export async function sendWeixinText(options: {
       to_user_id: toUserId,
       from_user_id: '',
       client_id: randomUUID(),
-      message_type: 2, // BOT
-      message_state: 2, // FINISH
+      message_type: 2,
+      message_state: 2,
       ...(contextToken !== undefined ? { context_token: contextToken } : {}),
       item_list: [{ type: ITEM_TYPE_TEXT, text_item: { text: text.slice(0, 2000) } }],
     },
@@ -324,7 +305,6 @@ async function postJson<T>(
 ): Promise<T> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort('timeout'), timeoutMs);
-  // 父信号联动
   const parentListener = (): void => controller.abort();
   signal.addEventListener('abort', parentListener);
   try {

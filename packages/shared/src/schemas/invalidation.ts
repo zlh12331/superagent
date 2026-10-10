@@ -1,16 +1,3 @@
-// packages/shared/src/schemas/invalidation.ts
-// 失效域契约（invalidation:event:domains 事件 payload + 域词表）
-// ──────────────────────────────────────────────────────────────
-// 背景（docs/design/31-invalidation-automation-spec.md）：主进程写路径声明式携带
-// 受影响域，经 invalidation:event:domains 广播；渲染层按域前缀失效 TanStack Query
-// 缓存。域「知识」收敛到写入端（主进程），渲染层不再逐域人工补失效清单
-// （task/usage/git/file/turns 五连遗漏与 memory/IM 运行态缺口的同根解法）。
-//
-// 域元素形如 'sessions' 或 'session:<id>'：渲染层 split(':') 得 queryKey 前缀
-// （'sessions' → ['sessions']；'session:<id>' → ['session', '<id>']），
-// 前半段与渲染层 lib/query/keys.ts 的 QUERY_KEY_ROOTS 键一一对应。
-// ──────────────────────────────────────────────────────────────
-
 import { z } from 'zod';
 
 /** invalidation:event:domains 事件 payload zod schema（主进程发送侧 dev 校验） */

@@ -1,14 +1,3 @@
-// src/renderer/lib/error-actions.ts
-// 错误码 → 恢复动作注册表（错误处理扩展）
-// ──────────────────────────────────────────────────────────────
-// 背景：AsyncBoundary 默认错误态提供「重试」按钮，但部分错误码需要
-// 业务恢复动作（如 API Key 缺失 → 打开设置配置密钥）。本注册表
-// 统一映射「错误码 → 恢复动作」，跨模块行为一致。
-//
-// 使用：parseErrorCode(error) 解析错误码（约定格式 "[CODE] message"），
-// resolveErrorAction(error) 查注册表；未注册的错误码只显示默认重试。
-// ──────────────────────────────────────────────────────────────
-
 import { ErrorCode, type ErrorCode as ErrorCodeType } from '@code-agent/shared/renderer';
 
 /** 错误恢复动作类型 */
@@ -40,7 +29,6 @@ export function parseErrorCode(error: Error): ErrorCodeType | undefined {
     return undefined;
   }
   const candidate = codeMatch[1] ?? '';
-  // 校验候选码确为合法 ErrorCode（防御任意字符串被当作错误码）
   const validCodes: readonly string[] = Object.values(ErrorCode);
   return validCodes.includes(candidate) ? (candidate as ErrorCodeType) : undefined;
 }

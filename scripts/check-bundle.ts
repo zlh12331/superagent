@@ -1,13 +1,3 @@
-// scripts/check-bundle.ts
-// Bundle 体积门槛（工程化强制）：检查构建产物，超限即卡关（exit 1）
-// ──────────────────────────────────────────────────────────────
-// 依据 docs/design/12-performance-spec.md §1.2：
-//   单 chunk ≤ 5MB、渲染层总包 ≤ 16MB（2026-08-11 基线门槛：当前产物 14.5MB，渐进收紧）
-// 产物不存在时仅提示（本地未构建场景不卡关）；CI 中 build 后运行。
-//
-// 运行：pnpm build && pnpm check:bundle
-// ──────────────────────────────────────────────────────────────
-
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -22,12 +12,8 @@ const HISTORY_KEEP = 30;
 /** 环比告警阈值（相比上次总包变化，超过即提示，不卡关——门槛已卡关） */
 const TREND_ALERT_RATIO = 0.15;
 
-// 基线门槛（依据 12-performance-spec §1.2，渐进收紧）：
 const CHUNK_LIMIT_KB = 5 * 1024;
 const TOTAL_LIMIT_KB = 16 * 1024;
-// 首载同步体积门槛（12-performance-spec §1.2，2026-09 新增）：
-// index.html 的 script/modulepreload 所列 chunk 合计（Electron 首帧需下载的 JS）。
-// shiki 按需加载后 index 4.4MB → ~0.8MB；此门槛防语言包被误打回主入口。
 const INITIAL_LOAD_LIMIT_KB = 3 * 1024;
 
 interface ChunkInfo {
@@ -57,9 +43,7 @@ function recordHistory(totalKib: number, chunks: readonly ChunkInfo[]): BundleHi
     if (existsSync(HISTORY_PATH)) {
       history = JSON.parse(readFileSync(HISTORY_PATH, 'utf8')) as BundleHistoryEntry[];
     }
-  } catch {
-    // 历史损坏时重置（不影响门禁）
-  }
+  } catch {}
   const previous = history.at(-1) ?? null;
 
   history.push(entry);
@@ -91,10 +75,6 @@ function reportTrend(previous: BundleHistoryEntry | null, totalKib: number): voi
   }
 }
 
-// P5 修复：主进程产物体积报告（此前门槛只测渲染层，主进程 ~250MB 运行时依赖
-// 完全无监控——@cursorless/tree-sitter-wasms 48MB、gpt-tokenizer 50MB、lark SDK 28MB 等）。
-// 第一阶段：out/main/index.js 体积告警不卡关（真实 asar 门禁需依赖清单基线，
-// 避免新门槛误伤 CI；先让膨胀可见，再收紧为卡关门禁）
 const MAIN_ENTRY = join(ROOT, 'out', 'main', 'index.js');
 const MAIN_WARN_KB = 5 * 1024;
 
@@ -112,13 +92,11 @@ function main(): number {
     return 0;
   }
 
-  // 边界：assets 目录存在但无 .js 产物（异常构建）——跳过历史记录避免写入 -Infinity 趋势数据
   if (chunks.length === 0) {
     console.log('[check-bundle] ⏭️ assets 目录无 .js 产物，跳过（异常构建请检查 build 输出）');
     return 0;
   }
 
-  // 主进程产物报告（告警不卡关）
   if (existsSync(MAIN_ENTRY)) {
     const mainKib = statSync(MAIN_ENTRY).size / 1024;
     if (mainKib > MAIN_WARN_KB) {
@@ -135,10 +113,6 @@ function main(): number {
 
   const totalKib = chunks.reduce((sum, c) => sum + c.sizeKib, 0);
 
-  // 首载同步体积（12-performance-spec §1.2，2026-09 新增）：
-  // 解析 index.html 的 <script> / <link rel="modulepreload">，汇总其引用的 chunk——
-  // 即 Electron 首帧必须下载的 JS 集（Vite/Rollup 生成的入口可达链）。
-  // shiki 按需加载后 index 4.4MB → ~0.8MB；此门槛防语言包被误打回主入口。
   let initialLoadKib = 0;
   if (existsSync(RENDERER_HTML)) {
     const html = readFileSync(RENDERER_HTML, 'utf8');
@@ -154,8 +128,6 @@ function main(): number {
 
   for (const c of chunks) {
     if (c.sizeKib > CHUNK_LIMIT_KB) {
-      // U1 修复：ChunkInfo 只有 sizeKib 字段，此前引用不存在的 sizeKB——
-      // 单 chunk 超限时抛 TypeError 而非报警（恰在最需要报警时失效）
       problems.push(`${c.name}: ${c.sizeKib.toFixed(0)}KB > ${CHUNK_LIMIT_KB}KB（单 chunk 超限）`);
     }
   }
@@ -176,7 +148,6 @@ function main(): number {
   }
 
   if (problems.length === 0) {
-    // 记录历史趋势（门槛通过后写，避免失败时污染趋势）
     const previous = recordHistory(totalKib, chunks);
     reportTrend(previous, totalKib);
     console.log(

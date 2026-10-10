@@ -1,7 +1,3 @@
-// src/main/ipc/ipc-gaps.test.ts
-// IPC 薄层 8 缺口补全：app/dialog handler 全路径、agent/chat thinking 省略、
-// tool handler deny 过滤（electron 全局 mock + service DI fake）
-
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { IAgentService } from '../infra/ai/agent/agent-service';
 import type { IToolRegistry } from '../infra/ai/tools/tool-registry';
@@ -44,8 +40,6 @@ vi.mock('electron', () => ({
 /** 构造 handler 上下文（sender 为最小 webContents 形状） */
 function createCtx(): IpcHandlerContext {
   return {
-    // emit-event 的 isDestroyed 守卫与 send 推送要求 sender 实现这两个方法；
-    // agent:stream:start 推送（run 路径）会触达 emitEvent
     sender: { isDestroyed: () => false, send: () => {} } as never,
     traceId: 'trace-gap',
   };

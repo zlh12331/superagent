@@ -1,24 +1,3 @@
-// src/main/infra/ai/llm-client/ai-provider.ts
-// AI Provider 工厂（多供应商可插拔路由，Code Agent 模板核心）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// 1. 通过 ProviderRegistry 按 kind 路由到对应供应商（内置 10 家：
-//    deepseek/openai/anthropic/ollama/moonshot/zhipu/qwen/doubao/
-//    siliconflow/openrouter）
-// 2. apiKey 从 keychain 按 kind 独立读取（首次配置时由 settings service 写入）
-// 3. provider 实例按 kind 缓存，避免重复创建
-// 4. 提供 getModel(modelId) 工厂方法，返回 LanguageModel 实例供 streamText 使用
-//    - 无覆盖参数时走 LlmClient（模型级解析：模型 id → 供应商 → per-model 缓存）
-//    - 带 kind/apiKey 覆盖时走原 kind 级路由（当前生产零调用，仅单测）
-// 5. 支持 reset（settings:setApiKey 后下次调用重建实例）
-//
-// 设计（对标 qwen-code BaseLlmClient + 保持向后兼容）：
-// - 模型领域层（models/）：模型条目、ModelRegistry 解析、运行时快照
-// - LLM 客户端层（llm-client/）：LlmClient 统一出口（模型级路由 + 缓存 + 重试）
-// - 本文件是薄委托层：装配 LlmClient 单例，保持旧 API 签名不变
-//   （agent-service / service-container 零改动；原注释的 chat-service 已并入删除）
-// ──────────────────────────────────────────────────────────────
-
 import { AppError, ErrorCode } from '@code-agent/shared/main';
 import type { LanguageModel } from 'ai';
 import { getAppConfig } from '../../../config';
@@ -82,18 +61,15 @@ export async function getAIProvider(
   const kind = options?.kind ?? providerRegistry.getDefaultKind();
   const definition = providerRegistry.getDefinition(kind);
 
-  // 显式传入 apiKey 时直接创建临时实例（用于测试连接），不污染缓存
   if (options?.apiKey !== undefined) {
     return providerRegistry.createFactory(kind, { apiKey: options.apiKey });
   }
 
-  // 单例缓存：按 kind 缓存（keychain 中每个 kind 只有一把 key）
   const cached = providerCache.get(kind);
   if (cached !== undefined) {
     return cached;
   }
 
-  // 读取 API Key（本地供应商如 ollama 不需要）
   let apiKey: string | undefined;
   if (definition.requiresApiKey) {
     const stored = await getSecret(toKeychainKey(kind));
@@ -130,12 +106,8 @@ export async function getAIProvider(
  */
 export const llmClient = new LlmClient({
   modelRegistry,
-  // 全局模型超时兜底（config.modelTimeoutMs；test 环境 5s）
   defaultTimeoutMs: getAppConfig().modelTimeoutMs,
   createProviderFactory: async (kind, options) => {
-    // 运行时快照携带显式配置时创建临时实例（不污染 kind 级缓存）。
-    // apiFormat 同属「快照显式配置」（自定义模型的协议选择），必须一并判定——
-    // 否则「只选格式、未改 baseUrl/apiKey」的模型会落入 kind 级缓存路径，格式被忽略
     if (
       options?.apiKey !== undefined ||
       options?.baseUrl !== undefined ||
@@ -147,7 +119,6 @@ export const llmClient = new LlmClient({
         ...(options.apiFormat !== undefined ? { apiFormat: options.apiFormat } : {}),
       });
     }
-    // 常规路径：kind 级缓存 + keychain 读取
     return getAIProvider({ kind });
   },
   modelGate: ensureModelConfigured,
@@ -201,7 +172,6 @@ export async function getModel(
   modelId?: string,
   options?: AiProviderFactoryOptions,
 ): Promise<LanguageModel> {
-  // 显式供应商 / API Key 覆盖：走原 kind 级路由（测试连接等临时场景）
   if (options?.kind !== undefined || options?.apiKey !== undefined) {
     const kind = options.kind ?? providerRegistry.getDefaultKind();
     const definition = providerRegistry.getDefinition(kind);
@@ -210,7 +180,6 @@ export async function getModel(
     return provider(resolvedModelId);
   }
 
-  // 常规路径：LlmClient 模型级解析 + per-model 缓存
   return llmClient.getModel(modelId);
 }
 
@@ -222,7 +191,6 @@ export async function getModel(
  */
 export function resetAIProvider(): void {
   providerCache.clear();
-  // 同步清空 LlmClient per-model 缓存（模型实例持有旧 API Key）
   llmClient.reset();
 }
 

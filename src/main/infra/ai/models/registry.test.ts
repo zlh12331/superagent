@@ -1,18 +1,3 @@
-// src/main/infra/ai/models/registry.test.ts
-// ModelRegistry 单测：模型级解析 / 跨供应商查找 / 运行时快照
-//
-// 测试要点：
-// 1. resolve(undefined) → 默认供应商默认模型（deepseek-v4-flash）
-// 2. resolve(显式 id) → 跨供应商查找（gpt-4o → openai）
-// 3. resolve(未注册 id) → 默认供应商 + 原始 id 透传（防御性降级）
-// 4. 运行时快照：注册 / 覆盖内置 / 注销 / 显式 apiKey+baseUrl
-// 5. 停用身份：available=false（含默认模型停用的主链路拦截）
-// 6. listModels：内置 + 运行时快照
-//
-// 接线背景：生产中单例 modelRegistry 在 models/index.ts 装配，llm-client
-// getModel 与 runtime-model-store 消费；停用拦截经 resolve 的 available
-// 字段（isModelDisabled 方法无生产调用方）。本文件为纯领域层测试（无 mock）。
-
 import { beforeEach, describe, expect, it } from 'vitest';
 import { BUILTIN_MODELS, DEFAULT_MODEL_BY_KIND } from './builtin-models';
 import { ModelRegistry } from './registry';
@@ -129,8 +114,6 @@ describe('ModelRegistry', () => {
     });
 
     it('快照 timeoutMs 与内置 generationConfig 合并（不整组覆盖）', () => {
-      // deepseek-v4-pro 内置 generationConfig = { reasoningEffort: 'max' }：
-      // 用户只调超时旋钮不应抹掉思考强度等默认值
       registry.registerRuntimeModel({
         id: buildRuntimeSnapshotId('deepseek', 'deepseek-v4-pro'),
         providerKind: 'deepseek',
@@ -157,9 +140,6 @@ describe('ModelRegistry', () => {
     });
 
     it('快照覆盖同名内置模型：继承能力元数据（contextWindowSize / reasoning）', () => {
-      // 服务商模式典型形态：modelId 即内置 id（deepseek-v4-pro），仅覆盖 apiKey/baseUrl。
-      // 能力是同一模型的固有属性，必须沿用——否则窗口回落 128K 保守值、reasoning 标记
-      // 丢失（后者会让 buildGenerationOptions 向思考模型注入采样参数，违背官方语义）
       registry.registerRuntimeModel({
         id: buildRuntimeSnapshotId('deepseek', 'deepseek-v4-pro'),
         providerKind: 'deepseek',

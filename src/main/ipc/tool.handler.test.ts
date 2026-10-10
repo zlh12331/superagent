@@ -1,8 +1,3 @@
-// src/main/ipc/tool.handler.test.ts
-// tool.handler 单测：tool 域 handler 工厂（定义表驱动模式下测业务函数）
-//
-// 测试维度：正向（list 转发 + permission 过滤透传）
-
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createToolHandlers, type ToolHandlerDeps } from './tool.handler';

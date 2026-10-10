@@ -1,18 +1,3 @@
-// src/main/infra/ai/agent-runtime/turn-emitter.ts
-// 回合事件发射器：类型安全的 on/emit（对齐 qwen AgentEventEmitter）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 回合事件的生产/订阅解耦：生产方 = TurnRunner（turn-start / text-delta /
-//   tool-call）与 agent-service 的 buildToolExecuteHook（tool-result）；消费方 =
-//   agent-service（onAny 转发到类级 turnListeners，on(TEXT_DELTA/TOOL_CALL) 累积
-//   助手全文与转录），生产/消费互不感知
-// - on 返回 unsubscribe 函数（订阅方负责在会话结束时取消，防泄漏）
-//
-// 设计（对齐 qwen agent-events.ts 的 AgentEventEmitter）：
-// - 按事件类型分桶存储监听器，emit 时只通知对应类型
-// - 事件为不可变对象（契约类型只读）
-// ──────────────────────────────────────────────────────────────
-
 import type { TurnEvent, TurnEventMap, TurnEventType } from '@code-agent/shared/main';
 
 /**
@@ -51,13 +36,10 @@ export class TurnEventEmitter {
    * （日志在宿主转发层记——agent-service forwardTurnEvents 捕获后 error 日志）。
    */
   emit(event: TurnEvent): void {
-    // 先通知全类型监听器（onAny），再通知按类型分桶的监听器
     for (const anyListener of this.anyListeners) {
       try {
         anyListener(event);
-      } catch {
-        // 隔离单个监听器异常，保证其他监听器正常收到事件
-      }
+      } catch {}
     }
     const bucket = this.listeners.get(event.type);
     if (bucket === undefined || bucket.size === 0) {
@@ -66,9 +48,7 @@ export class TurnEventEmitter {
     for (const listener of bucket) {
       try {
         listener(event);
-      } catch {
-        // 隔离单个监听器异常，保证其他监听器正常收到事件
-      }
+      } catch {}
     }
   }
 

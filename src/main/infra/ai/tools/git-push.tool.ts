@@ -1,19 +1,3 @@
-// src/main/infra/ai/tools/git-push.tool.ts
-// git_push 工具：推送本地提交到远程（git push）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 推送本地提交到远程仓库
-// - 支持 -u（设置上游）和 --force-with-lease（更安全的强制推送）
-// - 修改远程仓库，影响他人，需用户审批后执行
-//
-// 设计：
-// - permission='ask'：推送到远程会影响他人，是高风险操作
-// - 禁止 --force：使用 --force-with-lease 替代，避免覆盖他人提交
-// - push 失败不抛错，返回 ok=false 便于 LLM 继续对话
-// - 通过 IGitService 注入，便于测试 mock
-// - 返回 ok/pushedCount 和原始 stderr，便于诊断推送失败
-// ──────────────────────────────────────────────────────────────
-
 import { z } from 'zod';
 import type { IGitService } from '../../git/git-service';
 import { t } from '../../i18n';
@@ -25,12 +9,10 @@ const GitPushInputSchema = z.object({
     .string()
     .default('')
     .describe('引用规格（如 "master"、"feature/x"，省略时推送当前分支到同名远程分支）'),
-  // 是否设置上游（首次推送时使用），默认 false
   setUpstream: z
     .boolean()
     .default(false)
     .describe('是否设置上游（git push -u，首次推送时使用以建立追踪关系）'),
-  // 是否使用 --force-with-lease（更安全的强制推送），默认 false
   force: z
     .boolean()
     .default(false)

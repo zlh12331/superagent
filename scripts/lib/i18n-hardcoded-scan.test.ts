@@ -1,11 +1,3 @@
-// scripts/lib/i18n-hardcoded-scan.test.ts
-// 硬编码中文扫描核反例 fixture 测试：AST 主路径「违规样本必须命中 +
-// 干净/豁免样本必须放过」+ 正则兜底路径的行为锚定
-// ──────────────────────────────────────────────────────────────
-// 盲区修复（2026-09-27）的三类新增覆盖各有一组正反样本：
-// 多行 JSX 文本 / 字符串字面量属性 / 表达式容器。旧逐行正则对三者均静默漏扫。
-// ──────────────────────────────────────────────────────────────
-
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -39,7 +31,6 @@ describe('AST 主路径 · 违规样本必须命中', () => {
     ].join('\n');
     const hits = expectAstHits(src, 1);
     expect(hits[0]?.kind).toBe('jsx-text');
-    // JSXText 节点起始于 `<div>` 标签同行（紧跟标签闭合符），行号取节点起点
     expect(hits[0]?.line).toBe(2);
     expect(hits[0]?.snippet).toContain('第一行');
   });

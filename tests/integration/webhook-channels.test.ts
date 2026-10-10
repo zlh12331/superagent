@@ -1,6 +1,3 @@
-// src/main/infra/im/adapters/webhook-channels.test.ts
-// Webhook 渠道单测：真实本地 HTTP 服务器接收 POST（无 mock 框架）
-
 import { createServer, type Server } from 'node:http';
 import { ErrorCode } from '@code-agent/shared/main';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -97,7 +94,6 @@ describe('Webhook 渠道适配器', () => {
     const path = env.captured[0]?.path ?? '';
     expect(path).toContain('timestamp=');
     expect(path).toContain('sign=');
-    // 签名可独立验证（HMAC-SHA256 base64）
     const timestamp = Number(/timestamp=(\d+)/.exec(path)?.[1]);
     expect(timestamp).toBeGreaterThan(0);
     const expectedSign = await dingtalkSign('my-secret', timestamp);
@@ -145,7 +141,6 @@ describe('Webhook 渠道适配器', () => {
   });
 
   it('渠道错误响应（非 0 errcode）：发送失败并分类', async () => {
-    // 返回渠道错误的服务器
     const captured: CapturedRequest[] = [];
     const errorServer = createServer((req, res) => {
       req.on('data', () => {});

@@ -1,13 +1,3 @@
-// src/renderer/components/$1/AppErrorBoundary.test.tsx
-// AppErrorBoundary 单测（第 1 层错误边界：全屏兜底 + 崩溃报障）
-// ──────────────────────────────────────────────
-// 覆盖动机：组件此前 0% 覆盖。它是应用最外层兜底——全屏降级 UI、
-// 崩溃报障深链（标题/正文预填 + 版本环境 + 诊断包引导）、上报统一出口、
-// reload 恢复策略均无回归锚。
-// 断言策略：mock reportError（避免落盘）、mock window.api（getInfo/openExternal）；
-// buildIssueUrl 的拼装经 openExternal 收到的 url 反推验证。
-// ──────────────────────────────────────────────
-
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import { toast } from 'sonner';
@@ -77,7 +67,6 @@ describe('AppErrorBoundary', () => {
   });
 
   it('异常：子组件抛错 → 全屏兜底 UI + 错误消息可见', () => {
-    // 抑制 React 对错误边界的 console.error 噪音
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
     render(
       <AppErrorBoundary>
@@ -123,7 +112,6 @@ describe('AppErrorBoundary', () => {
     const url = openedUrl(openExternal);
     expect(url).toContain('github.com/');
     expect(decodeURIComponent(url)).toContain('[crash] render boom');
-    // 版本环境行来自 getInfo（Electron 版本 + 平台）
     expect(decodeURIComponent(url)).toContain('1.0.0');
     expect(decodeURIComponent(url)).toContain('win32/x64');
     spy.mockRestore();

@@ -1,19 +1,3 @@
-// src/main/telemetry/otel.ts
-// 主进程 OpenTelemetry 初始化（Tracing + Metrics）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 初始化 NodeTracerProvider（trace）
-// - 初始化 MeterProvider（metrics，counter + histogram）
-// - 配置 OTLP Exporter（HTTP/gRPC，端点从 OTEL_EXPORTER_OTLP_ENDPOINT 读取）
-// - 失败容忍：未配置端点时退化为 ConsoleSpanExporter（仅 dev）
-//
-// 设计：
-// - 桌面应用主进程是长期运行的 Node 进程，适合 OTel Node SDK
-// - 与 Sentry 互补：Sentry 采集错误 + Performance，
-//   OTel 采集自定义业务指标 + 分布式 trace（未来扩展 MCP 工具链路）
-// - 资源占用：OTel SDK 约增加 5-10MB 内存，对桌面应用可接受
-// ──────────────────────────────────────────────────────────────
-
 import type { Tracer } from '@opentelemetry/api';
 import { trace } from '@opentelemetry/api';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
@@ -75,10 +59,6 @@ export function initTelemetry(): void {
     const serviceName = `code-agent-agent-${app.isPackaged ? 'prod' : 'dev'}`;
     const serviceVersion = app.getVersion();
 
-    // P2 修复：尊重用户遥测级别——'off' 时完全不注册 provider。此前设置页的
-    // 「关闭遥测」只作用于 Sentry，OTel spans 照常导出（级别语义不一致）。
-    // 'error'/'full' 对 traces 语义相同（span 是链路而非错误日志），仅 off 控制启停；
-    // Sentry 级别仍受重启限制（见 settings.handler setTelemetryLevel 注释）。
     if (readTelemetryLevelSync() === 'off') {
       logger.info({}, 'OpenTelemetry 未初始化（遥测级别 = off）');
       tracer = null;
@@ -94,8 +74,6 @@ export function initTelemetry(): void {
       'host.platform': process.platform,
     });
 
-    // 打包版未配置端点：不落 Console——span 属性会携带文件路径与上下文片段，
-    // 全量打到 stdout 既是噪音也有信息外泄风险；此时 tracing 保持 no-op。
     if ((endpoint === undefined || endpoint === '') && app.isPackaged) {
       logger.info({}, 'OpenTelemetry 未初始化（打包版未配置 OTLP 端点）');
       tracer = null;
@@ -103,15 +81,12 @@ export function initTelemetry(): void {
       return;
     }
 
-    // OTel v2.x：spanProcessors 在构造函数传入，不再支持 addSpanProcessor 方法
     let spanProcessor: SimpleSpanProcessor;
     if (endpoint !== undefined && endpoint !== '') {
-      // 生产/远程开发：OTLP HTTP exporter
       const exporter = new OTLPTraceExporter({ url: endpoint });
       spanProcessor = new SimpleSpanProcessor(exporter);
       logger.info({ endpoint }, 'OpenTelemetry 初始化完成（OTLP exporter）');
     } else {
-      // 开发：Console exporter，便于本地调试
       spanProcessor = new SimpleSpanProcessor(new ConsoleSpanExporter());
       logger.info({}, 'OpenTelemetry 初始化完成（Console exporter，dev only）');
     }
@@ -163,20 +138,17 @@ export async function withSpan<T>(
   fn: (span: import('@opentelemetry/api').Span) => Promise<T>,
 ): Promise<T> {
   if (!initialized || tracer === null) {
-    // 未初始化：直接执行函数（不传 span）
-    // 用 undefined as 不可变断言：业务代码必须容忍 span 为 undefined
     return fn(undefined as unknown as import('@opentelemetry/api').Span);
   }
 
-  // startActiveSpan：激活 context + 自动 end（含异常路径）
   return tracer.startActiveSpan(name, { attributes }, async (span) => {
     try {
       const result = await fn(span);
-      span.setStatus({ code: 1 /* OK */ });
+      span.setStatus({ code: 1 });
       return result;
     } catch (error) {
       span.setStatus({
-        code: 2 /* ERROR */,
+        code: 2,
         message: error instanceof Error ? error.message : String(error),
       });
       span.recordException(error as Error);
@@ -199,7 +171,6 @@ export async function shutdownTelemetry(): Promise<void> {
       logger.warn({}, 'OpenTelemetry provider 引用缺失，跳过 flush');
       return;
     }
-    // NodeTracerProvider 的 forceFlush 会等待所有 span processor 完成
     await tracerProvider.forceFlush();
     await tracerProvider.shutdown();
     tracerProvider = null;

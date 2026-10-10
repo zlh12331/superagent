@@ -1,6 +1,3 @@
-// e2e/journey-helpers.ts
-// 用户旅程 E2E 公共 helper（web 模式 mock 环境）
-
 import { expect, type Locator, type Page } from '@playwright/test';
 
 /** 聊天输入框（composer 区域——页面可能多个 textarea，精确限定） */
@@ -74,7 +71,6 @@ export async function waitSendReady(page: Page): Promise<void> {
       await expect(sendBtn).toBeEnabled({ timeout: 5_000 });
       return;
     } catch {
-      // React state 偶发脱节（vite 冷启动）——重填输入触发 onChange 重同步
       await chatInput(page).fill('重试同步');
       await page.waitForTimeout(500);
     }
@@ -91,9 +87,7 @@ export async function typeMessage(page: Page, text: string): Promise<Locator> {
       await expect(input).toHaveValue(text, { timeout: 3_000 });
       await expect(page.locator('.send-btn:visible').first()).toBeEnabled({ timeout: 3_000 });
       return input;
-    } catch {
-      // 输入未生效/state 未同步——重试
-    }
+    } catch {}
   }
   throw new Error(`输入失败（3 次尝试）: ${text}`);
 }
@@ -110,7 +104,6 @@ export async function sendAndWaitRun(page: Page, send: () => Promise<void>): Pro
     try {
       await send();
     } catch {
-      // 点击被 disabled 拦截（streaming 尾窗）——等按钮恢复后原样重发
       await waitSendReady(page);
       await send();
     }
@@ -124,7 +117,6 @@ export async function sendAndWaitRun(page: Page, send: () => Promise<void>): Pro
         .toBeGreaterThan(0);
       return;
     } catch {
-      // 发送未触发——重建会话完整重试（最后尝试除外，交给外层报错）
       if (attempt < 2) {
         await page.reload();
         await wrapAgentRun(page);
@@ -152,13 +144,11 @@ export async function setupChatSession(page: Page): Promise<void> {
 export async function sendAndWaitApproval(page: Page, send: () => Promise<void>): Promise<Locator> {
   for (let attempt = 0; attempt < 3; attempt += 1) {
     await sendAndWaitRun(page, send);
-    // 审批卡片按钮（批准/同意/执行——pending 状态）
     const btn = page.getByRole('button', { name: /批准|同意|执行/ }).first();
     try {
       await expect(btn).toBeVisible({ timeout: 12_000 });
       return btn;
     } catch {
-      // 卡片未出现：streaming 死锁风险——重建会话后重发（最后尝试除外，交给外层报错）
       if (attempt < 2) {
         await page.reload();
         await wrapAgentRun(page);

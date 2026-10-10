@@ -1,10 +1,3 @@
-// src/renderer/components/chat/suggest-trigger.ts
-// 斜杠/提及建议触发检测（自 ChatInput 提取的纯函数层）
-// ──────────────────────────────────────────────
-// 照搬参考项目 useSlashSuggest 触发语义：支持任意位置触发，/ 与 @ 取位置靠后者；
-// 触发条件：查询段无空格；slash 查询 ≤20 字符、mention 查询 ≤30 字符（允许空串）。
-// ──────────────────────────────────────────────
-
 /** 激活的建议类型 */
 export type SuggestTrigger = 'slash' | 'mention';
 
@@ -43,8 +36,6 @@ export function detectSuggestTrigger(value: string): SuggestTriggerState {
   const slashActive = slashIndex > atIndex && isQueryActive(slashQuery, SLASH_QUERY_MAX);
   const mentionActive = atIndex > slashIndex && isQueryActive(mentionQuery, MENTION_QUERY_MAX);
   const activeTrigger = slashActive ? 'slash' : mentionActive ? 'mention' : null;
-  // 未触发时查询段必须为 null（此前回落到 mentionQuery：输入 "hi @ " 这类
-  // 「触发词在但查询段非法」的文本会返回非 null 的 ' '，违反接口契约）
   const activeQuery =
     activeTrigger === 'slash' ? slashQuery : activeTrigger === 'mention' ? mentionQuery : null;
   return {

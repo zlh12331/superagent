@@ -1,10 +1,3 @@
-// src/renderer/components/$1/models-section.test.tsx
-// ModelsSection 单测：模型管理列表页（表格/开关/增删改入口/空态/删除确认）
-// ──────────────────────────────────────────────────────────────
-// 数据源 mock：window.api.settings.listRuntimeModels 等 IPC 全部 stub；
-// 业务交互（开关切换/删除确认/弹窗打开）保持真实实现断言。
-// ──────────────────────────────────────────────────────────────
-
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -12,7 +5,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ModelsSection } from './models-section';
 
-// 删除确认收敛至命令式 confirm() store：测试默认确认通过
 vi.mock('@/stores/transient/confirm-dialog-store', () => ({
   confirm: vi.fn().mockResolvedValue(true),
 }));
@@ -82,7 +74,6 @@ describe('ModelsSection 模型管理列表页', () => {
     await waitFor(() => {
       expect(screen.getByText('我的编码器')).toBeTruthy();
       expect(screen.getByText('my-coder')).toBeTruthy();
-      // 服务商列（提供商行区块已拆出，DeepSeek 仅出现一次）
       expect(screen.getByText('DeepSeek')).toBeTruthy();
     });
   });
@@ -128,7 +119,6 @@ describe('ModelsSection 模型管理列表页', () => {
       },
     } as never);
     renderSection();
-    // confirm() store mock 默认确认通过：点行内删除按钮即触发删除
     const deleteBtn = await screen.findByRole('button', { name: '删除' });
     await userEvent.click(deleteBtn);
     await waitFor(() => {

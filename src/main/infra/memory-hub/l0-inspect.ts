@@ -1,13 +1,3 @@
-// src/main/infra/memory-hub/l0-inspect.ts
-// L0 审计镜像只读检查（从 memory-hub-service 抽出：统计/枚举会话）
-// ──────────────────────────────────────────────────────────────
-// 背景：引擎把 L0 同时落 SQLite（权威）与 JSONL（可 grep 的审计镜像）。
-//   设置页需要"已记录多少"与"清空全部"的会话枚举，这两件事都只读审计镜像、
-//   不触发引擎启动（打开设置页不应有启动 sidecar 的副作用）。
-// 抽取理由：这些是纯数据检查逻辑，与 sidecar 生命周期管理无关；留在
-//   MemoryHubService 内会推高其认知复杂度（超过棘轮门槛）。
-// ──────────────────────────────────────────────────────────────
-
 import { existsSync } from 'node:fs';
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -55,9 +45,7 @@ function forEachRecord(
       if (line.trim().length === 0) continue;
       try {
         visit(JSON.parse(line) as Record<string, unknown>);
-      } catch {
-        // 跳过损坏行（审计镜像容忍脏数据）
-      }
+      } catch {}
     }
   }
 }

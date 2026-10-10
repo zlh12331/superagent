@@ -1,13 +1,3 @@
-// src/renderer/stores/stores-gaps.test.ts
-// stores 层批次1 缺口补全：draft/settings/tool/approvals/create-persistent 首次补测
-//
-// 测试要点（真实 Zustand store，无 mock；beforeEach 重置状态与 localStorage）：
-// 1. draft：读写/覆盖/清除/持久化
-// 2. settings：默认值/各 update 合并/migrate v2→v3（Meta+ → Ctrl+）
-// 3. tool：pending/success/error 状态机/多会话分组/未找到 id
-// 4. approvals：FIFO/approve/reject/dismiss/clearBySession/resolved 上限
-// 5. create-persistent：key 前缀/partialize 过滤函数/migrate 透传
-
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createPersistentStore } from './persistent/create-persistent-store';
 import { useDraftStore } from './persistent/draft-store';
@@ -32,8 +22,6 @@ describe('stores 批次1 缺口补全', () => {
     useDraftStore.setState({ drafts: {} });
     useToolStore.setState({ callsBySession: new Map() });
     useApprovalsStore.setState({ pending: [], resolved: [] });
-    // S1：settings 下沉 SQLite——内存态不再经 persist rehydrate 重置，
-    // 显式重置回默认值（applySettingsSnapshot({}) = 全默认）
     applySettingsSnapshot({});
   });
 
@@ -132,14 +120,12 @@ describe('stores 批次1 缺口补全', () => {
 
     it('S1 写穿透：updateAi 后经 settings:set IPC 落库（不再写 localStorage）', () => {
       const setMock = vi.fn(async () => ({ data: { ok: true } }));
-      // 仅注入被测路径用到的方法（测试骨架为最小 mock）
       window.api.settings = { set: setMock } as never;
       useSettingsStore.getState().updateAi({ temperature: 0.5 });
       expect(setMock).toHaveBeenCalledWith({
         key: 'ai',
         value: expect.objectContaining({ temperature: 0.5 }),
       });
-      // 不再写 localStorage（真源已迁移 SQLite）
       expect(localStorage.getItem('code-agent:settings')).toBeNull();
     });
 
@@ -333,7 +319,6 @@ describe('stores 批次1 缺口补全', () => {
       expect(expanded).toEqual([...expanded].sort());
       expect(useFileTreeStore.getState().expandedPaths.has('/proj/a')).toBe(true);
       expect(useFileTreeStore.getState().expandedPaths.has('/proj/b')).toBe(true);
-      // 根目录仍在（setRootPath 默认展开根）
       expect(useFileTreeStore.getState().expandedPaths.has('/proj')).toBe(true);
     });
 
@@ -417,7 +402,6 @@ describe('stores 批次1 缺口补全', () => {
         useApprovalsStore.getState().approve(`a-${i}`);
       }
       expect(useApprovalsStore.getState().resolved).toHaveLength(20);
-      // 保留最新 20 条（id 大者新）
       expect(useApprovalsStore.getState().resolved[0]?.id).toBe('a-25');
       expect(useApprovalsStore.getState().resolved[19]?.id).toBe('a-6');
     });
@@ -434,7 +418,6 @@ describe('stores 批次1 缺口补全', () => {
       const raw = localStorage.getItem('code-agent:test-gap');
       expect(raw).not.toBeNull();
       if (raw !== null) {
-        // partialize 过滤函数：持久化数据不含 inc
         expect(JSON.parse(raw)).toMatchObject({ state: { count: 1 } });
         expect(JSON.parse(raw).state.inc).toBeUndefined();
       }

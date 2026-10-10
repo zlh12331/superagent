@@ -1,18 +1,3 @@
-// src/main/infra/ai/prompt/dynamic-context.ts
-// 动态上下文注入器：在运行时把环境信息注入 System Prompt 模板
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 收集环境信息（OS / Shell / 工作目录）
-// - 收集 Git 状态（分支 / 是否 clean / 未提交文件数）
-// - 收集 AGENTS.md 内容（通过 agents-md.ts 分层发现）
-// - 把模板变量 {{workingDir}} / {{os}} / {{gitBranch}} 等替换为实际值
-//
-// 设计原则：
-// - 纯函数：注入器本身不持有状态，每次调用都重新收集
-// - 失败容忍：任何一项收集失败（如非 git 仓库、无 AGENTS.md）都用占位符而非抛错
-// - 性能：Git 状态查询可能涉及子进程 spawn，但通常 <100ms
-// ──────────────────────────────────────────────────────────────
-
 import { homedir, platform } from 'node:os';
 import { resolve } from 'node:path';
 import { resolveAgentsMd } from './agents-md';
@@ -143,7 +128,6 @@ function getPlatformName(osPlatform: string): string {
  */
 function getDefaultShell(osPlatform: string): string {
   if (osPlatform === 'win32') {
-    // PowerShell 是 Windows 10+ 默认
     return process.env['COMSPEC'] ?? 'powershell.exe';
   }
   return process.env['SHELL'] ?? '/bin/bash';
@@ -211,19 +195,11 @@ export async function injectDynamicContext(
     workingDir,
   );
 
-  // 收集 AGENTS.md（失败时用空字符串）
   let agentsMd = '';
   try {
     agentsMd = resolveAgentsMd(workingDir);
-  } catch {
-    // AGENTS.md 发现失败，用空字符串
-  }
+  } catch {}
 
-  // 替换模板变量：单次遍历 + 函数 replacer
-  //   1) 函数 replacer：替换值里的 `$&` / `$1` / `$<name>` 不会被当作捕获组模式解释
-  //      （workingDir / gitBranch / gitStatus / agentsMd 均来自仓库与文件系统，可含 `$`）
-  //   2) 单次遍历：先插入的值（如 AGENTS.md 正文）里出现的 `{{homeDir}}` 字面量不会被二次替换
-  //   未登记的占位符保持原样。
   const values: Record<string, string> = {
     workingDir,
     os: osPlatform,

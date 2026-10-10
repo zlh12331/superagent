@@ -1,4 +1,3 @@
-// scripts/scaffold/lib/args.test.ts
 import { describe, expect, it } from 'vitest';
 
 import { optionalValue, parseArgs, rejectPositionals, requireValue } from './args';

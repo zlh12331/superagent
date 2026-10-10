@@ -1,12 +1,3 @@
-// src/renderer/components/ui/progress.tsx
-// 进度条基元（确定性线性进度；自动更新下载进度引入，docs/design/27-auto-update-spec.md）
-// ──────────────────────────────
-// 变体：无（高度/圆角由 className 决定）
-// 状态：无状态（受控 value；越界自动收敛到 0-100）
-// 依赖：motion（宽度过渡，走 MotionVault 预设，避免每秒进度推送造成视觉抖动）
-// 可访问性：role="progressbar" + aria-valuenow/min/max + aria-label（本地化文案必填）
-// ──────────────────────────────
-
 import { motion } from 'motion/react';
 import type { ReactElement } from 'react';
 

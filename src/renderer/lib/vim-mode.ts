@@ -1,13 +1,3 @@
-// src/renderer/lib/vim-mode.ts
-// vim 模式纯逻辑（settings.editor.vimMode 的真实消费方——此前仅存储无行为）
-// ──────────────────────────────────────────────────────────────
-// 支持的 normal 模式命令（最小可用子集，设置页如实标注）：
-//   移动：h/l 左右 · j/k 上下（保持列偏移）· w/b 词首 · 0/$ 行首尾
-//   编辑：x 删光标处字符 · dd 删整行（d 进入命令缓冲等待第二键）
-//   插入：i 光标处 / a 光标后 / I 行首 / A 行尾；Esc 回到 normal
-// 不支持（如实声明）：数字前缀（3dd）、y/p 复制粘贴、v 可视模式、u 撤销。
-// ──────────────────────────────────────────────────────────────
-
 /** vim 模式（normal / insert；编辑命令子集见文件头注释） */
 export type VimMode = 'normal' | 'insert';
 
@@ -107,24 +97,18 @@ export function vimHandleKey(
 ): VimResult {
   const len = text.length;
   const pos = Math.max(0, Math.min(cursor, len));
-  // 「非 dd 清缓冲」的落点：pending='d' 且第二键非 d/d 未命中时，缓冲清除后
-  // 继续按普通键处理——后续分支一律基于 current（修正：此前 default 分支返回
-  // 重赋值前捕获的旧态，pending='d' 未清除，连续 d 会被误判为 dd 触发行删除）
   let current = state;
 
-  // Esc：insert → normal；normal 下清除命令缓冲
   if (key === 'Escape') {
     return { type: 'state', state: { mode: 'normal', pending: '' } };
   }
   if (state.mode === 'insert') return { type: 'noop', state: current };
 
-  // 命令缓冲：d 等待第二键
   if (state.pending === 'd') {
     if (key === 'd') {
       const { value, cursor: next } = deleteLine(text, pos);
       return { type: 'edit', state: { mode: 'normal', pending: '' }, value, cursor: next };
     }
-    // 非 dd：清除缓冲，继续按普通按键处理
     current = { mode: 'normal', pending: '' };
   }
 

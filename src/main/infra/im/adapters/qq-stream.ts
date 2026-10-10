@@ -1,19 +1,4 @@
-// src/main/infra/im/adapters/qq-stream.ts
-// QQ 渠道：官方机器人 API + WebSocket Gateway 协议（对齐 qwen QQChannel 语义收敛）
-// ──────────────────────────────────────────────────────────────
-// 协议（参考 QQ 官方开放平台 api-v2 文档）：
-// 1. access_token：POST bots.qq.com/app/getAppAccessToken {appId, clientSecret}
-// 2. WS 网关：wss://api.sgroup.qq.com/websocket（沙箱可注入）
-// 3. Gateway 握手：hello(op10, heartbeat_interval) → identify(op2, {token, intents}) → 心跳(op1)
-// 4. 事件：op0 dispatch，t ∈ {GROUP_AT_MESSAGE, C2C_MESSAGE} → 文本消息
-//
-// 借鉴声明：
-// 本模块参考 qwen-code 参考项目 packages/channels/qqbot/src/
 // （Copyright 2026 Qwen Team，SPDX-License-Identifier: Apache-2.0）的
-// api.ts（accessToken/网关）+ QQChannel.ts（Gateway 协议/消息归一化）语义，按我们的技术栈收敛重写：
-// - 移除二维码登录/凭据持久化/跨服务器路由持久化（桌面端由 keychain + 会话映射覆盖）
-// - 保留核心：OpCode/Intent 协议帧、消息事件归一化、群/单聊 chatId 区分
-// ──────────────────────────────────────────────────────────────
 
 import { AppError, ErrorCode } from '@code-agent/shared/main';
 import { logger } from '../../../utils/logger';
@@ -32,7 +17,6 @@ export const QqOpCode = {
 
 /** 事件订阅 intent（官方协议） */
 export const QqIntent = {
-  // 官方：GROUP_AND_C2C_EVENT (1 << 25) 同时覆盖群聊@消息（GROUP_AT_MESSAGE_CREATE）与单聊（C2C_MESSAGE_CREATE）
   GROUP_AND_C2C_EVENT: 1 << 25,
 } as const;
 
@@ -281,7 +265,6 @@ export class QqStreamReceiver {
     const ws = new this.wsCtor(gateway);
     this.ws = ws;
     this.manualClose = false;
-    // 意外断线（非手动关闭）：自动重连（对齐 qwen 心跳监控/重连语义）
     ws.addEventListener('close', () => {
       this.ws = null;
       this.opened = false;
@@ -296,7 +279,6 @@ export class QqStreamReceiver {
     });
     await this.handshake(ws, accessToken);
     this.opened = true;
-    // 建连成功：重连计数归零（下次断线重新从最小退避开始）
     this.reconnectAttempts = 0;
     logger.info({}, 'QQ 长连接已建立（接收就绪）');
   }
@@ -342,7 +324,6 @@ export class QqStreamReceiver {
   /** 关闭长连接（幂等；手动关闭不触发重连） */
   close(): void {
     this.manualClose = true;
-    // 清除挂起的重连定时器（2026-09-08 修复：此前无法取消）
     if (this.reconnectTimer !== null) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
@@ -356,9 +337,7 @@ export class QqStreamReceiver {
     if (this.ws !== null) {
       try {
         this.ws.close();
-      } catch {
-        // 关闭失败不阻断
-      }
+      } catch {}
       this.ws = null;
     }
     this.opened = false;
@@ -385,7 +364,6 @@ export class QqStreamReceiver {
           const hello = frame.d as { heartbeat_interval?: number } | undefined;
           const interval = hello?.heartbeat_interval ?? 30_000;
           if (this.sessionId !== null) {
-            // 断线恢复：RESUME（复用会话，避免消息重播）
             ws.send(
               JSON.stringify({
                 op: QqOpCode.RESUME,
@@ -398,7 +376,6 @@ export class QqStreamReceiver {
             );
             this.startHeartbeat(ws, interval);
           } else {
-            // 首次连接：identify（订阅 C2C + 群 @ 消息）
             ws.send(
               JSON.stringify({
                 op: QqOpCode.IDENTIFY,
@@ -417,7 +394,6 @@ export class QqStreamReceiver {
             this.startHeartbeat(ws, interval);
           }
         } else if (frame.op === QqOpCode.INVALID_SESSION) {
-          // RESUME 失败（session 失效）：回退 identify（清空 sessionId 走首次流程）
           logger.warn({}, 'QQ RESUME 失败（INVALID_SESSION），回退 identify');
           this.sessionId = null;
           this.lastSeq = null;
@@ -438,7 +414,6 @@ export class QqStreamReceiver {
           );
         } else if (frame.op === QqOpCode.DISPATCH) {
           this.dispatchFrame(frame);
-          // READY（identify 成功）或 RESUMED（resume 成功）视为握手完成
           if (frame.t === 'READY') {
             const ready = frame.d as { session_id?: string } | undefined;
             if (typeof ready?.session_id === 'string') {
@@ -460,10 +435,8 @@ export class QqStreamReceiver {
     this.heartbeatTimer = setInterval(() => {
       try {
         ws.send(JSON.stringify({ op: QqOpCode.HEARTBEAT, d: this.lastSeq }));
-        // 发送后武装 ack 超时（2 倍心跳周期；超时判定僵尸连接 → 强制断开触发重连）
         this.armAckTimeout(ws, intervalMs * 2);
       } catch {
-        // 连接关闭时停止心跳
         if (this.heartbeatTimer !== null) {
           clearInterval(this.heartbeatTimer);
           this.heartbeatTimer = null;
@@ -474,8 +447,6 @@ export class QqStreamReceiver {
 
   /** 武装 HEARTBEAT_ACK 超时监控 */
   private armAckTimeout(ws: WebSocket, timeoutMs: number): void {
-    // 已有 pending 监控（等待 ACK）时不重置（真实缺陷修复：原实现每次心跳都
-    // 重新武装，心跳持续发送时计时器被无限重置 → 僵尸连接检测永不触发）
     if (this.ackTimeoutTimer !== null) {
       return;
     }
@@ -486,9 +457,7 @@ export class QqStreamReceiver {
       logger.warn({ timeoutMs }, 'QQ HEARTBEAT_ACK 超时，判定僵尸连接，强制断开');
       try {
         ws.close();
-      } catch {
-        // close 事件触发重连
-      }
+      } catch {}
     }, timeoutMs);
   }
 

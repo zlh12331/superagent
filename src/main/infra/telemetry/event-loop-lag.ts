@@ -1,21 +1,3 @@
-// src/main/infra/telemetry/event-loop-lag.ts
-// 事件循环延迟监控（P2-36：迁移 perf_hooks.monitorEventLoopDelay 直方图分位）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 周期性从事件循环延迟直方图取分位值（默认 p99），超阈值 → onLag 回调
-//   （告警/遥测上报挂载点，见 lag-alert.ts）
-// - 返回 stop（生命周期管理；应用退出时清理）
-//
-// 迁移说明（原 setInterval 期望间隔法 → 直方图分位法，2026-09-27）：
-// - 旧实现用「期望 tick 时刻 vs 实际时刻」差值估延迟，只能反映采样定时器
-//   自身被延迟的程度，且需要首采基准修正（2026-09-04 修复）；窗口内的短尖刺
-//   （如两次准点 tick 之间夹一段 300ms 阻塞）不可见。
-// - monitorEventLoopDelay 由 Node 把每次事件循环延迟记入直方图（纳秒），
-//   取窗口分位可覆盖全部尖刺；每窗口采样后 reset() 保证 lag 反映「最近窗口」。
-// - 对外契约不变：EventLoopLagSample 字段语义与阈值判定（lagMs >
-//   warnThresholdMs）保持一致；空窗口分位 ≈ 0，空闲不误报（语义继承）。
-// ──────────────────────────────────────────────────────────────
-
 import { monitorEventLoopDelay } from 'node:perf_hooks';
 
 /** 默认采样间隔（毫秒） */
@@ -128,8 +110,6 @@ export class EventLoopLagMonitor {
     const timer = setInterval(() => {
       this.sample();
     }, this.intervalMs);
-    // 与 MemoryMonitor 同口径：unref 不阻塞应用退出（窗口关闭驻留托盘时，
-    // 该 5s 周期定时器不得阻止 Electron 的退出流程走完）
     timer.unref();
     this.timer = timer;
   }

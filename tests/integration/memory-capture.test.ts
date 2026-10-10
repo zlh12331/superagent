@@ -1,12 +1,3 @@
-// tests/integration/memory-capture.test.ts
-// MemoryHub 回合捕获接线集成测试：capture-wire × 回合事件流
-// ──────────────────────────────────────────────────────────────
-// 单测（src/main/infra/memory-hub/capture-wire.test.ts）用 stub TurnEvent 验证
-// "capture 被调用"；本集成测试验证接线协作：capture 的 sessionKey 用真实
-// sessionId、用户/助手内容按事件流正确拼接、非 completed 回合不捕获。
-// MemoryPort 是外部记忆引擎边界，用 fake 收集调用（不走真实 sidecar）。
-// ──────────────────────────────────────────────────────────────
-
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { IAgentService } from '../../src/main/infra/ai/agent/agent-service';
 import {
@@ -63,10 +54,8 @@ describe('MemoryHub 回合捕获接线', () => {
     const { port, captures } = createFakePort();
     const wire = createMemoryCaptureWire({ agentService: agent.stub, port });
 
-    // handler 在 run 前注入用户文本（真实链路：agent.handler 调 noteLastUser）
     wire.noteLastUser('sess-1', '帮我修 bug');
 
-    // 模拟回合事件流：start → 两段 text-delta → end(completed)
     agent.turnListeners[0]?.(turnEvent({ type: 'turn-start', sessionId: 'sess-1' }));
     agent.turnListeners[0]?.(
       turnEvent({ type: 'text-delta', sessionId: 'sess-1', text: '第一段 ' }),
@@ -95,7 +84,6 @@ describe('MemoryHub 回合捕获接线', () => {
     wire.noteLastUser('sess-a', '会话 A 问题');
     wire.noteLastUser('sess-b', '会话 B 问题');
 
-    // 会话 A 回合
     agent.turnListeners[0]?.(turnEvent({ type: 'turn-start', sessionId: 'sess-a' }));
     agent.turnListeners[0]?.(
       turnEvent({ type: 'text-delta', sessionId: 'sess-a', text: 'A 回答' }),
@@ -104,7 +92,6 @@ describe('MemoryHub 回合捕获接线', () => {
       turnEvent({ type: 'turn-end', sessionId: 'sess-a', reason: 'completed' }),
     );
 
-    // 会话 B 回合
     agent.turnListeners[0]?.(turnEvent({ type: 'turn-start', sessionId: 'sess-b' }));
     agent.turnListeners[0]?.(
       turnEvent({ type: 'text-delta', sessionId: 'sess-b', text: 'B 回答' }),
@@ -137,13 +124,10 @@ describe('MemoryHub 回合捕获接线', () => {
   });
 
   it('extractLastUserText：兼容 UIMessage parts 形状与 string content', () => {
-    // parts 数组（UIMessage 形状）
     expect(extractLastUserText([{ role: 'user', parts: [{ type: 'text', text: '你好' }] }])).toBe(
       '你好',
     );
-    // string content
     expect(extractLastUserText([{ role: 'user', content: '直接文本' }])).toBe('直接文本');
-    // 空/非数组
     expect(extractLastUserText(undefined)).toBe('');
     expect(extractLastUserText([])).toBe('');
   });

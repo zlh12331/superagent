@@ -1,18 +1,3 @@
-// src/renderer/hooks/use-backups.ts
-// 备份恢复点查询与操作 hook（37 号 B：L3 服务端数据层；查询逻辑域文件）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - useBackups：查询恢复点列表（backup:list → TanStack Query）
-// - useCreateBackup：手动立即备份 mutation（成功后失效列表重拉）
-// - useRestoreBackup：从恢复点恢复 mutation（成功后应用将重启，前端兜提示）
-//
-// 设计（对齐项目查询层约定）：
-// - queryKey 常量在本文件导出（禁组件内联定义 key）
-// - 变更操作 onError 统一 toast（调用层不重复挂）
-// - restore 会触发主进程 relaunch+quit——成功响应到达后应用即将退出，
-//   不给「已恢复」成功 toast（进程将消失），仅错误路径有 toast
-// ──────────────────────────────────────────────────────────────
-
 import type { BackupEntry } from '@code-agent/shared/renderer';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';

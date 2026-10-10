@@ -1,7 +1,3 @@
-// src/renderer/components/chat/use-chat-composer-actions.ts
-// ChatPanel composer 动作（发送 / 斜杠命令）——自 ChatPanel 提取以压低认知复杂度
-// ──────────────────────────────────────────────────────────────
-
 import type { Dispatch, SetStateAction } from 'react';
 import { resolveComposerSend } from './chat-panel-derives';
 import { executeSlashCommand } from './slash-commands';

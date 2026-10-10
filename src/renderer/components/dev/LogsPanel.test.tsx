@@ -1,10 +1,3 @@
-// src/renderer/components/dev/LogsPanel.test.tsx
-// LogsPanel 单测/集成（四态渲染 / 过滤与行数交互 / 刷新与禁用语义）
-// ──────────────────────────────────────────────────────────────
-// 策略：mock `@/hooks/use-system`（数据获取边界，沿用 GitPanel 测试的做法），
-// 组件自身逻辑走真实实现。（原 dev-panels.test 按被测组件拆分至此）
-// ──────────────────────────────────────────────────────────────
-
 import type { ReadLogsRes } from '@code-agent/shared/renderer';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -68,7 +61,6 @@ describe('LogsPanel', () => {
   });
 
   it('查询失败：渲染错误提示 + 已本地化的错误文案', () => {
-    // 错误码经 unwrapErrorMessage 解析为 errors.* 文案（此前直出 `[CODE] message`）
     setLogsState({ error: new Error('[FS_READ_FAILED] 读取失败') });
     render(<LogsPanel />);
     expect(screen.getByText('日志获取失败')).toBeTruthy();
@@ -92,7 +84,6 @@ describe('LogsPanel', () => {
     render(<LogsPanel />);
     expect(screen.getByText('[info] started')).toBeTruthy();
     expect(screen.getByText('[error] boom')).toBeTruthy();
-    // 统计显示 total（未截断时不带截断标记）
     expect(screen.getByText('3')).toBeTruthy();
   });
 
@@ -110,7 +101,6 @@ describe('LogsPanel', () => {
     expect(screen.getByText('[warn] w').className).toContain('text-warn-text');
     expect(screen.getByText('[debug] d').className).toContain('text-muted-foreground');
     expect(screen.getByText('[info] i').className).toContain('text-foreground/80');
-    // 无级别标记：走兜底色
     expect(screen.getByText('plain line').className).toContain('text-muted-foreground');
   });
 
@@ -182,14 +172,12 @@ describe('LogsPanel', () => {
   });
 
   it('占位数据：isPlaceholderData=true 时列表容器降透明（keepPreviousData 驻留过渡），否则不降', () => {
-    // keepPreviousData 生效时：旧切片驻留渲染（isLoading=false），容器 opacity-50
     setLogsState({ data: LOGS_SAMPLE, isPlaceholderData: true });
     const { container, unmount } = render(<LogsPanel />);
     const listContainer = container.querySelector('.overflow-y-auto');
     expect(listContainer).toBeTruthy();
     expect(listContainer?.className).toContain('opacity-50');
     unmount();
-    // 非占位（首份数据 / 刷新完成）：容器不降透明
     setLogsState({ data: LOGS_SAMPLE, isPlaceholderData: false });
     const normal = render(<LogsPanel />);
     expect(normal.container.querySelector('.overflow-y-auto')?.className).not.toContain(

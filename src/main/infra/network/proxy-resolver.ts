@@ -1,16 +1,3 @@
-// src/main/infra/network/proxy-resolver.ts
-// 网络代理配置解析器（34 号网络代理；docs/design/34-network-proxy-spec.md §2.1）
-// ──────────────────────────────────────────────────────────────
-// 职责：settings.proxy 键（DB 值不可信）→ 归一化 ProxyConfig → 各网络栈要的形态。
-// 全部纯函数（除 warn 日志），单点真源——Chromium 三分区 / Node proxiedFetch /
-// env 侧门五个应用点全部经此模块，无双份状态。
-//
-// 失败路径：解析失败 fail-open 回 mode='system'（33 号 D2 同语义——向既有行为
-// 兜底，代理是增强能力），每次解析失败 warn 一次（诊断包可见，不静默）。
-//
-// 安全：代理 URL 可内嵌凭据（D5），进日志一律经 maskProxyUrl 脱敏。
-// ──────────────────────────────────────────────────────────────
-
 import { z } from 'zod';
 
 import { logger } from '../../utils/logger';
@@ -60,7 +47,6 @@ export function parseProxyConfig(raw: unknown): ProxyConfig {
   const parsed = ProxyConfigSchema.safeParse(raw);
   if (parsed.success) {
     const { mode, url, bypass } = parsed.data;
-    // mode=fixed 但 url 缺失（半损坏）→ 整配置不可用，回 system
     if (mode === 'fixed' && url === undefined) {
       logger.warn({ raw: String(raw).slice(0, 120) }, '代理配置 mode=fixed 缺 url，按 system 兜底');
       return { ...SYSTEM_DEFAULT };
@@ -94,7 +80,6 @@ export function buildChromiumProxyConfig(cfg: ProxyConfig): {
     return { mode: 'direct' };
   }
   if (cfg.url === undefined) {
-    // 防御：parseProxyConfig 已保证 fixed 必有 url，此处兜底
     return { mode: 'system' };
   }
   const host = proxyHostPort(cfg.url);
@@ -135,11 +120,9 @@ export function shouldBypass(cfg: ProxyConfig, requestUrl: string): boolean {
   if (hostname === 'localhost' || hostname === '::1' || hostname.endsWith('.localhost')) {
     return true;
   }
-  // IPv4 回环（127.0.0.0/8 首字节 127；URL hostname 无方括号）
   if (hostname.startsWith('127.')) {
     return true;
   }
-  // IPv6 回环：URL hostname 形如 [::1]
   if (hostname === '[::1]') {
     return true;
   }

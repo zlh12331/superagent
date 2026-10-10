@@ -1,11 +1,3 @@
-// src/main/infra/ai/agent-runtime/concurrency-gate.test.ts
-// 并发槽位门单测：槽位限制 / FIFO 公平 / 排队 abort 让位 / 释放幂等
-//
-// 接线背景：唯一生产实例在 ServiceContainer（readonly 字段，默认 4 槽），
-// agent-service 每回合经机器 deps.acquireGate 排队（排队 TTL 10 分钟）。
-// 本组用例守住公平性（先来先得，无饥饿）与让位语义（队列内 abort 立即
-// 出队拒绝，后续会话前移）。
-
 import { describe, expect, it } from 'vitest';
 import { createConcurrencyGate, createGateAbortError } from './concurrency-gate';
 
@@ -14,24 +6,20 @@ describe('createConcurrencyGate', () => {
     const gate = createConcurrencyGate(2);
     const order: string[] = [];
 
-    // 前两个立即放行
     const r1 = await gate.acquire('s1');
     const r2 = await gate.acquire('s2');
     expect(gate.getStats()).toEqual({ running: 2, queued: 0 });
 
-    // 第三个排队（FIFO）
     const p3 = gate.acquire('s3').then((release) => {
       order.push('s3');
       return release;
     });
-    // 第四个排队（FIFO）
     const p4 = gate.acquire('s4').then((release) => {
       order.push('s4');
       return release;
     });
     expect(gate.getStats()).toEqual({ running: 2, queued: 2 });
 
-    // 释放 s1 → s3 放行；释放 s2 → s4 放行
     r1();
     const r3 = await p3;
     expect(order).toEqual(['s3']);
@@ -54,7 +42,6 @@ describe('createConcurrencyGate', () => {
       r();
       return 's2-done';
     });
-    // 重复释放（模拟误调）不产生额外空位
     release();
     release();
     release();
@@ -66,26 +53,21 @@ describe('createConcurrencyGate', () => {
     const gate = createConcurrencyGate(1);
     const release = await gate.acquire('s1');
 
-    // s2 排队
     const controller2 = new AbortController();
     const p2 = gate.acquire('s2', controller2.signal).catch((error: unknown) => error);
-    // s3 排队
     const p3 = gate.acquire('s3');
     expect(gate.getStats()).toEqual({ running: 1, queued: 2 });
 
-    // abort s2 → 让位，s3 前移
     controller2.abort();
     const err2 = await p2;
     expect(err2).toBeInstanceOf(DOMException);
     expect((err2 as DOMException).name).toBe('AbortError');
     expect(gate.getStats()).toEqual({ running: 1, queued: 1 });
 
-    // 释放后 s3 直接放行（不再等 s2）
     release();
     const release3 = await p3;
     expect(gate.getStats()).toEqual({ running: 1, queued: 0 });
 
-    // s3 执行完毕释放
     release3();
     expect(gate.getStats()).toEqual({ running: 0, queued: 0 });
   });

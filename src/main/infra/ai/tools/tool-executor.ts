@@ -1,29 +1,3 @@
-// src/main/infra/ai/tools/tool-executor.ts
-// 工具执行器：统一工具执行入口，整合权限检查与审批流程
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - execute(toolName, input, ctx, webContents)：统一执行入口
-//   1. 查找工具（ToolRegistry.get）
-//   2. PermissionService.decide(tool, input) 决策权限
-//   3. 若 'ask'：推送 AGENT_APPROVAL_REQUEST，等待用户响应
-//   4. 若 approved：调用 tool.execute(input, ctx)
-//   5. 推送 AGENT_TOOL_RESULT 到渲染层
-//   6. 返回 AgentToolResultPayload
-//
-// 设计原则：
-// - 统一入口：所有工具调用都通过 ToolExecutor，确保权限检查与审计一致
-// - 错误分类：工具不存在 / 权限拒绝 / 执行失败 / 中断，分别对应不同错误码
-// - IPC 推送：执行前推送 AGENT_TOOL_CALL，执行后推送 AGENT_TOOL_RESULT
-// - 中断响应：检查 ctx.abortSignal.aborted，及时中止执行
-// - 标准化返回：tool.execute 返回 ToolResult（title + output + metadata），
-//   对齐 MiMo-Code 的工具返回结构，便于 UI 统一展示
-//
-// 与 AI SDK v7 的关系：
-// - AgentService 把 ToolExecutor 的执行逻辑包装为 AI SDK tool 的 execute 函数
-// - toolApproval 配置由 AgentService 负责（基于 ToolExecutor 的 decide 结果）
-// - ToolExecutor 不直接调用 streamText，是被 AgentService 调用
-// ──────────────────────────────────────────────────────────────
-
 import type { AgentToolCallPayload, AgentToolResultPayload } from '@code-agent/shared/main';
 import { AppError, ErrorCode, IPC_DEFINITIONS } from '@code-agent/shared/main';
 import type { WebContents } from 'electron';
@@ -139,7 +113,6 @@ export function clampToolOutput(output: string, contextWindowSize?: number): str
     return output;
   }
   const head = Buffer.from(output, 'utf8').subarray(0, limit).toString('utf8');
-  // 多字节字符在切点处可能产生替换字符，去掉末尾可能不完整的字符
   const safeHead = head.endsWith('\uFFFD') ? head.slice(0, -1) : head;
   return `${safeHead}\n\n…（输出超过 ${Math.round(limit / 1024)}KB 已截断，共 ${(bytes / 1024).toFixed(0)}KB；请缩小范围或分段读取）`;
 }
@@ -198,9 +171,7 @@ export class ToolExecutor implements IToolExecutor {
     ctx: ToolContext,
     webContents?: WebContents,
   ): Promise<AgentToolResultPayload> {
-    // 性能埋点：工具执行全流程耗时（含权限检查 + 审批等待 + 工具执行）
     const startTime = performance.now();
-    // OpenTelemetry span：仅做埋点包装，执行主体在 runExecution（见其注释）
     return withSpan(
       'tool.execute',
       {
@@ -248,20 +219,12 @@ export class ToolExecutor implements IToolExecutor {
         message,
       });
 
-    // 1. 查找工具
     const tool = this.registry.get(toolName);
     if (tool === undefined) {
       logger.warn({ toolName, toolCallId, errorCode: ErrorCode.TOOL_NOT_FOUND }, '工具不存在');
       return fail('工具不存在', ErrorCode.TOOL_NOT_FOUND, `工具不存在：${toolName}`);
     }
 
-    // 2. 决策权限（userPrompt 用于意图豁免破坏性拦截）
-    // P2（IM 外泄向量）：ctx.workingDir 作为路径边界传入——auto 模式下
-    // 命令引用边界外的绝对路径时降级 ask，不再被只读快速路径静默放行
-    //
-    // fail-closed：decide 内部（stableStringify / 白名单匹配）的异常契约是
-    // "由调用方 catch"，而这里是唯一生产调用点。不兜住会让异常冒泡出
-    // execute()，AGENT_TOOL_RESULT 永远不推送，渲染层工具卡片卡在"执行中"。
     let decision: PermissionDecision;
     try {
       decision = await this.permissionService.decide(tool, input, ctx.userPrompt, {
@@ -276,7 +239,6 @@ export class ToolExecutor implements IToolExecutor {
       );
     }
 
-    // 3. 推送 AGENT_TOOL_CALL 事件（渲染层据此展示 ToolCallView）
     this.sendToolCall(webContents, {
       sessionId: ctx.sessionId,
       toolCallId,
@@ -285,7 +247,6 @@ export class ToolExecutor implements IToolExecutor {
       permission: decision.permission,
     });
 
-    // 3.5 生命周期钩子：pre-tool-use（可阻断执行；错误隔离）
     const blocked = await hookRegistry.trigger(HookEventName.PRE_TOOL_USE, {
       sessionId: ctx.sessionId,
       toolCallId,
@@ -293,7 +254,6 @@ export class ToolExecutor implements IToolExecutor {
       input,
     });
     if (blocked !== null) {
-      // 阻断原因来自钩子本身（HookDenial.reason）；未提供时回落通用文案
       const reasonText = blocked.reason !== '' ? `（${blocked.reason}）` : '';
       logger.info({ toolName, toolCallId, reason: blocked.reason }, '钩子阻止工具执行');
       return fail(
@@ -303,8 +263,6 @@ export class ToolExecutor implements IToolExecutor {
       );
     }
 
-    // 4. 权限闸：deny 直接拒绝 / ask 推审批等用户响应（批准/拒绝/超时/中断/销毁五种出口）。
-    //    状态机细节与不变量注释见 resolvePermissionGate；返回非 null 即终止本次执行。
     const gate = await this.resolvePermissionGate({
       decision,
       tool,
@@ -318,17 +276,14 @@ export class ToolExecutor implements IToolExecutor {
       return gate;
     }
 
-    // 5. 检查中断信号（审批等待期间用户可能中断了对话）
     if (ctx.abortSignal.aborted) {
       logger.info({ toolName, toolCallId }, '工具执行前检测到中断信号');
       return fail('执行中断', ErrorCode.TOOL_ABORTED, '工具执行已被中断');
     }
 
-    // 6. 执行工具
     try {
       logger.info({ toolName, toolCallId }, '开始执行工具');
       const toolResult: ToolResult = await tool.execute(input, ctx);
-      // 生命周期钩子：post-tool-use（执行成功；错误隔离）
       void hookRegistry.trigger(HookEventName.POST_TOOL_USE, {
         sessionId: ctx.sessionId,
         toolCallId,
@@ -346,15 +301,12 @@ export class ToolExecutor implements IToolExecutor {
         toolCallId,
         toolName,
         title: toolResult.title,
-        // 窗口感知截断：小窗口模型（如 32K 本地 ollama）按比例收紧，
-        // 防单次输出占满上下文（详见 toolOutputLimitFor 注释）
         output: clampToolOutput(toolResult.output, ctx.contextWindowSize),
         ...(toolResult.metadata !== undefined ? { metadata: toolResult.metadata } : {}),
       };
       this.sendToolResult(webContents, result);
       return result;
     } catch (error: unknown) {
-      // 执行失败：包装为 TOOL_EXECUTION_FAILED
       const durationMs = Math.round(performance.now() - startTime);
       logger.error(
         { toolName, toolCallId, errorCode: ErrorCode.TOOL_EXECUTION_FAILED, durationMs, error },
@@ -409,7 +361,6 @@ export class ToolExecutor implements IToolExecutor {
       return result;
     };
 
-    // ── 4. deny（或 plan 模式下的 ask）：直接拒绝 ──
     if (decision.permission === 'deny' || (decision.permission === 'ask' && ctx.mode === 'plan')) {
       logger.info(
         { toolName, toolCallId, sessionId: ctx.sessionId, permission: decision.permission },
@@ -422,7 +373,6 @@ export class ToolExecutor implements IToolExecutor {
       );
     }
 
-    // ── 4.1 ask：推送审批请求并等待用户响应（审批状态机见 resolveAskGate）──
     if (decision.permission === 'ask') {
       const outcome = await this.resolveAskGate(args);
       if (outcome !== null) {
@@ -500,7 +450,6 @@ export class ToolExecutor implements IToolExecutor {
 
     let approved: boolean;
     try {
-      // 传入 ctx.abortSignal：用户在审批等待期间点"停止"时立即 reject（H4 修复）
       approved = await this.permissionService.requestApproval(
         approvalPayload,
         tool,
@@ -509,23 +458,18 @@ export class ToolExecutor implements IToolExecutor {
         ctx.abortSignal,
       );
     } catch (error: unknown) {
-      // 审批超时 / webContents 销毁 / 用户中断
       const { code, message } = this.classifyApprovalFailure(error, ctx.abortSignal);
       logger.warn({ toolName, toolCallId, approvalId, errorCode: code, error }, '审批请求失败');
       return fail('审批失败', code, message);
     }
 
     if (!approved) {
-      // 用户拒绝
       logger.info({ toolName, toolCallId, approvalId }, '用户拒绝工具调用');
-      // A4 接线：拒绝计入 PermissionService 拒绝统计（auto 模式连续拒绝
-      // 降级手动确认的数据源——此前记录方法存在但无人调用，机制死亡）
       this.permissionService.recordUserDenial();
       return fail('用户拒绝', ErrorCode.TOOL_PERMISSION_DENIED, `用户拒绝执行：${toolName}`);
     }
 
     logger.info({ toolName, toolCallId, approvalId }, '用户批准工具调用');
-    // A4 接线：批准计允许一次，抵消此前累计的拒绝计数
     this.permissionService.recordUserAllowance();
     return null;
   }
@@ -575,7 +519,6 @@ export class ToolExecutor implements IToolExecutor {
       toolCallId,
       toolName,
       title,
-      // 失败时 output 为 null（与成功时的 unknown 区分）
       output: null,
       error: { code, message },
     };
@@ -589,7 +532,6 @@ export class ToolExecutor implements IToolExecutor {
    */
   private sendToolCall(webContents: WebContents | undefined, payload: AgentToolCallPayload): void {
     if (webContents !== undefined && !webContents.isDestroyed()) {
-      // R2：统一出口 emitEvent（dev 契约校验）
       emitEvent(webContents, IPC_DEFINITIONS.agent.subscribeToolCall, payload);
     }
   }
@@ -605,7 +547,6 @@ export class ToolExecutor implements IToolExecutor {
     payload: AgentToolResultPayload,
   ): void {
     if (webContents !== undefined && !webContents.isDestroyed()) {
-      // R2：统一出口 emitEvent（dev 契约校验）
       emitEvent(webContents, IPC_DEFINITIONS.agent.subscribeToolResult, payload);
     }
   }

@@ -1,12 +1,3 @@
-// src/renderer/components/agent/approval-preview.test.tsx
-// approval-preview 结构化预览组件测试（正向 / 边界）
-// （approval-utils 断言已收敛至 approval-utils.test.ts，此处不重复）
-//
-// 测试要点：
-// 1. run_command / write_file / edit_file / git_add / git_commit / git_push
-//    结构化渲染（组件化后经 StructuredPreview 入口 + ThemeProvider）
-// 2. 无专属预览的类型返回 null
-
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
@@ -75,7 +66,6 @@ describe('StructuredPreview（approval-preview）', () => {
       renderPreview('git_commit', { message: 'feat: x', amend: true });
       expect(screen.getByText('feat: x')).toBeDefined();
       expect(screen.getByText(t('approval.commitAmend'))).toBeDefined();
-      // 徽标语义是「不可逆」（amend 覆盖原提交），不是「不可用」——工具支持 amend
       expect(screen.getByText(t('approval.irreversible'))).toBeDefined();
     });
 
@@ -93,7 +83,6 @@ describe('StructuredPreview（approval-preview）', () => {
 
     it('git_push 默认值：origin + 当前分支 + normalPush', () => {
       renderPreview('git_push', {});
-      // 占位文案走 i18n（此前硬编码英文 `<current-branch>`，中文界面下也显示英文）
       expect(
         screen.getByText(new RegExp(`git push origin/${t('approval.currentBranch')}`)),
       ).toBeDefined();
@@ -111,10 +100,6 @@ describe('StructuredPreview（approval-preview）', () => {
   });
 
   describe('approval i18n 键契约', () => {
-    // check:i18n 对动态模板前缀域（approval.types./chat./git. 等）豁免冗余与缺失检查，
-    // 新增 ApprovalType 而漏加 i18n 键不会被静态审计发现——此处做运行时兜底：
-    // i18next 缺键时返回键本身，故「翻译 ≠ 键」即键存在。
-    // 协议键收进 approval.types 子段：协议域（snake_case）与 UI 键域（camelCase）分区。
     it('10 类型均有 approval.types.<type> 键', () => {
       const types = [
         'run_command',

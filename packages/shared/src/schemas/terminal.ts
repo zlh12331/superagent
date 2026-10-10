@@ -1,19 +1,3 @@
-// packages/shared/src/schemas/terminal.ts
-// 终端域 zod schema 单一真源
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 定义 terminal:create / input / resize / kill 请求-响应 zod schema
-// - 定义 terminal:event:output / terminal:event:exit 流式事件 payload 类型
-// - 供主进程 TerminalService 校验入参
-//
-// 设计：
-// - 终端基于 node-pty（已引入），每个终端对应一个 PTY 进程
-// - terminalId 是终端会话的唯一标识（UUID），由主进程生成
-// - 终端输出含 ANSI 转义序列，渲染层用 xterm.js 直接渲染（不解码）
-// - cols/rows 用合理上限防止 OOM（500x200）
-// - env 用 z.record 而非 z.object：环境变量键名动态且不固定
-// ──────────────────────────────────────────────────────────────
-
 import { z } from 'zod';
 
 /**
@@ -79,34 +63,23 @@ export function isTerminalEnvDenied(key: string): boolean {
  */
 export const TerminalCreateReqSchema = z
   .object({
-    // 工作目录（P3 修复：可选——省略时主进程回退到用户主目录，
-    // 此前渲染层硬编码 DEFAULT_CWD 与激活会话脱钩）
     cwd: z
       .string()
       .min(1)
       .optional()
       .transform((v) => v ?? undefined),
-    // 启动命令（省略时用默认 shell）
     command: z
       .string()
       .optional()
       .transform((v) => v ?? undefined),
-    // 环境变量（键值对）
     env: z
       .record(z.string(), z.string())
       .optional()
       .transform((v) => v ?? undefined),
-    // 终端列数（默认 80，上限 500）
     cols: z.number().int().positive().max(500).default(80),
-    // 终端行数（默认 24，上限 200）
     rows: z.number().int().positive().max(200).default(24),
   })
   .superRefine((cfg, ctx) => {
-    // P0 收口：渲染层永不传自定义启动命令（终端面板只用默认 shell，实测
-    // TerminalPanel 固定传 undefined）。IPC 边界直接拒绝非空 command——
-    // 此前 command 按 shell 语义拆词后首 token 即 spawn 的二进制，等于
-    // 给渲染层开了「任意进程原语」（且无审批，区别于 agent 侧 ask 工具）。
-    // 未来若需"以指定解释器打开终端"，必须走审批链，不允许恢复透传。
     if (cfg.command !== undefined && cfg.command.trim().length > 0) {
       ctx.addIssue({
         code: 'custom',
@@ -114,8 +87,6 @@ export const TerminalCreateReqSchema = z
         message: 'terminal:create 仅允许默认 shell，不接受自定义启动命令',
       });
     }
-    // P0 安全：IPC 边界直接拒绝覆盖系统关键变量（类型化校验错误，
-    // 而不是静默丢弃——静默丢弃会让调用方误以为注入生效）
     if (cfg.env === undefined) {
       return;
     }
@@ -254,8 +225,6 @@ export interface TerminalExitEventPayload {
   /** 被信号中断时的信号名（如 'SIGTERM'） */
   readonly signal?: string;
 }
-
-// ── 事件 payload zod schema（R2：主进程发送侧 dev 校验，envelope 级） ──
 
 /** terminal:event:output payload schema（data 原样透传，仅 envelope 校验） */
 export const TerminalOutputEventPayloadSchema = z.object({

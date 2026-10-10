@@ -1,18 +1,3 @@
-// src/main/infra/ai/tools/web-fetch.tool.ts
-// web_fetch 工具：抓取网页正文（对齐 qwen web_fetch 工具语义收敛）
-// ──────────────────────────────────────────────────────────────
-// 设计：
-// - 全局 fetch（Node 18+）抓取 URL → HTML 去标签 → 正文截断
-// - 仅支持 http/https；超时 15s；隐私考虑 permission='ask'
-// - 失败（网络/超时/非 2xx）返回明确错误，不抛异常
-//
-// SSRF 防护（2026-09-06 安全审计修复）：
-// - 出站目标先经 url-guard.checkUrlAllowed 判定：环回 / 私网 / 链路本地 /
-//   保留段 / 本地主机名一律拒绝（auto 模式下本工具免审批，模型可被诱导探测内网）
-// - 重定向改用 redirect:'manual' 并**逐跳**复查：此前 redirect:'follow'
-//   允许 302 跳到 127.0.0.1 绕过首跳检查
-// ──────────────────────────────────────────────────────────────
-
 import { z } from 'zod';
 import { t } from '../../i18n';
 import type { Tool, ToolContext, ToolResult } from './tool';
@@ -142,7 +127,6 @@ async function fetchWithTimeout(url: URL, timeoutMs: number): Promise<Response> 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort('timeout'), timeoutMs);
   try {
-    // redirect:'manual'：3xx 原样返回，由 fetchWithSafeRedirects 逐跳复查后自行跳转
     return await fetch(url, { signal: controller.signal, redirect: 'manual' });
   } finally {
     clearTimeout(timer);

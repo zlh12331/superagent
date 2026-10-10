@@ -1,14 +1,3 @@
-// src/renderer/test/mock-api.test.ts
-// MSW IPC mock 工厂集成测试
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 验证 createMockApi() 工厂可用
-// - 验证 ok() / err() 响应构造器正确
-// - 验证 mock 可被覆盖
-//
-// 此测试验证 mock 工厂本身，不测试业务逻辑。
-// ──────────────────────────────────────────────────────────────
-
 import { describe, expect, it } from 'vitest';
 import {
   createMockApi,

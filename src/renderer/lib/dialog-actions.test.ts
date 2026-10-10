@@ -1,6 +1,3 @@
-// src/renderer/lib/dialog-actions.test.ts
-// Native dialog IPC bridge: no-bridge cancel / success / unwrap failure
-
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { pickDirectory, pickFiles } from './dialog-actions';

@@ -1,9 +1,3 @@
-// src/renderer/lib/agent/ipc-agent-transport.test.ts
-// IpcAgentTransport 流式出口批处理回归
-// ──────────────────────────────────────────────
-// 锁定缺陷「每个 token 一次 stream 提交 ⇒ 流式消息 react-markdown 全量重解析 O(n²)」：
-// IPC 侧推 500 条 text-delta，出口只允许少量提交，且合并后文本逐字符无损。
-
 import type { UIMessage, UIMessageChunk } from 'ai';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -103,7 +97,6 @@ describe('IpcAgentTransport 流式出口批处理', () => {
     ipc.end?.({ sessionId: 's1' });
 
     const chunks = await drain(stream);
-    // text-start + 合并后的 text-delta + text-end（窗口定时器可能再切几刀，但必须远小于 token 数）
     expect(chunks.length).toBeLessThan(20);
     const merged = chunks
       .filter((c) => c.type === 'text-delta')
@@ -167,7 +160,6 @@ describe('IpcAgentTransport 配置注入与分支覆盖', () => {
     });
     await tick();
     expect(window.api.agent.run).toHaveBeenCalledOnce();
-    // 未命中 unknown-chat → 回落 lastConfig（configureFor('other') 同步更新为 '/b'）
     expect(ipc.runArgs).toMatchObject({ workingDir: '/b', systemPrompt: 'sp' });
     void stream;
   });
@@ -213,7 +205,6 @@ describe('IpcAgentTransport 配置注入与分支覆盖', () => {
   it('systemPrompt 清空：全键装配使显式 undefined 覆盖缓存旧值（回归）', async () => {
     const transport = new IpcAgentTransport();
     transport.configureFor('s1', { workingDir: '/w', systemPrompt: 'old-prompt' });
-    // 模拟 use-agent 装配：设置清空 → effectiveSystemPrompt = undefined → 全键传入
     transport.configureFor(
       's1',
       buildAgentTransportConfig({
@@ -234,8 +225,6 @@ describe('IpcAgentTransport 配置注入与分支覆盖', () => {
     });
     await tick();
     expect(window.api.agent.run).toHaveBeenCalledOnce();
-    // 清空生效：run 入参的 systemPrompt 为 undefined（主进程回落默认提示词）——
-    // 此前旧值 'old-prompt' 残留、静默语义漂移
     expect(ipc.runArgs?.['systemPrompt']).toBeUndefined();
   });
 
@@ -376,20 +365,13 @@ describe('IpcAgentTransport 配置注入与分支覆盖', () => {
     expect(chunks).toEqual([{ type: 'text-delta', id: 't1', delta: 'ok' }]);
   });
 
-  // ── 回归：configureFor 的按会话配置缓存有上限（P3-57）──────────────────
-  // transport 是模块级单例，configureFor 以会话 id 为键；不加限制则随「打开过的
-  // 会话数」无界累积。
   it('configureFor 超上限时淘汰最旧，且最近配置的会话仍可命中', () => {
     const transport = new IpcAgentTransport();
-    // 写入 25 个会话（上限 20）
     for (let i = 0; i < 25; i += 1) {
       transport.configureFor(`sess-${i}`, { workingDir: `/w${i}` });
     }
-    // 最近写入的仍命中自己的配置（未被淘汰）
     expect(transport['configs'].get('sess-24')).toMatchObject({ workingDir: '/w24' });
-    // 最旧的已被淘汰
     expect(transport['configs'].has('sess-0')).toBe(false);
-    // 总数不超上限
     expect(transport['configs'].size).toBeLessThanOrEqual(20);
   });
 
@@ -398,9 +380,6 @@ describe('IpcAgentTransport 配置注入与分支覆盖', () => {
     await expect(transport.reconnectToStream()).resolves.toBeNull();
   });
 
-  // ── 回归：convertToModelMessages 抛错时不得泄漏订阅（P3-41）──────────────
-  // 此前该 await 在 try 之外，抛错时 cleanup 永不执行 → 三个 IPC 订阅 + batcher
-  // 定时器残留，后续推送会 enqueue 到已 error 的 controller 再抛。
   it('消息转换抛错 → 流错误且三订阅全部退订（不泄漏）', async () => {
     const transport = new IpcAgentTransport();
     transport.configureFor('s1', { workingDir: '/w' });
@@ -408,13 +387,11 @@ describe('IpcAgentTransport 配置注入与分支覆盖', () => {
       trigger: 'submit-message',
       chatId: 's1',
       messageId: undefined,
-      // role 非法：convertToModelMessages 抛 AI_MessageConversionError
       messages: [{ id: 'u1', role: 'bogus', parts: [] }] as unknown as UIMessage[],
       abortSignal: undefined,
     });
 
     await expect(drain(stream)).rejects.toThrow();
-    // 关键断言：订阅已退订 + run 未被调用（转换失败发生在发起之前）
     expect(ipc.part).toBeNull();
     expect(ipc.end).toBeNull();
     expect(ipc.error).toBeNull();

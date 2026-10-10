@@ -1,12 +1,3 @@
-// proxy-section.tsx
-// 设置 · 网络代理（34 号 spec §2.5/§2.6：三模式 + 测试连接）
-// ──────────────────────────────────────────────
-// 设计：模式 SegControl（system/direct/fixed）→ fixed 展开地址与 bypass 编辑 →
-// 测试连接按钮（主进程 proxy:test 探测，kind 归因文案）。写穿透经 settings-store
-// 落 SQLite，主进程 settings:set 收口即时应用（V5 免重启）。
-// 测试连接 pending/result 为组件级瞬态（L1），不进 store（§2.4）。
-// ──────────────────────────────────────────────────────────────
-
 import { useMutation } from '@tanstack/react-query';
 import { Network } from 'lucide-react';
 import type { ReactElement } from 'react';
@@ -33,7 +24,6 @@ export function ProxySection(): ReactElement {
   const proxy = useSettingsStore((s) => s.proxy);
   const updateProxy = useSettingsStore((s) => s.updateProxy);
 
-  // L1 瞬态：测试连接三态（idle/pending/result）
   const [testResult, setTestResult] = useState<TestResult | null>(null);
 
   const testMutation = useMutation({
@@ -45,7 +35,6 @@ export function ProxySection(): ReactElement {
       setTestResult(result);
     },
     onError: (error) => {
-      // 错误经 unwrapErrorMessage 本地化（写法标准：useMutation 必挂 onError）
       setTestResult({ ok: false, kind: 'target-unreachable' });
       unwrapErrorMessage(error, getErrorMessage);
     },
@@ -88,7 +77,6 @@ export function ProxySection(): ReactElement {
                 defaultValue={proxy.url ?? ''}
                 onBlur={(e) => {
                   const url = e.target.value.trim();
-                  // V9 前置校验：空值或非法 http(s) 地址不写穿透（主进程门禁兜底）
                   if (url === '') {
                     return;
                   }
@@ -97,9 +85,7 @@ export function ProxySection(): ReactElement {
                     if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
                       updateProxy({ url });
                     }
-                  } catch {
-                    // 非法输入不入库（保留输入框内容供用户修正）
-                  }
+                  } catch {}
                 }}
               />
               <p className="text-muted-foreground mt-1 text-xs leading-[1.5]">

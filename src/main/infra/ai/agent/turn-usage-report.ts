@@ -1,13 +1,3 @@
-// src/main/infra/ai/agent/turn-usage-report.ts
-// 回合 usage 投影 + 遥测上报（自 agent-service.completeTurn 提取）
-// ──────────────────────────────────────────────
-// 为什么提出来：usage 的条件展开投影 + 日志 + recordUsage + span 打点
-// 是一段与回合编排无关的完整块（~55 行），内联会撑爆 completeTurn
-// （file-size 净行 600 棘轮）；投影部分是纯函数可独立测试。
-//
-// 调用链：agent-service 的 completed 收尾先 projectTurnUsage(usage) 得到领域
-// TurnUsage（随后随 completeTurn 落库），再 reportTurnUsage 记日志/写用量表/打 span。
-
 import type { TurnUsage } from '@code-agent/shared/main';
 import { logger } from '../../../utils/logger';
 import type { ISessionService } from '../../storage/session-service';

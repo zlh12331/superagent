@@ -1,9 +1,3 @@
-// src/main/ipc/file.handler.test.ts
-// file.handler 单测：
-// 1. 9 个方法转发（fake FileService DI 注入）
-// 2. P0 工作区收口：边界内放行 / `../` 遍历拒绝 / 符号链接逃逸拒绝 /
-//    工作区外绝对路径拒绝 / 无根 fail closed / rename 双侧校验
-
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -208,7 +202,6 @@ describe('file.handler', () => {
       try {
         symlinkSync(outside, linkPath, process.platform === 'win32' ? 'junction' : 'dir');
       } catch {
-        // 平台不支持创建符号链接（无权限）时跳过本用例，不伪报通过
         return;
       }
       const handlers = build([workspace]);

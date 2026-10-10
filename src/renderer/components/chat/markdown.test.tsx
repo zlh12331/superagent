@@ -1,11 +1,8 @@
-// markdown.test.tsx
-// Markdown 渲染链单测：inline/block 分流 / shiki 高亮管线（成功·失败·跳过）/ 外链安全 / 复制
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { Markdown } from './Markdown';
 
-// shiki 高亮库 mock：codeToHtml 输出可断言的标记；可注入抛错验证降级
 const codeToHtml = vi.fn(
   (code: string, opts: { lang: string; theme: string }) =>
     `<pre data-lang="${opts.lang}" data-theme="${opts.theme}">${code}</pre>`,
@@ -16,7 +13,6 @@ vi.mock('@/lib/highlight', () => ({
   normalizeLang: vi.fn((lang: string) => lang),
 }));
 
-// useCopy / useTheme mock（jsdom 无剪贴板；主题需确定性）
 const copySpy = vi.fn();
 vi.mock('@/hooks/use-copy', () => ({
   useCopy: vi.fn(() => ({ copied: false, copy: copySpy })),
@@ -65,7 +61,6 @@ describe('Markdown', () => {
 
   it('边界：无语言标注围栏 → 现状按 inline code 呈现（language-* 正则不匹配）', () => {
     const { container } = render(<Markdown content={'```\nplain\n```'} />);
-    // 围栏内容保留尾随换行（markdown 原文形态）
     expect(container.querySelector('code.inline')?.textContent?.trim()).toBe('plain');
     expect(codeToHtml).not.toHaveBeenCalled();
   });

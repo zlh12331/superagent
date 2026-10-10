@@ -1,24 +1,3 @@
-// src/renderer/components/layout/AppShell.tsx
-// 应用主布局容器 · 对齐原型布局（三段式 grid）
-// ──────────────────────────────
-// 职责：
-// - 三段式 grid：Topbar / 主体（Sidebar + resizer + 内容 + resizer + 右面板）
-// - 面板宽度与分隔线交互：委托 use-resizable-panels（拖拽/键盘/折叠联动）
-// - 侧栏折叠：sb-collapsed 态，grid 第一列塌缩为 0
-// - 右面板折叠：crp-collapsed 态，grid 第五列塌缩为 0
-// - 右面板渲染 DevPanel（Terminal + Git + Files + Logs + Metrics + Inspector）
-// - 挂载 IPC 订阅桥接：approval / agent-ask / tool / terminal / agent 生命周期
-//
-// 布局参考：docs/prototype/prototype-v2.html
-// - .app（grid 两行：topbar + body）
-// - .view-chat（grid 五列：sidebar | resizer | main | resizer | right-panel）
-// - .resizer（可拖拽分隔线，hover 显示 accent 光带）
-// - .chat-right-panel（右面板，可折叠）
-// - .sb-collapsed / .crp-collapsed（折叠态 class）
-//
-// 拆分记录：宽度计算纯函数 → layout-utils；resizer 交互 → hooks/use-resizable-panels
-// ──────────────────────────────
-
 import { DEFAULT_ZOOM, stepZoom } from '@code-agent/shared/renderer';
 import { MotionConfig } from 'motion/react';
 import { lazy, type ReactElement, type ReactNode, Suspense, useEffect, useState } from 'react';
@@ -61,9 +40,6 @@ import {
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
 
-// ── 首屏 chunk 拆分：浮层与右面板重组件全部 lazy ──────────────────────
-// 主 chunk 不再包含 cmdk/fuse/shiki/xterm 等重型依赖；
-// 打开对应浮层 / 展开右面板时才拉取（Suspense fallback 为空，瞬时占位可接受）
 const LazySettingsDialog = lazy(async () => {
   const mod = await import('@/components/settings/SettingsDialog');
   return { default: mod.SettingsDialog };
@@ -95,50 +71,29 @@ interface AppShellProps {
  * IPC 桥接 hook（审批/提问/工具流/回合结束失效）与全局对话框宿主
  */
 export function AppShell({ children }: AppShellProps): ReactElement {
-  // 本地化文案
   const { t } = useTranslation();
-  // 审批桥接：订阅 IPC 推送（就地内联展示在 ChatPanel，弹窗已移除）
   useApprovalBridge();
-  // Agent 提问桥接：订阅 ask 事件 → agent-ask-store（AskDialog 渲染）
   useAgentAskBridge();
 
-  // 工具调用桥接：订阅 agent:tool:call / agent:tool:result IPC 事件
   useToolBridge();
-  // Agent 生命周期桥接：回合结束 → invalidate 缓存 + 清理 L2 缓冲 + usage 累积
   useAgentBridge();
-  // 失效域事件桥：订阅 invalidation:event:domains（主进程写路径声明的受影响域）
-  // → 逐域前缀失效；回合结束域覆盖登记供 use-agent-bridge 跳过旧清单（31 号设计文档）
   useInvalidationBridge();
 
-  // 终端桥接：订阅 terminal:event:output / terminal:event:exit IPC 事件
   useTerminalBridge();
 
-  // 更新事件桥：订阅 update:event:status 并写入 update-store（唯一订阅点；
-  // 关于面板 / 顶栏指示 / toast 提示均读 store，不再各自订阅）
   useUpdateBridge();
 
-  // 设置变更桥：订阅 settings:event:changed（主进程主动写入的设置域，如托盘改
-  // 「关闭时最小化到托盘」）→ 应用进 settings-store，避免旧值在后续写入时覆盖它
   useSettingsBridge();
 
-  // IPC 协议版本校验：主进程/渲染层版本错配时提示重启（P0 契约加固）
   useProtocolCheck();
-  // 深度链接：协议唤起 → 导航对应会话（`code-agent://session/<id>`）
   useDeepLink();
 
-  // L2 Zustand：激活会话 id（用于关联 DevPanel 中的终端实例）
   const activeSessionId = useActiveSessionStore((state) => state.activeSessionId);
   const devPanelSessionId = activeSessionId ?? DRAFT_SESSION_ID;
-  // P3 修复：Git 面板仓库路径绑定激活会话 workingDir（唯一权威入口 useActiveWorkingDir）
-  // 此前读 file-tree 的 rootPath 镜像：侧栏不在文件树视图时镜像未同步 → 拿到 null
-  // 无激活会话时传空串 → GitPanel 禁用查询（此前硬编码 f:\TraeProjects\1）
   const workingDir = useActiveWorkingDir();
 
-  // L2 Zustand：欢迎页模式（控制 .view-chat.welcome-mode class）
-  // 欢迎页模式下隐藏右面板 + 右分隔线，主区域改为居中 flex 容器
   const isWelcomeMode = useWelcomeStore((state) => state.isWelcomeMode);
 
-  // 折叠态（统一状态源：ui-store——快捷键 / 命令面板 / Topbar / 断点联动共用）
   const sidebarCollapsed = useUiStore((s) => s.sidebarCollapsed);
   const rightPanelCollapsed = useUiStore((s) => s.rightPanelCollapsed);
   const sidebarManual = useUiStore((s) => s.sidebarManual);
@@ -148,12 +103,8 @@ export function AppShell({ children }: AppShellProps): ReactElement {
   const toggleSidebar = useUiStore((s) => s.toggleSidebar);
   const toggleRightPanel = useUiStore((s) => s.toggleRightPanel);
 
-  // 响应式断点联动：窄屏自动折叠面板（对齐原型 @media 行为）
-  // <1200px：右面板自动隐藏；<900px：侧栏自动隐藏；宽屏自动恢复
-  // 仅当用户未手动覆盖时才跟随断点（手动展开不被 resize 强制折叠）
   const { isCompact, isNarrow } = useLayoutBreakpoint();
 
-  // 全局设置对话框开关（useUiStore）
   const settingsOpen = useUiStore((s) => s.settingsOpen);
   const closeSettings = useUiStore((s) => s.closeSettings);
   useEffect(() => {
@@ -167,76 +118,55 @@ export function AppShell({ children }: AppShellProps): ReactElement {
     }
   }, [isNarrow, sidebarManual, setSidebarCollapsed]);
 
-  // 命令面板 open 状态（多入口：⌘P/Ctrl+K 快捷键 / Topbar / 错误动作；集中到 ui-store）
   const paletteOpen = useUiStore((s) => s.paletteOpen);
   const openPalette = useUiStore((s) => s.openPalette);
   const closePalette = useUiStore((s) => s.closePalette);
 
-  // 快捷键帮助对话框（'?' 键触发；状态收敛 ui-store——/help 命令为第二入口，
-  // 此前双份 state 双份挂载 ShortcutHelpDialog，收敛后单一 lazy 实例）
   const shortcutHelpOpen = useUiStore((s) => s.shortcutHelpOpen);
   const closeShortcutHelp = useUiStore((s) => s.closeShortcutHelp);
   const openShortcutHelp = useUiStore((s) => s.openShortcutHelp);
-  // 文件模糊搜索对话框（⌘F 触发，对齐参考项目 FuzzySearchDialog）
   const [fuzzyOpen, setFuzzyOpen] = useState(false);
-  // 文件查看器入口（FuzzySearchDialog 选中文件时打开）
   const openFileViewer = useFileViewerStore((s) => s.openFile);
 
-  // 路由：聊天页显示返回按钮（对齐原型 back-btn）
-  // hash 路由（生产 file:// 兼容）下 pathname 恒为 '/，需同时检查 hash
   const navigate = useNavigate();
   const location = useLocation();
   const isChatRoute = location.pathname.startsWith('/chat/') || location.hash.startsWith('#/chat/');
 
   const setTheme = useSettingsStore((s) => s.setTheme);
   const theme = useSettingsStore((s) => s.theme);
-  // 实验功能：扫描线视觉叠加（settings.experimental.scanlines → .scanlines-overlay）
   const scanlines = useSettingsStore((s) => s.experimental.scanlines);
   const enterWelcomeMode = useWelcomeStore((s) => s.enterWelcomeMode);
-  // 全局 UI store：设置对话框入口（快捷键 / 错误动作 / Topbar / 命令面板共享）
   const openSettings = useUiStore((s) => s.openSettings);
 
-  // 折叠态切换：统一走 ui-store 的 toggle（置位 manual，断点自动折叠不再覆盖手动意图）
-  // 供快捷键（Ctrl+B/1、Ctrl+J/2）、Topbar、命令面板共用
   const handleToggleSidebar = toggleSidebar;
   const handleToggleRightPanel = toggleRightPanel;
 
   useKeyboardShortcuts({
     onCommandPalette: () => openPalette(),
-    // 全局保存：转发给文件查看器实例（编辑态打开时已注册 handleSave 到 store）；
-    // 无查看器 / 非编辑态时 no-op——修复此前空绑定死代码（真实保存被困在查看器本地 keydown）
     onSaveFile: () => {
       useFileViewerStore.getState().requestSave();
     },
-    // ⌘F 文件模糊搜索（对齐参考项目：Ctrl/Cmd + F 触发 FuzzySearchDialog）
     onSearchFile: () => setFuzzyOpen(true),
     onToggleTheme: () => {
       setTheme(nextTheme(theme));
     },
     onOpenSettings: openSettings,
-    // 与 Sidebar handleNewChat 保持一致：欢迎页（内部清激活会话）+ 跳转首页
-    //（此前仅 enterWelcomeMode，URL 停留当前路由）
     onNewSession: () => {
       enterWelcomeMode(null);
       navigate(ROUTES.home);
     },
     onOpenShortcutHelp: openShortcutHelp,
-    // 面板切换（Ctrl+B/1、Ctrl+J/2；对齐参考项目 toggle-left/right-sidebar 快捷键）
     onToggleSidebar: handleToggleSidebar,
     onToggleRightPanel: handleToggleRightPanel,
-    // 打开终端（Ctrl+`；对齐参考项目 codex.openTerminal：展开右面板 + 切终端 tab）
     onOpenTerminal: () => {
       useUiStore.getState().setRightPanelCollapsed(false);
       useUiStore.getState().setDevPanelTab('terminal');
     },
-    // 返回上一视图（Alt+←；对齐参考项目 backBtn：聊天页回首页，与 Topbar 返回按钮一致）
     onBack: () => {
       if (isChatRoute) {
         navigate('/');
       }
     },
-    // 界面缩放（35 号：Ctrl+=/Ctrl+-/Ctrl+0，固定键；应用由 useZoomEffect 单点收敛，
-    // 此处只改 store——单真源，与设置页 Select 同一出口）
     onZoomIn: () => {
       const { appearance, updateAppearance } = useSettingsStore.getState();
       updateAppearance({ zoom: stepZoom(appearance.zoom, 1) });
@@ -250,22 +180,16 @@ export function AppShell({ children }: AppShellProps): ReactElement {
     },
   });
 
-  // 35 号：缩放应用单点（订阅 store.appearance.zoom——五入口构造性覆盖）
   useZoomEffect();
 
-  // 37 号 A：代码面 Tab 宽度应用单点（订阅 store.editor.tabSize → --code-tab-size）
   useEditorCodeStyle();
 
-  // 面板宽度 + 分隔线交互（拖拽 / 键盘 / CSS 变量同步），实现见 use-resizable-panels
   const { sidebarWidth, rightPanelWidth, draggingSide, onResizerMouseDown, onResizerKeyDown } =
     useResizablePanels(sidebarCollapsed, rightPanelCollapsed);
 
   return (
-    // MotionConfig reducedMotion="user"：系统开启"减弱动态效果"时，
-    // motion 自动降级为透明度动画（a11y 全局开关，motion.dev/react-motion-config）
     <MotionConfig reducedMotion="user">
       <div className="bg-background text-foreground app font-sans">
-        {/* WCAG 2.4.1 Bypass Blocks：跳过导航链接 */}
         <a
           href="#main-content"
           className="bg-background text-foreground sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-boundary focus:rounded focus:px-3 focus:py-2 focus:text-sm focus:shadow-md"
@@ -287,12 +211,10 @@ export function AppShell({ children }: AppShellProps): ReactElement {
             isWelcomeMode && 'welcome-mode',
           )}
         >
-          {/* 列 1：侧边栏（组件级错误边界：单组件报错局部降级，不拖垮整个 App） */}
           <SectionErrorBoundary name="sidebar">
             <Sidebar />
           </SectionErrorBoundary>
 
-          {/* 列 2：左分隔线（可拖拽调整 sidebar 宽度） */}
           {!sidebarCollapsed && (
             <hr
               aria-orientation="vertical"
@@ -307,13 +229,10 @@ export function AppShell({ children }: AppShellProps): ReactElement {
             />
           )}
 
-          {/* 列 3：主内容区（thread 背景：多层光晕氛围 + 纸张噪点纹理）
-            组件级错误边界：聊天区单组件报错局部降级，不整页崩溃 */}
           <main id="main-content" className="thread-bg paper-texture">
             <SectionErrorBoundary name="main-content">{children}</SectionErrorBoundary>
           </main>
 
-          {/* 列 4：右分隔线（可拖拽调整右面板宽度；欢迎页也保留——右面板常驻） */}
           {!rightPanelCollapsed && (
             <hr
               aria-orientation="vertical"
@@ -328,8 +247,6 @@ export function AppShell({ children }: AppShellProps): ReactElement {
             />
           )}
 
-          {/* 列 5：右面板（DevPanel：Terminal + Git + Logs + Metrics + Inspector）
-            折叠展开按钮已删除（用户要求）：折叠态展开走顶栏右面板开关 */}
           <aside className="chat-right-panel" aria-label={t('common.rightPanel')}>
             {!rightPanelCollapsed && (
               <SectionErrorBoundary name="right-panel" resetKeys={[devPanelSessionId]}>
@@ -345,25 +262,16 @@ export function AppShell({ children }: AppShellProps): ReactElement {
           </aside>
         </div>
 
-        {/* 命令式确认/输入对话框（confirm()/prompt()，照搬参考项目） */}
         <DialogHost />
-        {/* 审批：就地内联展示（inline-approval-card 在 ChatPanel）——
-          移除全局 ApprovalDialog 弹窗：对齐原型 .card.paused 就地审批，
-          避免与内联卡双 UI 重复（同一审批两处呈现） */}
         <AskDialog />
 
-        {/* 文件查看器已改为右面板"文件"tab（FileViewerPanel——侧边栏树点击文件显示内容） */}
-
-        {/* 设置对话框：根级渲染，由 useUiStore 控制（Topbar / 命令面板 / 错误动作共用入口） */}
         <Suspense fallback={null}>
           <LazySettingsDialog open={settingsOpen} onOpenChange={closeSettings} />
         </Suspense>
 
-        {/* 命令面板（⌘P）：根级渲染，受控 open 状态 */}
         <Suspense fallback={null}>
           <LazyCommandPalette open={paletteOpen} onOpenChange={closePalette} />
         </Suspense>
-        {/* 文件模糊搜索（⌘F）：文件 + 会话统一搜索（对齐参考项目 FuzzySearchDialog） */}
         <Suspense fallback={null}>
           <LazyFuzzySearchDialog
             open={fuzzyOpen}
@@ -371,13 +279,10 @@ export function AppShell({ children }: AppShellProps): ReactElement {
             onSelect={openFileViewer}
           />
         </Suspense>
-        {/* 快捷键帮助对话框（'?' 触发） */}
         <Suspense fallback={null}>
           <LazyShortcutHelpDialog open={shortcutHelpOpen} onClose={closeShortcutHelp} />
         </Suspense>
-        {/* 自动更新提示（事件驱动 toast，无 DOM） */}
         <UpdateNotice />
-        {/* 扫描线视觉叠加（实验功能开关）：纯视觉层，不拦截任何交互 */}
         {scanlines && <div className="scanlines-overlay" aria-hidden="true" />}
       </div>
     </MotionConfig>

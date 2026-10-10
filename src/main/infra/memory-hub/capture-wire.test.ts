@@ -1,12 +1,3 @@
-// src/main/infra/memory-hub/capture-wire.test.ts
-// MemoryCaptureWire 单测：回合事件订阅 → L0 自动捕获
-// ──────────────────────────────────────────────────────────────
-// 验证点：
-// - extractLastUserText 容错解析（string parts / 数组 parts / content 回退）
-// - text-delta 累积 → turn-end(completed) 一次性 capture
-// - 非 completed 结束不捕获；noteLastUser 修剪；unmount 解除订阅
-// ──────────────────────────────────────────────────────────────
-
 import type { TurnEvent } from '@code-agent/shared/main';
 
 import { TurnEventType } from '@code-agent/shared/main';
@@ -103,11 +94,10 @@ describe('createMemoryCaptureWire', () => {
       reason: 'completed',
       durationMs: 10,
     } as never);
-    // capture 内部有 void 异步，等待微任务
     await vi.waitFor(() => expect(capture).toHaveBeenCalledTimes(1));
     expect(capture).toHaveBeenCalledWith({
       sessionKey: 'sess-1',
-      userContent: '用户问题', // noteLastUser 已 trim
+      userContent: '用户问题',
       assistantContent: '你好世界',
     });
   });

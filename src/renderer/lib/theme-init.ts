@@ -1,17 +1,3 @@
-// src/renderer/lib/theme-init.ts
-// 主题初始化（FOUC 防护）
-// ──────────────────────────────────────────────────────────────
-// 背景：ThemeProvider 在 React 挂载后才 applyTheme，而 zustand persist 是
-// 异步恢复——首帧可能按默认主题渲染后闪切到用户主题（暗色），即 FOUC。
-//
-// 方案：渲染层入口 main.tsx 在 createRoot 之前同步读取 localStorage 并应用
-// .dark class（module script 为 'self' 来源，生产 CSP script-src 'self' 合规；
-// 不能放 index.html 内联脚本，生产 CSP 禁止 inline）。
-//
-// 存储格式与 createPersistentStore 对齐：
-//   `code-agent:settings` = { state: { theme: 'light'|'dark'|'system' }, version }
-// ──────────────────────────────────────────────────────────────
-
 /** 持久化存储 key（与 createPersistentStore 的 `code-agent:` 前缀 + name 拼接一致） */
 export const SETTINGS_STORAGE_KEY = 'code-agent:settings';
 
@@ -41,9 +27,7 @@ export type StoredTheme = 'light' | 'dark' | 'system';
 export function mirrorThemeForFirstPaint(theme: StoredTheme): void {
   try {
     localStorage.setItem(THEME_FIRST_PAINT_KEY, theme);
-  } catch {
-    // 无痕模式 / 存储被禁：静默（首帧脚本回退默认主题）
-  }
+  } catch {}
 }
 
 /**

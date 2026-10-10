@@ -1,12 +1,3 @@
-// src/renderer/components/terminal/TerminalTabs.tsx
-// 终端标签栏（照搬参考项目 TerminalTabs：tab 列表 + 关闭 + 末尾新建按钮）
-// ──────────────────────────────────────────────────────────────
-// 每个 Tab：终端图标 + 标题（截断）+ 关闭按钮（×）。激活 Tab 用 accent
-// 色 + 底部强调线，非激活 hover 显示淡色背景。关闭按钮激活时常显、
-// 非激活 hover 显示。末尾固定「+」新建按钮，标签栏横向可滚动。
-// 纯展示组件，数据与回调全部通过 props 传入。
-// ──────────────────────────────────────────────────────────────
-
 import { Terminal as TerminalIcon } from 'lucide-react';
 import { type KeyboardEvent, type ReactElement, useRef } from 'react';
 
@@ -44,7 +35,6 @@ type TabKeyIntent =
   | { readonly kind: 'close' };
 
 function resolveTabKeyIntent(key: string, index: number, count: number): TabKeyIntent | null {
-  // 列表为空时无目标可算（Home/End/方向键都退化）
   if (count === 0) {
     return key === 'Delete' || key === 'Backspace' ? { kind: 'close' } : null;
   }
@@ -86,9 +76,7 @@ export function TerminalTabs({
   onSelect,
   onClose,
 }: TerminalTabsProps): ReactElement {
-  // 本地化文案
   const { t } = useTranslation();
-  // 标签栏容器：方向键切换后把焦点移到新激活项（roving tabindex 约定）
   const listRef = useRef<HTMLDivElement | null>(null);
 
   /**
@@ -116,7 +104,6 @@ export function TerminalTabs({
     event: KeyboardEvent<HTMLDivElement>,
   ): void => {
     const intent = resolveTabKeyIntent(event.key, index, terminals.length);
-    // 无关按键不拦截（让事件继续冒泡）
     if (intent === null) return;
     event.preventDefault();
 
@@ -127,7 +114,6 @@ export function TerminalTabs({
     const target = terminals[intent.index]?.id;
     if (target === undefined) return;
     onSelect(target);
-    // 仅方向键/Home/End 需要移焦（Enter/Space 未移动目标）
     if (target !== terminal.id) focusTab(target);
   };
 
@@ -141,8 +127,6 @@ export function TerminalTabs({
       {terminals.map((terminal, index) => {
         const isActive = terminal.id === activeId;
         return (
-          // 包裹层仅承载布局（tablist 允许普通 div 包裹）；tab 与关闭钮必须
-          // 平级——role=tab 内嵌交互元素是 nested-interactive 违规（axe 实测）
           <div
             key={terminal.id}
             className={cn(
@@ -169,8 +153,6 @@ export function TerminalTabs({
                 {terminal.title}
               </span>
             </div>
-            {/* 关闭钮：绝对定位覆盖 tab 右缘；对无障碍树隐藏（鼠标专用修饰），
-                键盘等价路径 = 聚焦标签后 Delete/Backspace（上方 onKeyDown 已实现） */}
             <Button
               variant="ghost"
               size="icon"

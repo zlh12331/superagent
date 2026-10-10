@@ -1,7 +1,3 @@
-// src/renderer/components/ui/input.tsx
-// 输入框组件（shadcn/ui new-york 风格）
-// 设计文档 §2.3 shadcn/ui 组件库
-
 import type * as React from 'react';
 
 import { cn } from '@/lib/utils';

@@ -1,12 +1,3 @@
-// src/renderer/components/$1/MotionReveal.test.tsx
-// MotionReveal 入场动效包装单测：三种变体 / 延迟 / inView 两分支 / className 透传
-// ──────────────────────────────────────────────
-// 覆盖动机：组件此前 0% 覆盖。它对 motion/react 的 initial/animate/whileInView
-// 装配是「一行启用动效」的契约面——变体名拼错、inView 分支走错会导致
-// 首页元素静止不动（视觉缺陷，无报错），需要回归锚。
-// 断言策略：motion.div 在 jsdom 中渲染为 div，通过 data-* 与 className 观察装配结果。
-// ──────────────────────────────────────────────
-
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 

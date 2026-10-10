@@ -1,31 +1,3 @@
-// scripts/lib/update-metadata.ts
-// 更新元数据（latest*.yml）的双架构合并纯函数
-// ──────────────────────────────────────────────────────────────
-// 用途：CD 拆成「每架构一个 build job」后，Windows/macOS 的两个 job 会各自产出
-// **同名**的更新元数据（latest.yml / latest-mac.yml）——electron-builder 的
-// getArchPrefixForUpdateFile 只对 Linux 追加架构后缀（已核实
-// app-builder-lib/out/publish/updateInfoBuilder.js:55-60），而 release job 用
-// `cp -n` 收集，只有一份能生效 ⇒ 另一架构的用户拿不到自己的条目。本模块把两份
-// 单架构元数据合并成一份双架构元数据（Linux 天然分文件，不走这里）。
-//
-// 合并语义**对齐 electron-builder 自身的多架构合并**（即同一 job 内构建双架构时的
-// 产出形态），依据 writeUpdateInfoFiles（updateInfoBuilder.js:156-205）：
-//   1. files 排序键：先按「是否 zip」（zip 排前——MacUpdater.js:81 只下载 zip），
-//      再按 Arch 枚举序（builder-util/out/arch.js：ia32=0, x64=1, armv7l=2,
-//      arm64=3, universal=4）⇒ x64 条目在 arm64 之前；
-//   2. path 与顶层 sha512 取「首个条目」的值（原实现保留第一个 task 的 info）；
-//   3. 其余字段（releaseName/releaseNotes/releaseDate…）同样以首个 task 为准；
-//   4. 序列化用 js-yaml.dump({ lineWidth: 8000, skipInvalid: false, noRefs: true })
-//      ——与 builder-util/out/util.js:94 的 serializeToYaml 逐字一致。
-//
-// ⚠️ 用户侧的选择依据（决定这些不变量为何必须成立）：
-//   · Windows：NsisUpdater 用 `findFile(files, "exe")`，其内部按
-//     `url.includes(process.arch)` 匹配（electron-updater/out/providers/Provider.js:80）
-//     ⇒ x64 与 arm64 的条目必须**同时在 files 里**，且文件名含各自架构串。
-//   · macOS：MacUpdater 先 `filterFilesForArch`（按 `includes("arm64")` 过滤）再
-//     `findFile(files, "zip")`（MacUpdater.js:30-36,81）⇒ 两份 zip 都必须存在。
-// ──────────────────────────────────────────────────────────────
-
 import { dump, load } from 'js-yaml';
 
 /** 参与合并的架构（本项目只发布这两种） */
@@ -208,7 +180,6 @@ export function mergeUpdateMetadata(inputs: readonly MergeInput[]): string {
     if (only === undefined) {
       throw new Error('[merge-update-metadata] 没有输入');
     }
-    // 校验后再原样返回：即使是对已是双架构的输入，也要挡住解析错误
     parseUpdateInfo(only.content, `输入(${only.arch})`);
     return only.content;
   }
@@ -261,8 +232,6 @@ export function mergeUpdateMetadata(inputs: readonly MergeInput[]): string {
     throw new Error('[merge-update-metadata] 合并后没有任何条目');
   }
 
-  // 键顺序来自 base 的解析结果（version, files, path, sha512, …），
-  // 覆盖同名键不会改变其在对象中的位置 ⇒ 与 electron-builder 原生输出同序
   const merged: UpdateInfo = {
     ...base.info,
     files: mergedFiles,

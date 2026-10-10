@@ -1,6 +1,3 @@
-// src/main/infra/ai/tools/stable-stringify.test.ts
-// 稳定 JSON 序列化单测：键排序 / 循环引用 / DAG 共享引用
-
 import { describe, expect, it } from 'vitest';
 import { stableStringify } from './stable-stringify';
 
@@ -30,7 +27,6 @@ describe('stableStringify（键按字典序排序）', () => {
   });
 
   it('共享引用（DAG）不误判为循环引用', () => {
-    // {a: shared, b: shared} 是 DAG 而非环，原生 JSON.stringify 可序列化
     const shared = { x: 1 };
     const result = stableStringify({ a: shared, b: shared });
     expect(result).toBe('{"a":{"x":1},"b":{"x":1}}');

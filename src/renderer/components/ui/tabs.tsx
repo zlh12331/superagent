@@ -1,7 +1,3 @@
-// src/renderer/components/ui/tabs.tsx
-// 标签页组件（shadcn/ui new-york 风格，基于 @radix-ui/react-tabs）
-// 设计文档 §2.3 shadcn/ui 组件库
-
 import * as TabsPrimitive from '@radix-ui/react-tabs';
 import type * as React from 'react';
 
@@ -75,8 +71,6 @@ export function TabsTrigger({
     <TabsPrimitive.Trigger
       data-slot="tabs-trigger"
       className={cn(
-        // 纯语义令牌（对齐 shadcn 铁律：无手动 dark: 覆盖）——激活态用 bg-muted
-        // 两主题自适应（亮色浅灰浮起 / 暗色深灰浮起），非激活文本 muted、激活 foreground
         "data-[state=active]:bg-muted data-[state=active]:text-foreground data-[state=active]:border-input data-[state=active]:shadow-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:outline-ring text-muted-foreground inline-flex h-[calc(100%-1px)] flex-1 items-center justify-center gap-1.5 rounded-md border border-transparent px-2 py-1 text-sm font-medium whitespace-nowrap transition-[color,box-shadow] focus-visible:ring-[3px] focus-visible:outline-1 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         className,
       )}

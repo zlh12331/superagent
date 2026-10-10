@@ -1,10 +1,3 @@
-// src/main/infra/remote/remote-control.test.ts
-// RemoteControlService 单测：令牌生成 / 校验路由 / 生命周期 / HTTP 桥接 / 发现广播
-// ──────────────────────────────────────────────────────────────
-// 网络为真实边界（本机回环，无外部依赖）：HTTP 用 fetch 直连监听端口，
-// 发现广播注入 127.0.0.1 单播（生产为全网广播；单播在 CI/防火墙环境稳定）。
-// ──────────────────────────────────────────────────────────────
-
 import { createSocket, type Socket as UdpSocket } from 'node:dgram';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -53,7 +46,7 @@ describe('RemoteControlService（生命周期与路由）', () => {
     expect(service.isRunning()).toBe(false);
     expect(service.getSessionToken()).toBeNull();
     expect(service.getPort()).toBeNull();
-    await service.stop(); // 可重入 no-op
+    await service.stop();
   });
 
   it('validateAndRoute：令牌匹配时路由到监听器并透出执行结果', async () => {
@@ -334,7 +327,6 @@ describe('RemoteControlService（HTTP 桥接）', () => {
 
 describe('RemoteControlService（局域网发现广播）', () => {
   it('start 后按间隔广播公告（service/name/port，不含令牌）', async () => {
-    // 接收端：回环随机端口（单播注入，跨平台稳定）
     const receiver = createSocket({ type: 'udp4' });
     const discoveryPort = await new Promise<number>((resolve, reject) => {
       receiver.once('error', reject);
@@ -444,7 +436,6 @@ describe('RemoteControlService（绑定范围）', () => {
         broadcastAddress: '127.0.0.1',
         broadcastIntervalMs: 30,
       });
-      // 窗口 ≥ 10 个广播间隔：若误发公告必然落入窗口
       await expectSilent(receiver, 500);
     } finally {
       receiver.close();
@@ -460,14 +451,13 @@ describe('RemoteControlService（绑定范围）', () => {
         broadcastAddress: '127.0.0.1',
         broadcastIntervalMs: 30,
       });
-      await firstPacket(receiver, 3000); // lan 模式确认公告在发
+      await firstPacket(receiver, 3000);
 
       await service.setBindScope('loopback');
       expect(service.isRunning()).toBe(true);
-      expect(service.getSessionToken()).toBe(token); // 配对话轮保留，无需重新配对
+      expect(service.getSessionToken()).toBe(token);
       expect(service.getBindScope()).toBe('loopback');
       expect(service.getBindAddress()).toBe('127.0.0.1');
-      // 间隔 30ms，静默 300ms ≈ 10 个间隔：公告确已停发
       await expectSilent(receiver, 300);
     } finally {
       receiver.close();
@@ -489,7 +479,7 @@ describe('RemoteControlService（绑定范围）', () => {
       expect(service.isRunning()).toBe(true);
       expect(service.getBindScope()).toBe('lan');
       expect(service.getBindAddress()).toBe('0.0.0.0');
-      await firstPacket(receiver, 3000); // 公告恢复
+      await firstPacket(receiver, 3000);
     } finally {
       receiver.close();
     }
@@ -513,6 +503,6 @@ describe('RemoteControlService（绑定范围）', () => {
     await service.setBindScope('lan');
     expect(service.isRunning()).toBe(true);
     expect(service.getSessionToken()).toBe(token);
-    expect(service.getPort()).toBe(port); // 未重启（随机端口重启必然换端口）
+    expect(service.getPort()).toBe(port);
   });
 });

@@ -1,7 +1,3 @@
-// src/main/infra/ai/tools/list-directory.tool.ts
-// list_directory 工具：封装 FileService.list，供 Code Agent 列出目录内容
-// ──────────────────────────────────────────────────────────────
-
 import type { FileListRes } from '@code-agent/shared/main';
 import { z } from 'zod';
 import type { IFileService } from '../../file/file-service';
@@ -40,7 +36,6 @@ export function createListDirectoryTool(fileService: IFileService): Tool<ListDir
     permission: 'auto',
     category: 'read',
     execute: async (input: ListDirectoryInput, ctx: ToolContext): Promise<ToolResult> => {
-      // realTarget：IO 用真实落点（TOCTOU，debt.md#d1）；metadata.path 保持输入形态
       const { resolved, realTarget } = resolveWithinWorkspace(input.path, ctx.workingDir);
 
       const result: FileListRes = await fileService.list({

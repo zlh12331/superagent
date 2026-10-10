@@ -1,6 +1,3 @@
-// src/main/ipc/im.handler.test.ts
-// im.handler 单测：渠道列表/启停（真实 ImService + fake 适配器 + electron 外壳）
-
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -17,7 +14,6 @@ import { createImHandlers } from './im.handler';
 /** 临时 userData 目录（真实文件 IO，符合无 mock 测试原则） */
 const TEMP_DIR = mkdtempSync(join(tmpdir(), 'im-handler-test-'));
 
-// mock electron：safeStorage（keychain 依赖）+ app
 vi.mock('electron', () => ({
   safeStorage: {
     isEncryptionAvailable: vi.fn(() => true),
@@ -74,9 +70,7 @@ describe('im.handler', () => {
     vi.clearAllMocks();
   });
 
-  afterEach(async () => {
-    // 清理 keychain 残留（真实文件可能写入 tmp）
-  });
+  afterEach(async () => {});
 
   afterAll(() => {
     rmSync(TEMP_DIR, { recursive: true, force: true });
@@ -98,14 +92,12 @@ describe('im.handler', () => {
     const handlers = createHandlers();
     const result = await handlers.start({ kind: 'telegram', token: 'tok-1' }, {} as never);
     expect(result).toEqual({ ok: true });
-    // 启动后状态 running
     const channels = (await handlers.list(undefined, {} as never)).channels;
     expect(channels.find((c) => c.kind === 'telegram')?.running).toBe(true);
   });
 
   it('start：无 token 启动（读 keychain——未配置时抛错）', async () => {
     const handlers = createHandlers();
-    // 未配置 token：keychain 无值 → adapter.connect(undefined) → FakeAdapter 接受（真实骨架抛错）
     await expect(handlers.start({ kind: 'wechat', token: undefined }, {} as never)).rejects.toThrow(
       'NOT_IMPLEMENTED',
     );
@@ -116,7 +108,7 @@ describe('im.handler', () => {
     await handlers.start({ kind: 'telegram', token: 't' }, {} as never);
     const stopped = await handlers.stop({ kind: 'telegram' }, {} as never);
     expect(stopped).toEqual({ ok: true });
-    await handlers.stop({ kind: 'telegram' }, {} as never); // 幂等
+    await handlers.stop({ kind: 'telegram' }, {} as never);
     const channels = (await handlers.list(undefined, {} as never)).channels;
     expect(channels.find((c) => c.kind === 'telegram')?.running).toBe(false);
   });

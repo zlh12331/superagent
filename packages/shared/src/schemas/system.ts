@@ -1,16 +1,3 @@
-// packages/shared/src/schemas/system.ts
-// System 域 zod schema 单一真源（运行时可观测性）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 集中定义 System 域 zod schema，作为 IPC 入参运行时校验的单一真源
-// - 当前提供 system:getStatus（运行时状态查询）+ logs:read（日志读取）
-//
-// 设计：
-// - system:getStatus 无入参（void），返回 SystemStatus（内存/CPU/uptime/版本）
-// - logs:read 入参为 { lines?, level? }（全可选），返回 ReadLogsRes
-// - Res 类型直接 interface 定义（zod 推断 req，res 由 main 进程保证形状）
-// ──────────────────────────────────────────────────────────────
-
 import { z } from 'zod';
 
 /** logs:read 入参最大行数（与 main 进程 system.handler.ts MAX_LINES 保持一致） */

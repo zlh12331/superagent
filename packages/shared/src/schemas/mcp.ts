@@ -1,20 +1,3 @@
-// packages/shared/src/schemas/mcp.ts
-// MCP 域 zod schema（MCP 服务器管理）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 定义 mcp:list / mcp:start / mcp:stop 请求-响应 schema
-// - McpServerConfig 与主进程 mcp-types 对齐（name/transport/url/headers/command/args）
-// - transport 三态：stdio（本地子进程）/ sse / streamable-http（远程 HTTP）
-// - McpServerInfo 由主进程 listServers() 返回，前端仅透传展示
-//
-// 安全策略（P0，2026-08 安全审计）：
-// - command 仅允许裸可执行文件名（MCP_COMMAND_PATTERN）
-// - args 额外过 exec-trampoline deny-list（detectMcpExecTrampoline）：
-//   shell/解释器 + `-c|-e|/c|/k|-Command` 之类代码串开关一律拒绝
-// - 定位澄清：用户亲手配置的 MCP server 仍是"用户信任的提权面"（可读写工作区、
-//   起子进程），本 deny-list 是配置文件注入的绊线，不是沙箱
-// ──────────────────────────────────────────────────────────────
-
 import { z } from 'zod';
 
 /**
@@ -208,7 +191,6 @@ export const McpServerConfigSchema = z
       .transform((v) => v ?? undefined),
   })
   .superRefine((cfg, ctx) => {
-    // headers 数量防御性上限（zod v4 record 无 .max，在 refine 中校验）
     if (cfg.headers !== undefined && Object.keys(cfg.headers).length > MCP_MAX_HEADERS) {
       ctx.addIssue({
         code: 'custom',
@@ -231,8 +213,6 @@ export const McpServerConfigSchema = z
           message: 'command 必须是裸可执行文件名（不含路径分隔符/空白/引号）',
         });
       } else {
-        // P0 安全：args 不受 MCP_COMMAND_PATTERN 约束，解释器 + 代码串开关
-        // （bash -c / node -e / cmd /c）等价于任意代码执行——schema 层绊线拦截
         const trampoline = detectMcpExecTrampoline(cfg.command, cfg.args);
         if (trampoline !== null) {
           ctx.addIssue({
@@ -244,7 +224,6 @@ export const McpServerConfigSchema = z
       }
       return;
     }
-    // 远程 transport：url 必填 + http(s) 校验
     if (cfg.url === undefined || cfg.url.length === 0) {
       ctx.addIssue({ code: 'custom', path: ['url'], message: `${transport} 传输需要提供 url` });
     } else if (!isValidMcpHttpUrl(cfg.url)) {

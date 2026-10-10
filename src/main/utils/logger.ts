@@ -1,14 +1,3 @@
-// src/main/utils/logger.ts
-// 主进程结构化日志工具
-// 基于 electron-log 5，设计文档 §7.6
-// 职责：
-// 1. 封装 electron-log，提供统一 logger 接口
-// 2. 支持 traceId 字段贯穿同一请求的多条日志
-// 3. 文件日志按大小轮转：单文件 10MB，保留 main.log + main.old.log 两份
-//    （§7.6 原文「按日轮转、保留 14 天」未落地，实际保留口径以本条与 initLogger 注释为准）
-// 4. 控制台仅 dev 环境
-// 5. 注册全局 unhandledRejection / uncaughtException 捕获
-
 import { existsSync, mkdirSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -61,31 +50,14 @@ export interface LogContext {
  * 必须在 app.whenReady() 之后调用（需要 app.getPath）
  */
 export function initLogger(): void {
-  // 文件日志级别：生产 info，开发 debug
   log.transports.file.level = app.isPackaged ? 'info' : 'debug';
-  // 控制台日志级别：仅 dev 启用
   log.transports.console.level = app.isPackaged ? false : 'debug';
 
-  // 测试环境的文件路径重定向已在模块加载期设置（见文件头 IS_TEST_ENV）——
-  // 那一步不能挪到这里：单测通常不调用 initLogger()，晚设置等于没设置。
-
-  // 文件轮转配置：单文件 10MB 上限
-  // electron-log 5 的轮转机制：超出 maxSize 后当前文件移为 main.old.log，新文件从空开始写
-  // 仅保留 main.log + main.old.log 两个文件，不存在文件数量无限增长问题
   log.transports.file.fileName = 'main.log';
-  log.transports.file.maxSize = 10 * 1024 * 1024; // 10MB
+  log.transports.file.maxSize = 10 * 1024 * 1024;
 
-  // 异步写盘（2026-09-08 性能修复）：
-  // electron-log v5 文件传输默认 sync: true（内部 fs.writeFileSync），而
-  // wrap.ts 每次 IPC invoke 固定记 2 条 info（请求开始 + 请求成功）——
-  // 即每个 IPC 请求 2 次同步写盘。实测单次 appendFileSync 约 0.15 ms，
-  // Windows + Defender 实时扫描下可放大到 1–5 ms，高频 channel
-  // （session:list / system:getStatus）累计延迟可观。
-  // 改异步后由 electron-log 内部队列合并写入，崩溃时最多丢失队列尾部若干行
-  // （致命退出路径留有 300ms 写盘窗口后才 app.exit，日志丢失窗口可接受）。
   log.transports.file.sync = false;
 
-  // 日志格式：[ISO时间] [级别] [traceId] 消息
   log.transports.file.format = '[{y}-{m}-{d} {h}:{i}:{s}.{ms}] [{level}] {text}';
   log.transports.console.format = '{level} {text}';
 
@@ -165,8 +137,6 @@ function serializeError(error: unknown): Record<string, unknown> {
       message: error.message,
       stack: error.stack,
     };
-    // Error.cause 来自 ES2022.Error lib（tsconfig 已包含）
-    // result 类型为 Record<string, unknown>，必须用方括号赋值（noPropertyAccessFromIndexSignature）
     if (error.cause !== undefined) {
       result['cause'] = serializeError(error.cause);
     }
@@ -228,19 +198,15 @@ export async function flushPendingLogs(timeoutMs = 300): Promise<void> {
  */
 export function registerGlobalErrorHandlers(): void {
   process.on('uncaughtException', (error: Error) => {
-    // 重入保护：flush/退出过程中再次抛错时不再递归
     if (fatalErrorHandled) {
       return;
     }
     fatalErrorHandled = true;
     logger.error({}, '全局未捕获异常 uncaughtException', error);
     writeCrashMarker(error);
-    // 日志为异步队列：留 300ms 写盘窗口再退出（此前借 Sentry 动态 import 的
-    // 耗时顺带落地，移除 Sentry 后显式给窗口）
     setTimeout(() => {
       app.exit(1);
     }, 300).unref();
-    // 兜底：300ms 窗口未退出（事件循环被半崩溃状态挂死）也强制退出
     const forceExit = setTimeout(() => {
       app.exit(1);
     }, 3_000);
@@ -269,7 +235,6 @@ function writeCrashMarker(error: Error): void {
     );
     logger.info({ markerPath }, '已写入崩溃标记');
   } catch (writeError) {
-    // 标记写入失败不影响主流程
     logger.error({ error: String(writeError) }, '崩溃标记写入失败');
   }
 }

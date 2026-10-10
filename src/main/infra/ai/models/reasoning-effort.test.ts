@@ -1,15 +1,3 @@
-// src/main/infra/ai/models/reasoning-effort.test.ts
-// 思考强度阶梯单测：归一化 / 钳制 / DeepSeek 官方映射
-//
-// 测试要点：
-// 1. normalizeReasoningEffort：别名归一化 / 无法识别返回 undefined
-// 2. clampReasoningEffort：受支持保留 / 取更强档 / 封顶到最强档
-// 3. clampDeepSeekReasoningEffort：应用官方映射表（xhigh→flash:high/pro:max 等）
-//
-// 接线背景：clampDeepSeekReasoningEffort 已接线（generation-options）；
-// normalizeReasoningEffort / clampReasoningEffort 生产零调用（预留能力，
-// 本组用例是其回归锚——接线前防档位语义腐烂）。
-
 import { describe, expect, it } from 'vitest';
 import {
   clampDeepSeekReasoningEffort,
@@ -46,14 +34,11 @@ describe('clampReasoningEffort（钳制）', () => {
   });
 
   it('请求档位不受支持：取下一个更强档位', () => {
-    // xhigh(60) → 支持集 [low, high, max] 中 ≥60 的最小档 = max(70)
     expect(clampReasoningEffort('xhigh', ['low', 'high', 'max'])).toBe('max');
-    // medium(30) → 支持集 [low, high, max] 中 ≥30 的最小档 = high(40)
     expect(clampReasoningEffort('medium', ['low', 'high', 'max'])).toBe('high');
   });
 
   it('请求档位高于全部支持档：封顶到最强可用档', () => {
-    // max(70) → 支持集 [low, high] 无 ≥70 的档 → 封顶 high
     expect(clampReasoningEffort('max', ['low', 'high'])).toBe('high');
   });
 

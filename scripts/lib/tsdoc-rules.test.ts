@@ -1,7 +1,3 @@
-// scripts/lib/tsdoc-rules.test.ts
-// TSDoc 覆盖门禁规则核反例 fixture 测试：违规命中 / 干净放过 / 边界形态
-// ──────────────────────────────────────────────────────────────
-
 import { describe, expect, it } from 'vitest';
 
 import { scanTsdoc } from './tsdoc-rules';
@@ -75,7 +71,6 @@ describe('正例与豁免形态', () => {
       'export function f(a: string): number;',
       'export function f(a: string | number): number { return 1; }',
     ].join('\n');
-    // 重载声明跳过；实现声明仍需注释 → 命中实现
     expect(namesOf(content)).toEqual(['f']);
   });
 

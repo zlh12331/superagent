@@ -1,26 +1,3 @@
-// src/main/infra/memory-hub/memory-hub-service.ts
-// MemoryHubService：上游 TencentDB-Agent-Memory（MemoryCore gateway）sidecar 生命周期管理
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - ensureStarted()：懒启动 sidecar 子进程并等待 /health 就绪，返回 MemoryPort
-//   · 动态选空闲端口 + 随机 apiKey（每次启动轮换，不落盘）
-//   · 生成 gateway.yaml 写入数据目录（端口 / 数据目录 / 蒸馏 LLM / recall 策略）
-//   · 经 Electron utilityProcess 启动（**不再依赖 ELECTRON_RUN_AS_NODE**，见下）
-// - stop()：应用退出时终止子进程（dispose 链中调用）
-//
-// 边界纪律：
-// - 上游入口路径只经环境变量 MEMORY_HUB_ENTRY 传给 launcher；本模块不 import 上游代码
-// - dev：hubRoot 指向上游源码目录（tsx 直跑 src）；prod：指向打包的构建产物目录
-//
-// 进程启动方式（2026-09-13 变更）：
-//   旧实现 spawn(process.execPath) + ELECTRON_RUN_AS_NODE=1：借 Electron 二进制
-//   当 Node 用，要求 RunAsNode 熔断保持开启——而该熔断开启时签名二进制可被同机
-//   任意进程复用为通用 Node 运行时（绕过 asar 完整性校验）。现改用 Electron 官方
-//   的 utilityProcess（后台 Node 子进程 API），不再需要该环境变量，从而可在
-//   electron-builder.yml 关闭 RunAsNode 并开启 OnlyLoadAppFromAsar。
-//   ⚠️ 启动路径无 shell 参与（模块路径 + 参数数组），不构成命令注入面。
-// ──────────────────────────────────────────────────────────────
-
 import { randomUUID } from 'node:crypto';
 import { cpSync, existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import net from 'node:net';
@@ -272,16 +249,11 @@ export class MemoryHubService {
       };
       child.onExit(finish);
       child.kill();
-      // 兜底：3s 未退出也放行（utilityProcess.kill 为 SIGTERM 语义；
-      // 进程已被 Electron 托管，异常残留由应用退出时的子进程收尾兜底）
       setTimeout(finish, 3000);
     });
     logger.info({}, `${TAG} sidecar 已停止`);
-    // 失效域声明（31 号 spec S8）：运行态 running→false（窗口已被销毁时广播为 no-op）
     broadcastInvalidation([INVALIDATION_DOMAINS.memory]);
   }
-
-  // ─── 内部实现 ───
 
   private async doStart(): Promise<MemoryPort> {
     const hubRoot = this.options.hubRoot;
@@ -304,9 +276,6 @@ export class MemoryHubService {
     const dataDir = this.options.dataDir;
     mkdirSync(dataDir, { recursive: true });
 
-    // 数据归属修复的一次性迁移：早期版本未设 MEMORY_TENCENTDB_ROOT，引擎把主库
-    // 落在 ~/.memory-tencentdb/memory-tdai/（实测本机确有）。现在显式指向 userData，
-    // 若不迁移则用户既有记忆在升级后"消失"（引擎在新位置建空库）。
     migrateLegacyDataDir(dataDir);
 
     const configPath = await this.writeGatewayConfig(dataDir, port, apiKey);
@@ -315,7 +284,6 @@ export class MemoryHubService {
     const useTsx = !entry.isDist;
 
     logger.info({ hubRoot, entry: entry.path, port, useTsx }, `${TAG} 启动 sidecar`);
-    // 环境变量：不含 ELECTRON_RUN_AS_NODE（改用 utilityProcess 后不再需要）
     const childEnv: NodeJS.ProcessEnv = {
       ...process.env,
       // biome-ignore lint/style/useNamingConvention: 标准环境变量名
@@ -328,10 +296,6 @@ export class MemoryHubService {
       TDAI_METADATA_SQLITE_BASE_DIR: join(dataDir, 'metadata'),
       // biome-ignore lint/style/useNamingConvention: 上游约定的配置环境变量名
       TDAI_DEPLOY_MODE: 'standalone',
-      // 数据根目录显式收进 userData（P1 修复）：上游默认落到 ~/.memory-tencentdb
-      // （见上游 config.ts 的 MEMORY_TENCENTDB_ROOT 解析），导致引擎数据散落在
-      // 用户主目录——备份不覆盖、卸载不清理、多用户环境可能串数据。实测本机
-      // 已存在 ~/.memory-tencentdb/memory-tdai/vectors.db（引擎记忆库）。
       // biome-ignore lint/style/useNamingConvention: 上游约定的配置环境变量名
       MEMORY_TENCENTDB_ROOT: dataDir,
     };
@@ -343,7 +307,6 @@ export class MemoryHubService {
         logger.warn({ code }, `${TAG} sidecar 进程退出`);
         this.child = null;
         this.port = null;
-        // 失效域声明（31 号 spec S8）：运行态 running→false（崩溃退出也要通知）
         broadcastInvalidation([INVALIDATION_DOMAINS.memory]);
       }
     });
@@ -352,8 +315,6 @@ export class MemoryHubService {
     await this.waitUntilHealthy(baseUrl, apiKey, () => child.stderrTail());
 
     logger.info({ baseUrl }, `${TAG} sidecar 就绪`);
-    // 失效域声明（31 号 spec S8）：运行态 running→true（懒启动缺口——
-    // 设置页此前打开时引擎未启动则永远显示「未运行」）
     broadcastInvalidation([INVALIDATION_DOMAINS.memory]);
     return new HttpMemoryPort({ baseUrl, apiKey });
   }
@@ -383,7 +344,6 @@ export class MemoryHubService {
 
   /** 生成 gateway.yaml（全部配置单点生成，便于审计与排障） */
   private async writeGatewayConfig(dataDir: string, port: number, apiKey: string): Promise<string> {
-    // 蒸馏 LLM：静态值 / 异步解析器（失败回退占位值，不阻断 sidecar 启动）
     const llmOption = this.options.llm;
     const resolvedLlm =
       typeof llmOption === 'function' ? await llmOption() : (llmOption ?? undefined);
@@ -434,9 +394,6 @@ export class MemoryHubService {
   ): Promise<void> {
     const deadline = Date.now() + START_TIMEOUT_MS;
     while (Date.now() < deadline) {
-      // 子进程真退出（收到 exit 事件）→ 立即失败并带出 stderr 尾巴
-      // ⚠️ 不能用 `pid === undefined` 判定：utilityProcess 在 spawn 前 pid 就是
-      // undefined（实测约 29ms 后才赋值、63ms 才稳定），会把「启动中」误判成「已退出」
       if (this.child?.hasExited()) {
         throw new Error(`${TAG} sidecar 启动即退出\n${stderrTail()}`);
       }
@@ -454,9 +411,7 @@ export class MemoryHubService {
             return;
           }
         }
-      } catch {
-        // 未就绪，继续轮询
-      }
+      } catch {}
       await new Promise((resolve) => setTimeout(resolve, HEALTH_POLL_MS));
     }
     void this.stop();
@@ -509,14 +464,12 @@ export function migrateLegacyDataDir(newRoot: string, homeDir?: string): number 
       const src = join(legacyRoot, entry.name);
       const dest = join(newRoot, entry.name);
       if (existsSync(dest)) {
-        continue; // 新位置已有该条目，不覆盖
+        continue;
       }
       try {
         cpSync(src, dest, { recursive: true, force: true });
         migrated += 1;
-      } catch {
-        // 单项失败跳过（不阻断其余项与引擎启动）
-      }
+      } catch {}
     }
     if (migrated > 0) {
       logger.info(

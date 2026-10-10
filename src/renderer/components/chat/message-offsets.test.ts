@@ -1,13 +1,3 @@
-// src/renderer/components/chat/message-offsets.test.ts
-// 导航轨偏移测量与二分查找纯逻辑测试
-// ──────────────────────────────────────────────────────────────
-// 测试要点：
-// 1. measureMessages：属性缺失/非数字跳过、按 top 升序、读取 offsetTop
-// 2. isSnapshotFresh：null / 高度一致 / 高度变化
-// 3. findActiveMessageIndex：中点落在首条之上 → -1、命中最后一条 <= 中点、空数组
-// 4. findUserOrder：活跃索引之前的最后一个用户序、无匹配 → null、空/负索引
-// ──────────────────────────────────────────────────────────────
-
 import { describe, expect, it } from 'vitest';
 
 import {

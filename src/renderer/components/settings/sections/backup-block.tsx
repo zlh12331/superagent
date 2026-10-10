@@ -1,16 +1,3 @@
-// backup-block.tsx（37 号 B：启动备份可见性；DataSection 的子块，独立文件控净行）
-// ──────────────────────────────────────────────
-// 职责：
-// - 展示备份恢复点列表（时间/大小/健康徽标，最新在前）
-// - 「立即备份」触发 backup:create（复用启动备份路径，进同一轮转环）
-// - 逐行「恢复」（danger confirm：重启后生效、未导出改动丢失）
-//
-// 设计：
-// - 数据源 = use-backups 域 hook（TanStack Query）；本组件不直连 IPC
-// - 恢复成功后应用即将重启：不弹成功 toast（进程消失），主进程 relaunch/quit
-// - 健康度徽标是列表与恢复入口的分界（损坏备份禁用恢复钮）
-// ──────────────────────────────────────────────
-
 import type { BackupEntry } from '@code-agent/shared/renderer';
 import { History, RotateCcw } from 'lucide-react';
 import type { ReactElement } from 'react';
@@ -43,9 +30,7 @@ export function BackupBlock(): ReactElement {
     try {
       await createBackup.mutateAsync();
       toast.success(t('settings.backupCreated'));
-    } catch {
-      // 错误提示由 useCreateBackup.onError 统一弹出（防双弹）
-    }
+    } catch {}
   };
 
   const handleRestore = async (entry: BackupEntry): Promise<void> => {
@@ -57,10 +42,7 @@ export function BackupBlock(): ReactElement {
     if (!confirmed) return;
     try {
       await restoreBackup.mutateAsync(entry.name);
-      // 成功 → 主进程已暂存并触发重启；进程即将退出，不再渲染后续状态
-    } catch {
-      // 错误提示由 useRestoreBackup.onError 统一弹出
-    }
+    } catch {}
   };
 
   return (
@@ -80,7 +62,6 @@ export function BackupBlock(): ReactElement {
       </div>
       <p className="text-muted-foreground text-xs font-sans">{t('settings.backupHint')}</p>
 
-      {/* 列表：加载中/空态/条目三态。查询失败（无桥等）显示空态文案（诚实形态） */}
       {backups.length === 0 ? (
         <p className="text-muted-foreground/70 text-xs font-sans">{t('settings.backupEmpty')}</p>
       ) : (

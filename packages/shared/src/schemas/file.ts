@@ -1,25 +1,3 @@
-// packages/shared/src/schemas/file.ts
-// 文件域 zod schema 单一真源
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 定义 file:read / file:write / file:list / file:watch:start / file:watch:stop 请求-响应 zod schema
-// - 定义 file:watch:event 流式事件 payload 类型
-// - 供主进程 IPC handler 校验入参
-//
-// 设计（R2 修正，此前承诺"FileService 执行时做 workingDir 越权校验"从未落地，注释与实现不符）：
-// - 路径校验由 zod 完成基础形状校验（非空字符串）+ FileService.assertAbsolutePath
-//   （必须绝对路径）。文件域 IPC 的定位是"用户文件管理器"（浏览/读写任意绝对路径，
-//   由 file tree / dialog 驱动），与 Agent 工具不同——后者经 path-guard 限制在
-//   session workingDir 内；前者没有 workingDir 边界，靠 contextIsolation + CSP +
-//   显式 recursive 声明（file:delete 必填）兜底
-// - offset/limit 用 `.optional().transform(v => v ?? undefined)` 兼容 exactOptionalPropertyTypes
-// - 文件条目用 FileEntrySchema 复用，list 与 watch 都可能用到
-// - file:watch 拆分为 start/stop/event 三种 channel：
-//   · start（请求-响应）：渲染层发起监听，返回 watcherId
-//   · stop（请求-响应）：渲染层停止指定 watcher
-//   · event（流式事件）：主进程推送变更事件（携带 watcherId 关联）
-// ──────────────────────────────────────────────────────────────
-
 import { z } from 'zod';
 
 /**
@@ -30,14 +8,12 @@ import { z } from 'zod';
  */
 export const FileReadReqSchema = z.object({
   path: z.string().min(1),
-  // 起始行（0-based），省略时从第 0 行开始
   offset: z
     .number()
     .int()
     .nonnegative()
     .optional()
     .transform((v) => v ?? undefined),
-  // 读取行数，省略时读到文件末尾
   limit: z
     .number()
     .int()
@@ -74,9 +50,7 @@ export const FileReadResSchema = z.object({
 export const FileWriteReqSchema = z.object({
   path: z.string().min(1),
   content: z.string(),
-  // 是否追加（默认 false 覆盖）
   append: z.boolean().default(false),
-  // 是否自动创建父目录（默认 true）
   createDirs: z.boolean().default(true),
 });
 
@@ -119,7 +93,6 @@ export const FileEntrySchema = z.object({
   path: z.string(),
   type: z.enum(['file', 'directory', 'symlink']),
   size: z.number().int().nonnegative(),
-  // Unix timestamp（毫秒）
   modifiedAt: z.number().int().nonnegative(),
 });
 
@@ -143,7 +116,6 @@ export const FileListResSchema = z.object({
  * 后续文件变更通过 file:watch:event 流式事件推送（携带 watcherId 关联）。
  */
 export const FileWatchStartReqSchema = z.object({
-  // 监听根目录（绝对路径）
   path: z.string().min(1),
 });
 
@@ -164,7 +136,6 @@ export const FileWatchStartResSchema = z.object({
  * 渲染层停止指定 watcherId 的文件监听。
  */
 export const FileWatchStopReqSchema = z.object({
-  // 要停止的 watcher id（来自 file:watch:start 返回值）
   watcherId: z.string().min(1),
 });
 
@@ -206,8 +177,6 @@ export const FileWatchEventPayloadSchema = z.object({
   path: z.string().min(1),
   oldPath: z.string().optional(),
 });
-
-// ── 文件树编辑操作（新建/删除/重命名） ──────────────────────
 
 /**
  * file:create 入参 zod schema

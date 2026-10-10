@@ -1,10 +1,3 @@
-// src/main/infra/storage/keychain.test.ts
-// keychain 单测：safeStorage 加密存储（mock safeStorage + 真实文件 IO）
-//
-// 覆盖 P1 加固：
-// - 读路径（getSecret / listSecrets）同样持互斥锁，不会与 set 的「读-改-写」交错
-// - 文件损坏时逐条抢救（salvage）而非整库丢弃，并显式上报完整性报告
-
 import {
   existsSync,
   promises as fsPromises,
@@ -23,8 +16,6 @@ const { mockSafeStorage, mockApp, mockLogger } = vi.hoisted(() => ({
     isEncryptionAvailable: vi.fn(() => true),
     getSelectedStorageBackend: vi.fn(() => 'basic_text'),
     encryptString: vi.fn((s: string) => Buffer.from(`enc:${s}`)),
-    // 真实 safeStorage 对非本主密钥密文会抛错——测试桩必须同样抛，
-    // 否则「不可解密条目计入 lost」的抢救语义无法被验证
     decryptString: vi.fn((b: Buffer) => {
       const text = b.toString('utf8');
       if (!text.startsWith('enc:')) {
@@ -59,7 +50,6 @@ describe('加密不可用降级', () => {
       mockLogger.warn.mockClear();
       expect(await getSecret('deepseek-api-key')).toBeNull();
       expect(await getSecret('deepseek-api-key')).toBeNull();
-      // 每进程仅告警一次（两次读取只产生一条 warn），随诊断包导出可追溯
       expect(mockLogger.warn).toHaveBeenCalledTimes(1);
     } finally {
       mockSafeStorage.isEncryptionAvailable.mockReturnValue(true);
@@ -103,8 +93,6 @@ describe('keychain', () => {
   });
 
   it('Windows ACL：USERNAME 误导（=SYSTEM）时不锁死属主（whoami 优先）', async () => {
-    // 回归：旧实现用 process.env.USERNAME 跑 icacls /inheritance:r /grant:r，
-    // 沙箱/服务上下文里 USERNAME 可能是 SYSTEM，会把文件锁给 SYSTEM、属主 EPERM。
     const prevUser = process.env['USERNAME'];
     process.env['USERNAME'] = 'SYSTEM';
     try {
@@ -158,13 +146,11 @@ describe('keychain', () => {
     it('get-while-set：get 必须等 set 释放锁，读到新值而非旧快照', async () => {
       await setSecret('lock-key', 'before');
 
-      // 让 setSecret 的第一次 readFile 挂起 → set 处于「持锁未写完」窗口
       let releaseGate: () => void = () => {};
       const gate = new Promise<void>((resolve) => {
         releaseGate = resolve;
       });
       let firstRead = true;
-      // readFile 是 overload 集合，无法直接透传 unknown[]：显式收窄为宽松签名
       const originalRead = fsPromises.readFile as (
         this: typeof fsPromises,
         ...args: unknown[]
@@ -181,7 +167,6 @@ describe('keychain', () => {
 
       try {
         const setPromise = setSecret('lock-key', 'after');
-        // setSecret 同步进入锁并停在挂起的 readFile 上；此时并发发起读取
         const getPromise = getSecret('lock-key');
         releaseGate();
 
@@ -222,12 +207,10 @@ describe('keychain', () => {
         salvaged: 2,
         lost: 1,
       });
-      // 显式告警（不再静默返回空）
       expect(mockLogger.error).toHaveBeenCalledWith(
         expect.objectContaining({ filePath: keychainFile(), salvaged: 2, lost: 1 }),
         expect.stringContaining('已损坏'),
       );
-      // 原件保留为 .corrupt，健康子集回写
       expect(existsSync(`${keychainFile()}.corrupt`)).toBe(true);
       const rewritten = JSON.parse(readFileSync(keychainFile(), 'utf8')) as Record<string, unknown>;
       expect(Object.keys(rewritten).sort()).toEqual(['good-a', 'good-b']);
@@ -247,7 +230,6 @@ describe('keychain', () => {
         salvaged: 0,
         lost: 1,
       });
-      // 无可救条目 → 不写回（避免把空库伪装成有效快照）
       expect(existsSync(keychainFile())).toBe(false);
       expect(existsSync(`${keychainFile()}.corrupt`)).toBe(true);
     });

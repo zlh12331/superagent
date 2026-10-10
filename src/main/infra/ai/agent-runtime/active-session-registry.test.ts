@@ -1,15 +1,5 @@
-// src/main/infra/ai/agent-runtime/active-session-registry.test.ts
-// ActiveSessionRegistry 单元测试
-// 覆盖：activeCount（关窗协商的判定依据）+ 注册/中断/CAS 删除/dispose 语义回归
-//
-// 接线背景：唯一生产实例在 agent-service（registry 字段，R2 去重收敛）；
-// abort 的「先删再 abort」与 removeXIfCurrent 的 CAS 语义配套——旧 stream
-// finally 迟到时不得误删新回合的条目（本文件用例 4 是该竞态的结构性回归）。
-// preemptExisting 的「检查—注册」TOCTOU 窗口由宿主 startingSessions Set
-// 临界区补齐，不属本文件职责（见 agent-service）。
 import { describe, expect, it, vi } from 'vitest';
 
-// logger 依赖 electron（app.getPath）——测试环境按项目惯例 mock electron
 vi.mock('electron', () => ({
   app: { isPackaged: false, getPath: vi.fn(() => '/tmp/test-userdata') },
 }));
@@ -46,13 +36,10 @@ describe('ActiveSessionRegistry', () => {
     const registry = new ActiveSessionRegistry();
     const oldController = new AbortController();
     registry.register('s1', oldController, pendingStream());
-    // 新回合抢占：register 覆盖同 id 条目
     const newController = new AbortController();
     registry.register('s1', newController, pendingStream());
-    // 旧 stream 的 finally 迟到：只应删自己的条目（不匹配 → false）
     expect(registry.removeControllerIfCurrent('s1', oldController)).toBe(false);
     expect(registry.activeCount).toBe(1);
-    // 新 stream 正常收尾：匹配 → 删除
     expect(registry.removeControllerIfCurrent('s1', newController)).toBe(true);
     expect(registry.activeCount).toBe(0);
   });
@@ -61,7 +48,6 @@ describe('ActiveSessionRegistry', () => {
     const registry = new ActiveSessionRegistry();
     registry.register('s1', new AbortController(), pendingStream());
     registry.register('s2', new AbortController(), pendingStream());
-    // pendingStream 永不完成 → 走 10ms 超时兜底路径（不用默认 3s，测试提速）
     await registry.dispose(10);
     expect(registry.activeCount).toBe(0);
   });
@@ -69,7 +55,6 @@ describe('ActiveSessionRegistry', () => {
   it('dispose 在全部 stream 完成时不清日志告警分支（正常收尾路径）', async () => {
     const registry = new ActiveSessionRegistry();
     const controller = new AbortController();
-    // abort 信号触发的 stream 立即完成：dispose 无需等超时
     const stream = new Promise<void>((resolve) => {
       controller.signal.addEventListener('abort', () => {
         resolve();

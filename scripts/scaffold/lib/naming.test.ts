@@ -1,4 +1,3 @@
-// scripts/scaffold/lib/naming.test.ts
 import { describe, expect, it } from 'vitest';
 
 import {

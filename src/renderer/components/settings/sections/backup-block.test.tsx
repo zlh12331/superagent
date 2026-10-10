@@ -1,14 +1,3 @@
-// src/renderer/components/settings/sections/backup-block.test.tsx
-// BackupBlock 测试（37 号 B）：列表渲染 / 立即备份 / 恢复 confirm 流
-// ──────────────────────────────────────────────────────────────
-// 覆盖：
-// - 空态文案（无备份）
-// - 列表：时间/大小/健康徽标；损坏条目恢复钮禁用
-// - 立即备份：IPC 调用 + 成功 toast
-// - 恢复：confirm 放行后调用 backup:restore；confirm 取消时不调用
-// - 恢复失败（SESSION_IN_USE 等）→ 错误 toast（由 hook onError 弹出）
-// ──────────────────────────────────────────────────────────────
-
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';

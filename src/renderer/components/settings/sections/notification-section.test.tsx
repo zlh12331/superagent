@@ -1,12 +1,3 @@
-// src/renderer/components/settings/sections/notification-section.test.tsx
-// NotificationSection 测试：断言 store 实质状态（33 号 spec V9 + 写穿透 + 36-A 审批开关）
-// ──────────────────────────────────────────────────────────────
-// 覆盖：
-// - 四开关渲染与默认态（全开）
-// - 总开关关 → 三个事件开关 disabled（V9），描述切换为引导文案
-// - toggle 事件开关 → updateNotification 经 store 部分合并 + 写穿透（setSpy 捕获）
-// ──────────────────────────────────────────────────────────────
-
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -62,9 +53,7 @@ describe('NotificationSection', () => {
       name: t('settings.notificationFinishedLabel'),
     });
     expect(finished).toBeDisabled();
-    // 三个事件开关的描述都切换为引导文案
     expect(screen.getAllByText(t('settings.notificationDisabledDesc'))).toHaveLength(3);
-    // 总开关状态进 store（写穿透由 store 层测试覆盖，此处断言 UI 联动实质）
     expect(useSettingsStore.getState().notification.enabled).toBe(false);
   });
 
@@ -118,7 +107,6 @@ describe('NotificationSection', () => {
   });
 
   it('V9 值保留：总开关关时事件开关值不变，恢复总开关后原值生效', async () => {
-    // 预置：出错关、完成开
     useSettingsStore.setState({
       notification: {
         enabled: false,

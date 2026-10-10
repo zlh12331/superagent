@@ -1,25 +1,3 @@
-// src/main/infra/ai/tools/tool.ts
-// Tool 接口与执行上下文（Code Agent 工具系统核心抽象）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 定义 Tool 接口：扩展 AI SDK v7 原生 tool 概念，附加 permission 元数据
-// - 定义 ToolContext：工具执行时所需的环境信息
-// - 定义 ToolResult：工具执行的标准化返回结构
-//
-// 设计原则：
-// - Tool 接口是工具系统的核心抽象，所有具体工具都实现此接口
-// - permission 字段与用户决策对齐：白名单自动 + 危险询问
-// - inputSchema 支持 Zod schema 或 AI SDK Schema（jsonSchema() 产物）：
-//   内置工具用 zod 做运行时校验；MCP 工具透传上游 JSON Schema（校验由 server 完成）
-// - execute 函数返回 ToolResult，统一 title / output / metadata 结构
-//
-// 与 AI SDK v7 的关系：
-// - AI SDK 原生 tool({ description, inputSchema, execute }) 返回 Tool 对象
-// - 本 Tool 接口扩展了 permission 字段，ToolRegistry.toAISDKTools()
-//   会将本接口转换为 AI SDK 原生 tool 格式
-// - ToolResult.output 会作为 AI SDK tool.execute 的返回值（给 LLM 看）
-// ──────────────────────────────────────────────────────────────
-
 import type { Schema } from 'ai';
 import type { WebContents } from 'electron';
 import type { ZodType } from 'zod';

@@ -1,7 +1,3 @@
-// scripts/check-release-pr-scope.test.ts
-// Release PR 内容边界闸门单测：白名单判定 + package.json 版本行约束 +
-// #90 越界形态 / #98 干净形态的最小重放（files 注入，不发真实网络请求）
-
 import { describe, expect, it } from 'vitest';
 
 import { findScopeViolations } from './check-release-pr-scope';
@@ -53,8 +49,6 @@ describe('findScopeViolations', () => {
   });
 
   it('package.json 无 patch（GitHub 对超 ~400 行 diff 省略）→ fail-closed 报 violation', () => {
-    // 2026-10-07 收口：patch 缺失时「仅允许版本行」约束无从执行——静默放行会让
-    // package.json 大改借超大 diff 搭车，故按存在性风险处理，要求人工复核
     const violations = findScopeViolations([{ filename: 'package.json' }]);
     expect(violations).toHaveLength(1);
     expect(violations[0]?.filename).toBe('package.json');

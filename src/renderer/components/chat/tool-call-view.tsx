@@ -1,12 +1,3 @@
-// src/renderer/components/chat/tool-call-view.tsx
-// 通用工具调用卡片（自 message-item 拆出，2026-09-15 结构审计）
-// ──────────────────────────────────────────────
-// 拆分依据：message-item 同时承担「消息/part 编排」与「工具卡渲染」两个子域；
-// 同类工具卡 file-change-card（edit_file/write_file 专用）早已独立成文件，
-// 通用 ToolCallView 内联属待遇不一致。拆出后 message-item 只保留编排职责。
-// 数据源：tool-store 推送标题（会话作用域查找）+ part.input/output/errorText。
-// ──────────────────────────────────────────────
-
 import { FileCode, Loader2, Terminal } from 'lucide-react';
 import { type ReactElement, useState } from 'react';
 
@@ -48,39 +39,21 @@ export function ToolCallView({
   output,
   errorText,
 }: ToolCallViewProps): ReactElement {
-  // 折叠状态：成功默认折叠、错误默认展开（签名时刻 R3：失败可达）
   const [open, setOpen] = useState(() => state === 'output-error');
-  // 本地化文案
   const { t } = useTranslation();
 
-  // 从 tool-store 查找 title（主进程通过 AgentToolResultPayload 推送的人类可读标题）
-  // 没有找到时回退到工具名（type）。
-  // 会话作用域：消息列表只渲染活跃会话的消息（ChatPanel 按 chatId 装配），故按活跃
-  // 会话索引查找（对齐 right-panel-panes.tsx 的 callsBySession.get(sessionId) 模式），
-  // 避免流式期 store 高频推送 × 每张卡片对全部会话全表扫描的 O(卡片×调用) 放大
   const activeSessionId = useActiveSessionStore((s) => s.activeSessionId);
   const title = useToolStore((s) => {
     const calls = activeSessionId === null ? undefined : s.callsBySession.get(activeSessionId);
     return calls?.find((c) => c.id === toolCallId)?.title ?? null;
   });
 
-  // 状态映射：AI SDK state → .card-status 类 + 本地化文案
   const statusClass = mapToolStateToStatusClass(state);
   const statusLabel = mapToolStateToStatusLabelKey(state);
   const localizedStatusLabel = t(`chat.${statusLabel}`);
 
-  // 归一化工具名（2026-09 审计修复）
-  //
-  // 调用方传两种形态：
-  // - 静态工具：part.type = 'tool-exec_command'（带 'tool-' 前缀）
-  // - 动态工具：message-item 传 `dynamic-tool: ${part.toolName}`（见其调用处）
-  // 此前只剥 'tool-' 前缀，动态工具得到 'dynamic-tool: exec_command' →
-  // COMMAND_TOOLS 永不命中（命令工具不高亮）、无 title 时还把该字符串当标题显示。
   const toolName = type.replace(/^dynamic-tool:\s*/, '').replace(/^tool-/, '');
-  // 命令工具高亮（照搬参考项目 COMMAND_TOOLS：命令行块 accent 左边条 + 深色背景）
   const isCommandTool = COMMAND_TOOLS.has(toolName);
-  // 工具图标（照搬参考项目 getToolIcon：命令工具 Terminal / 其他 FileCode，运行中换 spinner）
-  // 运行中判定复用徽章映射（ToolCallState 的 running 档，见 message-utils）
   const isRunning = statusClass === 'running';
   const ToolIcon = isRunning ? Loader2 : isCommandTool ? Terminal : FileCode;
 
@@ -111,7 +84,6 @@ export function ToolCallView({
               ▸
             </span>
           </button>
-          {/* 展开动画（照搬参考项目 grid-rows 方案：始终挂载切换 class，非条件渲染） */}
           <div
             className={cn(
               'grid transition-all duration-200',
@@ -120,7 +92,6 @@ export function ToolCallView({
           >
             <div className="overflow-hidden">
               <div className="card-body">
-                {/* 入参（JSON 序列化，最多 200 字符避免膨胀） */}
                 {input !== undefined && (
                   <CodeBlock
                     label={t('chat.toolInput')}
@@ -128,7 +99,6 @@ export function ToolCallView({
                     commandStyle={isCommandTool}
                   />
                 )}
-                {/* 输出（output 优先于 errorText） */}
                 {output !== undefined && (
                   <CodeBlock
                     label={t('chat.toolOutput')}

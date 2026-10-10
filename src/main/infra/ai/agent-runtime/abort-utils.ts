@@ -1,16 +1,3 @@
-// src/main/infra/ai/agent-runtime/abort-utils.ts
-// 中断信号工具：组合信号 + 可清理超时信号（主回合与 side query 两路共用）
-// ──────────────────────────────────────────────────────────────
-// 背景：主回合（agent streamText）原仅接用户中断信号；模型级总时长超时
-// （generationConfig.timeoutMs）接入后需组合语义。从 llm-client 提取共享
-// （llm-client 内部实现改为导入本模块，单一真源）。
-//
-// 生产调用方（均深度导入，不经 index 桶）：
-// - turn-assembly：主回合超时信号 + 用户中断合并（仅当模型配置 timeoutMs 才创建
-//   信号；生产常态未配置，见 turn-assembly 第 2 步的登记说明）
-// - llm-client runSideQuery：side query 模型级超时 + 用户信号合并（有全局默认兜底）
-// ──────────────────────────────────────────────────────────────
-
 /**
  * 组合多个中断信号（AbortSignal.any 封装）
  *

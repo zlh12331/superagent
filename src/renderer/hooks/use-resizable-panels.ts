@@ -1,19 +1,3 @@
-// src/renderer/hooks/use-resizable-panels.ts
-// 左右面板宽度拖拽/键盘调整（resizer 交互）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 鼠标拖拽两条分隔线调整 sidebar / rightPanel 宽度（含 clamp 上下限）
-// - 键盘调整：←/→ 16px 步进、Home/End 跳到极值
-// - 拖拽期 body.resizing 类（全局光标/禁用选中）+ 卸载时清理监听
-// - 把宽度同步到根元素 CSS 变量（供 .view-chat 的 grid-template-columns 用）
-//
-// 提取动机（2026-09 layout 审计）：这套逻辑原内联在 AppShell（约 100 行、
-// 5 个 useState/useCallback/useRef + 3 个 effect），使 AppShell 成为认知复杂度
-// 25 的基线条目。宽度约束本身是独立关注点（CSS 令牌 → JS 数值），与布局编排无关。
-//
-// 宽度上下限来自 layout-utils（从 CSS 令牌动态解析，JS 不硬编码像素）。
-// ──────────────────────────────────────────────────────────────
-
 import type { KeyboardEvent, MouseEvent } from 'react';
 import { useEffect, useRef, useState } from 'react';
 
@@ -100,27 +84,20 @@ export function useResizablePanels(
   sidebarCollapsed: boolean,
   rightPanelCollapsed: boolean,
 ): ResizablePanels {
-  // 初始宽度对齐原型 clamp() 行为，按视口宽度计算
   const [sidebarWidth, setSidebarWidth] = useState(computeInitialSidebarWidth);
   const [rightPanelWidth, setRightPanelWidth] = useState(computeInitialRightPanelWidth);
   const [draggingSide, setDraggingSide] = useState<ResizerSide | null>(null);
 
-  // 拖拽起始信息（ref：拖拽过程中变化频繁，不应触发重渲染）
   const dragStartRef = useRef<{ side: ResizerSide; startX: number; startWidth: number } | null>(
     null,
   );
 
-  // 同步 CSS 变量到根元素（供 .view-chat 的 grid-template-columns 使用）
   useEffect(() => {
     const root = document.documentElement;
     root.style.setProperty('--sidebar-w', sidebarCollapsed ? '0px' : `${sidebarWidth}px`);
     root.style.setProperty('--right-panel-w', rightPanelCollapsed ? '0px' : `${rightPanelWidth}px`);
   }, [sidebarWidth, rightPanelWidth, sidebarCollapsed, rightPanelCollapsed]);
 
-  // 拖拽/键盘处理器：用 ref 固定「已注册到 document 的那一对」监听函数。
-  // 不用 useCallback：vitest 不跑 React Compiler（仅 vite build 启用），
-  // 依赖 Compiler 稳定函数身份会让单测与 bail-out 场景静默坏掉；
-  // add/remove 必须同一引用，ref 是与 memo 策略无关的正确解法。
   const listenersRef = useRef<{
     move: (event: globalThis.MouseEvent) => void;
     up: () => void;
@@ -134,7 +111,6 @@ export function useResizablePanels(
     if (dragStart.side === 'left') {
       setSidebarWidth(clamp(dragStart.startWidth + delta, SIDEBAR_WIDTH_MIN, SIDEBAR_WIDTH_MAX));
     } else {
-      // 右侧分隔线左移 = 面板变宽，故符号相反
       setRightPanelWidth(
         clamp(dragStart.startWidth - delta, RIGHT_PANEL_WIDTH_MIN, RIGHT_PANEL_WIDTH_MAX),
       );
@@ -174,7 +150,6 @@ export function useResizablePanels(
     document.addEventListener('mouseup', up);
   };
 
-  // 卸载时清理监听（防御性：拖拽中组件被卸载时不留全局监听）
   useEffect(() => {
     return () => {
       document.body.classList.remove('resizing');
@@ -187,11 +162,8 @@ export function useResizablePanels(
     };
   }, []);
 
-  // 键盘调整（此前仅 ARIA 语义 + tabIndex，无方向键行为）：
-  // ←/→ 步进（右侧分隔线右移 = 面板变窄），Home/End 跳极值
   const onResizerKeyDown = (side: ResizerSide) => (event: KeyboardEvent<HTMLHRElement>) => {
     const intent = resolveKeyIntent(side, event.key);
-    // 无关按键不拦截（让事件继续冒泡，避免吞掉其它快捷键）
     if (intent === null) return;
     event.preventDefault();
     event.stopPropagation();

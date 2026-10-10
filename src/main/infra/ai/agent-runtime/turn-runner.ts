@@ -1,19 +1,3 @@
-// src/main/infra/ai/agent-runtime/turn-runner.ts
-// 回合执行器（TurnRunner）：读流 → 翻译 → 事件产出 → 回合统计
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 消费 streamText 的 UIMessageStream，逐 part 翻译为 TurnEvent 并 emit
-// - 回合统计：耗时、终止原因（completed / aborted / timeout）
-// - 流空闲超时守卫（复用 stream-reader）
-//
-// 设计（对齐 qwen AgentCore.runReasoningLoop 的收敛子集）：
-// - 不感知 webContents / DB：事件经 TurnEventEmitter 产出，由订阅方推送/落库
-// - 中断（AbortError）归为 reason='aborted'，其余错误抛出由上层分类
-// - 模型级总时长超时经 isTimeout 回调显式归因为 reason='timeout'（combinedAbortSignals
-//   把超时与用户中断都折叠成 abort 形态，二者必须区分：超时走错误出口、中断走中断出口）
-// - usage（token 统计）来自 streamText 结果对象（上层持有），本层不重复采集
-// ──────────────────────────────────────────────────────────────
-
 import type { TurnToolCallEvent } from '@code-agent/shared/main';
 import { TurnEventType } from '@code-agent/shared/main';
 import { isAbortError } from '../tools/error-classifier';
@@ -102,7 +86,6 @@ export class TurnRunner {
     stream: ReadableStream<unknown>,
     reader?: ReadableStreamDefaultReader<unknown>,
   ): Promise<TurnRunResult> {
-    // turn-start：模型已选定，回合开始
     this.options.emitter.emit({
       type: TurnEventType.TURN_START,
       sessionId: this.options.sessionId,
@@ -111,12 +94,9 @@ export class TurnRunner {
       modelId: this.options.modelId,
     });
 
-    // 请求级重试链路：上层已持有 reader（首 part 预读）时复用，避免重复 getReader
     const activeReader = reader ?? stream.getReader();
-    // 回合循环检测（对齐 qwen loopDetection）：连续相同工具调用/文件读取超阈值终止
     const loopDetector = new LoopDetector();
     try {
-      // 请求级重试链路：首 part 已由上层预读（重试内完成），此处接续处理
       if (this.options.firstPart !== undefined) {
         const done = this.options.firstPart.done;
         const value = this.options.firstPart.value;
@@ -144,16 +124,13 @@ export class TurnRunner {
         if (done) {
           break;
         }
-        // 原始 part 回调（上层推送原始通道，运行时对象完整）
         this.options.onPart?.(value as StreamPart);
-        // part → 领域事件（text-delta / tool-call；其余由上层处理）
         const translated = translatePart(value as StreamPart, {
           sessionId: this.options.sessionId,
           turnId: this.options.turnId,
           timestamp: Date.now(),
         });
         if (translated !== null) {
-          // 循环检测：tool-call 事件记录（同 name + 同入参连续超阈值抛 LoopDetectedError）
           if (translated.type === TurnEventType.TOOL_CALL) {
             const toolCall = translated as TurnToolCallEvent;
             loopDetector.recordToolCall(toolCall.toolName, JSON.stringify(toolCall.input ?? {}));
@@ -163,18 +140,12 @@ export class TurnRunner {
       }
       return { reason: 'completed', durationMs: Date.now() - this.startTime };
     } catch (error) {
-      // 用户中断：归为 aborted（不视为错误，由上层推送 END(aborted)）
-      // 模型级总时长超时同样以 abort 形态到达（combinedAbortSignals）：isTimeout
-      // 归因为 timeout——上层据此走错误出口而非中断出口，状态机快照与落库
-      // status 不再分叉（2026-09-28 深读发现）
       if (isAbortError(error)) {
         const reason = this.options.isTimeout?.() === true ? 'timeout' : 'aborted';
         return { reason, durationMs: Date.now() - this.startTime };
       }
-      // 其他错误（含流空闲超时 AI_TIMEOUT）：抛出，由上层分类 + 产出 error 事件
       throw error;
     } finally {
-      // 回合终态：清理本会话已读文件记录（priorReadEnforcement 防跨回合累积）
       readTracker.clearSession(this.options.sessionId);
     }
   }

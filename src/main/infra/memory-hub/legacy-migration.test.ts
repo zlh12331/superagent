@@ -1,8 +1,3 @@
-// src/main/infra/memory-hub/legacy-migration.test.ts
-// 主目录遗留数据迁移单测（真实 fs + 临时目录，不 mock）
-// ──────────────────────────────────────────────────────────────
-// 覆盖：无旧目录 / 正常迁移 / 新位置已有则不覆盖 / 单项失败不阻断 / 幂等
-
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -61,7 +56,7 @@ describe('migrateLegacyDataDir', () => {
     seedLegacy('c.db', 'c');
     writeFileSync(join(newRoot, 'b.db'), 'existing', 'utf8');
     const migrated = migrateLegacyDataDir(newRoot, home);
-    expect(migrated).toBe(2); // a、c
+    expect(migrated).toBe(2);
     expect(readFileSync(join(newRoot, 'a.db'), 'utf8')).toBe('a');
     expect(readFileSync(join(newRoot, 'b.db'), 'utf8')).toBe('existing');
     expect(readFileSync(join(newRoot, 'c.db'), 'utf8')).toBe('c');

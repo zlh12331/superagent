@@ -1,13 +1,3 @@
-// src/renderer/components/$1/use-mention-files.test.tsx
-// useMentionFiles：@ 触发的文件搜索 hook（200ms 防抖 + 生命周期清理）
-//
-// 测试要点：
-// 1. 非 mention 触发态 → 不调 glob、候选清空
-// 2. mention 触发 → 防抖 200ms 后调 glob 并返回候选
-// 3. 防抖：200ms 内查询词变化只发最后一次
-// 4. error 响应 / 网络异常 → 候选清空
-// 5. workingDir 缺失（浏览器模式）→ 不调 glob
-
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -38,22 +28,16 @@ describe('useMentionFiles', () => {
     globMock.mockResolvedValue({ data: { files: ['src/a.ts', 'src/b.ts'] } });
     const { result } = renderHook(() => useMentionFiles('mention', 'a', 'C:\\proj'));
 
-    // 防抖窗口内：尚未调用
     vi.advanceTimersByTime(100);
     expect(globMock).not.toHaveBeenCalled();
 
-    // advanceTimersByTimeAsync：触发定时器的同时冲刷 promise 微任务链；
-    // 包 act：setMentionFiles 的状态更新需在 act 内提交（否则渲染不刷新）
     await act(async () => {
       await vi.advanceTimersByTimeAsync(150);
     });
     expect(globMock).toHaveBeenCalledTimes(1);
-    // 模式经 lib/file-search.buildFileSearchPattern 构造（单一真源）：
-    // 递归通配 + 大小写展开（[aA]）+ 尾通配——与 fuzzy-search-dialog 一致
     expect(globMock).toHaveBeenCalledWith(
       expect.objectContaining({ pattern: '**/*[aA]*', path: 'C:\\proj', maxResults: 10 }),
     );
-    // act 已提交状态更新，直接断言（waitFor 依赖真实定时器，与 fake timers 冲突会挂死）
     expect(result.current).toEqual(['src/a.ts', 'src/b.ts']);
   });
 
@@ -78,7 +62,6 @@ describe('useMentionFiles', () => {
     renderHook(() => useMentionFiles('mention', 'a*b', 'C:\\proj'));
     vi.advanceTimersByTime(500);
 
-    // 未转义时 `a*b` 会退化为「a 任意 b 前缀」；转义后按字面量搜索
     expect(globMock).toHaveBeenCalledWith(expect.objectContaining({ pattern: '**/*[aA]\\*[bB]*' }));
   });
 

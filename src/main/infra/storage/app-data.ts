@@ -1,10 +1,3 @@
-// src/main/infra/storage/app-data.ts
-// 用户数据目录路径管理
-// 设计文档 §4.3 storage/app-data 职责
-//
-// 封装 app.getPath('userData')，提供各子目录路径
-// dev 环境 userData 重定向到 .electron-user-data/（在 index.ts 中设置）
-
 import { join } from 'node:path';
 import { app } from 'electron';
 

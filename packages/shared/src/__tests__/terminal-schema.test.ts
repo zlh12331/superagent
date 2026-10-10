@@ -1,7 +1,3 @@
-// packages/shared/src/__tests__/terminal-schema.test.ts
-// terminal schema 单测：P0 env 注入面——系统关键环境变量禁止由渲染层覆盖
-// （PATH/PATHEXT 决定命令解析、LD_PRELOAD/NODE_OPTIONS 决定启动即加载哪里的代码）
-
 import { describe, expect, it } from 'vitest';
 import { isTerminalEnvDenied, TerminalCreateReqSchema } from '../schemas/terminal';
 

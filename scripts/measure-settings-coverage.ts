@@ -1,23 +1,3 @@
-// scripts/measure-settings-coverage.ts
-// settings 目录覆盖率单列聚合（renderer-settings 层的 measured 回填）
-// ──────────────────────────────────────────────────────────────
-// 背景：渲染层汇总覆盖率（floor 70/61/66/71）把 settings 洼地（项目自记约 21%）
-// 平均掉了——债不可见就没人还。本脚本从 renderer coverage 产物
-// （coverage-summary.json，per-file covered/total 计数）按路径前缀
-// components/settings 聚合出该目录的四指标实测，回填
-// scripts/coverage-floors.json 的 layers.rendererSettings.measured/measuredAt。
-//
-// 与 test:coverage 的关系：同一次 renderer coverage 产出两个口径（汇总层 +
-// settings 子集），不重复执行测试。test:coverage 链尾已接 coverage:settings。
-//
-// 棘轮语义（coverage-floors.json rendererSettings 层）：
-//   floor 首次 = 实测 − MEASURE_BUFFER（保守起步），之后随实测提升经
-//   --tighten 抬升（只升不降）；measured ≥ floor 由 check:coverage-floors 校验。
-//
-// 运行：pnpm coverage:settings          # 聚合并回填真源
-//       pnpm coverage:settings --print  # 仅打印，不回填
-// ──────────────────────────────────────────────────────────────
-
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { loadCoverageFloors, METRIC_KEYS } from './lib/coverage-floors';
@@ -86,7 +66,6 @@ function aggregate(): MetricPcts {
 function writeMeasured(pcts: MetricPcts): void {
   const raw = readFileSync(FLOORS_PATH, 'utf8');
   const today = new Date().toISOString().slice(0, 10);
-  // 幂等：真源已记录相同实测（同一天重复跑）时按成功处理，不做替换
   const file = loadCoverageFloors(FLOORS_PATH);
   const recorded = file.layers['renderer-settings']?.measured;
   if (
@@ -97,7 +76,6 @@ function writeMeasured(pcts: MetricPcts): void {
     console.log('[coverage:settings] ✅ 真源已记录相同实测（幂等，无需回填）');
     return;
   }
-  // 定位 rendererSettings 层段落内的 measured/measuredAt 两行（层级键 4 空格缩进）
   const layerStart = raw.indexOf('"renderer-settings"');
   if (layerStart < 0) {
     console.error(

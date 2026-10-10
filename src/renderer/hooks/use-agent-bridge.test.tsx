@@ -1,5 +1,3 @@
-// src/renderer/hooks/use-agent-bridge.test.tsx
-// use-agent-bridge 单测：回合结束 → invalidate 缓存 + 清理 L2 缓冲 + usage 累积
 import { QueryClientProvider } from '@tanstack/react-query';
 import { renderHook } from '@testing-library/react';
 import type { ReactNode } from 'react';
@@ -52,16 +50,13 @@ describe('use-agent-bridge', () => {
     endCallback = undefined;
     errorCallback = undefined;
     vi.clearAllMocks();
-    // 清空 L2 store 与全局 queryClient 残留
     useToolStore.getState().clearBySession('s1');
     useApprovalsStore.getState().clearBySession('s1');
     useAgentAskStore.getState().clearAsk();
     useTurnErrorStore.setState({ errors: {} });
     globalQueryClient.clear();
-    // 清空回合结束覆盖登记（31 号：避免用例间失效事件状态串扰）
     resetInvalidationCoverage();
 
-    // 订阅回调捕获
     window.api.agent = {
       run: vi.fn(),
       stop: vi.fn(),
@@ -93,7 +88,6 @@ describe('use-agent-bridge', () => {
   });
 
   it('stream:start（D4A）：setQueryData 把该会话乐观点亮为 running，不触发 invalidate', () => {
-    // 预置分页缓存（InfiniteData<SessionListData> 形状，与 use-sessions 同构）
     globalQueryClient.setQueryData(SESSIONS_QUERY_KEY, {
       pages: [{ sessions: [{ id: 's1', title: '会话1', lastRunStatus: 'idle' }], total: 1 }],
       pageParams: [0],
@@ -107,7 +101,6 @@ describe('use-agent-bridge', () => {
       pages: Array<{ sessions: Array<{ id: string; lastRunStatus: string }> }>;
     }>(SESSIONS_QUERY_KEY);
     expect(data?.pages[0]?.sessions[0]?.lastRunStatus).toBe('running');
-    // 方案语义：start 走 setQueryData（免重拉 + 免 markRunning 落库竞态），不 invalidate
     expect(invalidateSpy).not.toHaveBeenCalled();
   });
 
@@ -132,7 +125,6 @@ describe('use-agent-bridge', () => {
 
     fireEnd({ sessionId: 's1', reason: 'completed', usage: { totalTokens: 150 } });
 
-    // invalidate 已调用（会话列表 + 会话详情 + 用量汇总前缀）
     expect(invalidateSpy).toHaveBeenCalledWith(
       expect.objectContaining({ queryKey: SESSIONS_QUERY_KEY }),
     );
@@ -143,7 +135,6 @@ describe('use-agent-bridge', () => {
   });
 
   it('stream:end：清理 agent-ask 弹窗状态（P2：超时后弹窗不得悬挂）', () => {
-    // 会话归属：入队带 sessionId，回合 end 按会话精确清理（队列形态）
     useAgentAskStore.getState().enqueue({
       sessionId: 's1',
       askId: 'ask-1',
@@ -159,7 +150,6 @@ describe('use-agent-bridge', () => {
   });
 
   it('stream:end：仅清理审批缓冲；tool 缓冲保留（P3：右面板数据源）', () => {
-    // 预置 L2 数据
     useToolStore.getState().appendToolCall({
       id: 'call-1',
       sessionId: 's1',
@@ -182,7 +172,6 @@ describe('use-agent-bridge', () => {
     renderHook(() => useAgentBridge(), { wrapper: createWrapper() });
     fireEnd({ sessionId: 's1', reason: 'aborted' });
 
-    // P3 修复：tool 缓冲回合后保留（右面板 DiffPane 数据源），仅审批缓冲清空
     expect(useToolStore.getState().callsBySession.get('s1')?.length).toBe(1);
     expect(useApprovalsStore.getState().pending.length).toBe(0);
   });
@@ -196,7 +185,6 @@ describe('use-agent-bridge', () => {
     expect(invalidateSpy).toHaveBeenCalledWith(
       expect.objectContaining({ queryKey: SESSIONS_QUERY_KEY }),
     );
-    // 对话区错误卡数据源：code + 消息原文（未经 SDK 脱敏）
     expect(useTurnErrorStore.getState().errors['s1']?.code).toBe('INTERNAL_ERROR');
     expect(useTurnErrorStore.getState().errors['s1']?.message).toBe('boom');
   });
@@ -209,8 +197,6 @@ describe('use-agent-bridge', () => {
     fireStart({ sessionId: 's1' });
     expect(useTurnErrorStore.getState().errors['s1']).toBeUndefined();
   });
-
-  // ── 渐进回落（31 号 spec §2.5c）：事件覆盖 → 跳过旧清单；L2 清理不受影响 ──
 
   /** 构造回合结束聚合声明域（与主进程 turnEndInvalidationDomains 等形） */
   function turnEndDomains(sessionId: string): string[] {

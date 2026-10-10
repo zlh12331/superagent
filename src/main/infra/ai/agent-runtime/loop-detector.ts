@@ -1,24 +1,3 @@
-// src/main/infra/ai/agent-runtime/loop-detector.ts
-// 回合循环检测（对齐 qwen-code loopDetectionService）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 连续相同工具调用（同 name + 同入参）≥ 阈值 → 判定循环（重复调用
-//   必然产生相同结果，是永远无产出的模式，先于服务端拒绝整个会话断开）
-// - 连续相同文件读取 ≥ 阈值 → 判定循环（"总结这个项目"等合法场景
-//   会并行 read_file，因此文件读取阈值放宽）
-//
-// 接线现状（重要）：
-// - recordToolCall 已接线：TurnRunner 读流时对每个 tool-call 事件记录
-// - recordFileRead 未接线：生产代码零调用（TurnRunner 不记录文件读取，
-//   agent-service executeHook 也未接），当前仅单测覆盖，属预留能力；
-//   接线点应在 executeHook 的 read_file 分支，补齐前文件读取循环不设防
-//
-// 语义：
-// - recordToolCall 抛 LoopDetectedError = 触发循环（agent-service 按
-//   AI_LOOP_DETECTED 分类终止回合）
-// - 单回合实例（TurnRunner 每次 run 创建），回合结束自然释放
-// ──────────────────────────────────────────────────────────────
-
 import { AppError, ErrorCode } from '@code-agent/shared/main';
 
 /** 连续相同工具调用阈值（同 name + 同入参；低于服务端重复调用拒绝阈值） */

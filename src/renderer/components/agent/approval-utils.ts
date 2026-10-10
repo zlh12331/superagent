@@ -1,14 +1,3 @@
-// approval-utils.ts（自原 ApprovalDialog 拆分，弹窗已删除）
-// 审批载荷解析（纯函数守卫）+ 类型元数据表（单一真源）
-// ──────────────────────────────
-// 拆分背景：原 ApprovalDialog 539 行，纯函数与组件混合，按职责提取
-// 表驱动重构（2026-09-15）：原 getIconForType / getVariantForType / isDangerousType /
-// canRememberDecision 四个平行函数合并为 APPROVAL_META 单表——新增类型从改 4 处
-// 降为 1 行，satisfies Record 提供编译期穷尽性（漏登记即编译失败，无需 default 兜底）；
-// getLabelKeyForType 随 i18n 键对齐协议值（approval.types.<type> 子段）删除，文案消费
-// t(`approval.types.${type}`) 零映射层
-// ──────────────────────────────
-
 import type { LucideIcon } from 'lucide-react';
 import {
   CloudUpload,

@@ -1,12 +1,3 @@
-// src/renderer/components/settings/shortcut-picker.tsx
-// 快捷键录键组件（对齐参考项目 ShortcutPicker）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 点击进入录制模式，捕获下一次按键组合（Ctrl/Alt/Shift/Meta + 主键）
-// - 输出格式与 settings-store 一致："Meta+P" / "Ctrl+Shift+F"
-// - Esc 取消录制；Backspace/Delete 清空当前快捷键
-// ──────────────────────────────────────────────────────────────
-
 import { type ReactElement, useEffect, useRef, useState } from 'react';
 
 import { useTranslation } from '@/i18n/use-translation';
@@ -32,7 +23,6 @@ export function formatShortcut(e: React.KeyboardEvent): string | null {
     return null;
   }
 
-  // 主键：字母大写 / 空格显示 Space / 其他功能键原样
   const mainKey = key === ' ' ? 'Space' : key.length === 1 ? key.toUpperCase() : key;
   parts.push(mainKey);
   return parts.join('+');
@@ -56,7 +46,6 @@ export function ShortcutPicker({ value, onChange, className }: ShortcutPickerPro
   const [recording, setRecording] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
 
-  // 录制态：捕获全局 keydown（避免按钮失焦后丢失监听）
   useEffect(() => {
     if (!recording) {
       return;
@@ -96,8 +85,6 @@ export function ShortcutPicker({ value, onChange, className }: ShortcutPickerPro
         recording && 'border-primary text-primary',
         className,
       )}
-      // recording 时显示等待提示（此前是硬编码英文 'press-keys'，
-      // check-i18n 的硬编码检测只识别中文字面量，故一直未被拦）
       title={recording ? t('settings.shortcutPressKeys') : value}
     >
       {recording ? '…' : value === '' ? t('settings.shortcutUnbound') : value}

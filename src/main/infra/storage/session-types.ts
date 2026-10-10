@@ -1,10 +1,3 @@
-// src/main/infra/storage/session-types.ts
-// SessionService 契约层（自 session-service.ts 提取：接口与导出类型单一归属）
-// ──────────────────────────────────────────────────────────────
-// 职责：ISessionService 接口 + 入参/导出 payload 类型 + 标题常量。
-// session-service.ts 对外 re-export 本文件全部符号（外部 import 路径不变）。
-// ──────────────────────────────────────────────────────────────
-
 import type {
   ChatMessage,
   SessionClearAllRes,
@@ -92,8 +85,6 @@ export type SessionExportPayload = SessionExportFile;
  */
 // biome-ignore lint/style/useNamingConvention: I 前缀接口为项目既有命名约定（ISessionService 全仓 26 处引用）
 export interface ISessionService {
-  // ── IPC 暴露方法 ───────────────────────────────────
-
   /** 分页列出所有会话（按 updatedAt 倒序） */
   list(limit: number, offset: number): Promise<SessionListRes>;
   /**
@@ -112,8 +103,6 @@ export interface ISessionService {
   rename(id: string, title: string): Promise<SessionRenameRes>;
   /** 置顶/取消置顶会话（对齐参考项目 pinned-header 分组） */
   pin(id: string, pinned: boolean): Promise<SessionPinRes>;
-
-  // ── 内部 API（供 AgentService / ChatService 调用） ────
 
   /** 创建新会话（可选写入初始消息历史），返回 sessionId */
   create(options: SessionCreateOptions): Promise<string>;
@@ -145,8 +134,6 @@ export interface ISessionService {
    */
   pruneExpiredUsage(): number;
 
-  // ── 崩溃恢复（回合状态机） ──────────────────────────────
-
   /** 标记会话回合开始（崩溃恢复状态机） */
   markRunning(id: string): Promise<void>;
   /** 标记会话回合结束（正常结束/错误/中断都归位 idle） */
@@ -167,8 +154,6 @@ export interface ISessionService {
    */
   importAll(payload: unknown): Promise<SessionImportRes>;
 
-  // ── token 用量统计（设置页展示） ──────────────────────────
-
   /** 记录一次 LLM 调用用量（agent/chat 回合结束时写入一行） */
   recordUsage(usage: {
     readonly sessionId: string;
@@ -181,8 +166,6 @@ export interface ISessionService {
   }): Promise<void>;
   /** 用量统计汇总（总量 / 按模型 / 按日） */
   getUsageSummary(): Promise<UsageSummaryRes>;
-
-  // ── Transcript（回合记录，对齐 qwen chatRecordingService） ──────
 
   /** 记录一个回合（agent:run 结束后写入一行） */
   recordTurn(turn: {

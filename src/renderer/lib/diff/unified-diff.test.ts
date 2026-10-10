@@ -1,6 +1,3 @@
-// src/renderer/lib/diff/unified-diff.test.ts
-// unified diff 解析器单测：hunk 拆解 / 还原 / 边界
-
 import { describe, expect, it } from 'vitest';
 
 import { countHunks, extractDiffTargetPath, parseUnifiedDiff } from './unified-diff';
@@ -49,7 +46,6 @@ describe('parseUnifiedDiff', () => {
     const hunks = parseUnifiedDiff(diff);
     expect(hunks).toHaveLength(2);
     expect(hunks[0]?.oldStart).toBe(10);
-    // 上下文行 'x' 同时进入两侧（首个 hunk：x/a → x/b）
     expect(hunks[0]?.oldLines).toEqual(['x', 'a']);
     expect(hunks[0]?.newLines).toEqual(['x', 'b']);
     expect(hunks[1]?.oldStart).toBe(20);

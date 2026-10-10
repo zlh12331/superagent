@@ -1,20 +1,3 @@
-// src/main/infra/storage/settings-io.ts
-// 设置导出/导入的存储层（app_settings 全表 ↔ 版本化 JSON 文件）
-// ──────────────────────────────────────────────────────────────
-// 职责（自 settings.handler 拆出的可测逻辑层；dialog/文件 IO 留在 handler）：
-// - buildSettingsExportFile：readAllSettings 全表 + version/exportedAt 组装导出文件
-// - applySettingsImport：zod 校验 → 逐键过 SETTING_KEYS 白名单 → 单事务写入
-//
-// 数据完整性 / 安全设计：
-// - keychain 凭据（safeStorage 加密的 API Key，本机绑定）不在 app_settings 表内，
-//   天然不含在导出文件中——这是显式安全取舍，UI 文案同步注明
-// - 导入逐键过白名单：白名单外的键跳过并计数（不写入），防文件覆写主进程内部
-//   配置命名空间（与 settings:set 的 P0 收口同一防线）
-// - 白名单内的键单事务原子写入（settings-pref.writeSettings）：任一值非法
-//   （超尺寸）→ 整批回滚，不产生"半截导入"
-// - 幂等：upsert 语义，重复导入同一文件结果一致
-// ──────────────────────────────────────────────────────────────
-
 import type { SettingKey, SettingsExportFile } from '@code-agent/shared/main';
 import {
   AppError,

@@ -1,11 +1,3 @@
-// src/main/infra/im/adapters/weixin-adapter.ts
-// 微信渠道适配器：iLink 智能机器人（长轮询接收 + 消息发送）
-// ──────────────────────────────────────────────────────────────
-// 接入配置（token 格式）：iLink 机器人 token（ilinkai.weixin.qq.com 网关）
-// 接收：getupdates 长轮询（游标续传；本地可行——无需公网回调）
-// 发送：sendmsg（context_token 从入站消息学习，回发自动携带）
-// ──────────────────────────────────────────────────────────────
-
 import { logger } from '../../../utils/logger';
 import type { ChannelIncomingMessage, ChannelTarget, IChannelAdapter } from '../channel/types';
 import { sendWeixinText, WEIXIN_DEFAULT_BASE_URL, WeixinStreamReceiver } from './weixin-stream';

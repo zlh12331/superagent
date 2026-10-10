@@ -1,35 +1,3 @@
-// src/main/infra/storage/session-service.ts
-// SessionService：会话持久化服务（基于 SQLite + Drizzle ORM）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 会话 CRUD：list / get / delete / rename / pin（暴露为 IPC handler）
-// - 内部 API：create + appendMessage / replaceMessages（供 AgentService / ChatService 持久化对话历史）
-// - 崩溃恢复：markRunning / markIdle / markAllInterrupted（回合状态机）
-// - 用量与回合：委托 usage-turn-store（薄委托层，见文件尾部 import）
-//
-// 拆分（2026-08-31 重构，行为不变）：
-// - session-types.ts：ISessionService 接口 + 入参/导出 payload 类型（本文件 re-export 保持外部 import 路径不变）
-// - session-helpers.ts：行转换与标题/序列化辅助函数
-// - 本文件：SessionService 实现 + 单例管理
-//
-// 设计：
-// - 通过 Drizzle ORM 操作 sessions / messages 两张表（schema 定义见 schema.ts）
-// - better-sqlite3 同步驱动：所有 DB 操作阻塞式，无需 await
-// - IPC 暴露方法返回纯数据，不含 DB 行类型（避免泄漏 Drizzle 类型）
-// - 内部 API 方法返回 sessionId，由 AgentService / ChatService 决定何时调用
-//
-// 与 AgentService 的关系：
-// - AgentService.startAgent 流结束后调用 appendMessage 持久化对话历史
-// - SessionService 不感知 AgentService 内部状态（无状态设计）
-// - 多窗口/多会话安全：每条消息原子写入，事务保证一致性
-//
-// 错误分类：
-// - 会话不存在：SESSION_NOT_FOUND
-// - 入参错误（空标题等）：INVALID_INPUT
-// - DB 操作失败：INTERNAL_ERROR
-// - JSON 序列化/反序列化失败：INTERNAL_ERROR
-// ──────────────────────────────────────────────────────────────
-
 import { randomUUID } from 'node:crypto';
 import type {
   ChatMessage,
@@ -75,7 +43,6 @@ import {
   recordUsage as storeRecordUsage,
 } from './usage-turn-store';
 
-// 契约层 re-export：外部 import 路径保持 './session-service' 不变（26 处引用零改动）
 export {
   DEFAULT_SESSION_TITLE,
   type ISessionService,
@@ -112,7 +79,6 @@ export class SessionService {
   async list(limit: number, offset: number): Promise<SessionListRes> {
     const db = getDb();
 
-    // 1. 查询当前页会话
     const rows = db
       .select()
       .from(sessions)
@@ -121,7 +87,6 @@ export class SessionService {
       .offset(offset)
       .all();
 
-    // 2. 查询总会话数（用于分页计算）
     const totalRow = db.select({ value: count() }).from(sessions).get();
     const total = totalRow?.value ?? 0;
 
@@ -141,13 +106,11 @@ export class SessionService {
   async get(id: string, options?: { includeMessages?: boolean }): Promise<SessionGetRes> {
     const db = getDb();
 
-    // 1. 查询会话元数据
     const sessionRow = db.select().from(sessions).where(eq(sessions.id, id)).get();
     if (sessionRow === undefined) {
       throw new AppError(ErrorCode.SESSION_NOT_FOUND, undefined, undefined, { sessionId: id });
     }
 
-    // 2. 查询消息历史（按 seq 升序）；includeMessages=false 跳过（元数据消费方免付全量负载）
     if (options?.includeMessages === false) {
       return { session: rowToMeta(sessionRow), messages: [] };
     }
@@ -158,9 +121,6 @@ export class SessionService {
       .orderBy(messages.seq)
       .all();
 
-    // 3. 反序列化 content JSON（content 存储完整 ModelMessage 的 JSON 字符串）
-    // 类型标注 ChatMessage：写入侧（appendMessage/replaceMessages）即按此序列化，
-    // 读出侧与之对称——此前标 unknown[] 会把类型洞扩散到 IPC 消费方（需断言）。
     const messageList: ChatMessage[] = messageRows.map((row) => {
       try {
         return JSON.parse(row.content) as ChatMessage;
@@ -189,10 +149,7 @@ export class SessionService {
   async delete(id: string): Promise<SessionDeleteRes> {
     const db = getDb();
     db.delete(sessions).where(eq(sessions.id, id)).run();
-    // 级联删除只把页放进 freelist，文件不会自己缩小
     reclaimFreePages();
-    // 失效域声明（31 号 spec S1）：列表域；不含 session:<id>——详情缓存指向已删除
-    // 会话，重拉只会 SESSION_NOT_FOUND（渲染层删除 mutation 自行清理详情缓存）
     broadcastInvalidation([INVALIDATION_DOMAINS.sessions]);
     return { ok: true };
   }
@@ -210,9 +167,6 @@ export class SessionService {
     const result = db.delete(sessions).run();
     const deleted = result.changes;
     reclaimFreePages();
-    // 失效域声明（31 号 spec）：级联清空波及 usage（用量汇总）/ turns（最近回合）/
-    // goal（目标），四域一并声明；session:<id> 详情与 recent-dirs 由渲染层 mutation
-    // removeQueries 前缀清理（清空场景逐 id 声明不现实）
     broadcastInvalidation([
       INVALIDATION_DOMAINS.sessions,
       INVALIDATION_DOMAINS.usage,
@@ -237,12 +191,10 @@ export class SessionService {
       .where(eq(sessions.id, id))
       .run();
 
-    // better-sqlite3 的 RunResult.changes 表示受影响行数
     if (result.changes === 0) {
       throw new AppError(ErrorCode.SESSION_NOT_FOUND, undefined, undefined, { sessionId: id });
     }
 
-    // 失效域声明（31 号 spec S2）
     broadcastInvalidation([INVALIDATION_DOMAINS.sessions, INVALIDATION_DOMAINS.session(id)]);
     return { ok: true };
   }
@@ -259,7 +211,6 @@ export class SessionService {
       .set({ pinned: pinned ? 1 : 0, updatedAt: Date.now() })
       .where(eq(sessions.id, id))
       .run();
-    // 失效域声明（31 号 spec S2）：仅真实写入时声明（changes=0 是幂等空操作）
     if (result.changes > 0) {
       broadcastInvalidation([INVALIDATION_DOMAINS.sessions, INVALIDATION_DOMAINS.session(id)]);
     }
@@ -282,14 +233,9 @@ export class SessionService {
     const sessionId = randomUUID();
     const initialMessages = options.messages ?? [];
 
-    // 计算标题与 lastMessage 预览（事务外，避免持有 DB 锁）
     const title = resolveTitle(options.title, initialMessages, DEFAULT_SESSION_TITLE);
     const lastMessagePreview = resolveLastMessagePreview(initialMessages);
 
-    // 预序列化 messages（M2 修复：在事务外完成 JSON.stringify）
-    // - JSON.stringify 是 CPU 密集操作，事务内执行会延长 SQLite 写锁持有时间
-    // - 若序列化失败（如循环引用），在事务外抛错，避免 BEGIN/ROLLBACK 开销
-    // - 事务体仅保留纯 DB 操作，更易推理
     const messageInserts: MessageInsert[] =
       initialMessages.length > 0
         ? initialMessages.map((msg, index) => ({
@@ -301,10 +247,7 @@ export class SessionService {
           }))
         : [];
 
-    // 事务：保证 sessions 行与 messages 行原子写入
-    // 任一步失败则整体回滚，避免出现孤立的 messages 行
     db.transaction((tx) => {
-      // 1. 插入 sessions 行
       const sessionInsert: SessionInsert = {
         id: sessionId,
         title,
@@ -316,14 +259,12 @@ export class SessionService {
       };
       tx.insert(sessions).values(sessionInsert).run();
 
-      // 2. 批量插入预序列化的 messages 行
       if (messageInserts.length > 0) {
         tx.insert(messages).values(messageInserts).run();
       }
     });
 
     logger.info({ sessionId, messageCount: initialMessages.length }, '创建新会话');
-    // 失效域声明（31 号 spec S3）：IM/远程桥创建会话由此到达渲染层（无头回合链路）
     broadcastInvalidation([INVALIDATION_DOMAINS.sessions, INVALIDATION_DOMAINS.session(sessionId)]);
     return sessionId;
   }
@@ -346,16 +287,13 @@ export class SessionService {
     const db = getDb();
     const { sessionId, messages: newMessages } = options;
 
-    // 1. 查询会话是否存在 + 当前 messageCount
     const sessionRow = db.select().from(sessions).where(eq(sessions.id, sessionId)).get();
     if (sessionRow === undefined) {
       throw new AppError(ErrorCode.SESSION_NOT_FOUND, undefined, undefined, { sessionId });
     }
 
-    // 2. 若无消息追加，仅更新 updatedAt（保持会话活跃）
     if (newMessages.length === 0) {
       db.update(sessions).set({ updatedAt: Date.now() }).where(eq(sessions.id, sessionId)).run();
-      // 失效域声明（31 号 spec S4）：updatedAt 也是真实写（空消息路径）
       broadcastInvalidation([
         INVALIDATION_DOMAINS.sessions,
         INVALIDATION_DOMAINS.session(sessionId),
@@ -363,24 +301,15 @@ export class SessionService {
       return sessionRow.messageCount;
     }
 
-    // 3. 预计算（事务外）：now / newLastMessage / 序列化
-    //    （M2 修复沿用：JSON.stringify 不进写锁——事务内只做纯组装）
     const now = Date.now();
     const newLastMessage = resolveLastMessagePreview(newMessages);
     const serializedRows: Array<Pick<MessageInsert, 'turnId' | 'role' | 'content'>> =
       newMessages.map((msg) => ({
-        // exactOptionalPropertyTypes：turnId 未传时条件展开（不写 NULL）
         ...(options.turnId !== undefined ? { turnId: options.turnId } : {}),
         role: extractRole(msg),
         content: serializeMessage(msg),
       }));
 
-    // 4. 事务：messageCount 读取 → seq 分配 → 批量插入 + 更新 sessions
-    //    正确性前提改造（2026-09-28 深读收口）：此前 messageCount 读在事务外，
-    //    读-写之间仅靠 better-sqlite3 同步驱动 + 主进程单连接事件循环保证无交错，
-    //    未来引入第二连接（如多窗口独立连接）会撞 uq_messages_session_seq 唯一约束。
-    //    现在 seq 分配移入事务、由 SQLite 写锁保护，隐式前提变为结构性保证；
-    //    会话在快速失败检查后被并发删除（TOCTOU）时，事务内兜底抛 NOT_FOUND 并回滚。
     let startSeq = 0;
     db.transaction((tx) => {
       const locked = tx.select().from(sessions).where(eq(sessions.id, sessionId)).get();
@@ -388,7 +317,6 @@ export class SessionService {
         throw new AppError(ErrorCode.SESSION_NOT_FOUND, undefined, undefined, { sessionId });
       }
       startSeq = locked.messageCount;
-      // 批量插入消息行（seq 由事务内读到的计数分配）
       tx.insert(messages)
         .values(
           serializedRows.map((row, index) => ({
@@ -400,10 +328,6 @@ export class SessionService {
         )
         .run();
 
-      // 更新 sessions：updatedAt + messageCount（+ lastMessage 若有新 user 消息）
-      // 条件展开：若追加消息中无 user 角色消息，保留原 lastMessage 不变
-      // （exactOptionalPropertyTypes 要求可选字段不能显式传 undefined，
-      //  用条件展开而非 Partial 类型，让 TS 自动推导出正确类型）
       tx.update(sessions)
         .set({
           updatedAt: now,
@@ -418,8 +342,6 @@ export class SessionService {
       { sessionId, appended: newMessages.length, total: startSeq + newMessages.length },
       '追加会话消息',
     );
-    // 失效域声明（31 号 spec S4）：回合开始/结束的消息落库（含 IM/远程入站消息）；
-    // markRunning/markIdle 刻意不声明（D4A 徽标竞态，见 spec §2.4）
     broadcastInvalidation([INVALIDATION_DOMAINS.sessions, INVALIDATION_DOMAINS.session(sessionId)]);
     return startSeq + newMessages.length;
   }
@@ -464,9 +386,7 @@ export class SessionService {
         .run();
     });
     logger.info({ sessionId, messageCount: newMessages.length }, '替换会话消息（上下文压缩）');
-    // 失效域声明（31 号 spec S5）
     broadcastInvalidation([INVALIDATION_DOMAINS.sessions, INVALIDATION_DOMAINS.session(sessionId)]);
-    // 压缩掉的旧消息页需在事务外回收：VACUUM 类 pragma 不能在事务内执行
     reclaimFreePages();
     return newMessages.length;
   }
@@ -482,7 +402,6 @@ export class SessionService {
       .where(eq(messages.turnId, turnId))
       .orderBy(messages.seq)
       .all();
-    // 反序列化 content JSON（与 get 的语义一致：解析失败抛 INTERNAL_ERROR）
     return rows.map((row) => {
       try {
         return JSON.parse(row.content) as ChatMessage;
@@ -504,16 +423,7 @@ export class SessionService {
    * db 实例由 closeDb 在 ServiceContainer.dispose 中统一关闭。
    * 保留 dispose 方法以满足接口一致性，便于未来扩展（如缓存）。
    */
-  async dispose(): Promise<void> {
-    // 无操作
-  }
-
-  // ── 崩溃恢复（回合状态机） ──────────────────────────────
-  // ⚠️ 以下三个状态机方法刻意不做失效域声明（31 号 spec §2.4）：
-  // markRunning/markIdle 的 invalidate 有读不到 running 的时序竞态（D4A 徽标闪失，
-  // use-agent-bridge 的既证结论），回合状态由 agent 回合结束的聚合声明统一收敛为真值；
-  // markAllInterrupted 在启动期执行，渲染层尚未挂载（启动后的首次拉取即新数据）。
-  // recordUsage/recordTurn 同理：回合粒度才有消费方，由回合聚合声明覆盖。
+  async dispose(): Promise<void> {}
 
   async markRunning(id: string): Promise<void> {
     const db = getDb();
@@ -527,7 +437,6 @@ export class SessionService {
 
   async markAllInterrupted(): Promise<number> {
     const db = getDb();
-    // 启动时把所有 running 残留置为 interrupted（上次进程异常退出的证据）
     const result = db
       .update(sessions)
       .set({ lastRunStatus: 'interrupted' })
@@ -555,9 +464,6 @@ export class SessionService {
    */
   async importAll(payload: unknown): Promise<SessionImportRes> {
     const result = await importSessionsFromPayload(payload);
-    // 失效域声明（31 号 spec S6）：批量导入只影响列表。仅真实导入时声明
-    // （全部同 id 跳过 / 空文件时库里没变，声明只会换来一次无谓的列表重拉——
-    // 对齐 spec §3「只有真实写/状态迁移才通知」与 pin/im.start 的同类守卫）
     if (result.imported > 0) {
       broadcastInvalidation([INVALIDATION_DOMAINS.sessions]);
     }
@@ -576,8 +482,6 @@ export class SessionService {
     const db = getDb();
     const { limit } = req;
 
-    // 原始 SQL 查询:去重 + 取 MAX(updated_at) + 过滤空字符串 + 倒序
-    // 列别名使用 camelCase 以符合 biome useNamingConvention 规则
     const rows = db.all<{ workingDir: string; lastUsed: number }>(
       sql`SELECT DISTINCT working_dir as workingDir, MAX(updated_at) as lastUsed
           FROM sessions
@@ -594,8 +498,6 @@ export class SessionService {
       })),
     };
   }
-
-  // ── token 用量统计 / Transcript（薄委托 usage-turn-store） ──────────
 
   /** @inheritDoc */
   pruneExpiredUsage(): number {
@@ -645,8 +547,6 @@ export class SessionService {
     return storeGetRecentTurns(req);
   }
 }
-
-// ─── 单例管理（与 FileService / GitService 一致） ─────────────
 
 /** SessionService 单例（内部按具体实现类持有，外部暴露为 ISessionService 接口） */
 let sessionService: SessionService | null = null;

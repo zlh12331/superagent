@@ -1,12 +1,3 @@
-// src/main/infra/im/adapters/dingtalk-stream-receiver.test.ts
-// DingTalkStreamReceiver 单测：钉钉 Stream 长连接生命周期（正向/边界/异常三件套）
-// ──────────────────────────────────────────────────────────────
-// 测试策略（遵循"业务逻辑不 mock、外部依赖注入 fake"）：
-// - fetchFn / WebSocketCtor / timeoutMs / heartbeatMs 经构造注入
-// - FakeWebSocket 可编程触发 open/message/error/close 事件
-// - 心跳间隔注入 10ms 验证 nop 帧发送（生产 30s 不可等待）
-// ──────────────────────────────────────────────────────────────
-
 import { ErrorCode } from '@code-agent/shared/main';
 import { describe, expect, it, vi } from 'vitest';
 import { DingTalkStreamReceiver } from './dingtalk-stream';
@@ -46,7 +37,6 @@ let currentWs: FakeWebSocket;
 /** 测试桩：new 返回共享 WS 实例（open 的异步链中构造，需保持同一对象） */
 class SharedWebSocketCtor {
   constructor(url: string) {
-    // 同步更新 url（endpoint 在异步链中才确定）——WebSocket.url 只读，类型断言绕过
     (currentWs as unknown as { url: string }).url = url;
     // biome-ignore lint/correctness/noConstructorReturn: 测试桩返回共享实例（保持 new 语义）
     return currentWs;
@@ -117,7 +107,6 @@ describe('DingTalkStreamReceiver.open（三件套）', () => {
     await vi.waitFor(() => expect(ws.hasListener('open')).toBe(true));
     ws.emit('open');
     await p;
-    // token + gateway 两个 HTTP 调用完成
     expect(fetchFn).toHaveBeenCalledTimes(2);
     expect(ws.url).toBe('wss://gw.dingtalk.com');
     expect(ws.send).toHaveBeenCalledWith(JSON.stringify({ type: 'register', ticket: 't-1' }));
@@ -131,7 +120,6 @@ describe('DingTalkStreamReceiver.open（三件套）', () => {
     ws.emit('message', { data: JSON.stringify({ type: 'registered' }) });
     await p;
     expect(receiver.isOpen).toBe(true);
-    // 心跳：10ms 间隔，等 25ms 应至少发送 1 次 nop
     await new Promise((resolve) => setTimeout(resolve, 25));
     const nopCalls = ws.send.mock.calls.filter((c) => String(c[0]).includes('"nop"'));
     expect(nopCalls.length).toBeGreaterThanOrEqual(1);

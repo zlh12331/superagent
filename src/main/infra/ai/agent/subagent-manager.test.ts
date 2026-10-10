@@ -1,18 +1,3 @@
-// src/main/infra/ai/agent/subagent-manager.test.ts
-// SubagentManager 单测：委派执行 / 回合事件累积 / 停滞防护 / 任务跟踪
-//
-// 测试要点：
-// 1. list：内置子代理定义（general/code_review/plan）
-// 2. run：委派 startAgent（无头）+ TURN_END 事件收集输出
-// 3. 事件按 sessionId 过滤（多子代理并发不串流）
-// 4. 停滞：无进展超阈值 → abort + 任务 FAILED + 返回空输出
-// 5. 回合超时兜底（5min）→ 任务 FAILED
-// 6. 未知代理名抛错；startAgent 失败重试耗尽抛错
-// 7. 单例：getSubagentManager 未初始化抛错（首个用例）；init 幂等
-//
-// 依赖策略：agentService 注入 fake；taskService 为数据库外部依赖 → mock；
-// StallWatchdog 真实实现（停滞阈值用短 stallMs 驱动）。
-
 import type { TurnEvent } from '@code-agent/shared/main';
 import { TurnEventType } from '@code-agent/shared/main';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -27,7 +12,6 @@ const mocks = vi.hoisted(() => {
     error: vi.fn(),
     debug: vi.fn(),
   };
-  // taskService 为数据库外部依赖：mock 单例（保留 TaskKind/TaskStatus 真实枚举）
   const mockTaskService = {
     create: vi.fn(() => 'task-1'),
     update: vi.fn(),
@@ -128,7 +112,6 @@ describe('SubagentManager 批次3 缺口补全', () => {
     it('register：覆盖同名定义；新名字可注册并可运行', async () => {
       const { agentService, emit } = createFakeAgentService();
       const manager = new SubagentManager(agentService as unknown as IAgentService);
-      // 无 maxSteps 的定义：run 时回退默认 15（maxSteps ?? 15 分支）
       manager.register({ name: 'custom', description: '自定义', prompt: '你是自定义代理' });
 
       const names = manager.list().map((s) => s.name);
@@ -249,7 +232,6 @@ describe('SubagentManager 批次3 缺口补全', () => {
     it('任务状态更新失败：不阻断回合收尾（完成信号仍发出）', async () => {
       const { agentService, emit } = createFakeAgentService();
       const manager = new SubagentManager(agentService as unknown as IAgentService);
-      // 第一次 update（RUNNING）正常；第二次（TURN_END 的 COMPLETED）抛错
       mocks.mockTaskService.update
         .mockImplementationOnce(() => {})
         .mockImplementationOnce(() => {
@@ -262,7 +244,6 @@ describe('SubagentManager 批次3 缺口补全', () => {
 
       const result = await promise;
       expect(result.output).toBe('输出');
-      // 任务跟踪失败仅记录日志（真实缺陷修复：原实现会因 done 已置位导致回合永久挂起）
       expect(mocks.mockLogger.error).toHaveBeenCalledWith(
         expect.objectContaining({ error: expect.any(Error) }),
         expect.stringContaining('任务状态更新失败'),
@@ -302,7 +283,6 @@ describe('SubagentManager 批次3 缺口补全', () => {
         const manager = new SubagentManager(agentService as unknown as IAgentService);
 
         const promise = manager.run('general', '任务', '/tmp/proj', { stallMs: 100 });
-        // 停滞阈值内工具开始执行（暂停计时），持续推进越过停滞阈值
         await vi.advanceTimersByTimeAsync(50);
         emit({
           type: TurnEventType.TOOL_CALL,
@@ -312,9 +292,7 @@ describe('SubagentManager 批次3 缺口补全', () => {
           toolName: 'grep',
         } as TurnEvent);
         await vi.advanceTimersByTimeAsync(500);
-        // 工具执行中不触发停滞 abort
         expect(agentService.abort).not.toHaveBeenCalled();
-        // 工具结束恢复计时 → 继续无进展 → 停滞
         emit({
           type: TurnEventType.TOOL_RESULT,
           sessionId: 'sub-session-1',

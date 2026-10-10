@@ -1,6 +1,3 @@
-// src/main/infra/ai/agent/task-service.test.ts
-// 任务状态机单测：create/list/get + 终端状态幂等锁（内存 DB）
-
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb, resetDb } from '../../storage/db';
 import { createTestDb } from '../../storage/test-utils';
@@ -65,7 +62,6 @@ describe('TaskService（任务注册表 + 状态机）', () => {
     const a = service.create('s1', TaskKind.AGENT, 'A');
     const b = service.create('s2', TaskKind.AGENT, 'B');
     const c = service.create('s1', TaskKind.AGENT, 'C');
-    // 同毫秒创建时 startTime 相同 → 排序回落 id 字典序（uuid 随机，只断言集合）
     const s1Ids = service.list('s1').map((t) => t.id);
     expect(s1Ids).toHaveLength(2);
     expect(s1Ids).toEqual(expect.arrayContaining([c, a]));

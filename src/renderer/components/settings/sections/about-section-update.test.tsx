@@ -1,11 +1,3 @@
-// src/renderer/components/settings/sections/about-section-update.test.tsx
-// 关于面板「更新区」测试：进度 / 取消 / 跳过 / 说明折叠 / 错误分类 / 开关
-// ──────────────────────────────────────────────
-// 覆盖动机：关于面板是更新功能最复杂的界面（进度条、取消、跳过、说明、错误文案、
-// 开关），此前 0 测试。这里用真实 settings-store + 可控的 useUpdate mock，
-// 断言各 phase 下的真实渲染与交互，避免后续改动静默回归。
-// ──────────────────────────────────────────────
-
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -85,7 +77,6 @@ describe('关于面板 · 更新区', () => {
     });
     const bar = screen.getByRole('progressbar');
     expect(bar.getAttribute('aria-valuenow')).toBe('42');
-    // 详情行：字节 / 总量 · 速率 · 剩余（percent 只在 aria 上，视觉上面板给的是绝对值）
     expect(screen.getByText(/11\.4 MB \/ 45\.8 MB/)).toBeTruthy();
     expect(screen.getByText(/2\.0 MB\/s/)).toBeTruthy();
     expect(screen.getByRole('button', { name: t('update.cancel') })).toBeTruthy();
@@ -114,8 +105,6 @@ describe('关于面板 · 更新区', () => {
   });
 
   it('就绪：说明是 GitHub 渲染后的 HTML（atom feed 回退）时按结构渲染，不显示字面标签', async () => {
-    // 形状对齐真实数据：GitHubProvider 在 latest.yml 无内嵌 notes 时回退
-    // releases.atom 订阅源，交付的是渲染后 HTML（g-emoji/hovercard 属性）
     const notes = [
       '<blockquote>',
       '<p><g-emoji class="g-emoji" alias="warning">⚠️</g-emoji>',
@@ -133,7 +122,6 @@ describe('关于面板 · 更新区', () => {
       releaseNotes: notes,
     });
     await userEvent.click(screen.getByRole('button', { name: t('update.notesExpand') }));
-    // 按结构渲染：文本与 emoji 可见、blockquote 是真元素、链接带 target
     expect(container.querySelector('blockquote')).toBeTruthy();
     expect(screen.getByText(/预发布版本（beta）/)).toBeTruthy();
     expect(screen.getByText('新增')).toBeTruthy();
@@ -141,7 +129,6 @@ describe('关于面板 · 更新区', () => {
     const link = container.querySelector('a[href*="issues/97"]');
     expect(link).toBeTruthy();
     expect(link?.getAttribute('target')).toBe('_blank');
-    // 字面标签与未知属性不外泄（rehype-raw 解析 + rehype-sanitize 清洗）
     expect(container.textContent).not.toContain('<blockquote>');
     expect(container.textContent).not.toContain('<g-emoji>');
     expect(container.querySelector('[data-hovercard-type]')).toBeNull();

@@ -1,21 +1,3 @@
-// src/main/infra/ai/mcp/mcp-types.ts
-// MCP（Model Context Protocol）类型定义
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 定义 MCP server 配置类型（stdio / sse / streamable-http 三态传输）
-// - 定义工具命名空间 helper：避免与内置工具重名
-// - 定义 MCP server 状态枚举
-//
-// 设计原则：
-// - transport 三态：stdio（本地子进程，最常见）/ sse / streamable-http（远程 HTTP）
-//   缺省 stdio（向后兼容：旧配置无 transport 字段视为 stdio）
-// - 工具命名空间：mcp__${serverName}__${toolName}（与 Claude Code 一致）
-//   避免与内置工具（read_file 等）重名，且便于按 server 名批量过滤
-// - 配置生命周期：经 mcp:start IPC 按次传入（设置页表单组装），运行时状态
-//   不持久化——应用重启后 server 不自动恢复，需再次启动（原注释的
-//   「settings store 持久化」未实施，勿据此假设配置跨重启存在）
-// ──────────────────────────────────────────────────────────────
-
 /** MCP 传输类型（与 shared MCP_TRANSPORTS 对齐；缺省 stdio） */
 export type McpTransportType = 'stdio' | 'sse' | 'streamable-http';
 

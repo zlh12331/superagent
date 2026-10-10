@@ -1,6 +1,3 @@
-// src/renderer/lib/diff/diff-rows.test.ts
-// diff 渲染行装配单测：文本对 → 编号行（rowsFromTextPair）/ 词级片段（computeWordSegments）
-
 import { describe, expect, it } from 'vitest';
 
 import { computeWordSegments, rowsFromTextPair } from './diff-rows';

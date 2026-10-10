@@ -1,15 +1,3 @@
-// src/renderer/lib/highlight.ts
-// shiki 语法高亮管理模块（2026-09 渲染性能优化：语言按需加载）
-// ──────────────────────────────────────────────────────────────
-// 背景：
-// - 旧实现从 'shiki' 顶层导入（= bundle-full），所有语言语法静态打进主包
-//   （index chunk 4.4MB 主因）。仅缩减语言列表不会减小主包。
-// - 本模块切换到 'shiki/bundle/web'（语言懒加载入口）：createHighlighter
-//   只预载最热语言，其余语言首次遇到时才 loadLanguage 按需 code-split。
-// - 单例 + 并发去重，供 Markdown.tsx（消息代码块）与 FileViewerPanel.tsx
-//   （文件预览）共用，避免重复初始化 highlighter / 语言加载。
-// ──────────────────────────────────────────────────────────────
-
 import {
   createHighlighter,
   type DynamicImportLanguageRegistration,
@@ -102,8 +90,6 @@ export function getHighlighter(): Promise<Highlighter> {
         _highlighter = h;
         return h;
       },
-      // 初始化失败清缓存：rejected promise 永久持有会导致本次会话
-      // 内所有代码块无高亮（瞬时失败如 chunk 加载失败无法重试）
       (err) => {
         _highlighterPromise = null;
         throw err;
@@ -125,13 +111,12 @@ export function getHighlighter(): Promise<Highlighter> {
 export async function ensureLangLoaded(h: Highlighter, lang: string): Promise<void> {
   if (lang === 'text' || loadedLangs.has(lang)) return;
   const load = DEFERRED_LANG_MODULES[lang];
-  if (load === undefined) return; // 未收录 → 调用方 codeToHtml 抛错走 'text' fallback
+  if (load === undefined) return;
   if (loadingDictionary[lang] === undefined) {
     loadingDictionary[lang] = h.loadLanguage(load).then(
       () => {
         loadedLangs.add(lang);
       },
-      // 失败清缓存键：允许下一个代码块重试（否则永久降级纯文本）
       (err) => {
         delete loadingDictionary[lang];
         throw err;

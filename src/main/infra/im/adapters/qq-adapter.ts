@@ -1,12 +1,3 @@
-// src/main/infra/im/adapters/qq-adapter.ts
-// QQ 渠道适配器：官方 API 发送 + Gateway 长连接接收
-// ──────────────────────────────────────────────────────────────
-// 接入配置（token 格式）：appId:appSecret（QQ 开放平台应用凭证）
-// 发送：官方 API（群聊 /v2/groups/{openid}/messages；单聊 /v2/users/{openid}/messages）
-//       —— chatId 即 openid（入站事件学习 openid 类型，回发自动路由）
-// 接收：Gateway WS 长连接（GROUP_AT_MESSAGE / C2C_MESSAGE）
-// ──────────────────────────────────────────────────────────────
-
 import { AppError, ErrorCode } from '@code-agent/shared/main';
 import { logger } from '../../../utils/logger';
 import { proxiedFetch } from '../../network/proxied-fetch';
@@ -46,7 +37,6 @@ export class QqAdapter implements IChannelAdapter {
   ) {
     this.fetchTokenFn = options.fetchToken ?? fetchQqAccessToken;
     this.receiverCtor = options.Receiver ?? QqStreamReceiver;
-    // 34 号：生产默认 proxiedFetch（同 telegram-adapter 注入语义）
     this.fetchFn = options.fetchFn ?? (proxiedFetch as unknown as typeof fetch);
   }
 
@@ -82,10 +72,8 @@ export class QqAdapter implements IChannelAdapter {
     this.appSecretValue = appSecret;
     await this.refreshAccessToken(appId, appSecret);
 
-    // 启动长连接接收
     const receiver = new this.receiverCtor({ appId, appSecret });
     receiver.onMessage((message) => {
-      // 学习 openid 类型（群/单聊路由）
       if (message.channelType !== undefined) {
         this.chatTypeMap.set(message.chatId, message.channelType);
       }
@@ -119,7 +107,6 @@ export class QqAdapter implements IChannelAdapter {
       chatType === 'group'
         ? `${API_HOST}/v2/groups/${target.chatId}/messages`
         : `${API_HOST}/v2/users/${target.chatId}/messages`;
-    // access_token 过期前刷新（官方：7200s 生命周期，需自行刷新）
     if (this.appIdValue !== null && this.appSecretValue !== null && this.isTokenExpiring()) {
       await this.refreshAccessToken(this.appIdValue, this.appSecretValue);
     }
@@ -142,7 +129,6 @@ export class QqAdapter implements IChannelAdapter {
         err_code?: number;
         message?: string;
       } | null;
-      // 官方：依据 err_code 判断失败（message 可能调整）
       if (!response.ok || (body?.err_code !== undefined && body.err_code !== 0)) {
         throw new Error(
           body?.err_code !== undefined

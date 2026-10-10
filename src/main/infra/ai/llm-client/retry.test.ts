@@ -1,17 +1,3 @@
-// src/main/infra/ai/llm-client/retry.test.ts
-// 重试层单测：错误码感知 / Retry-After / 指数退避 / abort 贯穿
-//
-// 测试要点：
-// 1. isRetryableError：429/5xx 可重试，401/404 不可重试，TypeError 可重试
-// 2. getErrorStatus：提取 APICallError.statusCode
-// 3. getRetryAfterDelayMs：Retry-After 头解析
-// 4. retryWithBackoff：成功不重试 / 重试到成功 / 耗尽抛错 / 不可重试立即抛 / abort 贯穿
-// 5. onRetry 遥测回调参数正确
-//
-// 接线背景：生产消费方两路——llm-client runSideQuery（side query 完整重试）
-// 与 create-stream（shouldRetryOnError 覆盖，主回合只兜传输层失败）；本组
-// 用例守住默认判定语义（isRetryableError），两路覆盖行为各有专属用例。
-
 import { APICallError } from 'ai';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getErrorStatus, getRetryAfterDelayMs, isRetryableError, retryWithBackoff } from './retry';
@@ -25,7 +11,6 @@ function createApiError(
     message: `HTTP ${String(statusCode)}`,
     url: 'https://api.example.com/v1/chat/completions',
     requestBodyValues: {},
-    // exactOptionalPropertyTypes：undefined 需条件展开
     ...(statusCode !== undefined ? { statusCode } : {}),
     ...(opts.responseHeaders !== undefined ? { responseHeaders: opts.responseHeaders } : {}),
     ...(opts.isRetryable !== undefined ? { isRetryable: opts.isRetryable } : {}),
@@ -133,7 +118,6 @@ describe('retryWithBackoff（重试执行器）', () => {
     const fn = vi.fn().mockRejectedValueOnce(createApiError(500)).mockResolvedValueOnce('ok');
     const promise = retryWithBackoff(fn, { maxAttempts: 5, initialDelayMs: 100, maxDelayMs: 200 });
 
-    // 第一次失败后进入退避等待，需要推进定时器
     await vi.advanceTimersByTimeAsync(200);
     await expect(promise).resolves.toBe('ok');
     expect(fn).toHaveBeenCalledTimes(2);
@@ -143,7 +127,6 @@ describe('retryWithBackoff（重试执行器）', () => {
     const error = createApiError(503);
     const fn = vi.fn().mockRejectedValue(error);
     const promise = retryWithBackoff(fn, { maxAttempts: 3, initialDelayMs: 100, maxDelayMs: 200 });
-    // 先挂载断言再推进定时器，避免期间产生 unhandled rejection
     const assertion = expect(promise).rejects.toBe(error);
 
     await vi.advanceTimersByTimeAsync(1000);
@@ -169,13 +152,11 @@ describe('retryWithBackoff（重试执行器）', () => {
       initialDelayMs: 100,
       signal: controller.signal,
     });
-    // 首次调用失败后立即中断（模拟用户中途停止）
     controller.abort();
     const assertion = expect(promise).rejects.toBe(error);
 
     await vi.advanceTimersByTimeAsync(200);
     await assertion;
-    // abort 后不再重试
     expect(fn).toHaveBeenCalledTimes(1);
   });
 
@@ -200,7 +181,6 @@ describe('retryWithBackoff（重试执行器）', () => {
       expect.objectContaining({
         attempt: 1,
         errorStatus: 429,
-        // Retry-After 头优先于指数退避（2s > 1s 初始退避）
         delayMs: 2000,
       }),
     );
@@ -215,13 +195,11 @@ describe('retryWithBackoff（重试执行器）', () => {
       maxDelayMs: 250,
       onRetry,
     });
-    // 先挂载断言再推进定时器
     const assertion = expect(promise).rejects.toBeInstanceOf(APICallError);
 
     await vi.advanceTimersByTimeAsync(2000);
     await assertion;
 
-    // 3 次重试延迟：100 → 200 → 250（上限截断）
     const delays = onRetry.mock.calls.map((call) => call[0].delayMs);
     expect(delays).toEqual([100, 200, 250]);
   });

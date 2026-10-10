@@ -1,9 +1,3 @@
-// src/renderer/components/chat/chat-panel-derives.ts
-// ChatPanel 纯派生：状态指示文本 + 历史回显能力缺口告知（自 ChatPanel 提取）
-// ──────────────────────────────────────────────
-// 为什么提出来：两者都是「输入确定 → 输出确定」的映射，留在组件里既撑长函数体，
-// 又要连带挂载 useChat / IPC / TanStack Query 才能验证分支，实测成本与收益不成比例。
-
 import type { ChatMessage } from '@code-agent/shared/renderer';
 import type { UIMessage } from 'ai';
 import type { TFunction } from 'i18next';

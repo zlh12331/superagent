@@ -1,11 +1,3 @@
-// tests/integration/helpers/with-db.ts
-// 集成测试共享基建：真实 db.ts + 临时 userData（简化环境 Medium Test）
-// ──────────────────────────────────────────────────────────────
-// electron 替身由 setup.ts 全局注册（app.getPath → 本模块切换的临时目录）；
-// 此处仅负责：每用例创建独立临时目录、真实初始化 DB、用后关闭清理。
-// 对应用例：await withTempUserData(async (db) => { ... })
-// ──────────────────────────────────────────────────────────────
-
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -41,7 +33,6 @@ export async function withTempUserData<T>(fn: (db: DrizzleDB) => Promise<T> | T)
     const db = initDb();
     return await fn(db);
   } finally {
-    // 真正关闭连接释放句柄（resetDb 仅清缓存不 close）——否则 Windows 下临时目录清理 EPERM
     await closeDb();
     resetDb();
     rmSync(dir, { recursive: true, maxRetries: 5 });

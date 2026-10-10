@@ -1,29 +1,10 @@
-// src/renderer/hooks/use-terminal-bridge.test.tsx
-// use-terminal-bridge 单元测试
-// ──────────────────────────────────────────────────────────────
-// 测试要点：
-// 1. 挂载时订阅 terminal:event:output / terminal:event:exit
-// 2. output 事件：按 \n 切分后追加到 store buffer
-//    - 末尾 \n 产生的空字符串应被移除（避免多一个空行）
-//    - 无 \n 的部分行直接追加为单独一行
-// 3. exit 事件：标记 terminal alive=false
-// 4. 卸载时退订所有事件
-// 5. window.api 未定义时不报错（SSR 兼容）
-// ──────────────────────────────────────────────────────────────
-
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useTerminalStore } from '@/stores/transient/terminal-store';
 import { useTerminalBridge } from './use-terminal-bridge';
 
-// ── mock window.api.terminal ────────────────────────────────
-//
-// 测试需要捕获 subscribe 的回调，并在测试中手动触发以验证行为
-
-// 创建 mock unsubscribe 函数（每个测试重新创建）
 let unsubscribeOutputMock: ReturnType<typeof vi.fn>;
 let unsubscribeExitMock: ReturnType<typeof vi.fn>;
-// 捕获 subscribe 时传入的回调
 let outputCallback: ((payload: { terminalId: string; data: string }) => void) | null = null;
 let exitCallback:
   | ((payload: { terminalId: string; exitCode: number; signal?: string }) => void)
@@ -31,20 +12,17 @@ let exitCallback:
 
 describe('useTerminalBridge', () => {
   beforeEach(() => {
-    // 重置 store
     useTerminalStore.setState({
       terminals: [],
       activeTerminalId: null,
       buffers: new Map(),
     });
 
-    // 重置捕获的回调
     outputCallback = null;
     exitCallback = null;
     unsubscribeOutputMock = vi.fn();
     unsubscribeExitMock = vi.fn();
 
-    // 注入 window.api.terminal 的 mock 实现
     window.api.terminal = {
       subscribeOutputEvent: vi.fn((cb) => {
         outputCallback = cb;
@@ -54,7 +32,6 @@ describe('useTerminalBridge', () => {
         exitCallback = cb;
         return unsubscribeExitMock;
       }),
-      // 以下方法本测试不使用，仅占位避免类型报错
       create: vi.fn(),
       input: vi.fn(),
       resize: vi.fn(),
@@ -62,7 +39,6 @@ describe('useTerminalBridge', () => {
     } as never;
   });
 
-  // ── 订阅行为 ──────────────────────────────────────────
   it('挂载时订阅 output 和 exit 事件', () => {
     renderHook(() => {
       useTerminalBridge();
@@ -83,14 +59,12 @@ describe('useTerminalBridge', () => {
     expect(unsubscribeExitMock).toHaveBeenCalledTimes(1);
   });
 
-  // ── output 事件处理：P3 原样累积原始 ANSI 字符串（不切行） ──
   describe('output 事件处理', () => {
     it('带末尾 \\n 的 data 切分后移除末尾空字符串', () => {
       renderHook(() => {
         useTerminalBridge();
       });
 
-      // 先注册一个终端（让 store 有对应 terminalId 的 buffer entry）
       useTerminalStore.getState().createTerminal({
         id: 'term-1',
         sessionId: 'session-1',
@@ -100,12 +74,10 @@ describe('useTerminalBridge', () => {
         alive: true,
       });
 
-      // 模拟 output 事件：「line1\nline2\n」
       act(() => {
         outputCallback?.({ terminalId: 'term-1', data: 'line1\nline2\n' });
       });
 
-      // P3：原样累积（含末尾换行），不再切行丢空串
       expect(useTerminalStore.getState().buffers.get('term-1')).toBe('line1\nline2\n');
     });
 
@@ -187,7 +159,6 @@ describe('useTerminalBridge', () => {
     });
   });
 
-  // ── exit 事件处理：标记 alive=false ───────────────────
   describe('exit 事件处理', () => {
     it('标记 terminal alive=false（保留 buffer）', () => {
       renderHook(() => {
@@ -211,7 +182,6 @@ describe('useTerminalBridge', () => {
       const state = useTerminalStore.getState();
       const term = state.terminals.find((t) => t.id === 'term-1');
       expect(term?.alive).toBe(false);
-      // buffer 应保留（用于退出后查看历史；P3：原始字符串原样保留）
       expect(state.buffers.get('term-1')).toBe('some output');
     });
 
@@ -238,9 +208,7 @@ describe('useTerminalBridge', () => {
     });
   });
 
-  // ── window.api 未定义时不报错 ─────────────────────────
   it('window.api 未定义时直接 return（不报错）', () => {
-    // 临时移除 window.api
     const originalApi = window.api;
     // biome-ignore lint/suspicious/noExplicitAny: 测试环境需要删除 window 属性
     delete (window as any).api;
@@ -251,7 +219,6 @@ describe('useTerminalBridge', () => {
       });
     }).not.toThrow();
 
-    // 恢复 window.api（避免影响后续测试）
     Object.defineProperty(window, 'api', {
       value: originalApi,
       writable: true,

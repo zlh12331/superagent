@@ -1,15 +1,3 @@
-// src/renderer/components/$1/ask-dialog.test.tsx
-// AskDialog（Agent 提问对话框）渲染与交互测试
-//
-// 此前该组件无任何覆盖（codegraph 核查），补齐：
-// 1. 空态不渲染 / 提问渲染结构（标题/问题/选项/自由输入/底部按钮）
-// 2. 单选语义：点击第二个选项仅保留最后一个
-// 3. 多选语义：multiSelect 累积 + 再次点击取消
-// 4. 提交 payload：selectedIndexes / text 条件字段
-// 5. 取消 = 空回答回传 + 清空 store
-// 6. 进度条：单问题不渲染，多问题渲染（aria-valuemax）
-// 7. 异常路径：respondAsk 拒绝 / 返回 error → toast + 清空
-
 import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -66,8 +54,6 @@ describe('AskDialog', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     useAgentAskStore.setState({ asks: [] });
-    // 会话归属：队列 selector 按「当前激活会话」取队头——运行时提问总发生
-    // 在已激活会话中，测试需对齐该前提
     useActiveSessionStore.setState({ activeSessionId: ACTIVE_SESSION });
   });
 
@@ -79,7 +65,6 @@ describe('AskDialog', () => {
   it('提问到达：渲染标题/问题/选项/自由输入/提交取消按钮', () => {
     setAsk('ask-1', [mkQuestion()]);
     render(<AskDialog />);
-    // Radix 迁移后 sr-only DialogTitle 与可见头部并存：用 getAllByText 断言
     expect(screen.getAllByText('Agent 提问').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('选择后续方向？')).toBeInTheDocument();
     expect(screen.getByText('方案 A')).toBeInTheDocument();
@@ -159,12 +144,9 @@ describe('AskDialog', () => {
   });
 
   it('进度条边界：全部答完时 aria-valuenow 不越界（≤ valuemax）', async () => {
-    // 回归锚：调用方按「已答题数 + 1」算进度，两问全答会算到 3 > max=2。
-    // ARIA 要求 valuenow ≤ valuemax，组件内钳制后不再越界。
     const user = userEvent.setup();
     setAsk('ask-2', [mkQuestion(), mkQuestion({ question: '第二问？' })]);
     render(<AskDialog />);
-    // 两问各选一个选项 → 全部作答
     await user.click(screen.getAllByText('方案 A')[0] as HTMLElement);
     await user.click(screen.getAllByText('方案 A')[1] as HTMLElement);
 
@@ -185,9 +167,7 @@ describe('AskDialog', () => {
     render(<AskDialog />);
     await user.click(screen.getByRole('button', { name: '提交' }));
     const { toast } = await import('sonner');
-    // [CODE] 前缀错误 → 错误码经 errors namespace 本地化（zh-CN：输入参数有误）
     expect(toast.error).toHaveBeenCalledWith('输入参数有误');
-    // 失败不 clearAsk：选项保留，用户可原地重试（此前强制关窗丢答案）
     expect(headAskId()).toBe('ask-9');
   });
 
@@ -201,7 +181,6 @@ describe('AskDialog', () => {
     render(<AskDialog />);
     await user.click(screen.getByRole('button', { name: '提交' }));
     const { toast } = await import('sonner');
-    // 非 IPC 错误响应（无 [CODE] 前缀）→ unwrapErrorMessage 原样透传（全仓统一行为）
     expect(toast.error).toHaveBeenCalledWith('ipc down');
     expect(headAskId()).toBe('ask-9');
   });
@@ -216,12 +195,9 @@ describe('AskDialog', () => {
     expect(headAskId()).toBeNull();
   });
 
-  // ── 队列化（2026-10-08）：一轮多 ask 工具并发到达，FIFO 逐条呈现 ──
-
   it('队列：两条待答 → 只渲染队头；队头出队后下一条自动上浮', async () => {
     const user = userEvent.setup();
     injectRespondAsk();
-    // 模拟并发到达：两条同会话提问同时入队（AI SDK Promise.all 并行执行工具）
     useAgentAskStore.setState({
       asks: [
         {
@@ -240,11 +216,9 @@ describe('AskDialog', () => {
     });
     render(<AskDialog />);
 
-    // 队头（先问先答）：只显示第一问
     expect(screen.getByText('第一问？')).toBeInTheDocument();
     expect(screen.queryByText('第二问？')).not.toBeInTheDocument();
 
-    // 提交队头 → 出队 → 第二问自动上浮
     await user.click(screen.getByRole('button', { name: '提交' }));
     expect(screen.getByText('第二问？')).toBeInTheDocument();
     expect(screen.queryByText('第一问？')).not.toBeInTheDocument();
@@ -252,8 +226,6 @@ describe('AskDialog', () => {
   });
 
   it('队列：超时的队头被决议事件放行（不阻塞后续提问）', () => {
-    // 主进程 60s 超时 → agent:event:ask:resolved(timed-out) → bridge 调 removeAsk。
-    // 此处直接断言 store 语义（bridge 订阅链路由 use-agent-ask-bridge 覆盖）
     useAgentAskStore.setState({
       asks: [
         {
@@ -273,8 +245,6 @@ describe('AskDialog', () => {
     render(<AskDialog />);
     expect(screen.queryByText('第二问？')).not.toBeInTheDocument();
 
-    // 决议事件到达（removeAsk 幂等；用户未曾操作）
-    // act 包裹：zustand 外部更新须让 React 同步渲染后才可断言
     act(() => {
       useAgentAskStore.getState().removeAsk('ask-timeout');
     });

@@ -1,10 +1,3 @@
-// src/renderer/components/chat/attachments.ts
-// 附件内容拼接（自 ChatInput 提取：file:read 拼装逻辑独立可测）
-// ──────────────────────────────────────────────
-// 附件以「文件名 + 代码块」形式拼进消息文本；file:read 支持 GBK 自动转码。
-// 读取失败（二进制/超大/权限）跳过内容仅保留文件名标注，不阻断发送。
-// ──────────────────────────────────────────────
-
 import { ATTACHMENT_MAX_CHARS as SHARED_ATTACHMENT_MAX_CHARS } from '@code-agent/shared/renderer';
 
 import { hasIpcBridge, unwrap } from '@/lib/ipc';
@@ -64,7 +57,6 @@ export async function buildTextWithAttachments(
       const mark = clipped.length < data.content.length ? label.truncated(data.content.length) : '';
       text += `\n\n${label.attached(att.name)}\n\`\`\`\n${clipped}${mark}\n\`\`\``;
     } catch {
-      // 读取失败（二进制/权限/错误响应）：仅附加文件名标注，不阻断发送
       text += `\n\n${label.readFailed(att.name)}`;
     }
   }

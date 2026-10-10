@@ -1,20 +1,3 @@
-// src/main/infra/ai/agent-runtime/stream-reader.ts
-// 共享流读取器：带空闲超时守卫的 reader.read
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 流空闲超时：超时说明流已死（网络半开 / 服务端静默断连），
-//   中断底层流（abort controller）并抛 AI_TIMEOUT，避免无限等待
-//
-// 背景（历史）：自 ChatService / AgentService 双复制提取；
-// ChatService 已并入 agent-service 回合链路删除，现消费方为
-// agent-runtime 内部两处（create-stream 首 part 预读 + TurnRunner 循环读流）。
-//
-// 设计（对齐 qwen streamIdleTimeout 思路）：
-// - 每次 read 都带独立超时（读流循环中反复调用，finally 清理不残留定时器）
-// - 超时阈值与供应商保活上限一致（默认 10 分钟），不误杀正常推理
-// - abort 由调用方传入的 controller 触发（streamText 感知后停止推送）
-// ──────────────────────────────────────────────────────────────
-
 import { AppError, ErrorCode } from '@code-agent/shared/main';
 
 /**
@@ -48,7 +31,6 @@ export async function readWithIdleTimeout<T>(
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
   const timeoutPromise = new Promise<never>((_resolve, reject) => {
     timeoutId = setTimeout(() => {
-      // 中断底层流（streamText 感知 abortSignal 后停止推送）
       controller?.abort();
       reject(new AppError(ErrorCode.AI_TIMEOUT, 'AI 流式响应空闲超时'));
     }, timeoutMs);

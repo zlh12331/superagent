@@ -1,12 +1,3 @@
-// src/renderer/lib/diff/line-diff.ts
-// 行级 diff 渲染数据（diff-match-patch 行编码，供 FileChangeCard 渲染）
-// ──────────────────────────────────────────────────────────────
-// R5 说明：diff-stats.ts 已删除（git diff 统计口径统一为主进程 numstat）。
-// 本文件是 dmp 的行级用途：agent 工具 write_file 的**原文前后对比**
-// （oldText/newText 原始字符串对，非 unified diff 文本）——这与
-// unified-diff（unified diff 文本解析）输入形态不同，不构成重复实现。
-// ──────────────────────────────────────────────────────────────
-
 import {
   DIFF_DELETE,
   DIFF_EQUAL,
@@ -96,7 +87,6 @@ function decodeDiffs(diffs: readonly Diff[], charToLine: ReadonlyMap<string, str
  * ```
  */
 export function computeLineDiff(oldText: string, newText: string): DiffLine[] {
-  // 空文本边界：全量 add / 全量 del
   if (oldText === '') {
     return newText.split('\n').map((text) => ({ type: 'add' as const, text }));
   }
@@ -107,7 +97,6 @@ export function computeLineDiff(oldText: string, newText: string): DiffLine[] {
   const oldLines = oldText.split('\n');
   const newLines = newText.split('\n');
 
-  // 规模守卫：超限退化为整块替换（见 MAX_DIFF_LINES 说明）
   if (oldLines.length > MAX_DIFF_LINES || newLines.length > MAX_DIFF_LINES) {
     return [
       ...oldLines.map((text) => ({ type: 'del' as const, text })),
@@ -115,7 +104,6 @@ export function computeLineDiff(oldText: string, newText: string): DiffLine[] {
     ];
   }
 
-  // 行 → 唯一字符编码（空间足够 65535 行）
   const ctx: EncodeContext = { lineMap: new Map(), charToLine: new Map(), code: 32 };
   const diffs: Diff[] = DMP.diff_main(
     encodeLines(oldLines, ctx),

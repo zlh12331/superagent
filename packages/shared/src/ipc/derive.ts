@@ -1,18 +1,3 @@
-// packages/shared/src/ipc/derive.ts
-// 从 IPC 定义表推导类型与运行时产物的工具
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// 1. deriveChannels(defs)：运行时遍历定义表生成 IPC_CHANNELS 常量对象
-//    （key 命名：{DOMAIN}_{METHOD} SCREAMING_SNAKE_CASE，如 app.getStatus → APP_GET_STATUS）
-// 2. InferIpcApi<D>：推导 window.api 接口形状（替代手写 api.ts）
-// 3. InferRequestMap<D> / InferEventMap<D>：推导 payloads.ts 的类型映射
-//
-// 设计：
-// - 无入参方法（schema=null）推导为 () => Promise<IpcResponse<R>>
-// - 事件方法推导为 (callback) => unsubscribe
-// - 所有类型从定义表单一真源派生，杜绝手写漂移
-// ──────────────────────────────────────────────────────────────
-
 import type { z } from 'zod';
 
 import type { IpcResponse } from './response';
@@ -75,22 +60,15 @@ export function deriveChannels<D extends Record<string, Record<string, MetaEntry
   const result: Record<string, string> = {};
   for (const [domain, methods] of Object.entries(defs)) {
     for (const def of Object.values(methods)) {
-      // P2 修复：域键与 channel 前缀一致性运行时检查——此前类型层 ChannelKey
-      // 与运行时 toConstantKey 是两套独立实现，域键与 channel 前缀不一致时
-      // 类型层产出 never（常量静默从联合消失）而运行时照常生成，静默分叉。
-      // 现在改为 fail-fast：不一致立即抛错，配合编译期 parity 检查双重兜底。
       if (!def.channel.startsWith(`${domain}:`)) {
         throw new Error(
           `IPC_META channel "${def.channel}" 与域键 "${domain}" 不匹配（channel 必须以 "${domain}:" 开头）`,
         );
       }
-      // key 从 channel 推导（app:getStatus → APP_GET_STATUS），与既有 IPC_CHANNELS 完全兼容
       const key = toConstantKey(def.channel);
       result[key] = def.channel;
     }
   }
-  // 类型断言：运行时对象形状由上述循环保证，映射类型经 ChannelKey 推导；
-  // 两端一致性的机器保证 = 上方的域前缀运行时检查 + definitions.ts 编译期 parity
   return result as unknown as {
     readonly [K in keyof D as ChannelKey<D, K, keyof D[K]>]: string;
   };
@@ -98,15 +76,12 @@ export function deriveChannels<D extends Record<string, Record<string, MetaEntry
 
 /** channel → SCREAMING_SNAKE_CASE（app:getStatus → APP_GET_STATUS；chat:stream:part → CHAT_STREAM_PART） */
 function toConstantKey(channel: string): string {
-  // channel 格式 {domain}:{rest}，rest 可能含 ':'（如 stream:part / event:created）
   const [domain, ...rest] = channel.split(':');
   const restSnake = (rest ?? [])
     .map((seg) => seg.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`))
     .join('_');
   return `${domain}_${restSnake}`.toUpperCase();
 }
-
-// ─── 类型推导 ─────────────────────────────────────────────────
 
 /** 提取域内所有 request 方法名 */
 type RequestMethods<D, Domain extends keyof D> = {
@@ -153,7 +128,6 @@ type EventSignature<Def> = Def extends { readonly kind: 'event'; readonly payloa
  * ```
  */
 export type InferIpcApi<D extends Record<string, Record<string, RequestDefLike | EventDefLike>>> = {
-  // -readonly：显式移除 as const 源的 readonly（保证测试可覆盖域属性）
   -readonly [Domain in keyof D]: {
     -readonly [M in keyof D[Domain]]: D[Domain][M] extends RequestDefLike
       ? RequestSignature<D[Domain][M]>

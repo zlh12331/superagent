@@ -1,28 +1,9 @@
-// src/main/infra/ai/middleware/model-observability.test.ts
-// 模型观测中间件单测：通过真实 wrapLanguageModel 驱动，验证打点语义
-//
-// 测试要点：
-// 1. wrapGenerate 成功：debug 打点（provider/modelId/latencyMs/token 用量），result 透传
-// 2. wrapGenerate 失败：warn 打点 + 原始错误原样抛出（不吞错）
-// 3. wrapStream 成功：debug 打点，result 透传
-// 4. wrapStream 失败：warn 打点 + 原始错误原样抛出
-// 5. 不改参：doGenerate/doStream 收到原样 params（观测语义零侵入）
-//
-// 接线背景：生产中该中间件在 LlmClient.getModel 出口挂载（per-model 缓存的
-// 就是 wrapped 实例，agent 主回合与 side query 全部调用零改动获得观测）；
-// 本文件用真实 wrapLanguageModel 驱动（仅 mock logger），打点语义与零侵入
-// 语义全在此覆盖。
-
 import { wrapLanguageModel } from 'ai';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-// 类型派生自 wrapLanguageModel 签名，避免直连传递依赖 @ai-sdk/provider：
-// - 模型参数类型（LanguageModelV2|V3|V4）
-// - doGenerate 调用参数类型（LanguageModelV4CallOptions）
 type WrapModel = Parameters<typeof wrapLanguageModel>[0]['model'];
 type WrapCallParams = Parameters<ReturnType<typeof wrapLanguageModel>['doGenerate']>[0];
 
-// logger mock：避免触发真实 electron-log 初始化
 const mocks = vi.hoisted(() => ({
   mockLogger: {
     info: vi.fn(),
@@ -109,7 +90,6 @@ describe('modelObservabilityMiddleware', () => {
         }),
         '模型生成调用失败',
       );
-      // 失败不打成功日志
       expect(mocks.mockLogger.debug).not.toHaveBeenCalledWith(
         expect.anything(),
         '模型生成调用完成',

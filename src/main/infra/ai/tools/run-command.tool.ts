@@ -1,7 +1,3 @@
-// src/main/infra/ai/tools/run-command.tool.ts
-// run_command 工具：在沙箱工作目录内执行 shell 命令
-// ──────────────────────────────────────────────────────────────
-
 import { type ChildProcess, spawn } from 'node:child_process';
 import { z } from 'zod';
 import { t } from '../../i18n';
@@ -38,7 +34,6 @@ const DANGEROUS_PATTERNS: readonly { pattern: RegExp; reason: string }[] = [
   { pattern: /\b(shutdown|reboot|halt|poweroff)\b/i, reason: '禁止执行关机/重启命令' },
   { pattern: /\bformat\s+[a-z]:/i, reason: '禁止格式化磁盘' },
   { pattern: /\bdiskpart\b/i, reason: '禁止磁盘分区操作' },
-  // 2026-08 安全审计加固：变量展开变体 + cd 组合攻击（黑名单是审批主防线后的兜底）
   {
     pattern: /\brm\s+(-[a-z]*r[a-z]*f?|-[a-z]*f[a-z]*r?)\s+\$\{HOME\}/i,
     reason: '禁止递归删除用户目录（变量展开变体）',
@@ -92,12 +87,9 @@ function killTree(child: ChildProcess, force: boolean): void {
       process.kill(-pid, force ? 'SIGKILL' : 'SIGTERM');
     }
   } catch {
-    // 组杀失败（已退出/无权限）：回退到直杀 shell 本体
     try {
       child.kill(force ? 'SIGKILL' : 'SIGTERM');
-    } catch {
-      // ignore
-    }
+    } catch {}
   }
 }
 
@@ -144,7 +136,6 @@ export function createRunCommandTool(): Tool<RunCommandInput> {
         }
       }
 
-      // realTarget：spawn 落点用真实路径（TOCTOU，debt.md#d1）；metadata.cwd 保持输入形态
       const { resolved, realTarget } =
         input.cwd !== undefined
           ? resolveWithinWorkspace(input.cwd, ctx.workingDir)
@@ -160,7 +151,6 @@ export function createRunCommandTool(): Tool<RunCommandInput> {
           env: process.env,
           stdio: ['ignore', 'pipe', 'pipe'],
           windowsHide: true,
-          // POSIX：detached 使子进程成为进程组组长，kill(-pid) 才能覆盖孙进程
           ...(isWin ? {} : { detached: true }),
         });
 
@@ -197,21 +187,15 @@ export function createRunCommandTool(): Tool<RunCommandInput> {
         }
 
         let timedOut = false;
-        // 防重复 resolve：强制收尾路径与 close 事件竞争时只取先到者
         let settled = false;
         const timer = setTimeout(() => {
           timedOut = true;
-          // 树杀而非仅杀 shell：孙进程持有 stdio 写端，只杀 shell 时
-          // close 事件永不触发（Node 要求进程退出且 stdio 流关闭）
           killTree(child, false);
-          // 升级强杀：2s 后仍未退出则整组 SIGKILL
           setTimeout(() => {
             if (!settled) {
               killTree(child, true);
             }
           }, 2000).unref();
-          // 终极兜底：close 依赖 stdio 流关闭，极端情况下孙进程句柄滞留
-          // 时永不触发——5s 后直接以已缓冲输出 resolve，避免悬挂到看门狗
           setTimeout(() => {
             if (!settled) {
               settled = true;
@@ -231,7 +215,6 @@ export function createRunCommandTool(): Tool<RunCommandInput> {
         timer.unref();
 
         const onAbort = (): void => {
-          // 中断同样需要树杀：仅杀 shell 会留下孤儿孙进程（同超时路径）
           killTree(child, false);
         };
         if (!ctx.abortSignal.aborted) {
@@ -239,9 +222,7 @@ export function createRunCommandTool(): Tool<RunCommandInput> {
         } else {
           try {
             child.kill('SIGTERM');
-          } catch {
-            // ignore
-          }
+          } catch {}
         }
 
         child.on('close', (code, signal) => {
@@ -283,8 +264,6 @@ export function createRunCommandTool(): Tool<RunCommandInput> {
       if (result.stderr) {
         outputParts.push(result.stderr);
       }
-      // 截断可见性（2026-08 审计修正）：此前截断静默发生，LLM 不知输出不完整；
-      // 保留头部（错误通常在尾部——截断后明确提示）
       const truncated = result.stdoutTruncated || result.stderrTruncated;
       if (truncated) {
         outputParts.push(`[输出已截断：超 ${MAX_OUTPUT_BYTES / 1024}KB 上限，仅保留开头部分]`);

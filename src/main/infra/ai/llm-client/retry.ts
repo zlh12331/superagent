@@ -1,24 +1,3 @@
-// src/main/infra/ai/llm-client/retry.ts
-// LLM 调用重试层：错误码感知 + 指数退避 + 遥测回调
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 从错误中提取 HTTP 状态码（AI SDK APICallError）
-// - 判定是否可重试（429 / 503 Retry-After / 5xx / 网络层错误）
-// - 指数退避重试（默认 7 次、1.5s 初始、30s 上限），支持 Retry-After 头覆盖
-// - onRetry 遥测回调（Otel span / logger 由调用方注入，本层零耦合）
-// - abortSignal 贯穿：中断后不再重试（catch 侧 signal.aborted 检查立即抛出）
-//
-// 消费方（重试语义两路刻意不同）：
-// - llm-client runSideQuery：side query 完整重试（含 HTTP 类，幂等可重试）
-// - create-stream：主回合首读，shouldRetryOnError 覆盖——只兜 SDK 覆盖不到的
-//   传输层失败（HTTP 类交 SDK model call 级 maxRetries，两层不叠加）
-//
-// 设计（对标 qwen-code utils/retry.ts）：
-// - 纯函数 + DI：不依赖 config / telemetry / logger
-// - shouldRetryOnError 可覆盖（错误判定单一语义）
-// - Retry-After 头优先于指数退避（尊重服务端指示）
-// ──────────────────────────────────────────────────────────────
-
 import { APICallError } from 'ai';
 
 /**
@@ -88,7 +67,6 @@ export function isRetryableError(error: unknown): boolean {
   if (error instanceof APICallError) {
     return error.isRetryable === true;
   }
-  // Node/undici 网络层错误码（连接重置、各阶段超时）
   const code = getErrorCode(error);
   if (code !== undefined && RETRYABLE_NETWORK_ERROR_CODES.has(code)) {
     return true;
@@ -184,14 +162,12 @@ export async function retryWithBackoff<T>(
     try {
       return await fn();
     } catch (error) {
-      // 中断信号：不重试，立即抛出（用户主动停止）
       if (options.signal?.aborted === true) {
         throw error;
       }
       if (attempt >= maxAttempts || !shouldRetry(error)) {
         throw error;
       }
-      // Retry-After 头优先，否则指数退避（上限截断）
       const retryAfterMs = getRetryAfterDelayMs(error);
       const delayMs = retryAfterMs ?? Math.min(initialDelayMs * 2 ** (attempt - 1), maxDelayMs);
       options.onRetry?.({

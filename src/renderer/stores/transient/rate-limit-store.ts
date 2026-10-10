@@ -1,12 +1,3 @@
-// src/renderer/stores/transient/rate-limit-store.ts
-// 限流提示状态（L2 客户端共享状态 - transient）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 记录最近一次 429 限流触发（agent/chat 回合失败时由 use-agent-bridge 写入）
-// - RateLimitBanner 订阅本 store 渲染横幅（对齐参考项目 RateLimitBanner 语义）
-// - 不持久化：限流提示是会话内瞬态
-// ──────────────────────────────────────────────────────────────
-
 import { create } from 'zustand';
 
 /** 限流提示状态形状 */

@@ -1,14 +1,3 @@
-// src/renderer/components/chat/file-change-card.tsx
-// 文件变更 diff 卡片（对齐参考项目 superagent FileChangeCard + 原型 .diff-file）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 渲染 edit_file / write_file 工具调用的文件变更（路径 + 类型徽章 + 行级 diff）
-// - diff 数据源：工具 input（edit_file: path/oldString/newString；write_file: path/content）
-//   （主进程输出仅含摘要统计，before/after 内容在 input 中）
-// - 交互：默认折叠，点击头部展开 diff 行（context 灰 / add 绿 / del 红）
-// - 变更类型判定：write_file → created；edit_file → modified
-// ──────────────────────────────────────────────────────────────
-
 import { FileCode, FilePlus } from 'lucide-react';
 import { type ReactElement, useState } from 'react';
 import { useTranslation } from '@/i18n/use-translation';
@@ -37,24 +26,19 @@ function extractPath(input: unknown): string | null {
  */
 export function FileChangeCard({ toolName, input }: FileChangeCardProps): ReactElement | null {
   const { t } = useTranslation();
-  // 折叠状态（对齐 ToolCallView：默认折叠）
   const [open, setOpen] = useState(false);
 
-  // 解析 diff 数据：纯派生，交给 React Compiler 记忆化（toolName/input 稳定时复用）
   const path = extractPath(input);
   if (path === null || typeof input !== 'object' || input === null) return null;
 
   const record = input as Record<string, unknown>;
-  // write_file → 新建（无 old 内容）；edit_file → 修改（oldString/newString）
   const isCreate = toolName === 'write_file';
   const oldText = isCreate ? '' : String(record['oldString'] ?? '');
   const newText = isCreate ? String(record['content'] ?? '') : String(record['newString'] ?? '');
   const lines = computeLineDiff(oldText, newText);
   const stats = countDiffLines(lines);
 
-  // 预构造带稳定 key 的行（diff 行无天然唯一 id：内容可重复；type+序号 组合保证稳定）
   const rows = lines.map((line, i) => ({ ...line, rowKey: `${line.type}:${i}` }));
-  // 变更类型徽章：created（accent 软底）/ modified（蓝底）——纯语义令牌（照搬参考项目 FileChangeCard）
   const badgeClass = isCreate
     ? 'bg-accent-soft text-accent-text'
     : 'bg-info-blue text-accent-2-text';
@@ -94,7 +78,6 @@ export function FileChangeCard({ toolName, input }: FileChangeCardProps): ReactE
                 key={line.rowKey}
                 className={cn(
                   'flex gap-2 px-2 whitespace-pre-wrap break-all',
-                  // diff 行配色：纯语义令牌（照搬参考项目 FileChangeCard，无 dark: 双写）
                   line.type === 'add' && 'bg-accent/10 text-accent-text',
                   line.type === 'del' && 'bg-error/10 text-error-text',
                   line.type === 'context' && 'text-muted-foreground',

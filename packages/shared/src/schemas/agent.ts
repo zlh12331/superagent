@@ -1,19 +1,3 @@
-// packages/shared/src/schemas/agent.ts
-// Agent 域 zod schema 单一真源（Code Agent 核心）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 集中定义 Agent 域所有 zod schema，作为 IPC 入参运行时校验的单一真源
-// - 类型（AgentRunReq / AgentStopReq 等）从 schema 派生（z.infer）
-// - 供主进程 IPC handler 校验入参，避免 handler 内联 schema 重复定义
-//
-// 设计：
-// - 复用 ChatMessageSchema 作为消息历史元素（Code Agent 的对话历史与 chat 域同构）
-// - sessionId / systemPrompt 用 `.optional().transform(v => v ?? undefined)`
-//   让 output 类型为 `string | undefined`，兼容 exactOptionalPropertyTypes
-// - 工具入参 input / 输出 output 用 z.unknown()：具体结构由 ToolRegistry 动态定义，
-//   IPC 层不强制校验（由工具 schema 自行校验）
-// ──────────────────────────────────────────────────────────────
-
 import type { ModelMessage } from 'ai';
 import { z } from 'zod';
 
@@ -49,37 +33,25 @@ export type AgentRunMode = z.infer<typeof AgentRunModeSchema>;
  * maxSteps 限制单次对话的最大工具调用轮数，避免无限循环消耗 token。
  */
 export const AgentRunReqSchema = z.object({
-  // 完整消息历史（含 user/assistant/tool-call/tool-result）
   messages: z.array(ChatMessageSchema).min(1),
-  // 可选 sessionId：续传已有会话；省略则生成新会话
   sessionId: z
     .string()
     .optional()
     .transform((v) => v ?? undefined),
-  // 工作目录：限制所有文件操作的根目录
   workingDir: z.string().min(1),
-  // 可选系统提示词（覆盖默认 system prompt）
   systemPrompt: z
     .string()
     .optional()
     .transform((v) => v ?? undefined),
-  // 最大工具调用轮数（默认 20，避免无限循环）
   maxSteps: z.number().int().positive().max(50).default(20),
-  // 运行模式（默认 build：写操作走审批流）
   mode: AgentRunModeSchema.default('build'),
-  // 思考强度（可选：渲染层设置项，覆盖模型级默认 reasoningEffort）
   thinking: ThinkingLevelSchema.optional().transform((v) => v ?? undefined),
-  // 采样温度（可选：渲染层设置项，覆盖模型级默认 generationConfig.temperature；
-  // 范围 0-2；DeepSeek 思考模型忽略采样参数，主进程按模型能力决定是否生效）
   temperature: z
     .number()
     .min(0)
     .max(2)
     .optional()
     .transform((v) => v ?? undefined),
-  // 目标模型 id（可选：渲染层模型选择器的当前选择，主进程经 ModelRegistry 解析路由）。
-  // 省略 = 主进程回落 app_settings.ai.defaultModel，仍无则用默认供应商默认模型。
-  // 上限与 runtime_models.model_id 的存储约束对齐。
   modelId: z
     .string()
     .min(1)

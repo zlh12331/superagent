@@ -1,13 +1,3 @@
-// src/main/infra/ai/agent/stream-part-forward.ts
-// 流式 part 推送出口（2026-09-27 从 agent-service 提取，携带 P2-31 合帧装配）
-// ──────────────────────────────────────────────────────────────
-// - forwardStreamPart：单 part 推送（含输出闸门 clampToolPartOutput + dev 契约校验）
-// - createTurnPartForwarder：回合级装配——text-delta 经 16–20ms 微批合帧（P2-31），
-//   其余 part 透传；回合结束/错误路径在推送 END/ERROR 前调用 flush() 保序防丢尾。
-// 提取理由：agent-service 体量在 file-size 棘轮基线内（net 683），本文件把
-//   推送装配独立出去，新增合帧逻辑不再推高宿主文件。
-// ──────────────────────────────────────────────────────────────
-
 import type { AgentStreamPartPayload } from '@code-agent/shared/main';
 import { IPC_DEFINITIONS } from '@code-agent/shared/main';
 import type { WebContents } from 'electron';
@@ -39,7 +29,6 @@ export function forwardStreamPart(
     sessionId,
     part: clampToolPartOutput(part, contextWindowSize),
   };
-  // dev 契约校验后发送（payloadSchema 见定义表）
   emitEvent(webContents, IPC_DEFINITIONS.agent.subscribeStreamPart, payload);
 }
 

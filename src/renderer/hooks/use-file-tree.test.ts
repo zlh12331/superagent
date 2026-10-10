@@ -1,15 +1,3 @@
-// src/renderer/hooks/use-file-tree.test.ts
-// useFileTree 数据生命周期测试（此前零覆盖）
-// ──────────────────────────────────────────────────────────────
-// 覆盖（正向 / 边界 / 异常）：
-// 1. workingDir 同步 setRootPath + 启动 watch + 根目录加载（IPC 参数契约）
-// 2. 默认展开层级链：加载波次后自动注入子目录（defaultExpandDepth）
-// 3. watch 事件分流：create → 父目录重载 / delete → removeEntry / rename → 移除+重载
-// 4. watcherId 过滤：就绪后异源事件被忽略（多窗口/旧 watcher 残留防串扰）
-// 5. 异常：watchStart 错误信封 → watchFailed toast；异常 → watchAbnormal toast
-// 6. 边界：workingDir null 不启动；卸载 → watchStop 防泄漏；卸载时 watchStart 在途 → 响应后立即停
-// ──────────────────────────────────────────────────────────────
-
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -91,9 +79,7 @@ describe('useFileTree 数据生命周期', () => {
       ).toEqual(['a.ts']),
     );
     expect(useFileTreeStore.getState().rootPath).toBe(ROOT);
-    // 默认展开根目录
     expect(useFileTreeStore.getState().expandedPaths.has(ROOT)).toBe(true);
-    // list IPC 参数契约（与 refreshExpandedDirs 对齐）
     expect(list).toHaveBeenCalledWith({ path: ROOT, depth: 1, includeHidden: false });
     expect(watchStart).toHaveBeenCalledWith({ path: ROOT });
   });
@@ -113,7 +99,6 @@ describe('useFileTree 数据生命周期', () => {
     await waitFor(() =>
       expect(list).toHaveBeenCalledWith({ path: '/proj/sub', depth: 1, includeHidden: false }),
     );
-    // 子目录被自动注入展开集
     expect(useFileTreeStore.getState().expandedPaths.has('/proj/sub')).toBe(true);
   });
 
@@ -125,7 +110,6 @@ describe('useFileTree 数据生命周期', () => {
     });
     await waitFor(() => expect(list).toHaveBeenCalledTimes(1));
 
-    // 同 workingDir 重渲染：expandedPaths 未变化 → 不重复 list
     rerender({ dir: ROOT });
     await act(async () => {});
     expect(list).toHaveBeenCalledTimes(1);
@@ -150,9 +134,6 @@ describe('useFileTree 数据生命周期', () => {
   });
 
   it('异常：根目录下的文件（父目录即根）→ 重载根而非把文件路径当目录', async () => {
-    // 工作目录为文件系统根：根级文件的父目录应解析为 '/'，
-    // 此前 dirname 的 idx<=0 分支把 '/a.ts' 原样返回 → 会对「文件」调 list
-    // 并按文件路径查 entries（键不存在，增量更新静默失效）。
     const { watchHandlers, list, watchStart } = setupApi();
     list.mockResolvedValue({ data: { entries: [] } });
     watchStart.mockResolvedValue({ data: { watcherId: 'w1' } });
@@ -171,8 +152,6 @@ describe('useFileTree 数据生命周期', () => {
   });
 
   it('异常：Windows 盘根下的文件 → 父目录保留尾分隔符（C:\\ 而非 C:）', async () => {
-    // workingDir='C:\' 时 store 键是 'C:\'；若 dirname 返回 'C:' 则键失配，
-    // 重载写不进 entries、删除也不会命中
     const { watchHandlers, list, watchStart } = setupApi();
     list.mockResolvedValue({ data: { entries: [] } });
     watchStart.mockResolvedValue({ data: { watcherId: 'w1' } });
@@ -215,7 +194,6 @@ describe('useFileTree 数据生命周期', () => {
 
   it('watch rename：旧路径移除 + 父目录重载', async () => {
     const { watchHandlers, list, watchStart } = setupApi();
-    // 首次加载返回 old.txt；rename 触发的重载返回 new.txt（模拟磁盘已重命名）
     let listCalls = 0;
     list.mockImplementation(() => {
       listCalls += 1;
@@ -240,7 +218,6 @@ describe('useFileTree 数据生命周期', () => {
       });
     });
 
-    // 旧路径条目移除后由重载写入磁盘上的新条目
     await waitFor(() =>
       expect(
         useFileTreeStore
@@ -341,7 +318,6 @@ describe('useFileTree 数据生命周期', () => {
       const { result } = renderHook(() => useFileTree(ROOT));
       await flushAsync();
 
-      // 展开一个子目录 → 触发一次 list；再手动刷新应覆盖「根 + 子目录」
       list.mockClear();
       useFileTreeStore.getState().setExpanded(`${ROOT}/sub`, true);
       await waitFor(() => expect(list).toHaveBeenCalledTimes(1));
@@ -415,18 +391,14 @@ describe('useFileTree 数据生命周期', () => {
       const { result } = renderHook(() => useFileTree(ROOT));
       await flushAsync();
 
-      // 仅在 refresh 调用期间移除桥（模拟桥不可用），随后立即恢复——
-      // 否则卸载时的 watchStop 清理会命中 undefined（与本用例无关的路径）
       const savedApi = window.api;
       (window as unknown as { api: undefined }).api = undefined;
-      // 清掉挂载期的根目录加载，使断言只反映本次 refresh 的调用
       list.mockClear();
       mockToastWarning.mockClear();
       result.current.refresh();
       await flushAsync();
       (window as unknown as { api: typeof savedApi }).api = savedApi;
 
-      // 守卫直接返回 0（全部成功语义）→ 不调 IPC、不弹提示
       expect(list).not.toHaveBeenCalled();
       expect(mockToastWarning).not.toHaveBeenCalled();
     });

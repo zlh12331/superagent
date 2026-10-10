@@ -1,6 +1,3 @@
-// src/main/ipc/devtools.handler.test.ts
-// devtools.handler 单测：devtools:open（BrowserWindow 查找 + openDevTools 调用）
-
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { mockFromWebContents } = vi.hoisted(() => ({
@@ -8,7 +5,6 @@ const { mockFromWebContents } = vi.hoisted(() => ({
 }));
 
 vi.mock('electron', () => ({
-  // 字符串键：避免 useNamingConvention 对 PascalCase 属性名的检查
   ['BrowserWindow']: { fromWebContents: mockFromWebContents },
 }));
 

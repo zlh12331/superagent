@@ -1,13 +1,3 @@
-// src/main/infra/im/adapters/weixin-stream-receiver.test.ts
-// WeixinStreamReceiver 单测：iLink 长轮询接收器（正向/边界/异常三件套）
-// ──────────────────────────────────────────────────────────────
-// 测试策略（遵循"业务逻辑不 mock、外部依赖注入 fake"）：
-// - fetchUpdatesFn 经构造注入 fake（有状态：首轮消息后续空，模拟游标续传）
-// - backoffMs/sessionPauseMs 注入短值（生产 30s 不可等待）
-// - fetch mock 带 5ms 延迟：pollLoop 无退避时立即返回会形成同步微任务
-//   忙循环（await 立即 resolve 不 yield 宏任务 → abort 无法生效 → OOM）
-// ──────────────────────────────────────────────────────────────
-
 import { describe, expect, it, vi } from 'vitest';
 import { WeixinStreamReceiver } from './weixin-stream';
 
@@ -81,7 +71,6 @@ describe('WeixinStreamReceiver.open/轮询（三件套）', () => {
     expect(handler).toHaveBeenCalledWith(
       expect.objectContaining({ channel: 'wechat', chatId: 'user-1', text: '你好' }),
     );
-    // 游标续传：第二轮请求 cursor 已推进
     await waitForPoll(fetchUpdatesFn, 2);
     const second = fetchUpdatesFn.mock.calls[1]?.[0] as { cursor?: string };
     expect(second?.cursor).toBe('cursor-2');
@@ -90,7 +79,6 @@ describe('WeixinStreamReceiver.open/轮询（三件套）', () => {
 
   it('正向：getContextToken 返回（context_token 学习）', async () => {
     const { receiver } = makeReceiver();
-    // contextTokens 由 iLink 消息中的 context_token 学习——此处验证 API 形状
     expect(receiver.getContextToken('any')).toBeUndefined();
   });
 
@@ -111,8 +99,6 @@ describe('WeixinStreamReceiver.open/轮询（三件套）', () => {
     });
     const { receiver, fetchUpdatesFn } = makeReceiver({ fetchUpdatesFn: expiredFn });
     await receiver.open();
-    // 会话过期后仍继续轮询（暂停 5ms 后下一轮）：用 setTimeout 验证（vi.waitFor 时序不稳）
-    // 等待窗口 200ms：全量并发 + coverage 插桩下事件循环延迟，50ms 窗口曾出现不足 3 轮
     await new Promise((resolve) => setTimeout(resolve, 200));
     expect(fetchUpdatesFn.mock.calls.length).toBeGreaterThanOrEqual(3);
     receiver.close();
@@ -125,7 +111,6 @@ describe('WeixinStreamReceiver.open/轮询（三件套）', () => {
     });
     const { receiver, fetchUpdatesFn } = makeReceiver({ fetchUpdatesFn: flakyFn });
     await receiver.open();
-    // 退避后继续轮询：等待窗口 200ms（并发下 50ms 窗口曾不足 2 轮）
     await new Promise((resolve) => setTimeout(resolve, 200));
     expect(fetchUpdatesFn.mock.calls.length).toBeGreaterThanOrEqual(2);
     receiver.close();
@@ -167,7 +152,7 @@ describe('WeixinStreamReceiver 兜底补充', () => {
   it('get_updates_buf 缺失：游标不更新（下次请求保持原 cursor）', async () => {
     const noBufFn = vi.fn(async () => {
       await pollDelay();
-      return { errcode: 0, msgs: [] }; // 无 get_updates_buf
+      return { errcode: 0, msgs: [] };
     });
     const { receiver, fetchUpdatesFn } = makeReceiver({ fetchUpdatesFn: noBufFn });
     await receiver.open();
@@ -175,7 +160,7 @@ describe('WeixinStreamReceiver 兜底补充', () => {
     const first = fetchUpdatesFn.mock.calls[0]?.[0] as { cursor?: string };
     const second = fetchUpdatesFn.mock.calls[1]?.[0] as { cursor?: string };
     expect(first?.cursor).toBe('');
-    expect(second?.cursor).toBe(''); // 游标保持
+    expect(second?.cursor).toBe('');
     receiver.close();
   });
 
@@ -204,7 +189,6 @@ describe('WeixinStreamReceiver 兜底补充', () => {
 describe('WeixinStreamReceiver 构造默认与缺失兜底', () => {
   it('默认构造（不传 options）：默认值生效，open/close 正常', async () => {
     const receiver = new WeixinStreamReceiver({ token: 't', baseUrl: 'https://x.local' });
-    // 默认 fetchUpdatesFn 会发真实 HTTP——只验证生命周期不抛
     expect(() => receiver.close()).not.toThrow();
     expect(receiver.isOpen).toBe(false);
   });
@@ -212,7 +196,7 @@ describe('WeixinStreamReceiver 构造默认与缺失兜底', () => {
   it('响应缺 msgs 字段：不崩溃不分发', async () => {
     const noMsgsFn = vi.fn(async () => {
       await pollDelay();
-      return { errcode: 0, get_updates_buf: 'c1' }; // 无 msgs
+      return { errcode: 0, get_updates_buf: 'c1' };
     });
     const { receiver, fetchUpdatesFn } = makeReceiver({ fetchUpdatesFn: noMsgsFn });
     const handler = vi.fn();

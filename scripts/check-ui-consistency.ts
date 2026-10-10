@@ -1,17 +1,3 @@
-// scripts/check-ui-consistency.ts
-// 渲染层写法一致性门禁（工程化强制）· 2026-09 一致性审计收敛项 ④
-// ──────────────────────────────────────────────────────────────
-// 背景：渲染层标准设施（unwrap/confirm() store/useCopy/AsyncSection）已建成，
-// 但存量采用率停在中位——本门禁用静态信号阻止「离群写法回潮」。
-// 七条 error 级规则（判据核在 scripts/lib/ui-consistency-rules.ts，
-// 反例 fixture 测试同目录）+ 设施采用率棘轮（正向）。
-// 级别：全部 error（卡关），存量计数走棘轮基线（只允许下降）。
-// 基线：scripts/ui-consistency-baseline.json（--update-baseline 重写）
-//
-// 运行：pnpm check:ui-consistency
-//       pnpm check:ui-consistency --update-baseline   # 收敛后收紧基线
-// ──────────────────────────────────────────────────────────────
-
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import {
@@ -36,13 +22,6 @@ const BASELINE_PATH = join(import.meta.dirname, 'ui-consistency-baseline.json');
  */
 const METRICS = ['count'] as const;
 
-// ── 采用率棘轮（正向，2026-09-24）────────────────────────────────────────
-// 违规棘轮管下限（防离群写法回潮），采用棘轮管上限（推标准设施落地）——
-// 后者此前缺失，useCopy/AsyncBoundary 等停在个位数无人推。统计标准设施在
-// 非测试渲染层文件中的 import 引用文件数；基线记录历史最高，当前 < 基线 =
-// 设施被拆除/降级 → 卡关；--update-adoption 取 max(旧, 实测) 只升不降。
-// 口径边界：toast 反馈形态的复制场景（use-copy.ts 头注释明文豁免，如远程
-// 令牌/诊断信息复制）本就不 import useCopy，不属采用缺口，不参与统计。
 const ADOPTION_BASELINE_PATH = join(import.meta.dirname, 'ui-consistency-adoption-baseline.json');
 
 const ADOPTION_FACILITIES = [
@@ -56,14 +35,9 @@ function collectFiles(dir: string, out: string[]): void {
   for (const name of readdirSync(dir)) {
     const full = join(dir, name);
     if (statSync(full).isDirectory()) {
-      // coverage/ 构建产物不入扫描（其内容是源码的历史快照）
       if (name === 'coverage') continue;
       collectFiles(full, out);
-    } else if (
-      (name.endsWith('.tsx') || name.endsWith('.ts')) &&
-      // 测试文件不参与一致性审计（此前按 __tests__ 目录排除，测试改为与源码同目录后按文件名排除）
-      !name.includes('.test.')
-    ) {
+    } else if ((name.endsWith('.tsx') || name.endsWith('.ts')) && !name.includes('.test.')) {
       out.push(full);
     }
   }
@@ -72,7 +46,6 @@ function collectFiles(dir: string, out: string[]): void {
 const files: string[] = [];
 collectFiles(SRC, files);
 
-// 判据核（lib 纯函数）：relFile 统一 posix 口径，使 fileFilter 与平台无关
 const violations: UiViolation[] = scanUiConsistency(
   files.map((full) => ({
     relFile: relative(SRC, full).split('\\').join('/'),
@@ -80,10 +53,6 @@ const violations: UiViolation[] = scanUiConsistency(
   })),
 );
 
-// 按规则聚合计数，对照棘轮基线（统一走 lib/ratchet.ts）
-// ratchet 语义：current 只含**超限**条目。本门禁的「超限」= 该规则命中数 > 0
-// （基线里没有该规则即视为允许 0 处）；命中 0 的规则不入 current，
-// 其历史基线条目会被 ratchet 判为 stale，提示收紧。
 const counts: Record<string, number> = {};
 for (const v of violations) {
   counts[v.rule] = (counts[v.rule] ?? 0) + 1;
@@ -110,7 +79,6 @@ function loadBaseline(): Record<string, Metrics> {
 
 const baseline = loadBaseline();
 
-// 采用率统计（每设施：import 引用的非测试文件数）
 const adoptionCurrent = new Map<string, number>();
 for (const { id, match } of ADOPTION_FACILITIES) {
   let n = 0;
@@ -121,7 +89,7 @@ for (const { id, match } of ADOPTION_FACILITIES) {
 }
 
 function loadAdoptionBaseline(): Record<string, Metrics> {
-  if (!existsSync(ADOPTION_BASELINE_PATH)) return {}; // 首次无基线 → 视为全 0，由 --update-adoption 创建
+  if (!existsSync(ADOPTION_BASELINE_PATH)) return {};
   try {
     return parseBaseline(readFileSync(ADOPTION_BASELINE_PATH, 'utf8'), METRICS);
   } catch (error: unknown) {
@@ -139,7 +107,7 @@ if (process.argv.slice(2).includes('--update-adoption')) {
   for (const { id } of ADOPTION_FACILITIES) {
     const cur = adoptionCurrent.get(id) ?? 0;
     const old = next[id]?.['count'] ?? 0;
-    next[id] = { count: Math.max(old, cur) }; // 只升不降
+    next[id] = { count: Math.max(old, cur) };
   }
   writeFileSync(ADOPTION_BASELINE_PATH, `${JSON.stringify(next, null, 2)}\n`, 'utf8');
   console.log(
@@ -171,7 +139,6 @@ if (problems.length > 0) {
   process.exit(1);
 }
 
-// 采用率棘轮检查：当前引用数低于基线 = 标准设施被拆除/降级（只许升）
 const adoptionProblems: string[] = [];
 for (const { id } of ADOPTION_FACILITIES) {
   const cur = adoptionCurrent.get(id) ?? 0;

@@ -1,14 +1,3 @@
-// scripts/lib/update-metadata.test.ts
-// 更新元数据合并纯函数的单测
-// ──────────────────────────────────────────────────────────────
-// 素材来源：**真实的 v1.3.2 发布元数据**（`gh release download v1.3.2 --pattern
-// "latest*.yml"` 取得），见 §"等价性"用例——它把「单 job 内构建双架构」的原生产物
-// 拆成两份单架构再合并回来，断言与原始文件**逐字节相同**。这是本模块最强的验证：
-// 合并结果不是"看起来对"，而是与 electron-builder 自己的输出完全一致。
-//
-// 覆盖三类：① 等价性/正向合并；② 各条不变量；③ 负向（每条例外路径都有用例）。
-// ──────────────────────────────────────────────────────────────
-
 import { load } from 'js-yaml';
 
 import { mergeUpdateMetadata, parseUpdateInfo } from './update-metadata';
@@ -99,15 +88,10 @@ const inputs = (x64: string, arm64: string) =>
 describe('mergeUpdateMetadata · 等价性（与 electron-builder 原生输出比对）', () => {
   it('把真实 v1.3.2 mac 元数据拆成两份单架构再合并，结果与原始文件逐字节相同', () => {
     const merged = mergeUpdateMetadata([...inputs(REAL_MAC_V132_X64, REAL_MAC_V132_ARM64)]);
-    // ⚠️ 这是最强断言：原始文件由 electron-builder 自己在同一 job 内构建双架构时写出，
-    // 逐字节相同意味着合并逻辑（排序 + path/sha512 取值 + YAML 序列化）与原实现一致
     expect(merged).toBe(REAL_MAC_V132);
   });
 
   it('arm64 先传入时同样逐字节相同（覆盖 CD 里目录扫描顺序不定）', () => {
-    // 反向验证发现：只测「x64 先传入」时，即使 Arch 排序键写错（两架构秩相同），
-    // 因 JS sort 稳定 + x64 恰好在前，结果仍会正确 ⇒ 等价性用例对排序键不敏感。
-    // CD 中 download-artifact 的子目录顺序不受控，故必须覆盖 arm64 先到的情况。
     const merged = mergeUpdateMetadata([
       { arch: 'arm64', content: REAL_MAC_V132_ARM64 },
       { arch: 'x64', content: REAL_MAC_V132_X64 },
@@ -130,8 +114,6 @@ describe('mergeUpdateMetadata · Windows 双架构合并', () => {
 
   it('输入顺序颠倒不影响结果（排序由 Arch 序决定，而非入参顺序）', () => {
     const forward = mergeUpdateMetadata([...inputs(REAL_WIN_V131_X64, WIN_ARM64)]);
-    // ⚠️ 反向必须连标签一起换：inputs() 的位置标签是固定的，只换内容会变成
-    // 「x64 标签 + arm64 内容」，被架构守卫拦下（守卫本身已由负向用例覆盖）
     const reversed = mergeUpdateMetadata([
       { arch: 'arm64', content: WIN_ARM64 },
       { arch: 'x64', content: REAL_WIN_V131_X64 },
@@ -157,7 +139,6 @@ describe('mergeUpdateMetadata · Windows 双架构合并', () => {
   it('输出可被自身解析器再解析（round-trip 不变形）', () => {
     const merged = mergeUpdateMetadata([...inputs(REAL_WIN_V131_X64, WIN_ARM64)]);
     const once = parseUpdateInfo(merged, 'merged');
-    // 再走一遍「单份输入」路径：既验证合并结果可被解析，也验证幂等透传
     const again = parseUpdateInfo(mergeUpdateMetadata([{ arch: 'x64', content: merged }]), 'again');
     expect(again.files).toEqual(once.files);
     expect(again.path).toBe(once.path);
@@ -167,8 +148,6 @@ describe('mergeUpdateMetadata · Windows 双架构合并', () => {
 
 describe('mergeUpdateMetadata · 单份输入（CD 回滚路径的幂等性）', () => {
   it('单份输入原样返回，不做 parse→dump 往返（字节不变）', () => {
-    // ⚠️ CD 回滚到「单 job 双架构」后合并步骤仍在流水线里，此时输入已是双架构的
-    // 一份，必须原样透传——任何重新序列化都会引入不必要的字节差异
     expect(mergeUpdateMetadata([{ arch: 'x64', content: REAL_WIN_V131_X64 }])).toBe(
       REAL_WIN_V131_X64,
     );
@@ -208,7 +187,6 @@ describe('mergeUpdateMetadata · 负向用例', () => {
   });
 
   it('版本不一致 → 抛错（两份产物来自不同提交）', () => {
-    // 构造一份「架构正确但版本不同」的 arm64 元数据（版本串只出现在 version 字段）
     const olderArm64 = WIN_ARM64.replace('version: 1.3.1', 'version: 1.3.0');
     expect(() => mergeUpdateMetadata([...inputs(REAL_WIN_V131_X64, olderArm64)])).toThrow(
       /版本不一致/,
@@ -253,7 +231,6 @@ sha512: abc
       'Code-Agent-Desktop-Windows-arm64.exe',
       'Code-Agent-Desktop-Windows-x64.exe',
     );
-    // 改掉主产物名后架构断言会先拦；此处直接构造同名条目走重复分支
     const duplicated = `version: 1.3.1
 files:
   - url: Code-Agent-Desktop-Windows-arm64.exe

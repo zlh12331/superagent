@@ -1,15 +1,5 @@
-// src/renderer/stores/persistent/settings-store.test.ts
-// settings-store 的 applyMainSettingChange 单测
-// ──────────────────────────────────────────────────────────────
-// 该 action 服务于「主进程主动变更设置」（托盘菜单改关窗行为），核心不变量有两条：
-//   1. 按域合并，**不得**影响其它域（整体替换会把 theme/language 等打回默认值）
-//   2. 只更新内存态、**不回写**（变更来源是主进程，回写是回声）
-// 见 docs/design/30-residency-fix-spec.md §3 P2-6 / §4.7d。
-// ──────────────────────────────────────────────────────────────
-
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-// 断言"不回写"：拦截 settings:set IPC
 const setSpy = vi.fn(async () => ({ data: { ok: true } }));
 Object.defineProperty(window, 'api', {
   value: { settings: { set: setSpy } },
@@ -24,14 +14,12 @@ const DEFAULTS = { theme: 'dark', language: 'zh-CN', closeAction: 'minimize' } a
 
 describe('settings-store.applyMainSettingChange', () => {
   beforeEach(() => {
-    // setup.ts 的 afterEach 会重建 window.api 空骨架，这里重新挂上 spy
     Object.defineProperty(window, 'api', {
       value: { settings: { set: setSpy } },
       writable: true,
       configurable: true,
     });
     setSpy.mockClear();
-    // 复位到默认态（各用例独立）
     useSettingsStore.setState({
       theme: DEFAULTS.theme,
       language: DEFAULTS.language,
@@ -60,7 +48,6 @@ describe('settings-store.applyMainSettingChange', () => {
   });
 
   it('window 域的部分字段：与既有字段合并而非替换', () => {
-    // 预置同域其它字段（未来 window 域扩展时不应被抹掉）
     useSettingsStore.setState({
       window: { closeAction: 'minimize', ...{ futureField: 'x' } } as never,
     });
@@ -127,9 +114,7 @@ describe('settings-store.persist 失败重试', () => {
   it('写失败后 flushPendingSettings 会重试同键（内存与 SQLite 不永久分叉）', async () => {
     setSpy.mockRejectedValueOnce(new Error('db locked'));
     useSettingsStore.getState().setTheme('light');
-    // 让首笔写 settle（失败已入 failedWrites）
     await flushPendingSettings();
-    // flush 内已触发一次重试；再 flush 一次应成功落库且无待重试
     await flushPendingSettings();
     const calls = setSpy.mock.calls as unknown as { key: string }[][];
     const themeWrites = calls.filter((c) => c[0]?.key === 'theme');
@@ -221,7 +206,6 @@ describe('settings-store.notification 域', () => {
       onTurnFailed: false,
       onApprovalRequested: false,
     });
-    // 变更来源是主进程（导入已落库）：内存更新即真源，回写是回声——不得再写穿透
     const calls = setSpy.mock.calls as unknown as { key: string }[][];
     expect(calls.filter((c) => c[0]?.key === 'notification')).toHaveLength(0);
   });

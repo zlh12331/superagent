@@ -1,17 +1,3 @@
-// packages/shared/src/schemas/settings.ts
-// Settings 域 zod schema 单一真源（用户设置 / 敏感数据管理）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 集中定义 Settings 域 zod schema，作为 IPC 入参运行时校验的单一真源
-// - 当前仅提供 API Key 管理（getSecret / setSecret / deleteSecret）
-//   敏感数据通过主进程 safeStorage 加密存储，渲染层只读写明文
-//
-// 设计：
-// - provider 字段标识 API 提供商（如 'deepseek'），作为 keychain 的 key
-// - apiKey 明文由渲染层传入，主进程加密后存储
-// - getApiKeyRes 返回 string | null（未设置时为 null，不返回 undefined 避免 IPC 序列化问题）
-// ──────────────────────────────────────────────────────────────
-
 import { z } from 'zod';
 
 import { EDITOR_TAB_SIZES } from '../constants/editor';
@@ -108,8 +94,6 @@ export const GetApiKeyResSchema = z.object({
   keychainAvailable: z.boolean(),
 });
 
-// ── 渲染层设置下沉 SQLite（settings 持久化单一真源） ─────────────
-
 /** settings:getAll 入参（无入参） */
 export const SettingsGetAllReqSchema = z.object({});
 
@@ -157,26 +141,13 @@ export const SETTING_KEYS = [
   'lsp',
   'workspace',
   'browser',
-  // 自动更新开关（settings.update.autoCheck；默认开，缺失/损坏视为开）
   'update',
-  // 关窗行为（settings.window.closeAction；默认 minimize=最小化到托盘，见 28-tray-spec）
   'window',
-  // 记忆功能开关（settings.memory.enabled；关闭后不捕获新记忆、不注入召回）
   'memory',
-  // 系统通知（settings.notification：回合结束后台提醒的门控开关组，
-  // 主进程 notification.ts 发送前即时读取；缺失/损坏视为全开——既有行为）
   'notification',
-  // 网络代理（settings.proxy：{mode, url?, bypass?}；主进程 proxy-applier 四路径
-  // 收口应用——启动/settings:set/import/resetAll；缺失/损坏视为 system 直通）
   'proxy',
-  // 界面缩放（settings.appearance：{zoom}；主进程 window:applyZoom 应用
-  // webContents.setZoomFactor + Windows overlay 联动；缺失视为 1，损坏归最近档位）
   'appearance',
-  // 终端（settings.terminal：{shell, fontSize}；主进程 TerminalService spawn 时
-  // 即时读并解析默认 shell——渲染层不传 shell（terminal:create P0 收口不变）；
-  // 缺失视为 {shell:'auto', fontSize:13}，损坏逐字段回落）
   'terminal',
-  // IM 群聊白名单（im-allowlist-field 直写，非 settings-store 分组）
   'im.allowedGroups',
 ] as const;
 
@@ -225,9 +196,6 @@ export const SettingsSetReqSchema = z
     }
   })
   .superRefine((cfg, ctx) => {
-    // 34 号：proxy 值级门禁（V9）——fixed 模式下 url 必须是合法 http(s) URL；
-    // 写拒在前 + resolver fail-open 兜底（导入路径绕过本 schema 时仍有防线），
-    // 无半生效状态
     if (cfg.key !== 'proxy') {
       return;
     }
@@ -270,9 +238,6 @@ export const SettingsSetReqSchema = z
     }
   })
   .superRefine((cfg, ctx) => {
-    // 35 号：appearance 值级门禁——zoom 必须是合法档位（ZOOM_LEVELS 单一真源）。
-    // settings:set 通道防御；导入路径不过本 schema，靠渲染层读侧 clampZoom 归一
-    // （双防线，35 号 spec §2.3）
     if (cfg.key !== 'appearance') {
       return;
     }
@@ -294,10 +259,6 @@ export const SettingsSetReqSchema = z
     }
   })
   .superRefine((cfg, ctx) => {
-    // 36 号 B：terminal 值级门禁——shell 必须是合法档位（TERMINAL_SHELL_CHOICES
-    // 单一真源，含平台不适用档位：跨平台写入合法、读侧回落是 34 号 fail-open
-    // 同款取舍），fontSize 必须是合法档位。settings:set 通道防御；导入路径不过
-    // 本 schema，靠渲染层读侧 clampFontSize 归一（双防线，35 号 §2.3 同构）
     if (cfg.key !== 'terminal') {
       return;
     }
@@ -326,9 +287,6 @@ export const SettingsSetReqSchema = z
     }
   })
   .superRefine((cfg, ctx) => {
-    // 37 号 A：editor 值级门禁——wordWrap/tabSize 字段存在时才校验（部分写入
-    // 合并语义：旧调用方只写 fontSize/vimMode 不受影响）。settings:set 通道
-    // 防御；导入路径不过本 schema，靠渲染层读侧 clamp 兜底（双防线，35 号 §2.3）
     if (cfg.key !== 'editor') {
       return;
     }
@@ -428,8 +386,6 @@ export const DeleteApiKeyResSchema = z.object({
   ok: z.boolean(),
 });
 
-// ─── Telemetry 用户开关（隐私合规） ─────────────────────────────
-
 /**
  * 遥测级别（对标 VS Code telemetry.telemetryLevel / Cursor 双开关）
  *
@@ -481,33 +437,25 @@ export const SetTelemetryLevelResSchema = z.object({
  * settings:addRuntimeModel 入参 zod schema（自定义模型）
  */
 export const AddRuntimeModelReqSchema = z.object({
-  // 模型 id（全局唯一，如 custom-coder）
   modelId: z.string().min(1).max(100),
-  // 所属供应商 kind（决定 SDK 协议）
   providerKind: ApiKeyProviderSchema,
-  // 显式 baseUrl（覆盖供应商默认端点；可选）
   baseUrl: z
     .string()
     .url()
     .optional()
     .transform((v) => v ?? undefined),
-  // 显式 API Key（可选；省略则走 keychain 默认 key）
   apiKey: z
     .string()
     .min(1)
     .optional()
     .transform((v) => v ?? undefined),
-  // 展示名称（可选；省略 = 回退 modelId）
   displayName: z
     .string()
     .max(32)
     .optional()
     .transform((v) => v ?? undefined),
-  // 单回合总时长上限（毫秒；可选；省略 = 不限制，仅流空闲超时兜底）
   timeoutMs: z.number().int().positive().max(86_400_000).optional(),
-  // 启停状态（可选；省略 = 启用）
   isEnabled: z.boolean().optional(),
-  // API 协议格式（可选；省略 = openai-chat，与存量行为一致——见其注释）
   apiFormat: ModelApiFormatSchema.optional(),
 });
 
@@ -543,30 +491,23 @@ export const RemoveRuntimeModelResSchema = z.object({
  */
 export const UpdateRuntimeModelReqSchema = z.object({
   modelId: z.string().min(1).max(100),
-  // 展示名称（可选；null/undefined = 不修改）
   displayName: z
     .string()
     .max(32)
     .optional()
     .transform((v) => v ?? undefined),
-  // 显式 baseUrl（可选；不传 = 不修改）
   baseUrl: z
     .string()
     .url()
     .optional()
     .transform((v) => v ?? undefined),
-  // 显式 API Key（可选；不传 = 不修改，传入则更新 keychain）
   apiKey: z
     .string()
     .min(1)
     .optional()
     .transform((v) => v ?? undefined),
-  // 单回合总时长上限（毫秒；三态：省略 = 不修改，null = 清除（回不限制），
-  // number = 设置）
   timeoutMs: z.number().int().positive().max(86_400_000).nullable().optional(),
-  // API 协议格式（可选；省略 = 不修改）
   apiFormat: ModelApiFormatSchema.optional(),
-  // 启停状态（可选；不传 = 不修改）
   isEnabled: z.boolean().optional(),
 });
 
@@ -664,8 +605,6 @@ export const SetApprovalModeResSchema = z.object({
   ok: z.boolean(),
   mode: ApprovalModeSchema,
 });
-
-// ─── 设置导出/导入（app_settings 全表 JSON；keychain 凭据除外） ─────────
 
 /**
  * 当前设置导出文件格式版本（导入侧仅接受本版本）

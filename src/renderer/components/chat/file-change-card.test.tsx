@@ -1,5 +1,3 @@
-// file-change-card.test.tsx
-// 文件变更 diff 卡片单测：正向渲染 / 边界（畸形 input）/ 折叠展开 / 双工具形态
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
@@ -40,7 +38,6 @@ describe('FileChangeCard', () => {
         input={{ path: '/a.ts', oldString: 'old line', newString: 'new line' }}
       />,
     );
-    // 折叠态：diff 内容不挂载
     expect(screen.queryByText('old line')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: t('chat.toggleToolDetails') }));
     expect(screen.getByText('old line')).toBeDefined();
@@ -70,7 +67,6 @@ describe('FileChangeCard', () => {
         input={{ path: '/a.ts', oldString: 42, newString: null }}
       />,
     );
-    // oldString=42 → '42'；newString=null → ''（空 diff 行）
     fireEvent.click(screen.getByRole('button', { name: t('chat.toggleToolDetails') }));
     expect(screen.getByText('42')).toBeDefined();
   });

@@ -1,11 +1,3 @@
-// src/main/infra/ai/tools/run-command.tool.test.ts
-// run_command 工具单测：危险命令拦截（安全关键模块）
-//
-// 测试要点：
-// 1. 危险命令黑名单：rm -rf /、mkfs、dd 覆写块设备、fork bomb、shutdown 等 → 安全拦截
-// 2. 正常命令放行（spawn 调用）
-// 3. cwd 越界路径 → UNAUTHORIZED
-
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRunCommandTool } from './run-command.tool';
 import type { ToolContext } from './tool';
@@ -128,14 +120,12 @@ describe('createRunCommandTool', () => {
     await tool.execute({ command: 'npm test', cwd: undefined, timeout: 10000 }, createCtx());
 
     const [shell, args] = mocks.mockSpawn.mock.calls[0] ?? [];
-    // spawn(shell, [flag, command], options)
     expect(args).toContain('npm test');
     void shell;
   });
 
   it('cwd 越界（../）：抛 AppError（由 ToolExecutor 转为执行失败）', async () => {
     const tool = createRunCommandTool();
-    // resolveWithinWorkspace 抛 AppError（UNAUTHORIZED），此处直接向上抛
     await expect(
       tool.execute({ command: 'ls', cwd: '..\\..\\outside', timeout: 5000 }, createCtx()),
     ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });

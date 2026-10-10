@@ -1,12 +1,3 @@
-// sidebar-utils.ts（自 Sidebar 拆分）
-// 侧边栏纯函数与数据类型
-// ──────────────────────────────
-// 拆分背景：Sidebar 641 行，纯函数与组件混合，按职责提取。
-// 2026-09-12 二次提取：搜索过滤 / 文件夹分组 / 列表扁平化（置顶 + 覆盖排序 +
-// 折叠语义）从组件迁入——这些是 Sidebar 变更最频繁、最易回归的逻辑，
-// 提取为纯函数后可无 React 环境单测（此前 0 测试）。
-// ──────────────────────────────
-
 import type { SessionMeta } from '@code-agent/shared/renderer';
 
 import { basename } from '@/lib/utils';
@@ -160,8 +151,6 @@ export function buildSidebarEntries(args: {
   const { sessions, groupedSessions, collapsedFolders, isSearching, orderOverrides } = args;
 
   const entries: SidebarEntry[] = [];
-  // 置顶会话直接排列表最前（用户选择：ChatGPT 式，无独立分组标签；带图钉图标标识）
-  // 置顶内部按 updatedAt 倒序：后置顶的排更前（pin 操作会刷新 updatedAt，对齐主进程排序）
   const pinnedSessions = sessions
     .filter((s) => s.pinned === true)
     .sort((a, b) => b.updatedAt - a.updatedAt);
@@ -170,7 +159,6 @@ export function buildSidebarEntries(args: {
   }
   for (const [folderName, folderSessions] of groupedSessions) {
     entries.push({ type: 'label', name: folderName });
-    // 搜索时忽略折叠态（自动展开匹配组，对齐参考项目 clearCollapsedFolders 语义）
     if (collapsedFolders.includes(folderName) && !isSearching) {
       continue;
     }
@@ -179,7 +167,6 @@ export function buildSidebarEntries(args: {
     }
   }
 
-  // dnd-kit SortableContext 所需的可见会话 id（仅未折叠文件夹）
   const sortableIds = entries
     .filter((entry): entry is Extract<SidebarEntry, { type: 'item' }> => entry.type === 'item')
     .map((entry) => entry.session.id);

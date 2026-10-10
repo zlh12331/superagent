@@ -1,5 +1,3 @@
-// scripts/lib/function-tiers.test.ts
-// 函数体净行分档单测（2026-09-08 用户拍板 100/200/400）
 import { describe, expect, it } from 'vitest';
 import { type BodyTiers, countTiers, tierOf, validateHeavyExempt } from './function-tiers';
 
@@ -31,7 +29,6 @@ describe('tierOf（体长分档）', () => {
 
 describe('countTiers（各档统计）', () => {
   it('按档累加，未超门槛不计', () => {
-    // 10/40 未超门槛（≤40）不入档；41/100 → mild；150 → moderate；300 → heavy；500 → over
     const counts = countTiers([10, 40, 41, 100, 150, 300, 500], LIMIT, TIERS);
     expect(counts).toEqual({ mild: 2, moderate: 1, heavy: 1, over: 1 });
   });

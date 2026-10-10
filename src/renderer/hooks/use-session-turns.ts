@@ -1,19 +1,3 @@
-// src/renderer/hooks/use-session-turns.ts
-// 会话历史按回合增量加载（L3 服务端请求状态层；debt.md#d2/#d4 根治）
-// ──────────────────────────────────────────────────────────────
-// 背景：此前 ChatPage 经 session:get 全量拉取消息历史，长会话下 IPC 负载
-// 与内存随消息数线性增长。改造后：
-// - 元数据走 session:get({ includeMessages: false })（见 use-sessions.ts）
-// - 回合元数据走 session:getTurns（摘要体量小，一次全量）
-// - 消息体走 session:getTurnMessages 按回合分页增量拉取
-//   （useInfiniteQuery：首页 = 最近 TURNS_PER_PAGE 个回合，向上翻页加载更早）
-//
-// 数据不变量（依赖主进程保证）：所有持久化消息均带 turnId（agent-service 回合
-// 开始统一落用户消息 + persistTurn 落助手消息；cron 预落库重复行已移除）。
-// 已知边界（如实登记）：/compact 后的压缩上下文消息无 turnId（「旧上下文不可
-// 回放」的既有语义），按回合重建不含它们——见 docs/design/debt.md#d2。
-// ──────────────────────────────────────────────────────────────
-
 import type { ChatMessage, TurnSummary } from '@code-agent/shared/renderer';
 import { type InfiniteData, useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { unwrap } from '@/lib/ipc';
@@ -73,7 +57,6 @@ export async function fetchTurnMessagesPage(
     end = turns.length;
   } else {
     const anchor = turns.findIndex((t) => t.turnId === param);
-    // 锚点回合不存在（回合不删除，防御）：空页让翻页判尽终止
     if (anchor === -1) {
       return { turnCount: 0, turns: [] };
     }
@@ -138,7 +121,6 @@ function turnPagesQueryOptions(id: string, turns: readonly TurnSummary[] | undef
       }
       return fetchTurnMessagesPage(turns, pageParam);
     },
-    // 本页最早回合已是全局最早 → 无更早页；否则以其 turnId 作下一页锚点
     getNextPageParam: (lastPage: TurnMessagesPage): TurnPageParam | undefined => {
       if (turns === undefined) return undefined;
       const first = lastPage.turns[0];
@@ -147,14 +129,6 @@ function turnPagesQueryOptions(id: string, turns: readonly TurnSummary[] | undef
       if (oldest !== undefined && first.turnId === oldest.turnId) return undefined;
       return first.turnId;
     },
-    // 不启用 maxPages（2026-09-27 读 @tanstack/query-core@5.102.8 实证）：maxPages
-    // 在每次追加页时生效，fetchNextPage（forward）走 addToEnd，超限 slice(1) 丢弃
-    // pages[0]/pageParams[0]（infiniteQueryBehavior.js:36-40 + utils.js:151-154）；
-    // 普通 refetch 又从 oldPageParams[0] 起逐页重放（infiniteQueryBehavior.js:52-58），
-    // 被裁页不会自愈。本查询单向向上翻页，pages[0] 是最近一页消息（initialPageParam
-    // 'latest'），flattenTurnPages 平铺全部 pages 渲染——被裁端正是聊天区最新可见
-    // 消息。启用前提：接 fetchPreviousPage（backward 改裁尾端）或反转页序让最新页
-    // 落在尾端，使被裁端不再是可见数据。
   };
 }
 

@@ -1,12 +1,3 @@
-// src/renderer/hooks/use-working-dir.ts
-// 会话工作目录的唯一读取入口（L3 派生态）
-// ──────────────────────────────────────────────────────────────
-// 规则：任何需要 workingDir 的组件都经本 hook 取，不再读 fileTreeStore.rootPath
-// 之类的镜像（详见 lib/working-dir.ts 顶部说明）。
-// 数据来自 ['sessions'] 列表缓存（侧栏已加载），不额外拉会话详情——详情里带全量
-// 消息，仅为拿一个目录字符串去拉详情是净负收益。
-// ──────────────────────────────────────────────────────────────
-
 import { resolveWorkingDir } from '@/lib/working-dir';
 import { useActiveSessionStore } from '@/stores/persistent/sessions-store';
 
@@ -15,7 +6,6 @@ import { useSessionsFlat } from './use-sessions';
 /** 会话 id → workingDir 索引（平铺无限分页的全部已加载会话） */
 export function useWorkingDirIndex(): ReadonlyMap<string, string> {
   const { data: sessions } = useSessionsFlat();
-  // 纯派生，交给 React Compiler 记忆化（Map 仅用于本次 resolve 查询，不对外暴露引用）
   const index = new Map<string, string>();
   for (const session of sessions ?? []) {
     index.set(session.id, session.workingDir);

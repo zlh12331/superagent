@@ -1,12 +1,3 @@
-// scripts/scaffold/lib/text.ts
-// 文本插入工具：以锚点/块为目标的源码修改（零 AST 依赖，幂等校验由调用方负责）
-// ──────────────────────────────────────────────
-// 适用场景：
-// - 向 meta.ts / definitions.ts 的对象字面量块内追加方法行
-// - 向 tools/index.ts 按字典序插入 import / export 行
-// - 向函数体末尾追加注册行
-// ──────────────────────────────────────────────
-
 /** 转义正则特殊字符（防御外部输入进入 RegExp 构造） */
 export function escapeRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -103,11 +94,9 @@ export function insertSortedLine(
     }
     const line = match[0];
     if (keyOf(line) > newKey) {
-      // 插在该行之前（该行是第一个排序键大于新行的行）
       return `${source.slice(0, match.index)}${newLine}\n${source.slice(match.index)}`;
     }
   }
-  // 全部小于：追加到最后一个匹配行之后
   const last = matches.at(-1);
   if (last === undefined || last.index === undefined) {
     return null;

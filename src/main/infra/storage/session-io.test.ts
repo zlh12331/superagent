@@ -1,11 +1,3 @@
-// src/main/infra/storage/session-io.test.ts
-// 会话导出/导入存储层单测：round-trip 无损 / 冲突跳过 / 幂等 / 事务 / 格式校验
-// ──────────────────────────────────────────────────────────────
-// 测试策略（业务逻辑不 mock）：真实 SessionService + 内存 SQLite（走完整迁移，
-// 含 UNIQUE/CHECK/外键约束），导出 → 换库 → 导入 → 再导出全量比对。
-// 用量/回合时间戳取当下：getUsageSummary 有 90 天窗口过滤，历史时间戳会被排除。
-// ──────────────────────────────────────────────────────────────
-
 import type { SessionExportFile } from '@code-agent/shared/main';
 import { ErrorCode } from '@code-agent/shared/main';
 import { eq } from 'drizzle-orm';
@@ -20,7 +12,6 @@ import { sessions } from './schema';
 import { SessionService } from './session-service';
 import { createTestDb } from './test-utils';
 
-// mock getDb 返回内存数据库（与 session-service.test.ts 同模式）
 vi.mock('./db', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./db')>();
   let memoryDb: ReturnType<typeof createTestDb> | null = null;
@@ -184,7 +175,7 @@ describe('session-io 导出（version=1 文件格式）', () => {
     const first = await service.exportAll();
     const firstSessions = structuredClone(first.sessions);
 
-    resetDb(); // 模拟换机：空库导入
+    resetDb();
     const res = await service.importAll(structuredClone(first));
 
     expect(res).toEqual({ imported: 1, skipped: 0 });
@@ -221,7 +212,6 @@ describe('session-io 导入（校验 / 冲突 / 幂等 / 事务）', () => {
     const file = buildExportFile();
     const item = file.sessions[0];
     if (item === undefined) throw new Error('测试数据缺失');
-    // 故意构造缺字段的非法文件（unknown 逃逸类型检查）
     const bad: unknown = {
       ...file,
       sessions: [{ ...item, meta: { ...item.meta, workingDir: undefined } }],
@@ -237,7 +227,6 @@ describe('session-io 导入（校验 / 冲突 / 幂等 / 事务）', () => {
       title: undefined,
       messages: [{ role: 'user', content: '本地已有消息' }],
     });
-    // 同 id 但内容不同的导入条目
     const file = buildExportFile();
     const item = file.sessions[0];
     if (item === undefined) throw new Error('测试数据缺失');
@@ -293,20 +282,16 @@ describe('session-io 导入（校验 / 冲突 / 幂等 / 事务）', () => {
     };
     const good = file.sessions[0];
     if (good === undefined) throw new Error('测试数据缺失');
-    // 好会话在前：其独立事务已提交；坏会话在后：抛错中止后续导入
-    // （契约只有 imported/skipped，无失败计数——出错即中止并上抛，重导幂等收敛）
     const mixed = { ...file, sessions: [good, badSession] };
 
     await expect(service.importAll(mixed)).rejects.toBeInstanceOf(Error);
 
-    // 坏会话：事务回滚，sessions 零残留
     const badRows = getDb()
       .select({ id: sessions.id })
       .from(sessions)
       .where(eq(sessions.id, BadId))
       .all();
     expect(badRows).toEqual([]);
-    // 好会话：独立事务已提交
     const detail = await service.get(good.meta.id);
     expect(detail.messages).toHaveLength(2);
   });
@@ -353,7 +338,6 @@ describe('session-io 导入（校验 / 冲突 / 幂等 / 事务）', () => {
     expect(res).toEqual({ imported: 1, skipped: 0 });
     const detail = await service.get(item.meta.id);
     expect(detail.messages).toHaveLength(2);
-    // messageCount 以实际入库条数为准（自洽）
     expect(detail.session.messageCount).toBe(2);
   });
 });

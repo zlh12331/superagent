@@ -1,11 +1,3 @@
-// src/renderer/components/settings/sections/dialogs/add-model-dialog.tsx
-// 添加模型弹窗（模型选择器）
-// ──────────────────────────────────────────────────────────────
-// 网格项 = 本项目已适配厂商清单（PROVIDER_LABELS，kind 单一真源为
-// shared ApiKeyProviderSchema，全量展示不依赖 key 配置状态）
-// +「自定义模型」固定入口（非数据派生，始终显示）。
-// ──────────────────────────────────────────────────────────────
-
 import type { ApiKeyProvider } from '@code-agent/shared/renderer';
 import { ChevronRight } from 'lucide-react';
 import type { ReactElement } from 'react';
@@ -65,7 +57,6 @@ export function AddModelDialog({
               <ChevronRight className="text-muted-foreground size-3.5 shrink-0" strokeWidth={1.5} />
             </Button>
           ))}
-          {/* 自定义模型：固定入口（非数据派生，始终显示） */}
           <Button
             variant="outline"
             className="hover:bg-muted/60 h-auto justify-start gap-2 px-3 py-2.5 text-left"

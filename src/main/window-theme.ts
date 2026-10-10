@@ -1,15 +1,3 @@
-// src/main/window-theme.ts
-// 窗口标题栏主题联动（纯 Electron 依赖，无 service-container 依赖）
-// ──────────────────────────────────────────────────────────────
-// 背景（2026-09-03 回归修复）：22aea39 把 syncTitleBarOverlayFromTheme 放进
-// window.ts（import service-container → electron-updater 初始化链），导致
-// settings.handler.test.ts（IPC 层单测）在纯 Node 环境加载 electron-updater
-// 崩溃（NsisUpdater 构造读 app.getVersion()）。
-// 本模块收敛"主题 → 窗口控件色"的关注点：只依赖 electron 的 nativeTheme/
-// BrowserWindow，settings.handler（IPC 层）与 window.ts（UI shell 层）均可
-// 安全引用，不再穿透到服务容器。
-// ──────────────────────────────────────────────────────────────
-
 import { BrowserWindow, nativeTheme } from 'electron';
 
 /** Windows/Linux 窗口控件（最小化/最大化/关闭）符号色 —— 按主题切换 */
@@ -36,14 +24,10 @@ export function applyTitleBarOverlayTheme(resolved: 'light' | 'dark'): void {
   }
   try {
     win.setTitleBarOverlay({
-      // 透明底：让顶栏玻璃背景统一延伸（深色实底会形成突兀黑块）
       color: '#00000000',
       symbolColor: resolved === 'dark' ? TITLE_BAR_SYMBOL.dark : TITLE_BAR_SYMBOL.light,
     });
-  } catch {
-    // 部分 Windows 版本/窗口态下 API 可能抛错（非致命，控件色退化为创建时配置）
-    // 静默：本模块刻意不依赖 logger（IPC 层测试环境无需日志副作用）
-  }
+  } catch {}
 }
 
 /**

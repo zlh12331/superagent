@@ -1,12 +1,8 @@
-// src/renderer/stores/transient/file-viewer-store.test.ts
-// 文件查看器 store 补测：全局保存桥接 + 切换文件脏数据保护
-
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { confirm } from '@/stores/transient/confirm-dialog-store';
 import { useFileViewerStore } from '@/stores/transient/file-viewer-store';
 
-// 仅 mock confirm（弹窗 UI 由 DialogHost 渲染，store 层只关心 Promise 结果）
 vi.mock('@/stores/transient/confirm-dialog-store', async (importOriginal) => {
   const mod = await importOriginal<typeof import('@/stores/transient/confirm-dialog-store')>();
   return { ...mod, confirm: vi.fn() };

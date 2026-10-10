@@ -1,15 +1,3 @@
-// src/renderer/components/ui/sheet.tsx
-// 抽屉组件（全屏覆盖，基于 @radix-ui/react-dialog）
-// ──────────────────────────────────────────────────────────────
-// 用途：设置抽屉等"侧边滑出面板"场景（对齐原型 .drawer）
-// - Sheet = Dialog 根（受控 open/onOpenChange）
-// - SheetOverlay = 半透明遮罩（点击关闭）
-// - SheetContent = inset-0 全屏覆盖面板（无开合动画，瞬时切换）
-//   当前唯一使用方 SettingsDialog 是全屏设置页；尺寸由调用方 className 控制
-//   （历史遗留：本组件曾为 side="right" 滑出抽屉，现已无 side prop）
-// - SheetTitle / SheetDescription = 无障碍标题（可 sr-only 隐藏）
-// ──────────────────────────────────────────────────────────────
-
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import type * as React from 'react';
 import { cn } from '@/lib/utils';
@@ -56,11 +44,7 @@ export function SheetContent({
       <SheetOverlay />
       <DialogPrimitive.Content
         data-slot="sheet-content"
-        className={cn(
-          // 无开合动画（当前唯一使用方 SettingsDialog 为全屏设置页，瞬时切换）
-          'bg-background fixed inset-0 z-popover h-full w-full shadow-lg',
-          className,
-        )}
+        className={cn('bg-background fixed inset-0 z-popover h-full w-full shadow-lg', className)}
         {...props}
       >
         {children}

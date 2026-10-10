@@ -1,33 +1,3 @@
-// src/main/infra/autostart/autostart.ts
-// 开机自启（OS 登录项）读写 · 平台差异抹平 · 真实状态回读 · 变更可观测
-// ──────────────────────────────────────────────────────────────
-// 独立成模块的原因：Electron 的 loginItem API 三平台语义差异极大（2026-09-20 读
-// Electron v44 源码 + Windows 实测核实），散落在 handler/tray 两处会各自踩坑：
-//
-// - win32：写 HKCU\...\Run 的命令行；**读取的 openAtLogin 是与写入命令行的逐字符
-//   比对**（args 少一个即 false），而 executableWillLaunchAtLogin 才是「该 exe 是否
-//   会在登录时启动」（忽略 args，且反映任务管理器的禁用态）。实测：不带 args 读 →
-//   false（界面恒显关闭、且无法关闭自启），带 args 读 → true。本模块统一用后者；
-//   其路径**必须带引号**（否则含空格的路径被按命令行解析后匹配失败，同为实测结论）。
-// - darwin：走 ServiceManagement，**args 被忽略**（--hidden 到不了应用）⇒ 静默启动
-//   改由启动期读一次 wasOpenedAtLogin 判定；status 可能是 requires-approval
-//   （macOS 13+ 需用户在系统设置批准），必须透传——否则界面显示「已关」而实际已注册。
-// - linux：Electron 的 SetLoginItemSettings 是**空函数**、Get 返回默认值 ⇒ 直接用它
-//   就是「假成功」（界面显示已开、系统什么都没发生）。本模块自行实现 XDG autostart
-//   （$XDG_CONFIG_HOME|~/.config/autostart/*.desktop），这是 Linux 桌面通用的自启机制。
-//   ⚠️ AppImage 必须用 $APPIMAGE 而非 process.execPath：后者是临时挂载点
-//   （/tmp/.mount_*），每次启动都变 ⇒ 写进 .desktop 的路径下次登录必然失效。
-// - 未打包（dev）：不做任何注册（macOS 未打包注册不可靠；Windows 会把 electron.exe
-//   写进注册表污染开发机）——supported=false，界面据此禁用并说明。
-//
-// 写后一律**回读真实状态**返回：任何平台的静默失败（注册表写入异常、审批未通过、
-// 文件写失败）都不会被伪装成成功。
-//
-// 可观测性（spec 28 §9A:232-233 要求「开机自启开关变更全部 logger.info 落 main.log」）：
-// 变更与读取失败都落日志——「开机自启不生效」类报障此前零证据可查（见
-// docs/design/30-residency-fix-spec.md §3 P2-1）。
-// ──────────────────────────────────────────────────────────────
-
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -119,7 +89,6 @@ export function createAutostartDeps(): AutostartDeps {
     platform: process.platform,
     execPath: resolveAutostartExecPath(process.platform, process.env['APPIMAGE']),
     homeDir: homedir(),
-    // 条件展开：exactOptionalPropertyTypes 下不允许显式传 undefined
     ...(xdgConfigHome !== undefined && xdgConfigHome !== '' ? { xdgConfigHome } : {}),
     adapter: app,
   };
@@ -186,8 +155,6 @@ export async function setAutostartEnabled(
         args: [AUTOSTART_HIDDEN_ARG],
       });
     } else if (deps.platform === 'darwin') {
-      // macOS：args 被 ServiceManagement 忽略（--hidden 无法传递），静默启动由
-      // wasOpenedAtLogin 兜底，故不传 args
       deps.adapter.setLoginItemSettings({ openAtLogin: enabled });
     } else {
       writeLinuxState(deps, enabled);
@@ -205,15 +172,12 @@ export async function setAutostartEnabled(
     throw error;
   }
   const state = await readAutostartState(deps);
-  // spec 28 §9A:232-233：自启开关变更必须落 main.log（排障证据）
   logger.info(
     { platform: deps.platform, requested: enabled, state, execPath: deps.execPath },
     '开机自启已变更（state 为写入后的真实回读值）',
   );
   return state;
 }
-
-// ── Windows ──
 
 /**
  * Windows 读取
@@ -230,8 +194,6 @@ function readWindowsState(deps: AutostartDeps): {
   return { openAtLogin: raw.executableWillLaunchAtLogin === true, requiresApproval: false };
 }
 
-// ── macOS ──
-
 function readMacState(deps: AutostartDeps): {
   readonly openAtLogin: boolean;
   readonly requiresApproval: boolean;
@@ -242,8 +204,6 @@ function readMacState(deps: AutostartDeps): {
     requiresApproval: raw.status === 'requires-approval',
   };
 }
-
-// ── Linux（XDG autostart，自行实现）──
 
 /**
  * Linux 自启文件路径
@@ -329,7 +289,6 @@ function readLinuxState(deps: AutostartDeps): { readonly openAtLogin: boolean } 
   try {
     content = readFileSync(filePath, 'utf8');
   } catch (error) {
-    // 文件不存在是正常状态（未启用）；不可读（权限等）会被上层 catch 记 warn
     const code = (error as { code?: string }).code;
     if (code === 'ENOENT') {
       return { openAtLogin: false };
@@ -352,8 +311,6 @@ function writeLinuxState(deps: AutostartDeps, enabled: boolean): void {
   mkdirSync(dirname(filePath), { recursive: true });
   writeFileSync(filePath, buildLinuxDesktopEntry(deps.execPath), 'utf8');
 }
-
-// ── 静默启动（--hidden 判定）──
 
 /** 静默启动判定输入（纯函数入参，便于测试） */
 export interface StartHiddenInput {

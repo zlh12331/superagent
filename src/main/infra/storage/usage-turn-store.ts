@@ -1,15 +1,3 @@
-// src/main/infra/storage/usage-turn-store.ts
-// LLM 用量与回合流水的存储层（token_usage / turns 两张表）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - token_usage：单次 LLM 调用用量写入、90 天窗口汇总、过期清理
-// - turns：回合流水写入与查询（会话内按 seq / 跨会话按 createdAt）
-//
-// 设计：
-// - 与 session-service 分离：这两张表的读写不依赖 sessions 行类型，聚合逻辑自成一块
-// - better-sqlite3 同步驱动，方法保持 async 以对齐 ISessionService 契约
-// ──────────────────────────────────────────────────────────────
-
 import type {
   SessionGetTurnsRes,
   SessionRecentTurnsRes,
@@ -63,7 +51,6 @@ export async function recordUsage(usage: {
       inputTokens: usage.inputTokens,
       outputTokens: usage.outputTokens,
       totalTokens: usage.totalTokens,
-      // exactOptionalPropertyTypes：可空列 undefined 时条件展开
       ...(usage.cacheReadTokens !== undefined ? { cacheReadTokens: usage.cacheReadTokens } : {}),
       ...(usage.reasoningTokens !== undefined ? { reasoningTokens: usage.reasoningTokens } : {}),
       createdAt: Date.now(),
@@ -112,7 +99,6 @@ export async function getUsageSummary(): Promise<UsageSummaryRes> {
     .orderBy(sql`SUM(${tokenUsage.totalTokens}) DESC`)
     .all();
 
-  // 按日聚合用 SQLite 的 localtime 转换（与 formatLocalDate 语义一致）
   const byDay = db
     .select({
       date: sql<string>`date(${tokenUsage.createdAt} / 1000, 'unixepoch', 'localtime')`,
@@ -153,11 +139,6 @@ export async function recordTurn(turn: {
   readonly durationMs: number | undefined;
 }): Promise<void> {
   const db = getDb();
-  // 2026-09-08 修复（seq 并发冲突）：seq 此前由调用方用 `existing.length` 计算
-  // （agent-service.persistTurn 先全量查 turns 再取长度），既让每回合多一次
-  // O(n) 查询，也在并发写同一会话时产生重复 seq（uq_turns_session_seq 冲突 →
-  // 该回合流水被静默丢弃）。现改为在 INSERT 内用 SQL 子查询原子取值：
-  // 单条语句内完成「读最大值 + 插入」，better-sqlite3 同步执行无交错窗口。
   const nextSeq = db
     .select({ maxSeq: sql<number | null>`MAX(${turns.seq})` })
     .from(turns)
@@ -171,7 +152,6 @@ export async function recordTurn(turn: {
       seq,
       modelId: turn.modelId,
       status: turn.status,
-      // exactOptionalPropertyTypes：可空列 undefined 时条件展开
       ...(turn.inputTokens !== undefined ? { inputTokens: turn.inputTokens } : {}),
       ...(turn.outputTokens !== undefined ? { outputTokens: turn.outputTokens } : {}),
       ...(turn.totalTokens !== undefined ? { totalTokens: turn.totalTokens } : {}),
@@ -213,7 +193,6 @@ export async function getRecentTurns(req: {
   readonly limit: number;
 }): Promise<SessionRecentTurnsRes> {
   const db = getDb();
-  // createdAt 同毫秒时按 id 倒序兜底（后写入的排前），保证排序稳定
   const rows = db
     .select()
     .from(turns)

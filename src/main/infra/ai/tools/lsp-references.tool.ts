@@ -1,14 +1,3 @@
-// src/main/infra/ai/tools/lsp-references.tool.ts
-// lsp_references 工具：查找符号全部引用（对齐 qwen LSP 工具语义收敛）
-// ──────────────────────────────────────────────────────────────
-// 设计：
-// - 通过 LspServerManager 懒启动语言服务器（按工作区根目录复用）
-// - 包含声明位置（includeDeclaration: true）；行/列 0 基
-// - permission='auto' / category='read'：只读查询
-// - 路径经 resolveWithinWorkspace 收口：语言服务器会按 URI 读取文件内容，
-//   缺少守卫时 auto/read 通道可越界读取工作区外任意源码文件（2026-09-08 修复）
-// ──────────────────────────────────────────────────────────────
-
 import { pathToFileURL } from 'node:url';
 import { z } from 'zod';
 import { t } from '../../i18n';
@@ -41,7 +30,6 @@ export function createLspReferencesTool(manager: LspServerManager): Tool<LspRefe
     category: 'read',
     execute: async (input: LspReferencesInput, ctx: ToolContext): Promise<ToolResult> => {
       try {
-        // realTarget：语言服务器按真实落点读文件（TOCTOU，debt.md#d1）
         const absPath = resolveWithinWorkspace(input.filePath, ctx.workingDir).realTarget;
         const rootUri = pathToFileURL(ctx.workingDir).href;
         const client = await manager.getClient(rootUri, absPath);

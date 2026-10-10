@@ -1,15 +1,3 @@
-// tests/integration/file.test.ts
-// File 域集成测试（batch 3/9 · 核心链路）
-// ──────────────────────────────────────────────────────────────
-// 链路：IPC handler（真实）→ FileService（真实）→ 真实文件系统（临时目录）
-// 替身：仅 webContents（watch 事件推送目标）
-//
-// 维度覆盖：接口契约 / 错误传播（classify*Error → 错误码）/ 资源生命周期（watch 清理）
-// 场景：安全边界（工作区收口：越界/遍历拒绝、无边界 fail closed）/ 幂等（重复 delete）/
-//       并发（并行 write）/ 事件流完整性（watch 事件序列）/
-//       持久化往返（write→read 文件系统真实落盘）
-// ──────────────────────────────────────────────────────────────
-
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -18,12 +6,8 @@ import { getFileService } from '../../src/main/infra/file/file-service';
 import { createFileHandlers } from '../../src/main/ipc/file.handler';
 import { createFakeWebContents } from './helpers/fake-webcontents';
 
-// Windows CI：chokidar 原生 fs-event 在「watch 目录随即被删除」的时序触发 libuv
-// 断言崩溃（fail-fast 0xC0000409，src\win\fs-event.c）——与 file-service.test.ts
-// 一致，统一走轮询模式绕开原生监视器。
 process.env['FILE_WATCH_USE_POLLING'] = '1';
 
-// 单例隔离：每用例后 dispose 清理 watcher（FileService 单例无 reset 导出）
 afterEach(async () => {
   await getFileService().dispose();
 });
@@ -105,7 +89,6 @@ describe('file 域集成链路（batch 3）', () => {
       await handlers.createDir({ path: dirPath });
       await handlers.create({ path: join(dirPath, 'inner.txt') });
 
-      // P0 契约：recursive 必填（文件 false / 目录树 true）
       await handlers.delete({ path: filePath, recursive: false });
       await handlers.delete({ path: join(dir, 'nested'), recursive: true });
 
@@ -139,11 +122,9 @@ describe('file 域集成链路（batch 3）', () => {
       } as never);
       expect(watcherId).toBeDefined();
 
-      // 触发文件变更
       const filePath = join(dir, 'watch-me.txt');
       await handlers.write({ path: filePath, content: 'v1' });
 
-      // 等待 watch 事件推送（chokidar 异步；真实等待 ≥5× 事件循环延迟）
       await vi.waitFor(
         () => {
           expect(sent.some((s) => s.channel.includes('watch:event'))).toBe(true);
@@ -156,7 +137,6 @@ describe('file 域集成链路（batch 3）', () => {
       };
       expect(event.watcherId).toBe(watcherId);
 
-      // 资源生命周期：watchStop 后不再推送
       const { stopped } = await handlers.watchStop({ watcherId });
       expect(stopped).toBe(true);
       expect((await handlers.watchStop({ watcherId })).stopped).toBe(false);
@@ -185,10 +165,8 @@ describe('file 域集成链路（batch 3）', () => {
       await handlers.create({ path: filePath });
 
       const read = await handlers.read({ path: filePath });
-      // 空文件 split 后为 1 行（空串语义）
       expect(read.content).toBe('');
       expect(read.totalLines).toBe(1);
-      // offset 超界返回空（不视为错误）
       const beyond = await handlers.read({ path: filePath, offset: 100 });
       expect(beyond.content).toBe('');
     });
@@ -214,14 +192,11 @@ describe('file 域集成链路（batch 3）', () => {
   it('安全边界：工作区收口拒绝越权路径（越界 / 遍历 / 无边界 fail closed）', async () => {
     await withTempDir(async (dir) => {
       const handlers = makeHandlers(dir);
-      // 相对路径按工作区根解析：落在根内，但无法借此读越权路径
       await handlers.write({ path: 'inside.txt', content: 'x' });
       expect((await handlers.read({ path: join(dir, 'inside.txt') })).content).toBe('x');
-      // .. 遍历逃出根 → 越权
       await expect(handlers.read({ path: join('..', 'Windows', 'win.ini') })).rejects.toMatchObject(
         { code: 'UNAUTHORIZED' },
       );
-      // 工作区外绝对路径 → 越权
       await expect(
         handlers.read({ path: join(tmpdir(), 'outside-secret.txt') }),
       ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
@@ -255,7 +230,6 @@ describe('file 域集成链路（batch 3）', () => {
       await expect(
         handlers.delete({ path: join(dir, 'never-existed'), recursive: false }),
       ).rejects.toBeDefined();
-      // 已删除文件的再次删除同样报错（严格语义）
       const filePath = join(dir, 'gone.txt');
       await handlers.create({ path: filePath });
       await handlers.delete({ path: filePath, recursive: false });

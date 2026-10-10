@@ -1,27 +1,3 @@
-// src/main/infra/ai/tools/tool-registry.ts
-// 工具注册表：管理工具的注册、查找与转换为 AI SDK 格式
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - register(tool)：注册工具实例，重名抛错
-// - get(name)：按名查找工具实例
-// - list()：列出所有工具元数据（ToolDescriptor）
-// - toAISDKTools(ctx, executeHook?)：转换为 AI SDK v7 原生 tool 格式
-//
-// 设计原则：
-// - 单一注册表：整个应用共享一个 ToolRegistry 实例（通过 ServiceContainer 持有）
-// - 注册时校验：避免重名注册导致 LLM 调用错乱
-// - 转换时注入 ctx：每次 agent 对话生成独立的 AI SDK tools 集合，
-//   闭包捕获对应的 sessionId / workingDir / abortSignal
-// - executeHook 可选注入：AgentService 传入 ToolExecutor.execute 作为 hook，
-//   统一执行权限检查、审批流程与 IPC 事件推送；不传时直接调用 tool.execute
-//
-// 与 AI SDK v7 的关系：
-// - streamText 接收 tools 参数，类型为 Record<string, Tool>
-// - 本注册表的 toAISDKTools() 把项目内 Tool 接口转换为 AI SDK 原生 Tool
-// - AI SDK execute 函数的 options.toolCallId 会传给 executeHook，
-//   用于关联 AGENT_TOOL_CALL / AGENT_TOOL_RESULT 事件
-// ──────────────────────────────────────────────────────────────
-
 import type { ToolDescriptor } from '@code-agent/shared/main';
 import { AppError, ErrorCode } from '@code-agent/shared/main';
 import { type Tool as AITool, tool as defineAITool } from 'ai';

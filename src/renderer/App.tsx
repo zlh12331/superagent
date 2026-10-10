@@ -1,15 +1,3 @@
-// src/renderer/App.tsx
-// 渲染层根组件
-// 设计文档 §3 应用入口 + §5.3 React Router 7 Data Mode
-//
-// 职责：
-// - 包裹应用 Provider（Theme / Tooltip / Toaster）
-// - 挂载 RouterProvider（RR7 Data Mode，由 router.tsx 配置）
-// - 外层包裹 AppErrorBoundary 兜底（P1-4 分层错误边界第 1 层）
-//
-// 注意：main.tsx 仅负责挂载根节点 + StrictMode + index.css，
-// 所有 Provider 与路由都由此组件组装，保持 main.tsx 简洁。
-
 import type { ReactElement } from 'react';
 import { RouterProvider } from 'react-router';
 

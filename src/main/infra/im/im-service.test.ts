@@ -1,18 +1,13 @@
-// src/main/infra/im/im-service.test.ts
-// IM 聚合服务单测：start/stop/list/send/restore/消息分发（fake 适配器注入）
-
 import type { ChannelKind, IChannelInfo } from '@code-agent/shared/main';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ChannelIncomingMessage, ChannelTarget, IChannelAdapter } from './channel/types';
 import { ImService } from './im-service';
 
-// keychain 外壳（safeStorage 为 Electron 原生模块，规范允许 vi.mock 外壳）
 vi.mock('../storage/keychain', () => ({
   getSecret: vi.fn(async () => null),
   setSecret: vi.fn(async () => {}),
 }));
 
-// 失效域广播替身（基础设施边界，规范允许 vi.mock；S10 断言用，见文件尾 describe）
 vi.mock('../invalidation/invalidation', () => ({ broadcastInvalidation: vi.fn() }));
 
 import { broadcastInvalidation } from '../invalidation/invalidation';
@@ -38,7 +33,6 @@ class FakeAdapter implements IChannelAdapter {
   }
 
   async connect(): Promise<void> {
-    // 未实现渠道（implemented=false）：抛 NOT_IMPLEMENTED（对齐 IChannelAdapter 契约）
     if (!this.implemented) {
       throw new Error('IM_CHANNEL_NOT_IMPLEMENTED');
     }
@@ -110,7 +104,7 @@ describe('ImService', () => {
     await service.start('telegram', 't');
     await service.stop('telegram');
     expect(adapters[0]?.isConnected).toBe(false);
-    await service.stop('telegram'); // 幂等
+    await service.stop('telegram');
     const channels = await service.list();
     expect(channels.find((c) => c.kind === 'telegram')?.running).toBe(false);
   });
@@ -156,7 +150,7 @@ describe('ImService', () => {
     expect(received).toHaveLength(1);
     unsubscribe();
     adapters[0]?.emit(msg);
-    expect(received).toHaveLength(1); // 取消后不再收到
+    expect(received).toHaveLength(1);
   });
 
   it('restore：仅恢复已配置且已实现的渠道', async () => {
@@ -165,8 +159,8 @@ describe('ImService', () => {
       key === 'im:telegram' ? 'stored' : null,
     );
     await service.restore();
-    expect(adapters[0]?.isConnected).toBe(true); // telegram 已配置 → 恢复
-    expect(adapters[1]?.isConnected).toBe(false); // 骨架未实现 → 不恢复
+    expect(adapters[0]?.isConnected).toBe(true);
+    expect(adapters[1]?.isConnected).toBe(false);
   });
 
   it('stopAll：全部渠道断开', async () => {
@@ -176,8 +170,6 @@ describe('ImService', () => {
     expect(adapters[0]?.isConnected).toBe(false);
   });
 });
-
-// ── 失效域声明（31 号 spec S10：im 渠道状态变化） ───────────────────
 
 describe('ImService 失效域声明（S10）', () => {
   beforeEach(() => {

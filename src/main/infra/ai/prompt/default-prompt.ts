@@ -1,22 +1,3 @@
-// src/main/infra/ai/prompt/default-prompt.ts
-// 默认 Code Agent System Prompt 内容
-// ──────────────────────────────────────────────────────────────
-// 设计参考：
-// - qwen-code 的核心 system prompt（身份 + 工具使用规范 + 输出格式）
-// - codex 的 AGENTS.md 上下文注入模式
-// - Cursor/Trae 的工作目录约束与安全规范
-//
-// 模板变量（由 injectDynamicContext 在运行时替换，dynamic-context.ts）：
-// - {{workingDir}}：当前工作目录绝对路径
-// - {{os}}：操作系统（darwin/win32/linux）
-// - {{platform}}：平台描述（macOS/Windows/Linux）
-// - {{shell}}：默认 shell
-// - {{gitBranch}}：当前 git 分支（非 git 仓库时为"非 git 仓库"）
-// - {{gitStatus}}：git 状态摘要（clean/dirty + 未提交文件数）
-// - {{agentsMd}}：AGENTS.md 文件内容（若存在）
-// - {{homeDir}}：用户主目录（已登记；默认模板未使用，供自定义模板用）
-// ──────────────────────────────────────────────────────────────
-
 /**
  * 默认 Code Agent System Prompt 模板
  *

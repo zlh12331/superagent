@@ -1,9 +1,3 @@
-// src/main/infra/storage/session-helpers.ts
-// SessionService 辅助函数（自 session-service.ts 提取：行转换 / 标题解析 / 消息序列化）
-// ──────────────────────────────────────────────────────────────
-// 全部为纯函数（不持有 DB 连接），由 SessionService 实现消费。
-// ──────────────────────────────────────────────────────────────
-
 import type { ChatMessage, SessionMeta } from '@code-agent/shared/main';
 import { AppError, ErrorCode } from '@code-agent/shared/main';
 import type { MessageRole, sessions } from './schema';
@@ -57,12 +51,10 @@ export function resolveTitle(
   messageList: readonly ChatMessage[],
   defaultTitle: string,
 ): string {
-  // 1. 调用方显式传入
   if (title !== undefined && title.length > 0) {
     return title.length > TITLE_MAX_LENGTH ? title.slice(0, TITLE_MAX_LENGTH) : title;
   }
 
-  // 2. 首条 user 消息预览
   const firstUserContent = findFirstUserText(messageList);
   if (firstUserContent !== null) {
     const preview =
@@ -72,7 +64,6 @@ export function resolveTitle(
     return preview;
   }
 
-  // 3. 默认值
   return defaultTitle;
 }
 

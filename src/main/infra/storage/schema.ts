@@ -1,35 +1,5 @@
-// src/main/infra/storage/schema.ts
-// Drizzle ORM Schema：SQLite 持久化表结构定义（全库唯一真源）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 定义全部 11 张表的列结构 + 领域约束（CHECK / UNIQUE / 外键）
-// - 作为 drizzle-orm 类型推导的单一真源（无需手写 TypeScript 类型）
-// - DDL 与迁移由 drizzle-kit 从本文件自动派生（schema-sql.ts / migrations.ts 已退役）
-//
-// 表清单（11 张）：
-// - sessions：会话元数据
-// - messages：消息历史
-// - prompts：System Prompt 模板
-// - token_usage：LLM token 用量
-// - turns：Agent 回合记录（Transcript）
-// - runtime_models：运行时模型配置快照
-// - goals：会话目标跟踪
-// - tasks：任务状态机持久化
-// - cron_tasks：定时任务
-// - skills：学习到的技能
-// - app_settings：渲染层用户设置（key-value）
-//
-// 约束策略（2026-08-24 数据设计收敛）：
-// - 稳定枚举 → DB CHECK 约束（一劳永逸，几乎不变）
-// - 演进枚举 → TS 联合类型（$type<>），DB 不建 CHECK（SQLite 改 CHECK 需重建表）
-// - 唯一性 → UNIQUE 约束（防重复写入）
-// - 归属关系 → 外键 + ON DELETE CASCADE（防孤儿行）
-// ──────────────────────────────────────────────────────────────
-
 import { sql } from 'drizzle-orm';
 import { check, index, integer, sqliteTable, text, unique } from 'drizzle-orm/sqlite-core';
-
-// ── 领域枚举（单一真源：storage 层定义，ai 层需要时从此导入，避免重复定义）──
 
 /** 消息角色（稳定枚举 → DB CHECK 兜底） */
 export type MessageRole = 'user' | 'assistant' | 'tool' | 'system';
@@ -76,18 +46,12 @@ export const sessions = sqliteTable(
     pinned: integer('pinned').notNull().default(0),
   },
   (t) => [
-    // 稳定枚举：运行状态三值恒定，DB 层兜底非法值
     check(
       'chk_sessions_last_run_status',
       sql`${t.lastRunStatus} IN ('idle','running','interrupted')`,
     ),
-    // 查询索引：list 接口按 updatedAt 倒序（SQLite 索引可反向扫描，无需显式 DESC）
     index('idx_sessions_updated_at').on(t.updatedAt),
-    // 复合索引（2026-09-08 性能修复）：list 的排序键是 (pinned DESC, updated_at DESC)，
-    // 单列 idx_sessions_updated_at 因 pinned 是前导排序键而无法服务，
-    // EXPLAIN QUERY PLAN 实测为 SCAN sessions + USE TEMP B-TREE FOR ORDER BY。
     index('idx_sessions_pinned_updated').on(t.pinned, t.updatedAt),
-    // working_dir 索引：listRecentDirs 的 GROUP BY working_dir 实测 SCAN + TEMP B-TREE
     index('idx_sessions_working_dir').on(t.workingDir, t.updatedAt),
   ],
 );
@@ -127,12 +91,7 @@ export const messages = sqliteTable(
     createdAt: integer('created_at').notNull(),
   },
   (t) => [
-    // 稳定枚举：消息角色四值恒定
     check('chk_messages_role', sql`${t.role} IN ('user','assistant','tool','system')`),
-    // 会话内序号唯一：防并发/重试写入同 seq 产生双行（会话历史错乱的根源）
-    // 该 UNIQUE 同时承担"按 sessionId 过滤 + seq 升序"的查询索引职责——
-    // drizzle 会把它发成具名 UNIQUE 索引 uq_messages_session_seq，列序 (session_id, seq)
-    // 的最左前缀即可服务该查询，故无需再建同列普通索引（只会带来写放大）
     unique('uq_messages_session_seq').on(t.sessionId, t.seq),
     index('idx_messages_turn').on(t.turnId),
   ],
@@ -176,10 +135,7 @@ export const prompts = sqliteTable(
     /** 最后更新时间（Unix timestamp 毫秒） */
     updatedAt: integer('updated_at').notNull(),
   },
-  (t) => [
-    // 查询索引：按角色过滤 prompt
-    index('idx_prompts_role').on(t.role),
-  ],
+  (t) => [index('idx_prompts_role').on(t.role)],
 );
 
 /** messages 表类型 */
@@ -225,10 +181,7 @@ export const tokenUsage = sqliteTable(
     createdAt: integer('created_at').notNull(),
   },
   (t) => [
-    // 查询索引：用量页按时间窗口聚合
     index('idx_token_usage_created_at').on(t.createdAt),
-    // 外键级联删除 sessions 时按 session_id 定位子行；缺此索引则全表扫描
-    // （2026-09-06 审计补充）
     index('idx_token_usage_session_id').on(t.sessionId),
   ],
 );
@@ -278,16 +231,8 @@ export const turns = sqliteTable(
     createdAt: integer('created_at').notNull(),
   },
   (t) => [
-    // 唯一：防同一回合重复落库
     unique('uq_turns_turn_id').on(t.turnId),
-    // 会话内回合序号唯一：防 transcript 序号重复
-    // 该 UNIQUE 索引本身即可服务「按会话取回合列表（seq 升序）」的查询
-    // （最左前缀 session_id + seq 有序），无需再建同列普通索引——
-    // 2026-09-06 审计删除冗余的 idx_turns_session_seq（每回合双份索引写）
     unique('uq_turns_session_seq').on(t.sessionId, t.seq),
-    // created_at 索引（2026-09-08 性能修复）：getRecentTurns 按
-    // ORDER BY created_at DESC, id DESC 取最近回合，此前实测 SCAN turns
-    // + TEMP B-TREE（turns 无 created_at 索引）
     index('idx_turns_created_at').on(t.createdAt),
   ],
 );
@@ -337,10 +282,7 @@ export const runtimeModels = sqliteTable(
     /** 创建时间（Unix timestamp 毫秒） */
     createdAt: integer('created_at').notNull(),
   },
-  (t) => [
-    // 布尔字段：只允许 0/1
-    check('chk_runtime_models_is_enabled', sql`${t.isEnabled} IN (0,1)`),
-  ],
+  (t) => [check('chk_runtime_models_is_enabled', sql`${t.isEnabled} IN (0,1)`)],
 );
 
 /**
@@ -373,10 +315,7 @@ export const goals = sqliteTable(
     /** 完成/清除时间（null = 未结束） */
     finishedAt: integer('finished_at'),
   },
-  (t) => [
-    // 查询索引：按会话取目标
-    index('idx_goals_session').on(t.sessionId),
-  ],
+  (t) => [index('idx_goals_session').on(t.sessionId)],
 );
 
 /**
@@ -491,7 +430,6 @@ export const appSettings = sqliteTable('app_settings', {
   updatedAt: integer('updated_at').notNull(),
 });
 
-// 导出 schema 对象供 db.ts 创建表
 export const schema = {
   sessions,
   messages,

@@ -1,23 +1,3 @@
-// src/main/infra/ai/agent-runtime/text-delta-batcher.ts
-// text-delta 微批合帧（主进程出口侧）：把「每 token 一次 IPC 推送」合并为「每窗口一次」
-// ──────────────────────────────────────────────────────────────
-// 动机（P2-31）：TurnRunner 每 part 回调 onPart → 宿主闭包 pushPart →
-//   partForwarder.push（本模块）→ forwardStreamPart 逐条 webContents.send，
-//   长回复高频 token 下 IPC 消息数与 token 数线性相关。
-//   相邻 text-delta 在窗口（16–20ms）内合并为单条 part 推送后，IPC 消息数
-//   与窗口数挂钩而非 token 数。渲染层已有对偶实现
-//   （src/renderer/lib/agent/stream-chunk-batcher.ts，合并相邻同 id text-delta），
-//   本模块是主进程侧同构：两侧窗口重叠不叠加（≈同帧内一次 DOM 提交）。
-//
-// 顺序保证（不丢 part、不乱序）：
-// - 仅合并「同一条 text part（id 相同）且相邻」的 delta
-// - 任何非 text-delta part（含 delta 非字符串的形状漂移 part）前先落地缓冲，
-//   保持发射顺序与上游一致
-// - flush 幂等；回合结束/错误路径在推送 END/ERROR 前显式 flush（机器终态
-//   entry 的 flushForwarder action + 宿主各 finalize 实现首步，双保险均幂等），
-//   防丢尾
-// ──────────────────────────────────────────────────────────────
-
 /** 默认合并窗口（毫秒）：与渲染层 TEXT_DELTA_BATCH_MS（20ms）对齐，16–20ms ≈ 1 帧 */
 export const TEXT_DELTA_BATCH_MS = 20;
 
@@ -78,7 +58,6 @@ export function createTextDeltaBatcher(options: TextDeltaBatcherOptions): TextDe
   const maxChars = options.maxChars ?? TEXT_DELTA_BATCH_MAX_CHARS;
   const schedule = options.schedule ?? defaultScheduler;
 
-  // 缓冲：合并后的 part 模板（保留首条除 delta 外的全部字段，如 id）+ 累积文本
   let pending: {
     readonly template: Record<string, unknown>;
     readonly id: unknown;
@@ -102,13 +81,11 @@ export function createTextDeltaBatcher(options: TextDeltaBatcherOptions): TextDe
 
   return {
     push(part) {
-      // 非 text-delta（或 delta 非字符串的形状漂移 part）：先落地缓冲再透传，保序
       if (!isBatchableTextDelta(part)) {
         flush();
         emit(part);
         return;
       }
-      // 不同 text part（id 不同）不可合并；先落地前一条
       const id = part['id'];
       if (pending !== null && pending.id !== id) {
         flush();

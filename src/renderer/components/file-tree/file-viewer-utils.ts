@@ -1,7 +1,3 @@
-// file-viewer-utils.ts（自文件预览组件拆分，纯函数集；源组件现名 FileViewerPanel）
-// 文件预览纯函数（shiki 语言检测 / 行数计算）
-// ──────────────────────────────
-// 拆分背景：源组件 427 行（拆分时名 FileViewerDialog），纯函数与组件混合，按职责提取
 import { normalizeLang } from '@/lib/highlight';
 import { fileExtension } from '@/lib/utils';
 
@@ -57,5 +53,3 @@ export function detectLangFromPath(filePath: string): string {
 export function lineCount(content: string): number {
   return content === '' ? 0 : content.split('\n').length;
 }
-
-// basename 已收敛至 @/lib/utils（渲染层此前 4 份重复实现合一）

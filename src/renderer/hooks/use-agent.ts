@@ -1,30 +1,3 @@
-// src/renderer/hooks/use-agent.ts
-// useAgentWithIpc：Code Agent 专用 hook，注入 IpcAgentTransport 并透传 agent 配置
-//
-// 职责：
-// 1. 创建并复用 IpcAgentTransport 单例（无状态，共享安全）
-// 2. 在 workingDir / systemPrompt / maxSteps 变化时调用 transport.configure()
-// 3. 包装 useChat，注入 transport + 透传 useChat 的其余 options
-//
-// 使用示例：
-// ```tsx
-// import { useAgentWithIpc } from '@/hooks/use-agent';
-//
-// function AgentPanel({ workingDir }: { workingDir: string }) {
-//   const { messages, sendMessage, status, stop } = useAgentWithIpc({
-//     id: 'agent-session',
-//     workingDir,
-//     systemPrompt: 'You are a helpful coding assistant.',
-//     maxSteps: 30,
-//   });
-//   // 渲染 messages / 输入框 / 发送按钮 / stop 按钮...
-// }
-// ```
-//
-// 与 useChatWithIpc 的区别：
-// - useChatWithIpc：单轮流式对话（无工具调用），走 chat:send IPC
-// - useAgentWithIpc：多轮工具调用，走 agent:run IPC，支持文件操作 / 命令执行等
-
 import { type UseChatOptions, useChat } from '@ai-sdk/react';
 import type { UIMessage } from 'ai';
 import { useEffect } from 'react';
@@ -91,30 +64,18 @@ type UseAgentOptions<Message extends UIMessage> = UseChatOptions<Message> & {
 export function useAgentWithIpc<Message extends UIMessage = UIMessage>(
   options: UseAgentOptions<Message>,
 ) {
-  // 模块级单例：每次调用返回同一实例，无需 useMemo 包裹（依赖数组里也恒定）
   const transport = getIpcAgentTransport();
 
-  // 用户设置项（settings-store persistent；变化时重新 configure）：
-  // 思考强度 / 采样温度 / 目标模型直接透传；系统提示词为空串时回落主进程内置默认 prompt
   const thinking = useSettingsStore((s) => s.ai.thinking);
   const temperature = useSettingsStore((s) => s.ai.temperature);
   const settingsSystemPrompt = useSettingsStore((s) => s.ai.systemPrompt);
-  // 模型选择：设置 ai.defaultModel 即模型选择器当前值（ChatPanel 与 home 的
-  // ModelSelector 写入同一字段）——此前仅用于 UI 展示，现经 transport 透传主进程
   const modelId = useSettingsStore((s) => s.ai.defaultModel);
 
-  // 解构 agent 专用字段（id 用于按会话配置 transport），剩余透传给 useChat
   const { id, workingDir, systemPrompt, maxSteps, ...chatOptions } = options;
 
-  // 有效系统提示词：显式 options.systemPrompt > 设置项（非空）> 主进程默认
   const effectiveSystemPrompt =
     systemPrompt ?? (settingsSystemPrompt.trim().length > 0 ? settingsSystemPrompt : undefined);
 
-  // 在 agent 配置变化时同步更新 transport（useEffect 确保在 render 后执行）
-  // sendMessage 由用户交互触发（总是在 effect 执行后），不存在竞态
-  // 全键传入（undefined 键显式存在）：清空 systemPrompt 才能覆盖缓存旧值
-  // （此前条件展开 omit undefined 键 → 清空永不生效，2026-09-28 修复）
-  // 按会话 id 配置（并发回合支持）：各 ChatPanel 的 useChat id = chatId，互不覆盖
   // biome-ignore lint/correctness/useExhaustiveDependencies: transport 为模块级单例（引用恒定），不入依赖
   useEffect(() => {
     transport.configureFor(
@@ -130,8 +91,6 @@ export function useAgentWithIpc<Message extends UIMessage = UIMessage>(
     );
   }, [id, workingDir, effectiveSystemPrompt, maxSteps, thinking, temperature, modelId]);
 
-  // id 必须透传给 useChat：transport.sendMessages 用 options.chatId 作为 IPC sessionId，
-  // 只有 chatId === 会话 id，主进程回流的审批/事件才能按 sessionId 正确匹配（内联审批卡渲染）
   return useChat<Message>({
     ...chatOptions,
     ...(id !== undefined ? { id } : {}),

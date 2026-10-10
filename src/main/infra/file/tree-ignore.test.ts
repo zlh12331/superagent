@@ -1,6 +1,3 @@
-// src/main/infra/file/tree-ignore.test.ts
-// 文件树忽略规则单测：名称匹配（精确/通配）+ 用户配置归一化
-
 import { describe, expect, it } from 'vitest';
 import { matchIgnorePattern, normalizeTreeIgnorePatterns } from './tree-ignore';
 
@@ -15,7 +12,6 @@ describe('matchIgnorePattern', () => {
     expect(matchIgnorePattern('app.log', ['*.log'])).toBe(true);
     expect(matchIgnorePattern('error.log.1', ['*.log*'])).toBe(true);
     expect(matchIgnorePattern('cache', ['c*'])).toBe(true);
-    // 不跨路径分隔符（名称级匹配本身无分隔符，防御正则语义）
     expect(matchIgnorePattern('a/b', ['*'])).toBe(false);
   });
 

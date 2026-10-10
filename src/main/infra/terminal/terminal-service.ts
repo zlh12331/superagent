@@ -1,21 +1,3 @@
-// src/main/infra/terminal/terminal-service.ts
-// TerminalService：基于 node-pty 的终端会话池
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - create：spawn 一个 PTY 进程（shell），返回 terminalId
-// - input：向指定终端写入数据（用户键入 / 粘贴命令）
-// - resize：调整终端尺寸（cols/rows）
-// - kill：终止指定终端进程
-// - dispose：应用退出时统一 kill 所有 PTY（释放子进程句柄）
-//
-// 设计：
-// - 基于 node-pty（已引入，native 模块，@electron/rebuild 已配置）
-// - 每个 terminalId 对应一个 IPty 实例 + WebContents（事件推送目标）
-// - 终端输出含 ANSI 转义序列，原样推送到渲染层由 xterm.js 渲染（不解码）
-// - 事件推送通过 webContents.send，与 FileService watch 事件一致
-// - 单例模式：与 FileService / SearchService 一致，便于统一生命周期管理
-// ──────────────────────────────────────────────────────────────
-
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import * as os from 'node:os';
@@ -87,14 +69,6 @@ export interface ITerminalService {
   /** 优雅关闭：kill 所有活跃 PTY */
   dispose(): Promise<void>;
 }
-
-// ── 禁止渲染层覆盖的系统关键环境变量（P0 安全，兜底过滤）──────────────
-// 单一真源在共享层 schemas/terminal.ts（TERMINAL_ENV_DENY_KEYS / isTerminalEnvDenied）：
-// IPC schema 已在边界直接拒绝这类 env（类型化校验错误），create() 内保留二次过滤，
-// 防止绕过 IPC 的内部调用方（工具/桥接）把劫持变量传进 PTY。
-// PATH / PATHEXT 决定可执行文件解析；LD_PRELOAD / NODE_OPTIONS 等决定
-// 「进程一启动就加载哪里的代码」，同属命令劫持面。
-// ──────────────────────────────────────────────────────────────
 
 /** 输出缓冲最大字节数（环形截断，避免内存膨胀） */
 const MAX_BUFFER_BYTES = 100 * 1024;
@@ -179,12 +153,11 @@ export class TerminalService implements ITerminalService {
       if (head === undefined) break;
       const headBytes = Buffer.byteLength(head, 'utf8');
       if (headBytes <= overflow) {
-        chunks.shift(); // 头部整片丢弃
+        chunks.shift();
         overflow -= headBytes;
         totalBytes -= headBytes;
         continue;
       }
-      // 越界字节在头片中段：字节级截边保留尾部
       const kept = Buffer.from(head, 'utf8').subarray(overflow).toString('utf8');
       const keptBytes = Buffer.byteLength(kept, 'utf8');
       totalBytes += keptBytes - headBytes;
@@ -210,17 +183,10 @@ export class TerminalService implements ITerminalService {
   async create(options: TerminalCreateOptions): Promise<TerminalCreateRes> {
     const terminalId = randomUUID();
     const { command, env, cols, rows, webContents } = options;
-    // P3 修复：cwd 可省略——回退到用户主目录（渲染层无 Node API 获取 home，
-    // 主进程按平台环境变量兜底），替代渲染层硬编码 DEFAULT_CWD
     const cwd = options.cwd ?? defaultHomeDir();
 
-    // 解析 shell 与 args
     const { file, args } = this.resolveShell(command);
 
-    // 合并环境变量：系统 env + 用户 env（用户覆盖系统同名，敏感键除外）
-    // P0 安全：过滤系统关键变量，防止渲染层通过 env 覆盖 PATH/PATHEXT 等
-    // 劫持终端内执行的命令（如把 ls 替换为恶意可执行文件）。
-    // 系统关键变量以主进程 process.env 为准，用户 env 仅用于注入普通变量（如 API Key）。
     const mergedEnv: Record<string, string | undefined> = {
       ...(process.env as Record<string, string | undefined>),
     };
@@ -237,7 +203,6 @@ export class TerminalService implements ITerminalService {
     let pty: IPty;
     try {
       pty = this.spawnFn(file, args, {
-        // 终端名称（xterm.js 识别用）
         name: 'xterm-256color',
         cols,
         rows,
@@ -252,7 +217,6 @@ export class TerminalService implements ITerminalService {
       });
     }
 
-    // 推送终端创建事件（通知渲染层，包括 Agent 工具创建的终端）
     const title = command ?? file.split(/[\\/]/).pop() ?? 'shell';
     const createdPayload: TerminalCreatedEventPayload = {
       terminalId,
@@ -263,22 +227,17 @@ export class TerminalService implements ITerminalService {
       rows,
     };
     if (!webContents.isDestroyed()) {
-      // R2：统一出口 emitEvent（dev 契约校验）
       emitEvent(webContents, IPC_DEFINITIONS.terminal.subscribeCreatedEvent, createdPayload);
     }
 
-    // 初始化输出缓冲
     this.outputBuffers.set(terminalId, []);
     this.outputBufferBytes.set(terminalId, 0);
 
-    // 绑定输出事件：推送 terminal:event:output + 追加到 outputBuffer
     pty.onData((data: string) => {
-      // dispose 后 in-flight 数据不再写回缓冲（防止已清空的 Map 被重新填充）
       if (!this.terminals.has(terminalId)) {
         return;
       }
       this.appendToOutputBuffer(terminalId, data);
-      // 推送到渲染层（R2：统一出口 emitEvent）
       if (webContents.isDestroyed()) {
         return;
       }
@@ -286,13 +245,8 @@ export class TerminalService implements ITerminalService {
       emitEvent(webContents, IPC_DEFINITIONS.terminal.subscribeOutputEvent, payload);
     });
 
-    // 绑定退出事件：推送 terminal:event:exit + 从 Map 移除
-    // 注意：node-pty 的 onExit 回调 signal 类型为 number | undefined（信号编号），
-    // 而 TerminalExitEventPayload.signal 期望 string（信号名如 'SIGTERM'），
-    // 需通过 os.constants.signals 反向查找转换为信号名
     pty.onExit(({ exitCode, signal }) => {
       logger.info({ terminalId, exitCode, signal }, 'TerminalService PTY 已退出');
-      // 推送退出事件（webContents 销毁后跳过）
       if (!webContents.isDestroyed()) {
         const signalName = signal !== undefined ? this.signalNumberToName(signal) : undefined;
         const payload: TerminalExitEventPayload = {
@@ -300,19 +254,13 @@ export class TerminalService implements ITerminalService {
           exitCode,
           ...(signalName !== undefined ? { signal: signalName } : {}),
         };
-        // R2：统一出口 emitEvent（dev 契约校验）
         emitEvent(webContents, IPC_DEFINITIONS.terminal.subscribeExitEvent, payload);
       }
-      // 从 Map 移除（若 dispose 已清空则 delete 无效，不报错）
       this.terminals.delete(terminalId);
-      // 淘汰策略：已退出终端的缓冲按 FIFO 保留最近 N 个，防无界增长
       this.retireOutputBuffer(terminalId);
-      // PTY 已退出：移除 destroyed 监听，避免窗口存活期间监听器累积
       webContents.removeListener('destroyed', onDestroyed);
     });
 
-    // P1 修复：PTY 生命周期绑定 webContents——窗口销毁（macOS 关窗不退出 /
-    // 渲染层崩溃）时自动 kill，此前窗口销毁后 PTY 进程继续存活（仅停止推送）
     const onDestroyed = (): void => {
       if (this.terminals.has(terminalId)) {
         logger.warn({ terminalId }, 'webContents 已销毁，自动 kill PTY');
@@ -324,8 +272,6 @@ export class TerminalService implements ITerminalService {
     this.terminals.set(terminalId, { pty, webContents });
     logger.info({ terminalId, file, cwd, pid: pty.pid }, 'TerminalService PTY 已创建');
 
-    // title 同时给出：与 created 事件同源（`title` 变量在上方构造 payload 时已算出），
-    // 渲染层据此显示真实 shell 名而无需自行推断平台默认 shell
     return { terminalId, pid: pty.pid, title };
   }
 
@@ -446,13 +392,11 @@ export class TerminalService implements ITerminalService {
    */
   async dispose(): Promise<void> {
     if (this.terminals.size > 0) {
-      // 快照后逐个 kill+等待（onExit 回调可能并发删 Map，避免迭代中变更）
       await Promise.all(
         [...this.terminals.entries()].map(([id, ctx]) => this.killWithEscalation(id, ctx.pty)),
       );
       this.terminals.clear();
     }
-    // 清理所有输出缓冲（包括已退出终端的残留缓冲）
     this.outputBuffers.clear();
     this.outputBufferBytes.clear();
     this.exitedBufferOrder.length = 0;
@@ -475,7 +419,6 @@ export class TerminalService implements ITerminalService {
         clearTimeout(timer);
         resolve();
       };
-      // 正常路径：pty 退出即放行，dispose 不空等
       pty.onExit(finish);
       try {
         pty.kill();
@@ -519,9 +462,6 @@ export class TerminalService implements ITerminalService {
    * - POSIX：PATH 等大小写敏感，直接比较
    */
   private isSensitiveEnvKey(key: string): boolean {
-    // 集合来自共享层单一真源；平台语义保持原样：
-    // - Windows：环境变量键大小写不敏感 → 统一大写比较
-    // - POSIX：大小写敏感（小写 path 是普通自定义变量，不应误伤）→ 原样比较
     const normalized = process.platform === 'win32' ? key.toUpperCase() : key;
     return TERMINAL_ENV_DENY_KEYS.has(normalized);
   }
@@ -544,7 +484,6 @@ export class TerminalService implements ITerminalService {
       if (parts.length === 0) {
         return this.defaultShell();
       }
-      // parts[0] 一定存在（filter 后非空数组）
       const file = parts[0] ?? '';
       const args = parts.slice(1);
       return { file, args };
@@ -562,14 +501,12 @@ export class TerminalService implements ITerminalService {
    * 找不到匹配项时返回 'signal:<number>' 兜底（避免 undefined 丢失信息）。
    */
   private signalNumberToName(num: number): string {
-    // os.constants.signals 是 Record<string, number>，反向遍历查找
     const signals = os.constants.signals as unknown as Record<string, number>;
     for (const [name, n] of Object.entries(signals)) {
       if (n === num) {
         return name;
       }
     }
-    // 兜底：未知信号编号保留数字，渲染层可显示 'signal:32' 等
     return `signal:${num}`;
   }
 
@@ -600,7 +537,6 @@ export class TerminalService implements ITerminalService {
     if (process.platform === 'win32') {
       return { file: 'powershell.exe', args: [] };
     }
-    // noPropertyAccessFromIndexSignature: process.env 必须用方括号访问
     const shell = process.env['SHELL'] ?? '/bin/bash';
     return { file: shell, args: [] };
   }
@@ -730,7 +666,6 @@ export function splitShellWords(
 
     if (ch === '\\') {
       if (!windows) {
-        // POSIX：反斜杠转义下一字符；单引号内不转义（与 shell 一致）
         if (quote !== "'") {
           const next = chars[i + 1];
           if (next !== undefined) {
@@ -744,9 +679,6 @@ export function splitShellWords(
         current += ch;
         continue;
       }
-      // Windows：反斜杠是路径分隔符（字面量），仅双引号内 \" 转义引号本身
-      // （CommandLineToArgvW 约定常用子集）。修复前 C:\Users\foo 会被拆成 C:Usersfoo，
-      // 导致任何含 Windows 路径的命令 spawn 失败（集成测试 terminal batch 5 实证）。
       if (quote === '"' && chars[i + 1] === '"') {
         current += '"';
         i += 1;
@@ -776,7 +708,6 @@ export function splitShellWords(
     }
     current += ch;
   }
-  // 容错：POSIX 悬空转义保留反斜杠；未闭合引号丢弃标记，残余作为最后参数
   if (posixEscaped) {
     current += '\\';
   }

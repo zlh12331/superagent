@@ -1,12 +1,3 @@
-// tests/integration/setup.ts
-// 集成测试全局 setup：electron SDK 边界替身（真实协作原则——只替身外部 SDK）
-// ──────────────────────────────────────────────────────────────
-// 替身范围（业界简化环境 Medium Test 标准）：
-// - app.getPath('userData') → 指向可变引用（with-db helper 每用例切换临时目录）
-// - dialog.showSaveDialog → 可变结果（exportAll 等用例设置保存路径）
-// 其余业务模块全真实（db.ts 初始化/SessionService 落库等）。
-// ──────────────────────────────────────────────────────────────
-
 import { tmpdir } from 'node:os';
 import { vi } from 'vitest';
 
@@ -32,9 +23,7 @@ function fakeDecrypt(buffer: Buffer): string {
 vi.mock('electron', () => ({
   app: {
     getPath: () => itState.userData,
-    // 测试环境视为未打包（config 加载依赖 isPackaged 布尔）
     isPackaged: false,
-    // initDb 的 resolveMigrationsDir 需要：dev 环境指向项目根 drizzle/
     getAppPath: () => process.cwd(),
     getVersion: () => '9.9.9-test',
   },

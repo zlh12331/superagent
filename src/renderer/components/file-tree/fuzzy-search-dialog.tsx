@@ -1,23 +1,3 @@
-// src/renderer/components/file-tree/fuzzy-search-dialog.tsx
-// 文件模糊搜索对话框（⌘F）：会话 + 文件统一搜索
-// ──────────────────────────────────────────────────────────────
-// 职责（仅编排与渲染）：
-// - 输入框 + 结果列表渲染（会话在前、文件在后，键盘导航统一索引）
-// - 结果项高亮匹配子串（<mark>）/ 两类结果的图标与副标题差异
-// - 键盘导航（ArrowUp/Down/Enter）+ 挨项自动滚动
-// - 确认结果：会话 → 切换激活会话并跳转；文件 → onSelect（父组件打开查看器）
-//
-// 数据来源：
-// - 会话列表：useSessionsQuery（TanStack Query）
-// - 文件搜索：useFileGlobSearch（防抖 + 竞态 + 失败上抛，见该 hook）
-// - glob 模式构造 / 展示目录派生：lib/file-search（纯函数）
-//
-// 拆分记录（2026-09 file-tree 审计）：本文件原 414 行，glob 转义、防抖搜索、
-// Promise 竞态、错误提示与渲染/键盘导航混居一处分居四种职责。现将
-// 「纯函数 → lib/file-search」「防抖搜索 → hooks/use-file-glob-search」
-// 「结果行 → 本文件内 ResultRow 子组件」拆出，组件自身只留编排。
-// ──────────────────────────────────────────────────────────────
-
 import { Hash, Search } from 'lucide-react';
 import {
   type KeyboardEvent,
@@ -128,13 +108,11 @@ function ResultRow({
   monospace,
 }: ResultRowProps): ReactElement {
   return (
-    // 行样式归 .fuzzy-result（styles/ 领域按钮类；选中态由 aria-selected 驱动，
-    // 无需在 JSX 里重复一份条件类，选中判定与可访问性状态自此同源）
     <button
       id={id}
       type="button"
-      role="option"
       aria-selected={selected}
+      role="option"
       onClick={onSelect}
       onMouseEnter={onHover}
       className="fuzzy-result"
@@ -163,13 +141,10 @@ export function FuzzySearchDialog({
   const inputRef = useRef<HTMLInputElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
 
-  // 会话列表（TanStack Query；会话搜索 + workingDir 派生共用；select 已平铺）
   const sessions = useSessionsFlat().data ?? [];
-  // 激活会话的 workingDir（文件搜索根目录；无激活会话时仅会话搜索可用）
   const activeSessionId = useActiveSessionStore((state) => state.activeSessionId);
   const workingDir = sessions.find((session) => session.id === activeSessionId)?.workingDir ?? null;
 
-  // 文件搜索（防抖 + 竞态 + 失败提示统一由 hook 负责）
   const fileResults = useFileGlobSearch({
     query,
     rootDir: workingDir,
@@ -179,7 +154,6 @@ export function FuzzySearchDialog({
     onError: () => toast.error(t('fileTree.fuzzySearch.failed')),
   });
 
-  // 会话匹配结果 — query 匹配会话标题时显示，最多 5 条
   const sessionQuery = query.trim().toLowerCase();
   const sessionResults: readonly UnifiedResult[] =
     sessionQuery === ''
@@ -194,16 +168,11 @@ export function FuzzySearchDialog({
             cwd: session.workingDir,
           }));
 
-  // 统一结果列表 — 会话在上、文件在下，用于键盘导航的连续索引
-  // （每次渲染重建数组：仅长度参与 effect 依赖，不构成记忆化收益）
   const combinedResults: readonly UnifiedResult[] = [
     ...sessionResults,
     ...fileResults.map((path) => ({ type: 'file' as const, path, title: basename(path) })),
   ];
 
-  // 重置状态：每次打开对话框时清空 query。通过 rAF 延迟 setState，
-  // 避免 effect 体内同步调用 setState 触发级联渲染
-  // （文件结果由 useFileGlobSearch 的 enabled=false 分支清空）
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
@@ -219,13 +188,9 @@ export function FuzzySearchDialog({
     };
   }, [open]);
 
-  // 防御性收敛：selectedIndex 不能超出 combinedResults 范围（含会话+文件）。
-  // 高亮、aria-activedescendant、滚动、Enter 确认四处一律以本值为准——
-  // 此前滚动与确认读原始 selectedIndex，结果集收缩时会与高亮行错位。
   const safeSelectedIndex =
     combinedResults.length === 0 ? 0 : Math.min(selectedIndex, combinedResults.length - 1);
 
-  // 选中项变化时自动滚动到可见区域（统一列表索引，含会话+文件）
   useEffect(() => {
     if (!open || combinedResults.length === 0) return;
     const list = listRef.current;
@@ -236,11 +201,8 @@ export function FuzzySearchDialog({
     }
   }, [safeSelectedIndex, combinedResults.length, open]);
 
-  // 确认单个结果：会话切换 / 文件 onSelect（键盘 Enter 与鼠标点击共用一份逻辑，
-  // 避免两处跳转代码漂移）
   const confirmResult = (item: UnifiedResult): void => {
     if (item.type === 'session') {
-      // 切换会话：设置激活 + 跳转聊天页（对齐参考项目 useSelectThread 语义）
       useActiveSessionStore.getState().setActiveSession(item.sessionId);
       navigate(ROUTES.chatPath(item.sessionId));
     } else {
@@ -249,13 +211,11 @@ export function FuzzySearchDialog({
     onClose();
   };
 
-  // 键盘 Enter：确认当前选中项（结果可能已变化，越界由 undefined 守卫兜底）
   const handleConfirm = (): void => {
     const item = combinedResults[safeSelectedIndex];
     if (item !== undefined) confirmResult(item);
   };
 
-  // 键盘导航：ArrowUp/Down 切换、Enter 确认（边界使用统一列表长度）
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>): void => {
     if (e.key === 'ArrowDown') {
       e.preventDefault();
@@ -284,7 +244,6 @@ export function FuzzySearchDialog({
           <DialogTitle>{t('fileTree.fuzzySearch.title')}</DialogTitle>
         </DialogHeader>
 
-        {/* 输入框 */}
         <div className="flex items-center gap-2 border-b border-border px-4 py-3">
           <Search width={14} height={14} className="shrink-0 text-text-faint" aria-hidden />
           <input
@@ -293,7 +252,6 @@ export function FuzzySearchDialog({
             value={query}
             onChange={(e) => {
               setQuery(e.target.value);
-              // 查询变化即回到首行：结果集随后被替换，旧的选中下标已无意义
               setSelectedIndex(0);
             }}
             onKeyDown={handleKeyDown}
@@ -308,7 +266,6 @@ export function FuzzySearchDialog({
           />
         </div>
 
-        {/* 结果列表 */}
         <div
           id="fuzzy-search-results"
           ref={listRef}
@@ -324,7 +281,6 @@ export function FuzzySearchDialog({
               {t('fileTree.fuzzySearch.noResults')}
             </div>
           ) : (
-            // 统一渲染会话+文件结果：会话在前、文件在后，键盘导航统一索引
             combinedResults.map((item, i) => {
               const shared = {
                 id: `fuzzy-result-${i}`,
@@ -332,7 +288,6 @@ export function FuzzySearchDialog({
                 onSelect: () => confirmResult(item),
                 onHover: () => setSelectedIndex(i),
               };
-              // 会话结果 — Hash 图标，点击切换到该会话
               if (item.type === 'session') {
                 return (
                   <ResultRow
@@ -345,7 +300,6 @@ export function FuzzySearchDialog({
                   />
                 );
               }
-              // 文件结果 — FileIcon，点击调用 onSelect(path)
               return (
                 <ResultRow
                   {...shared}

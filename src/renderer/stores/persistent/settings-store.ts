@@ -1,19 +1,3 @@
-// src/renderer/stores/persistent/settings-store.ts
-// 用户设置状态（L2 客户端共享状态层 - persistent）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 统一管理用户偏好设置：主题、AI 默认模型、编辑器配置等
-// - 替代 ThemeProvider 中手写的 localStorage 逻辑（ThemeProvider 改为副作用消费方）
-// - 跨应用重启保留用户设置
-//
-// S1 设计（settings 下沉 SQLite，用户决策）：
-// - 持久化真源从 localStorage 迁移到主进程 SQLite（app_settings 表）
-// - 本 store 保持纯内存态（即时性）；写穿透：每次变更 fire-and-forget
-//   经 settings:set IPC 落库；启动时 main.tsx 经 settings:getAll 拉取快照后
-//   applySettingsSnapshot() 注入（首帧前完成，无主题闪烁）
-// - 仅存储用户偏好，不存储敏感数据（API Key 由主进程 keychain 管理）
-// ──────────────────────────────────────────────────────────────
-
 import {
   type ApiKeyProvider,
   clampEditorTabSize,
@@ -367,7 +351,6 @@ interface SettingsData {
  * 用户设置状态形状
  */
 interface SettingsState extends SettingsData {
-  // ── 操作方法 ────────────────────────────────────────
   /** 设置主题 */
   readonly setTheme: (theme: Theme) => void;
   /** 设置界面语言（写穿透落库 + 镜像 detector 缓存） */
@@ -585,25 +568,15 @@ export const useSettingsStore = create<SettingsState>()((set) => ({
   setTheme: (theme) => {
     set({ theme });
     persistSetting('theme', theme);
-    // 首帧防闪镜像：index.html 内联脚本（CSP hash 放行）在主进程 settings:getAll
-    // 往返完成前读此键切 .dark——与 LANGUAGE_STORAGE_KEY 镜像同构的派生缓存
     mirrorThemeForFirstPaint(theme);
   },
   setLanguage: (language) => {
     set({ language });
     persistSetting('language', language);
-    // 镜像 detector 缓存：i18next init 在 React 渲染期（早于任何 store 消费），
-    // LanguageDetector 只能同步读 localStorage；SQLite 才是真源，此键仅派生缓存
     try {
       localStorage.setItem(LANGUAGE_STORAGE_KEY, language);
-    } catch {
-      // 无痕模式等场景静默（真源已落 SQLite）
-    }
+    } catch {}
   },
-  // P2 修复：persistSetting 移出 set() updater——zustand updater 应为纯函数，
-  // StrictMode/并发特性下 updater 可能被重复调用，产生重复 IPC 写穿透
-  // （幂等但浪费；且违背「updater 内禁副作用」约定）。
-  // 模式：先基于 getState() 计算新值 → set() 提交 → 再写穿透
   updateAi: (patch) => {
     const ai = { ...useSettingsStore.getState().ai, ...patch };
     set({ ai });
@@ -661,7 +634,6 @@ export const useSettingsStore = create<SettingsState>()((set) => ({
   },
   updateProxy: (patch) => {
     const proxy = { ...useSettingsStore.getState().proxy, ...patch };
-    // 模式从 fixed 切走时清掉残留 url/bypass（语义干净：非 fixed 域不携带代理数据）
     if (proxy.mode !== 'fixed') {
       delete (proxy as { url?: string; bypass?: readonly string[] }).url;
       delete (proxy as { url?: string; bypass?: readonly string[] }).bypass;
@@ -713,7 +685,6 @@ function applyMainChange(
     const language = asLanguage(value);
     if (language !== null) {
       set({ language });
-      // UI 即时生效：与侧栏/设置页同一出口，避免 store 与 i18n 分叉
       changeLanguage(language);
     }
     return;
@@ -722,7 +693,6 @@ function applyMainChange(
     set({ window: { ...useSettingsStore.getState().window, ...(value as WindowSettings) } });
     return;
   }
-  // 其余域：命中已知键时按域合并，未知键忽略（避免用未知结构污染 state）
   if (typeof value !== 'object' || value === null) {
     return;
   }
@@ -743,8 +713,6 @@ function applyMainChange(
  */
 export function applySettingsSnapshot(snapshot: Readonly<Record<string, unknown>>): void {
   const theme = (snapshot['theme'] as Theme | undefined) ?? DEFAULT_SETTINGS.theme;
-  // 首帧镜像随快照同步：新用户（无镜像）首帧脚本按默认 dark 渲染，
-  // 首次改主题后镜像即生效；SQLite 快照是权威值，此处补写保持一致
   mirrorThemeForFirstPaint(theme);
   useSettingsStore.setState({
     theme,
@@ -752,8 +720,6 @@ export function applySettingsSnapshot(snapshot: Readonly<Record<string, unknown>
     ai: { ...DEFAULT_SETTINGS.ai, ...((snapshot['ai'] as Partial<AiSettings> | undefined) ?? {}) },
     editor: {
       ...DEFAULT_SETTINGS.editor,
-      // 37 号 A：缺失 → 默认（false/8）；损坏 tabSize → clamp 最近档（导入路径
-      // 绕过 superRefine，读侧归一在此收口）；wordWrap 非布尔 → 默认 false
       ...((snapshot['editor'] as Partial<EditorSettings> | undefined) ?? {}),
       wordWrap: asEditorWordWrap(
         (snapshot['editor'] as { wordWrap?: unknown } | undefined)?.wordWrap,
@@ -803,13 +769,9 @@ export function applySettingsSnapshot(snapshot: Readonly<Record<string, unknown>
       ...((snapshot['proxy'] as Partial<ProxySettings> | undefined) ?? {}),
     },
     appearance: {
-      // 35 号 V1：缺失 → 默认 1；损坏 → clampZoom 最近档位归一（CP2 fail-5
-      // 钉死的归一点——导入路径绕过 superRefine，读侧归一在此收口）
       zoom: clampZoom((snapshot['appearance'] as { zoom?: unknown } | undefined)?.zoom as number),
     },
     terminal: {
-      // 36 号 B：缺失 → 默认（auto/13）；shell 非法档位 → auto；损坏字号 →
-      // clampFontSize 最近档归一（导入路径绕过 superRefine，读侧归一收口）
       shell: asShellChoice((snapshot['terminal'] as { shell?: unknown } | undefined)?.shell),
       fontSize: clampFontSize(
         (snapshot['terminal'] as { fontSize?: unknown } | undefined)?.fontSize as number,

@@ -1,10 +1,3 @@
-// src/main/infra/storage/ai-pref.test.ts
-// ai-pref 单测：用户选定模型的读取与回落（真实 SQLite 临时库，无业务 mock）
-//
-// 语义锁定：读取失败一律回落 undefined（调用方走默认模型），
-// 不因设置损坏/库未初始化而抛错——对话主链路不能被设置读取拖垮。
-// 与 settings-pref.test.ts 同一套「真实 better-sqlite3 临时目录」基建模式。
-
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -20,7 +13,6 @@ const mocks = vi.hoisted(() => ({
 vi.mock('electron', () => ({
   app: {
     getPath: mocks.mockGetPath,
-    // initDb 的 resolveMigrationsDir 需要：dev 环境指向项目根 drizzle/
     getAppPath: () => process.cwd(),
     isPackaged: false,
   },

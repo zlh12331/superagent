@@ -1,30 +1,3 @@
-// src/main/security/csp.ts
-// Content Security Policy 策略构建器（P1-5 安全基线）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 根据 app.isPackaged 构建生产 / 开发两套 CSP 字符串
-// - 生产环境：严格 CSP，仅允许 self + Google Fonts + AI API 域名
-// - 开发环境：在严格 CSP 基础上额外放开 Vite HMR（ws/http localhost）
-// - applyCspToSession：唯一注入入口（CSP/nosniff/X-Frame-Options 三头一并）
-//
-// 注入方式：
-// - 唯一执行点 = applyCspToSession（经 session.webRequest.onHeadersReceived 注入响应头）
-// - 渲染层 HTML 刻意不含 CSP meta（2026-09-28 修正：此前本注释谎称"HTML 保留
-//   meta 兜底"，实际不存在——meta 不支持 frame-ancestors，且会与响应头形成
-//   双真源漂移；check:csp-hash 现断言 index.html 无 meta）
-//
-// ⚠️ 作用域边界：本策略只覆盖 defaultSession。右面板「浏览器」预览走
-// WebContentsView + 独立内存分区 'browser-preview'（src/main/infra/browser/
-// preview-service.ts），刻意不在本注入作用域内——若把预览页放进 defaultSession
-// （如改回 iframe），会被下方策略三层拦截（无 frame-src 回退 default-src 'self'
-// + onHeadersReceived 给远端响应注入 X-Frame-Options/CSP），生产环境无法加载
-// 任何真实网页（2026-09-12 已实测并以此重构）。
-//
-// 参考：
-// - Electron Security Checklist: https://www.electronjs.org/docs/latest/tutorial/security
-// - CSP Level 3: https://www.w3.org/TR/CSP3/
-// ──────────────────────────────────────────────────────────────
-
 import type { Session } from 'electron';
 
 /**
@@ -120,13 +93,6 @@ export function applyCspToSession(session: Session, isDev: boolean): void {
   const csp = buildCsp(isDev);
   const isProduction = !isDev;
   session.webRequest.onHeadersReceived((details, callback) => {
-    // 跳过 chrome-extension:// 协议的响应
-    // 原因：dev 环境 React DevTools 扩展（chrome-extension://<id>/main.html）的
-    // 内部资源加载策略由扩展自身 manifest.content_security_policy 控制，
-    // 主进程注入的 CSP 会与扩展策略冲突，触发 ERR_BLOCKED_BY_RESPONSE 导致
-    // Components/Profiler 面板无法加载。
-    // 安全性：chrome-extension:// 协议的响应头由 Chrome Web Store 签名验证，
-    // 不需要主进程额外注入安全头。
     if (details.url.startsWith('chrome-extension://')) {
       callback({});
       return;
@@ -135,17 +101,9 @@ export function applyCspToSession(session: Session, isDev: boolean): void {
     const headers: Record<string, string[]> = {
       ...details.responseHeaders,
       'Content-Security-Policy': [csp],
-      // X-Content-Type-Options: nosniff — 防止 MIME 类型嗅探
-      // 阻止浏览器将非脚本资源解释为可执行脚本（防 XSS via MIME 混淆）
-      // 参考：https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Content-Type-Options
       'X-Content-Type-Options': ['nosniff'],
     };
 
-    // X-Frame-Options: 仅对 http(s) 协议注入
-    // - 生产环境 DENY：完全禁止嵌入（最严格）
-    // - 开发环境 SAMEORIGIN：允许同源嵌入（DevTools 面板用 chrome-extension:// 协议已被上面跳过）
-    // CSP frame-ancestors 是更现代的替代方案，此头作为旧浏览器兜底
-    // 参考：https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Frame-Options
     if (details.url.startsWith('http')) {
       headers['X-Frame-Options'] = [isProduction ? 'DENY' : 'SAMEORIGIN'];
     }

@@ -1,25 +1,4 @@
-// src/main/infra/ai/agent/hook-registry.ts
-// 生命周期钩子注册表（工具执行前后事件点）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 按事件名注册/注销钩子（pre-tool-use / post-tool-use）
-// - 触发时做错误隔离：单个钩子抛错只记日志，不阻断其他钩子与工具主流程
-// - 供扩展（审计、通知、自定义逻辑）挂载工具生命周期
-//
-// 接入点（当前唯一生产触发方 = tools/tool-executor.ts）：
-// - pre-tool-use：execute 阶段 3.5，await 后据返回值决定是否阻断（false → 拒绝执行）
-// - post-tool-use：仅「工具执行成功」分支触发，且为 fire-and-forget（void，不 await）
-//   ⇒ 失败分支（catch）不触发该事件，故 HookContext.error 目前无生产填充
-// - 当前生产侧无任何 register 调用（只有单测），本模块作为预留扩展点存在
-//
-// 借鉴声明：
-// 本模块参考 qwen-code 参考项目 packages/core/src/hooks/
 // （Copyright 2026 Qwen Team，SPDX-License-Identifier: Apache-2.0）的
-// HookEventName 事件点语义，按我们的技术栈收敛重写：
-// - 移除脚本执行器（ChildProcess）/ TaskStatus / ToolArtifact 等强耦合依赖（不搬运）
-// - 收敛为纯函数钩子（同步/异步 handler），覆盖工具执行前后事件点
-// - 回合级事件点（turn-start/end）由现有 onTurnEvent 类级总线覆盖，不重复实现
-// ──────────────────────────────────────────────────────────────
 
 import { logger } from '../../../utils/logger';
 
@@ -159,14 +138,12 @@ export class HookRegistry {
     for (const handler of bucket) {
       try {
         const result = await handler(context);
-        // 首个阻断即采纳（后续阻断不覆盖，保持原因可追溯）；不短路仍执行其余 handler
         if (result === false) {
-          block ??= { reason: '' }; // 兼容旧 handler：只表达"阻断"，无原因
+          block ??= { reason: '' };
         } else if (isDenial(result)) {
           block ??= { reason: result.reason ?? '' };
         }
       } catch (err: unknown) {
-        // 钩子异常隔离：记录日志，不阻断工具执行与其他钩子
         logger.error({ event, toolName: context.toolName, error: err }, '钩子执行异常');
       }
     }

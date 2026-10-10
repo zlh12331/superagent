@@ -1,12 +1,3 @@
-// src/renderer/test/smoke.test.tsx
-// 渲染层测试基础设施冒烟测试
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 验证 vitest config + jsdom + setup 是否正常工作
-// - 验证 @testing-library/react 可用
-// - 验证 window.api / ResizeObserver / matchMedia polyfill 已生效
-// ──────────────────────────────────────────────────────────────
-
 import { describe, expect, it } from 'vitest';
 
 describe('renderer test infrastructure', () => {

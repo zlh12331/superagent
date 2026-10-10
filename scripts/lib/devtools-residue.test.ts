@@ -1,4 +1,3 @@
-// scripts/lib/devtools-residue.test.ts
 import { describe, expect, it } from 'vitest';
 
 import { findDevtoolsResidue } from './devtools-residue';

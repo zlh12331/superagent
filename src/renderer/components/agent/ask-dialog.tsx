@@ -1,12 +1,3 @@
-// src/renderer/components/agent/ask-dialog.tsx
-// Agent 提问对话框（ask_user_question 工具的渲染层 UI）
-// ──────────────────────────────────────────────────────────────
-// - 展示 Agent 提出的问题（可带预置选项，单选/多选）
-// - 用户点选选项 + 自由输入文本 → agent:ask:respond 回传
-// - 取消：回传空回答（LLM 按「用户未选择」继续）
-// - 浏览器模式守卫：无 window.api 时直接关闭
-// ──────────────────────────────────────────────────────────────
-
 import { type AgentQuestion, ASK_TIMEOUT_SECONDS } from '@code-agent/shared/renderer';
 import { X } from 'lucide-react';
 import { type ReactElement, useEffect, useState } from 'react';
@@ -48,9 +39,6 @@ interface AskState {
  * - 提取为模块级 hook：AskDialog 函数体受 check-functions 棘轮约束。
  */
 function useAskState(activeSessionId: string | null): AskState {
-  // 队头选择：取首个归属当前激活会话的条目（asks 按到达顺序 FIFO）
-  // ⚠️ useShallow：filter/find 每次返回新对象引用，裸用触发
-  // "getSnapshot should be cached" 无限重渲染（React 19 + zustand 5 实测）
   const head = useAgentAskStore(
     useShallow((s) => s.asks.find((a) => a.sessionId === activeSessionId) ?? null),
   );
@@ -82,7 +70,6 @@ function useAskCountdown(
   readonly secondsLeft: number;
   readonly expiring: boolean;
 } {
-  // 截止时刻取数值：依赖数组用原始值（active/deadline），interval 闭包持新 deadline
   const deadline = receivedAt + ASK_TIMEOUT_SECONDS * 1000;
   const [secondsLeft, setSecondsLeft] = useState(() => secondsUntil(deadline));
   useEffect(() => {
@@ -130,12 +117,10 @@ function useAskAnswers({ askId, questions, removeAsk }: UseAskAnswersDeps): {
   readonly handleSubmit: () => Promise<void>;
 } {
   const { t } = useTranslation();
-  // 错误码 → 本地化文案（unwrapErrorMessage 统一模式）
   const { getErrorMessage } = useErrorMessage();
   const [answers, setAnswers] = useState<AnswerState[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
-  // 新提问到达时初始化回答状态
   useEffect(() => {
     if (askId !== null) {
       setAnswers(questions.map(() => ({ selectedIndexes: [], text: '' })));
@@ -170,18 +155,14 @@ function useAskAnswers({ askId, questions, removeAsk }: UseAskAnswersDeps): {
     setSubmitting(true);
     try {
       await respondAgentAsk({ askId, answers: answers.map(toAnswerPayload) });
-      // 仅成功才出队：失败保留现场（选项/文本/askId），用户可原地重试
       removeAsk(askId);
     } catch (error) {
-      // 对齐全仓统一模式：[CODE] 前缀错误 → 错误码本地化；非 IPC 异常回退通用文案
       toast.error(
         error instanceof Error
           ? unwrapErrorMessage(error, getErrorMessage)
           : t('agent.askSubmitFailed'),
       );
     }
-    // finally 语义（React Compiler 不优化 try/finally）：catch 不 rethrow，
-    // 成功/失败统一复位 submitting（出队仅发生在成功分支）
     setSubmitting(false);
   };
 
@@ -202,10 +183,6 @@ function QuestionProgressBar({
 }): ReactElement | null {
   const { t } = useTranslation();
   if (total <= 1) return null;
-  // 钳制到 [1, total]：调用方语义是「已答题数 + 1」（把当前题也点亮），全部答完时
-  // 会算到 total + 1——作为填充进度无碍，但写进 aria-valuenow 会**超过
-  // aria-valuemax**（违反 ARIA 要求 valuenow ≤ valuemax）。钳制后视觉不变
-  // （全亮即全亮），且 ARIA 合法。
   const value = Math.min(Math.max(current, 1), total);
   return (
     <div
@@ -221,7 +198,6 @@ function QuestionProgressBar({
         <div key={i} className="bg-muted relative flex-1 overflow-hidden rounded-full">
           <div
             className={cn(
-              // accent 填充（与导航圆点/热力图/骨架屏等进度类视觉一致；此前 bg-primary 与注释「accent 填充」不符）
               'bg-accent absolute inset-0 origin-left rounded-full transition-transform duration-300',
               i < value ? 'scale-x-100' : 'scale-x-0',
             )}
@@ -235,9 +211,7 @@ function QuestionProgressBar({
 /** Agent 提问对话框（队列队头呈现：FIFO 先问先答，出队后下一条自动上浮） */
 export function AskDialog(): ReactElement | null {
   const { t } = useTranslation();
-  // 会话归属校验在 selector 内完成（多会话并发时只看当前激活会话的提问）
   const activeSessionId = useActiveSessionStore((s) => s.activeSessionId);
-  // 队头提问（见 useAskState 说明）
   const {
     sessionId: askSessionId,
     askId,
@@ -245,29 +219,21 @@ export function AskDialog(): ReactElement | null {
     receivedAt,
     removeAsk,
   } = useAskState(activeSessionId);
-  // 超时倒计时（hook 在 early return 前调用；无提问时 active=false 内部短路）
   const timeout = useAskCountdown(receivedAt, askId !== null);
-  // 回答状态机（模块级 useAskAnswers：answers/submitting + 初始化 + 交互与提交）
   const { answers, submitting, toggleOption, setText, handleSubmit } = useAskAnswers({
     askId,
     questions,
     removeAsk,
   });
 
-  // 无本会话提问时不渲染（队列由 store 持有，其他会话的提问在各自会话下呈现）
   const open = askId !== null && askSessionId !== null;
   if (!open) {
     return null;
   }
 
   const handleCancel = (): void => {
-    // 取消 = 回传空回答（LLM 按「用户未选择」继续）。
-    // 与「提交失败」区分：用户意图是离开，无论 IPC 成败都出队，
-    // 否则关闭按钮失灵会把用户锁在弹窗里（且阻塞队列后续提问）。
     if (hasIpcBridge() && askId !== null) {
-      void respondAgentAsk({ askId, answers: [] }).catch(() => {
-        // 取消回传失败：主进程 60s 超时兜底，UI 不再阻塞用户
-      });
+      void respondAgentAsk({ askId, answers: [] }).catch(() => {});
     }
     if (askId !== null) {
       removeAsk(askId);
@@ -275,8 +241,6 @@ export function AskDialog(): ReactElement | null {
   };
 
   return (
-    // Radix Dialog：Esc/遮罩关闭 = 取消（回传空回答，与按钮取消同语义）；
-    // 自带焦点陷阱/滚动锁定/动画，替代此前自研 fixed 浮层
     <Dialog
       open={open}
       onOpenChange={(next) => {
@@ -287,23 +251,19 @@ export function AskDialog(): ReactElement | null {
         showCloseButton={false}
         className="bg-card max-h-[80vh] w-full max-w-lg gap-0 overflow-y-auto p-0"
         onEscapeKeyDown={(event) => {
-          // 提交中禁 Esc（避免半提交态被取消路径覆盖）
           if (submitting) event.preventDefault();
         }}
         onInteractOutside={(event) => {
           if (submitting) event.preventDefault();
         }}
       >
-        {/* sr-only 标题：满足 Radix 无障碍契约（视觉标题在下方头部行） */}
         <DialogTitle className="sr-only">{t('agent.askTitle')}</DialogTitle>
 
-        {/* 头部 */}
         <div className="border-border flex items-center gap-2 border-b px-4 py-3">
           <span className="bg-primary/10 text-accent-text flex size-5 items-center justify-center rounded text-2xs font-bold">
             ?
           </span>
           <span className="text-foreground text-sm font-semibold">{t('agent.askTitle')}</span>
-          {/* 超时倒计时（38 号阶段 2 收尾：60s 未回答自动继续对用户可见；最后 10 秒警示） */}
           <span
             className={cn(
               'ml-auto font-mono text-2xs',
@@ -324,7 +284,6 @@ export function AskDialog(): ReactElement | null {
           </Button>
         </div>
 
-        {/* 多问题引导进度条（tool-ui Question Flow 借鉴） */}
         <div className="px-4 pt-3">
           <QuestionProgressBar
             current={
@@ -334,7 +293,6 @@ export function AskDialog(): ReactElement | null {
           />
         </div>
 
-        {/* 问题列表 */}
         <div className="flex flex-col gap-4 p-4">
           {questions.map((q, qIndex) => (
             <div key={`${askId}-${q.question}`}>
@@ -343,7 +301,6 @@ export function AskDialog(): ReactElement | null {
               )}
               <p className="text-foreground mt-0.5 text-sm leading-relaxed">{q.question}</p>
 
-              {/* 选项 */}
               {q.options !== undefined && q.options.length > 0 && (
                 <div className="mt-2 flex flex-col gap-1.5">
                   {q.options.map((opt, optIndex) => {
@@ -361,7 +318,6 @@ export function AskDialog(): ReactElement | null {
                             : 'border-border bg-background hover:bg-muted/40',
                         )}
                       >
-                        {/* hover 背景层（对齐 tool-ui Question Flow OptionItem） */}
                         <span
                           className={cn(
                             'bg-primary/5 absolute inset-0 -m-0.5 rounded-xl opacity-0 transition-opacity group-hover:opacity-100',
@@ -393,8 +349,6 @@ export function AskDialog(): ReactElement | null {
                 </div>
               )}
 
-              {/* 自由输入：placeholder 带上题号作可访问名——多问时所有输入框若共用
-                  「自由回答」，读屏用户无法分辨当前焦点属于哪一问 */}
               <Input
                 type="text"
                 value={answers[qIndex]?.text ?? ''}
@@ -407,7 +361,6 @@ export function AskDialog(): ReactElement | null {
           ))}
         </div>
 
-        {/* 底部操作 */}
         <div className="border-border flex items-center justify-end gap-2 border-t px-4 py-3">
           <Button
             variant="ghost"

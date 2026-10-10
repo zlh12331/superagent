@@ -1,20 +1,3 @@
-// src/renderer/routes/home.tsx
-// 应用首页 · 欢迎页模式（对齐原型 .view-chat.welcome-mode）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 渲染 welcome-view（品牌大字）+ composer（输入框 + project-bar）+ welcome-quick-actions（快捷 pill）
-// - composer-project-bar：folder dropdown 选择历史目录 / 浏览其他目录
-// - 发送消息时：若 pendingWorkingDir 为空 → toast 提示并展开 dropdown（不弹原生对话框）
-//                                 不为空 → createSession + 跳转 /chat/:id
-// - 快捷 pill 点击：预填输入框（不自动发送，用户可编辑后回车）
-//
-// 设计（对齐原型 docs/prototype/prototype-v2.html）：
-// - 原型 setWelcomeMode(true) 后展示 welcome-view + composer + project-bar + quick-actions
-// - 原型 setWelcomeMode(false) 在选中会话 / 发送消息创建会话后触发
-// - 原型 folder dropdown 通过 folderDropdownMenu 渲染：本地 / 历史 folders / 选择文件夹…
-// - 本组件仅负责渲染内容，welcome-mode class 由 AppShell 根据 useWelcomeStore 切换
-// ──────────────────────────────────────────────────────────────
-
 import type { ApiKeyProvider, ErrorCode } from '@code-agent/shared/renderer';
 import { ChevronDown, Folder, LayoutGrid, Plus, Search, Star, Wrench } from 'lucide-react';
 import { motion } from 'motion/react';
@@ -73,7 +56,6 @@ const QUICK_ACTIONS: readonly QuickAction[] = [
 
 /** 欢迎页路由：品牌区 + composer（首条消息 stash 透传 ChatPanel）+ 快捷动作 + 最近项目 */
 export function HomePage(): ReactElement {
-  // 本地化文案 + 错误码解析（单一真源）
   const { t } = useTranslation();
   const { getErrorMessage } = useErrorMessage();
   const navigate = useNavigate();
@@ -89,32 +71,20 @@ export function HomePage(): ReactElement {
   const defaultProvider = useSettingsStore((state) => state.ai.defaultProvider);
   const defaultModel = useSettingsStore((state) => state.ai.defaultModel);
 
-  // 受控输入值（支持快捷 pill 预填）
   const [inputValue, setInputValue] = useState('');
 
-  // folder dropdown 开关
   const [folderMenuOpen, setFolderMenuOpen] = useState(false);
   const folderGroupRef = useRef<HTMLDivElement>(null);
 
-  // 历史目录列表（去重后由主进程返回）
   const dirs = recentDirsData?.dirs ?? [];
 
-  // 派生：当前显示的 folder 名（pendingWorkingDir 的 basename，或「未选择项目」）
   const currentFolderLabel = pendingWorkingDir ? basename(pendingWorkingDir) : t('home.noProject');
 
-  // 路由与欢迎页模式同步：/new 斜杠命令、返回按钮、删除激活会话等任意路径回首页
-  // 都必须进入欢迎页模式。此前仅侧栏「新建会话」入口调用 enterWelcomeMode——
-  // 其它入口回首页时品牌区与快捷动作整体隐藏（只剩输入框悬空）。
-  // enterWelcomeMode(null) 清空 pending 目录，由下方兜底逻辑从历史目录回填。
   // biome-ignore lint/correctness/useExhaustiveDependencies: 仅挂载时执行一次（enterWelcomeMode 为 zustand 稳定引用）
   useEffect(() => {
     enterWelcomeMode(null);
   }, []);
 
-  // 兜底初始化 pendingWorkingDir（对齐原型 prototype-v2.html:13312-13315）
-  // 场景：首次启动 / 通过 URL 直接访问 /home / 进入欢迎页时无激活会话
-  // 行为：若 pendingWorkingDir 为 null 且有历史目录，自动取第一个（最近的）
-  // 注意：仅在 pendingWorkingDir 为 null 时填充，不覆盖用户已主动选择的目录
   useEffect(() => {
     if (pendingWorkingDir !== null) return;
     const firstDir = dirs[0]?.workingDir;
@@ -122,7 +92,6 @@ export function HomePage(): ReactElement {
     setPendingWorkingDir(firstDir);
   }, [pendingWorkingDir, dirs, setPendingWorkingDir]);
 
-  // 点击外部关闭 folder dropdown
   useEffect(() => {
     if (!folderMenuOpen) return;
     const handleClickOutside = (event: MouseEvent): void => {
@@ -139,7 +108,6 @@ export function HomePage(): ReactElement {
     };
   }, [folderMenuOpen]);
 
-  // ESC 关闭 folder dropdown
   useEffect(() => {
     if (!folderMenuOpen) return;
     const handleKeyDown = (event: KeyboardEvent): void => {
@@ -173,7 +141,6 @@ export function HomePage(): ReactElement {
     try {
       const data = await pickDirectory();
       if (data.canceled || data.path === undefined) {
-        // 用户取消：保持 dropdown 打开
         return;
       }
       setPendingWorkingDir(data.path);
@@ -196,7 +163,6 @@ export function HomePage(): ReactElement {
    * - IPC 失败：useCreateSession 的 onError 已 toast 提示
    */
   const handleSend = async (text: string): Promise<void> => {
-    // 步骤 1：校验 workingDir（对齐原型：不允许「本地」模式创建无目录会话）
     if (pendingWorkingDir === null || pendingWorkingDir === '') {
       toast.message(t('home.chooseProject'), {
         description: t('home.chooseProjectDesc'),
@@ -205,38 +171,26 @@ export function HomePage(): ReactElement {
       return;
     }
 
-    // 步骤 2：创建会话
     try {
       const { sessionId } = await createSession({ workingDir: pendingWorkingDir });
-      // 步骤 3：设置激活 + 暂存首条消息 + 跳转
       setActiveSession(sessionId);
-      // 透传首条消息：暂存进 transient store，ChatPanel 挂载后 consume 一次并自动发送
-      // （必须在 navigate 之前写入：内存 store 无跨进程落盘，跳转后本函数不再有机会执行；
-      //   消费端与过期规则见 stores/transient/pending-message-store.ts）
       if (text.trim().length > 0) {
         stashPendingMessage(sessionId, text);
       }
-      // 退出欢迎页模式（与 navigate 同一 React commit，避免视觉闪烁）
       exitWelcomeMode();
       navigate(ROUTES.chatPath(sessionId));
-    } catch {
-      // onError 已在 useCreateSession 中 toast 提示
-      // 保持欢迎页打开，允许重试
-    }
+    } catch {}
   };
 
   /** 快捷 pill 点击：预填输入框（不自动发送，对齐原型行为） */
   const handleQuickAction = (prompt: string): void => {
     setInputValue(prompt);
-    // 聚焦输入框（用户可能想立即编辑）
     const input = document.getElementById('chat-input') as HTMLTextAreaElement | null;
     input?.focus();
   };
 
-  // ChatInput status：创建中视为 submitted（显示禁用 + loading 态）
   const chatStatus: 'submitted' | 'ready' = isCreating ? 'submitted' : 'ready';
 
-  // 派生：quick action 按钮列表（渲染期直接映射；仅 4 项且无 memo 边界，无需 useMemo）
   const quickActionButtons = QUICK_ACTIONS.map((action) => {
     const Icon = action.icon;
     return (
@@ -254,7 +208,6 @@ export function HomePage(): ReactElement {
     );
   });
 
-  // 派生：folder dropdown 项列表（渲染期映射，长度受最近目录数限制）
   const folderItems = dirs.map((dir) => {
     const name = basename(dir.workingDir);
     const isActive = pendingWorkingDir === dir.workingDir;
@@ -276,14 +229,7 @@ export function HomePage(): ReactElement {
   });
 
   return (
-    // 欢迎页容器：空 div 即可，CSS .view-chat.welcome-mode 会重排 .thread-bg 为居中 flex
-    // 内部四层结构对齐原型：welcome-view + composer(含 project-bar) + quick-actions
-    // 动效（MotionVault 灵感，lib/motion 落地）：
-    // - welcome-logo：品牌标记先入，然后字母逐字上浮+去模糊
-    // - composer：品牌完成后滑入（delay 0.45）
-    // - quick-actions：最后错落入场（delay 0.6，逐项 50ms）
     <>
-      {/* 品牌区：welcome-view（默认隐藏，welcome-mode 下显示） */}
       <div className="welcome-view">
         <motion.div
           className="welcome-logo"
@@ -311,8 +257,6 @@ export function HomePage(): ReactElement {
         </motion.div>
       </div>
 
-      {/* 输入区：.composer 外壳 + ChatInput（.composer-box 内层）+ composer-project-bar
-          对齐原型：composer 在 welcome-mode 下透明背景 + 最大宽度 720px */}
       <MotionReveal variant="slideUp" delay={0.45} className="composer">
         <FooterContent
           isCreating={isCreating}
@@ -333,8 +277,6 @@ export function HomePage(): ReactElement {
         />
       </MotionReveal>
 
-      {/* 快捷动作区：welcome-quick-actions（默认隐藏，welcome-mode 下显示）
-          错落入场：品牌(≈0.5s)与 composer(0.45s)之后起笔，逐项 50ms 淡入 */}
       <motion.div
         className="welcome-quick-actions"
         variants={{
@@ -388,27 +330,21 @@ function FooterContent({
   defaultModel,
 }: FooterContentProps): ReactElement {
   const { t } = useTranslation();
-  // 模型选择器设置项直接来自全局 store（避免逐层透传 updateAi 类型擦除）
   const updateAi = useSettingsStore((state) => state.updateAi);
   return (
     <>
       <ChatInput
         status={chatStatus}
         onSend={onSend}
-        onStop={() => {
-          // 欢迎页无流式生成，stop 仅用于满足 ChatInput 接口
-        }}
+        onStop={() => {}}
         value={inputValue}
         onValueChange={onValueChange}
         disabled={isCreating}
         placeholder={t('chat.inputPlaceholder')}
       />
 
-      {/* composer-project-bar：folder dropdown + 模型选择器占位
-          对齐原型：仅在 welcome-mode 下显示（基础样式 display:none） */}
       <div className="composer-project-bar">
         <div className="cpb-folder-group" ref={folderGroupRef}>
-          {/* 当前 folder 显示 + 展开按钮 */}
           <button
             type="button"
             className="cpb-select"
@@ -422,7 +358,6 @@ function FooterContent({
             <ChevronDown className="cpb-caret" size={10} strokeWidth={2} />
           </button>
 
-          {/* folder dropdown menu */}
           {folderMenuOpen && (
             <div className="folder-dropdown-menu show" role="menu" aria-label={t('home.dirList')}>
               <div className="fdm-scroll">
@@ -430,7 +365,6 @@ function FooterContent({
                   <div className="fdm-empty">{t('home.noRecentDirs')}</div>
                 ) : (
                   <>
-                    {/* 清空选择（回到「未选择项目」） */}
                     <button
                       type="button"
                       className={cn('fdm-item', pendingWorkingDir === null && 'active')}
@@ -446,7 +380,6 @@ function FooterContent({
                   </>
                 )}
               </div>
-              {/* 浏览其他目录：触发原生目录选择器 */}
               <button
                 type="button"
                 className="fdm-action-btn"

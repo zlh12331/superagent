@@ -1,6 +1,3 @@
-// src/main/infra/ai/tools/run-workflow.tool.test.ts
-// run_workflow 工具单测：入参 schema 校验 + 结果渲染 + 失败兜底（service 单例 mock）
-
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRunWorkflowTool } from './run-workflow.tool';
 import type { ToolContext } from './tool';
@@ -65,7 +62,6 @@ describe('run_workflow 工具', () => {
     expect(goal).toBe('先设计后实现');
     expect(steps).toHaveLength(2);
     expect(workDir).toBe('/tmp/proj');
-    // 未传 onFailure：不携带该键（exactOptionalPropertyTypes 条件展开）
     expect('onFailure' in (options ?? {})).toBe(false);
 
     expect(result.title).toContain('完成');

@@ -1,12 +1,3 @@
-// src/main/infra/im/adapters/wecom-adapter.ts
-// 企业微信渠道：webhook 发送（markdown）+ 长连接接收（官方 aibot SDK）
-// ──────────────────────────────────────────────────────────────
-// 接入配置（token 格式，二选一）：
-// 1. 仅发送：webhook 完整 URL（https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx）
-// 2. 发送+接收：botId:secret:webhookUrl（智能机器人长连接接收）
-// 接收说明：长连接需要企业微信智能机器人（botId/secret 在后台获取）；入站为机器人会话消息。
-// ──────────────────────────────────────────────────────────────
-
 import { logger } from '../../../utils/logger';
 import type { ChannelIncomingMessage } from '../channel/types';
 import { WebhookChannelAdapter } from './webhook-channel';
@@ -45,7 +36,6 @@ export class WecomAdapter extends WebhookChannelAdapter {
         botId.length > 0 &&
         secret.length > 0 &&
         webhookUrl.length > 0 &&
-        // 严格判定：botId 为纯字母数字（企业微信 botId 形状），webhookUrl 为 http(s) 地址
         /^[a-zA-Z0-9]+$/.test(botId) &&
         (webhookUrl.startsWith('http://') || webhookUrl.startsWith('https://'))
       ) {

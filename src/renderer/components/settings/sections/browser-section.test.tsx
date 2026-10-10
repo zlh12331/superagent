@@ -1,12 +1,3 @@
-// src/renderer/components/$1/browser-section.test.tsx
-// BrowserSection 单测：三项配置渲染 + 交互写穿透到 settings-store.browser
-// ──────────────────────────────────────────────────────────────
-// 这里锁的是「设置面板改了 store、store 落了库」这一段：
-// 初值/沙箱是否真被预览消费由 browser/browser-pane 用例覆盖
-// （components/$1/browser-pane.test.tsx）。
-// 切换严格沙箱额外断言 browser:configure 通知主进程（即时生效语义）。
-// ──────────────────────────────────────────────────────────────
-
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -34,7 +25,6 @@ describe('BrowserSection 浏览器设置面板', () => {
 
   it('默认值渲染：自适应预设 / 100% 缩放 / 严格沙箱关闭', () => {
     renderSection();
-    // SegControl 迁 ToggleGroup：item 是 radio 语义（激活态 data-state=on）
     expect(screen.getByRole('radio', { name: '自适应' }).getAttribute('data-state')).toBe('on');
     expect(screen.getByRole('radio', { name: '100%' }).getAttribute('data-state')).toBe('on');
     expect(screen.getByRole('switch').getAttribute('aria-checked')).toBe('false');

@@ -1,6 +1,3 @@
-// src/main/infra/ai/tools/run-team.tool.test.ts
-// run_team 工具单测：并行委派 + 汇总格式化 + 异常降级（mock teamService 单例）
-
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRunTeamTool } from './run-team.tool';
 import type { ToolContext } from './tool';

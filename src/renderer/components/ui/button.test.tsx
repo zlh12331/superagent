@@ -1,9 +1,3 @@
-// src/renderer/components/ui/button.test.tsx
-// ui/button 组件测试：变体/尺寸/asChild/禁用/className 合并
-//
-// 测试要点：默认渲染与基础类、6 变体类名、4 尺寸类名、disabled 透传、
-// asChild Slot 渲染子元素、className 合并
-
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
@@ -30,7 +24,6 @@ describe('Button', () => {
     expect(buttonVariants({ size: 'default' })).toContain('h-9');
     expect(buttonVariants({ size: 'sm' })).toContain('h-8');
     expect(buttonVariants({ size: 'lg' })).toContain('h-10');
-    // icon 尺寸用 size-9（宽高相等语义，样式铁律⑤）
     expect(buttonVariants({ size: 'icon' })).toContain('size-9');
   });
 

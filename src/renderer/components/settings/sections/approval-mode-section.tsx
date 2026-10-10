@@ -1,9 +1,3 @@
-// approval-mode-section.tsx（自 SettingsDialog 拆分）
-// 设置对话框 · ApprovalModeSection 独立面板
-// ──────────────────────────────────────────────
-// 拆分背景：SettingsDialog 1052 行多域混合，按域提取为独立文件（高内聚）
-// ──────────────────────────────────────────────
-
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ListChecks, Shield, Trash2 } from 'lucide-react';
 import { type ReactElement, useState } from 'react';
@@ -32,7 +26,6 @@ export function ApprovalModeSection(): ReactElement {
   const { getErrorMessage } = useErrorMessage();
   const { mode, setMode } = useApprovalMode();
   const queryClient = useQueryClient();
-  // 白名单添加表单（对齐原型 whitelist-panel 的 whitelistInput + 添加按钮）
   const [wlTool, setWlTool] = useState('run_command');
   const [wlPattern, setWlPattern] = useState('');
 
@@ -59,13 +52,11 @@ export function ApprovalModeSection(): ReactElement {
     },
   ];
 
-  // L3：白名单条目（跨会话持久化）
   const whitelistQuery = useQuery({
     queryKey: WHITELIST_ENTRIES_QUERY_KEY,
     queryFn: listWhitelistEntries,
   });
 
-  // L3：工具清单（tool:list，权限配置卡片数据源）
   const toolsQuery = useQuery({
     queryKey: TOOLS_LIST_QUERY_KEY,
     queryFn: listTools,
@@ -74,22 +65,17 @@ export function ApprovalModeSection(): ReactElement {
   const invalidateWhitelist = (): void => {
     void queryClient.invalidateQueries({ queryKey: WHITELIST_ENTRIES_QUERY_KEY });
   };
-  // 错误反馈（一致性审计：写路径 mutation 必须有 onError）
   const onError = useMutationOnError();
 
-  // 添加白名单 mutation（whitelist:add）
   const addMutation = useMutation({
     mutationFn: addWhitelistEntry,
     onSuccess: () => {
-      // 只清空 pattern、保留 toolName：常见流程是「同一工具加多条 pattern」，
-      // 保留工具名可连续添加（清空会让「添加」按钮因 wlTool 为空而禁用，被迫重输）
       setWlPattern('');
       invalidateWhitelist();
     },
     onError,
   });
 
-  // 移除白名单 mutation（whitelist:remove）
   const removeMutation = useMutation({
     mutationFn: removeWhitelistEntry,
     onSuccess: () => {
@@ -144,8 +130,6 @@ export function ApprovalModeSection(): ReactElement {
         ))}
       </RadioGroup>
 
-      {/* 命令白名单（对齐原型 whitelist-panel：增删命令自动放行）
-          持久化于主进程 userData/whitelist.json，跨会话生效 */}
       <div className="pt-1">
         <div className="flex items-center gap-2">
           <ListChecks className="text-muted-foreground size-3.5" strokeWidth={1.5} />
@@ -187,7 +171,6 @@ export function ApprovalModeSection(): ReactElement {
                   className="text-muted-foreground hover:text-error-text size-6 rounded border"
                   aria-label={t('settings.whitelistRemove')}
                   onClick={() => {
-                    // 破坏性操作统一 confirm() store（此前直接删除无确认）
                     void confirm({
                       title: t('settings.whitelistRemove'),
                       message: t('common.deleteConfirmDesc'),
@@ -221,8 +204,6 @@ export function ApprovalModeSection(): ReactElement {
               variant="outline"
               size="sm"
               className="h-9 shrink-0 self-stretch"
-              // 只受「添加」自身的在途状态约束：此前误加 removeMutation.isPending，
-              // 导致删除任一条白名单时整行添加表单被锁死（复制粘贴残留）
               disabled={addMutation.isPending || wlTool.trim() === ''}
               onClick={() =>
                 addMutation.mutate({ toolName: wlTool.trim(), pattern: wlPattern.trim() })
@@ -234,8 +215,6 @@ export function ApprovalModeSection(): ReactElement {
         </div>
       </div>
 
-      {/* 权限配置文件（对齐原型 perm-profile 卡片：工具权限徽章）
-          数据源：tool:list 真实工具注册表（auto 只读自动 / ask 需审批） */}
       <div className="pt-1">
         <div className="flex items-center gap-2">
           <ListChecks className="text-muted-foreground size-3.5" strokeWidth={1.5} />

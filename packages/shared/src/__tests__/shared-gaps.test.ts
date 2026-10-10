@@ -1,12 +1,3 @@
-// packages/shared/src/__tests__/shared-gaps.test.ts
-// shared 层契约补测：运行时产物正确性 + 单一真源一致性 + 核心 schema 拦截能力
-//
-// 测试要点：
-// 1. request/event 元数据构造器
-// 2. deriveChannels 通道派生（camelCase/多段 channel/空表）
-// 3. IPC_DEFINITIONS ↔ IPC_META 双向一致性（无孤儿/无缺失/kind 不漂移）
-// 4. 核心 schema parse 抽查（file read/write、session list）：正向 + 非法拦截
-
 import { describe, expect, it } from 'vitest';
 import { IPC_DEFINITIONS } from '../ipc/definitions';
 import { deriveChannels } from '../ipc/derive';
@@ -45,12 +36,9 @@ describe('shared 层契约补测', () => {
     });
 
     it('definitions 真源派生：与 meta 派生通道集一致（无孤儿 channel）', () => {
-      // definitions 含 schema 的完整真源，channel 必须与 meta 完全同步（无新增/无遗漏）
-      // 注意：不能依赖 IPC_CHANNELS 自比（其自身就是 deriveChannels(IPC_META) 的同源产物）
       const fromDefs = deriveChannels(IPC_DEFINITIONS);
       const fromMeta = deriveChannels(IPC_META);
       expect(fromDefs).toEqual(fromMeta);
-      // key 与 value 一一对应（toConstantKey 冲突会静默覆盖，防止 channel 丢失）
       expect(Object.keys(fromMeta)).toHaveLength(Object.values(fromMeta).length);
     });
   });
@@ -59,13 +47,11 @@ describe('shared 层契约补测', () => {
     it('双向覆盖：meta 与 definitions 的 domain/method 完全对齐（无孤儿/无缺失）', () => {
       const defs = IPC_DEFINITIONS as unknown as Record<string, Record<string, { kind?: string }>>;
       const meta = IPC_META as unknown as Record<string, Record<string, { kind?: string }>>;
-      // meta ⊆ definitions：meta 条目在 definitions 必须存在（防手写孤儿）
       for (const [domain, methods] of Object.entries(meta)) {
         for (const method of Object.keys(methods)) {
           expect(defs[domain]?.[method]).toBeDefined();
         }
       }
-      // definitions ⊆ meta：definitions 条目在 meta 必须存在（防新增遗漏）
       for (const [domain, methods] of Object.entries(defs)) {
         for (const method of Object.keys(methods)) {
           expect(meta[domain]?.[method]).toBeDefined();
@@ -74,7 +60,6 @@ describe('shared 层契约补测', () => {
     });
 
     it('kind 不漂移：definitions 与 meta 的 request/event 分类一致', () => {
-      // 编译期已由 withSchema/withPayload 的泛型约束保证（运行时为防御手写条目）
       const defs = IPC_DEFINITIONS as unknown as Record<string, Record<string, { kind?: string }>>;
       const meta = IPC_META as unknown as Record<string, Record<string, { kind?: string }>>;
       for (const [domain, methods] of Object.entries(defs)) {

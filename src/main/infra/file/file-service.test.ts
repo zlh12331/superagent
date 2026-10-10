@@ -1,7 +1,3 @@
-// src/main/infra/file/file-service.test.ts
-// FileService 单测 · 真实文件系统（重点：编码检测与转码）
-// 无业务 mock：临时目录 + 真实文件驱动；GBK 文件用 iconv-lite 编码生成。
-
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -11,8 +7,6 @@ import iconv from 'iconv-lite';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getFileService, type IFileService } from './file-service';
 
-// Windows CI：chokidar 原生 fs-event 在「watch 目录随即被删除」的时序触发 libuv
-// 断言崩溃（fail-fast 0xC0000409，src\win\fs-event.c）。测试统一走轮询模式绕开。
 process.env['FILE_WATCH_USE_POLLING'] = '1';
 
 /**
@@ -41,16 +35,12 @@ describe('FileService（真实文件系统）', () => {
   });
 
   afterEach(async () => {
-    // 先完整关闭 watcher（chokidar close 为异步），再删临时目录。
-    // Windows CI 上若目录先被移除、fs-event 仍在处理，libuv 断言崩溃
-    // （fail-fast 0xC0000409，src\win\fs-event.c）——dispose 内部 await close()。
     await svc.dispose();
     await rm(dir, { recursive: true, force: true });
   });
 
   it('read：UTF-8 文件 → 内容正确且 encoding=utf-8', async () => {
     const file = join(dir, 'utf8.txt');
-    // 无尾部换行：避免 split 产生尾部空行元素（既有语义：尾部 \n → 空行）
     await writeFile(file, '第一行\n第二行', 'utf-8');
     const res = await svc.read({ path: file, offset: undefined, limit: undefined });
     expect(res.content).toBe('第一行\n第二行');
@@ -60,7 +50,6 @@ describe('FileService（真实文件系统）', () => {
 
   it('read：GBK 编码文件 → 中文内容正确且 encoding 非 utf-8（Windows 场景）', async () => {
     const file = join(dir, 'gbk.txt');
-    // 用 iconv-lite 编码生成 GBK 文件（模拟 Windows 旧编码文件）
     const gbkBuffer = iconv.encode('第一章 序章\n这是中文内容', 'gbk');
     await writeFile(file, gbkBuffer);
     const res = await svc.read({ path: file, offset: undefined, limit: undefined });
@@ -92,7 +81,6 @@ describe('FileService（真实文件系统）', () => {
 
   it('read：>2MB 文件拒绝（防 OOM，明确报错而非崩溃）', async () => {
     const file = join(dir, 'big.txt');
-    // 2MB + 1 字节
     await writeFile(file, Buffer.alloc(2 * 1024 * 1024 + 1, 0x61));
     await expect(
       svc.read({ path: file, offset: undefined, limit: undefined }),
@@ -104,7 +92,6 @@ describe('FileService（真实文件系统）', () => {
     await writeFile(file, Buffer.alloc(2 * 1024 * 1024, 0x61));
     const res = await svc.read({ path: file, offset: undefined, limit: undefined });
     expect(res.totalLines).toBe(1);
-    // IO 重负载边界用例：全量并行跑时 Windows 临时目录 + 杀毒扫描易超默认 5s
   }, 15_000);
 });
 
@@ -221,7 +208,7 @@ describe('FileService.list（目录列举三件套）', () => {
     const names = res.entries.map((e) => e.name);
     expect(names).toContain('a.ts');
     expect(names).toContain('sub');
-    expect(names).not.toContain('b.ts'); // 子目录内容不递归
+    expect(names).not.toContain('b.ts');
   });
 
   it('正向：depth=2 递归包含子目录文件', async () => {
@@ -262,14 +249,10 @@ describe('FileService.list（目录列举三件套）', () => {
       ignorePatterns: ['dist', '*.log'],
     });
     const names = res.entries.map((e) => e.name);
-    // 内置基线
     expect(names).not.toContain('node_modules');
-    // 用户模式：目录不展示且不递归（depth=2 下无 dist 子文件）
     expect(names).not.toContain('dist');
     expect(names).not.toContain('y.js');
-    // 通配
     expect(names).not.toContain('debug.log');
-    // 未命中正常保留
     expect(names).toContain('a.ts');
     expect(names).toContain('sub');
   });
@@ -446,7 +429,6 @@ describe('FileService.watch/unwatch/dispose（监听生命周期）', () => {
       wc: {
         isDestroyed: () => destroyed,
         send: (_ch: string, payload: unknown) => events.push(payload),
-        // P1 生命周期绑定：watch/unwatch 会注册与移除 destroyed 监听
         once: vi.fn(),
         removeListener: vi.fn(),
       } as unknown as WebContents,
@@ -475,10 +457,6 @@ describe('FileService.watch/unwatch/dispose（监听生命周期）', () => {
     async () => {
       const { wc, events } = fakeWebContents();
       const handle = await svc.watch({ path: dir, webContents: wc });
-      // ⚠️ chokidar 的事件投递依赖 OS 的 inotify/FSEvents/ReadDirectoryChangesW，
-      // 共享 runner（尤其 ARM 机型）在高负载下延迟可达数秒——本机实测 421ms，
-      // 但 2026-09-21 六平台 CI 首跑的 windows-11-arm 上首个 waitFor 即超时。
-      // 这里给每次等待留足余量；测试体本身已有 15s 上限兜底。
       await writeFile(join(dir, 'f.txt'), 'a');
       await vi.waitFor(
         () => expect(events.some((e) => (e as { type: string }).type === 'create')).toBe(true),
@@ -499,16 +477,14 @@ describe('FileService.watch/unwatch/dispose（监听生命周期）', () => {
     15_000,
   );
 
-  // ⚠️ 本用例也走 itWatch：它断言"没有事件"，而在不派发事件的环境里会**假通过**
-  // （空事件集必然满足断言）——假通过比失败更危险，故与正向用例一同跳过。
   itWatch(
     '边界：webContents 已销毁 → 不推送（容错）',
     async () => {
       const { wc, events } = fakeWebContents(true);
       const handle = await svc.watch({ path: dir, webContents: wc });
       await writeFile(join(dir, 'ghost.txt'), 'x');
-      await new Promise((resolve) => setTimeout(resolve, 800)); // 给 chokidar 处理时间
-      expect(events).toHaveLength(0); // destroyed → handleWatchEvent 提前返回
+      await new Promise((resolve) => setTimeout(resolve, 800));
+      expect(events).toHaveLength(0);
       svc.unwatch(handle.watcherId);
     },
     10_000,
@@ -529,7 +505,7 @@ describe('FileService.watch/unwatch/dispose（监听生命周期）', () => {
     const { wc } = fakeWebContents();
     await svc.watch({ path: dir, webContents: wc });
     await svc.dispose();
-    await svc.dispose(); // 第二次：watchers 已空
+    await svc.dispose();
     expect(svc.unwatch('ghost')).toBe(false);
   }, 10_000);
 });

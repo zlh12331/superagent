@@ -1,7 +1,3 @@
-// src/renderer/components/ui/sonner.tsx
-// Toast 通知组件（sonner + 主题联动）
-// 设计文档 §2.3 shadcn/ui 组件库 + §7.10 用户友好错误提示
-
 import type * as React from 'react';
 import { Toaster as Sonner } from 'sonner';
 
@@ -35,7 +31,6 @@ export function Toaster({ ...props }: React.ComponentProps<typeof Sonner>): Reac
       className="toaster group"
       style={
         {
-          // 让 toast 使用项目主题的 popover 颜色变量
           '--normal-bg': 'var(--popover)',
           '--normal-text': 'var(--popover-foreground)',
           '--normal-border': 'var(--border)',

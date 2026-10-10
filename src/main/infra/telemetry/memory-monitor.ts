@@ -1,17 +1,3 @@
-// src/main/infra/telemetry/memory-monitor.ts
-// 主进程内存监控（生产长期趋势 + 泄漏哨兵）
-// ──────────────────────────────────────────────
-// 职责：
-// - 周期性采样 process.memoryUsage（rss/heapUsed）+ app.getAppMetrics（各进程 CPU/内存）
-// - 泄漏嫌疑检测：RSS 连续 N 次采样单调增长且累计增长超阈值 → onAlert 回调
-//   （日志挂载点；检测逻辑为纯函数，可单测）
-// - 返回 stop（生命周期管理；定时器 unref，不阻塞进程退出）
-//
-// 设计（对齐 event-loop-lag.ts 语义收敛）：
-// - 回调挂载点模式：监控器不感知上报通道（错误上报/electron-log 由调用方注入）
-// - 保守阈值：连续 3 次（5 分钟窗口）单调增长 + 累计 > 150MB 才告警，防 GC 抖动误报
-// ──────────────────────────────────────────────
-
 import { app } from 'electron';
 import { logger } from '../../utils/logger';
 
@@ -78,7 +64,6 @@ export function detectGrowth(
   if (samples.length < consecutive + 1) {
     return null;
   }
-  // 找最长连续单调增长段（相邻采样 rss 严格递增）
   let bestStart = -1;
   let bestLen = 0;
   let runStart = 0;
@@ -151,7 +136,6 @@ export class MemoryMonitor {
     if (this.timer !== null) {
       return;
     }
-    // 首采建立基线（不检测）
     this.sample();
     const timer = setInterval(() => {
       this.sample();
@@ -183,7 +167,6 @@ export class MemoryMonitor {
       at: Date.now(),
     };
     this.history.push(sample);
-    // 窗口滑动：只保留 2 倍告警窗口所需样本（防历史无限增长）
     const maxHistory = this.consecutiveSamples * 2 + 2;
     if (this.history.length > maxHistory) {
       this.history = this.history.slice(-maxHistory);

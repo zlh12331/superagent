@@ -1,18 +1,3 @@
-// src/main/infra/network/proxy-applier.ts
-// 代理配置应用单点（34 号网络代理 §2.2 四路径收口）
-// ──────────────────────────────────────────────────────────────
-// applyProxyChange(raw) 是全部主进程代理生效路径的唯一出口：
-//   ① settings:set（key=proxy）② settings:import（applied 含 proxy）
-//   ③ settings:resetAll（删键后传 undefined） ④ 启动 whenReady 早期一次
-//
-// 应用顺序（固定化，反例 7 注记）：Chromium 三分区（default → electron-updater
-// → browser-preview）→ env 侧门 → AI 工厂缓存重置。Node fetch 栈经
-// setProxyFetchConfig 无需主动通知（proxiedFetch 每次读 currentConfig）。
-//
-// 失败路径：任一分区 setProxy 失败 log warn 不抛——代理是增强能力，
-// 不能阻断启动链或设置写入链。
-// ──────────────────────────────────────────────────────────────
-
 import { session } from 'electron';
 import { logger } from '../../utils/logger';
 import { resetAIProvider } from '../ai/llm-client/ai-provider';
@@ -39,8 +24,6 @@ export async function applyProxyChange(raw: unknown): Promise<void> {
   setProxyFetchConfig(cfg);
   await applyChromiumSessions(cfg);
   applyEnvSideChannel(cfg);
-  // AI 工厂两层缓存清空：下一次 getModel 用新 fetch 重建（V5；三层缓存链
-  // 经 CP2 第一路核实：providerCache → llmClient.reset → modelCache）
   resetAIProvider();
   logger.info(
     { mode: cfg.mode, ...(cfg.url !== undefined ? { url: maskProxyUrl(cfg.url) } : {}) },

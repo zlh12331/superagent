@@ -1,28 +1,3 @@
-// src/main/infra/ai/prompt/prompt-service.ts
-// PromptService：System Prompt 模板的数据库 CRUD + 默认 prompt 初始化 + 动态上下文注入
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - initialize()：创建 prompts 表 + 插入默认 Code Agent prompt（幂等）
-// - getPrompt(id)：从数据库读取 prompt 模板
-// - resolvePrompt(id, workingDir)：读取模板 + 注入动态上下文 → 返回完整 system prompt
-// - listPrompts() / updatePrompt(id, content)：预留设置界面接入点
-//
-// 消费方与调用链：
-// - initialize：index.ts 在 AgentService 初始化之前调用（resolvePrompt 时
-//   数据库已有默认 prompt）
-// - resolvePrompt：agent.handler 记忆召回链预解析（P2-32）→ agent-service
-//   resolveSystemPrompt 复用（同回合免二次解析；PromptService 内部已回退
-//   硬编码默认值，失败容忍）
-// - listPrompts / updatePrompt：当前生产零调用（无 prompt 域 IPC，仅单测），
-//   预留设置界面接入
-//
-// 设计原则：
-// - 数据库存储：用户选择的方案，支持运行时编辑
-// - 默认 prompt 注入：initialize 时插入 DEFAULT_CODE_AGENT_PROMPT
-// - 动态上下文注入：每次 resolvePrompt 都重新收集环境信息
-// - 失败容忍：数据库读取失败时回退到默认 prompt（硬编码在 default-prompt.ts）
-// ──────────────────────────────────────────────────────────────
-
 import { eq } from 'drizzle-orm';
 import { logger } from '../../../utils/logger';
 import { getDb } from '../../storage/db';
@@ -123,8 +98,6 @@ export class PromptService implements IPromptService {
       const db = getDb();
       const now = Date.now();
 
-      // INSERT OR IGNORE：已存在则跳过（幂等）
-      // 不用 INSERT OR REPLACE：避免覆盖用户编辑过的内容
       db.insert(prompts)
         .values({
           id: DEFAULT_CODE_AGENT_PROMPT_ID,
@@ -142,12 +115,6 @@ export class PromptService implements IPromptService {
       this.initialized = true;
       logger.info({}, 'PromptService 初始化完成');
     } catch (error) {
-      // L6 修复：失败时不设 initialized=true，允许下次调用 initialize 重试
-      // - 原实现：catch 块末尾设 initialized=true，导致 DB 临时不可用（如文件锁）
-      //   后下次 initialize 直接 return，永远走 fallback，无法自愈
-      // - 修复后：保持 initialized=false，下次调用会重新尝试插入
-      // - 不影响运行时：resolvePrompt 已内置 fallback 到 DEFAULT_CODE_AGENT_PROMPT
-      //   数据库读取失败时仍能正常工作
       logger.error({ error }, 'PromptService 初始化失败，下次调用将重试');
     }
   }
@@ -227,7 +194,6 @@ export class PromptService implements IPromptService {
     id: string = DEFAULT_CODE_AGENT_PROMPT_ID,
     workingDir: string,
   ): Promise<ResolvedPrompt> {
-    // 1. 从数据库读取模板
     const row = this.getPrompt(id);
     let template: string;
     let source: 'database' | 'default-fallback';
@@ -236,13 +202,11 @@ export class PromptService implements IPromptService {
       template = row.content;
       source = 'database';
     } else {
-      // 数据库读取失败，回退到硬编码默认值
       logger.warn({ promptId: id }, '数据库中未找到 prompt，回退到硬编码默认值');
       template = DEFAULT_CODE_AGENT_PROMPT;
       source = 'default-fallback';
     }
 
-    // 2. 注入动态上下文
     const content = await injectDynamicContext(template, {
       workingDir,
       ...(this.gitSummaryProvider !== undefined

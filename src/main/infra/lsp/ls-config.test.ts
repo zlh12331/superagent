@@ -1,6 +1,3 @@
-// src/main/infra/lsp/ls-config.test.ts
-// 语言服务器解析单测：扩展名映射 / 命令行解析 / override 优先级
-
 import { describe, expect, it } from 'vitest';
 import {
   languageForFile,
@@ -58,7 +55,6 @@ describe('resolveLsServer / serverSpecForLanguage', () => {
     const overrides = { python: { command: 'custom-pylsp', args: ['-v'] } };
     const resolved = resolveLsServer('/repo/app.py', overrides);
     expect(resolved?.spec).toEqual({ command: 'custom-pylsp', args: ['-v'] });
-    // 未覆盖语言不受影响
     expect(resolveLsServer('/repo/b.go', overrides)?.spec.command).toBe('gopls');
   });
 

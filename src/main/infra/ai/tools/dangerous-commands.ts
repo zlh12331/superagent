@@ -1,20 +1,5 @@
-// src/main/infra/ai/tools/dangerous-commands.ts
-// 危险命令确定性拦截（AUTO 模式 Layer-0 守卫）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 检测破坏性命令（git 丢弃工作 / IaC 销毁基础设施）→ 强制 ask
-// - 检测只读安全命令（ls/cat/git status 等）→ auto 模式自动放行
-// - 纯函数、零依赖：输入 command 字符串 + 用户原始 prompt，输出决策
-//
-// 借鉴声明：
-// 本模块的破坏性命令正则集参考 qwen-code 参考项目
 // packages/core/src/permissions/destructive-commands.ts（Copyright 2025 Qwen Team，
 // SPDX-License-Identifier: Apache-2.0）的 DESTRUCTIVE_GIT_PATTERNS /
-// IAC_DESTROY_PATTERNS / DISCARD_KEYWORDS，按我们的技术栈重写：
-// - 移除 @google/genai 类型依赖（user prompt 直接以 string 传入）
-// - 移除 execSync 会话提交跟踪（git commit --amend 会话内放行，标注后置）
-// - 增加只读命令白名单（对齐 qwen AUTO 分类器"安全命令自动"的收敛子集）
-// ──────────────────────────────────────────────────────────────
 
 /**
  * 危险命令检测结果
@@ -81,7 +66,6 @@ export function detectDangerousCommand(
   command: string,
   userPrompt?: string,
 ): DangerousCommandDecision {
-  // 用户显式意图：豁免破坏性拦截（用户意图优先）
   const hasDiscardIntent =
     userPrompt !== undefined && DISCARD_KEYWORDS.some((pattern) => pattern.test(userPrompt));
 

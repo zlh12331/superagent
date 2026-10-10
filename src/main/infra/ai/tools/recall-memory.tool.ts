@@ -1,13 +1,3 @@
-// src/main/infra/ai/tools/recall-memory.tool.ts
-// recall_memory 工具：按需检索跨会话记忆（只读）
-// ──────────────────────────────────────────────────────────────
-// 设计：
-// - L0/L1 不注入 systemPrompt（上游 KV cache 约束），改为暴露只读工具由模型主动查询
-// - 数据面：MemoryHub recall（keyword 策略预取召回，返回引擎格式化上下文）
-// - 依赖注入：MemoryPort 由 ServiceContainer 提供（唯一边界见 infra/memory-hub）
-// - 查询实现按 mode 拆为独立函数（保持 execute 精简，见函数体棘轮）
-// ──────────────────────────────────────────────────────────────
-
 import { z } from 'zod';
 import { t } from '../../i18n';
 import { isMemoryEnabled } from '../../memory-hub/memory-pref';
@@ -92,7 +82,6 @@ export function createRecallMemoryTool(memoryPort: MemoryPort): Tool<RecallMemor
     permission: 'auto',
     category: 'read',
     execute: async (input: RecallMemoryInput, ctx: ToolContext): Promise<ToolResult> => {
-      // 用户关闭记忆功能时不提供检索（关闭语义 = 不捕获也不使用）
       if (!isMemoryEnabled()) {
         return { title: t('tools.recallMemory.disabled'), output: '用户已在设置中关闭记忆功能。' };
       }

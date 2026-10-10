@@ -1,54 +1,6 @@
-// src/main/service-container.ts
-// ServiceContainer：应用单例统一生命周期管理入口
-// 设计文档 §4.1 分层架构 / §7.6 生命周期管理
-//
-// 设计目标：
-// 1. 集中持有核心服务实例（IAgentService / IFileService / ISearchService
-//    / IToolRegistry / IPermissionService / IToolExecutor），统一对外暴露获取接口
-// 2. 应用退出时统一清理（替代 index.ts 中分散的 cleanup 调用）
-// 3. 测试隔离时统一 reset（避免每个测试手动调用各模块 reset）
-// 4. 支持依赖注入：IPC handler 通过容器获取服务实例，而非直接 import 模块级单例
-//
-// dispose 顺序（反向依赖，先停依赖方再停被依赖方）：
-//   1.  cronService.stop()          停止定时调度（fire 会触发 agent 回合，最先停）
-//   2.  GoalService.unmount()       解除回合监听（P1 新增 unmount，此前泄漏）
-//   3.  ImAgentBridge.unmount()     解除 IM 消息订阅（P1 新增 unmount）
-//   4.  ImService.stopAll()         停止 IM 渠道长连接
-//   5.  RemoteControl.release()     解除命令桥接订阅 + 停 HTTP 监听/UDP 发现广播
-//   6.  AgentService.dispose()      中断活跃 agent 对话（drain 完成后再收下层）
-//   6.5 markInterruptedOnShutdown   退出善后：残留 running 回合标 interrupted
-//       （消除"干净退出留 stale running"窗口，须在 closeDb 前落库）
-//   7.  MCPService.stopAll()        停止所有 MCP server 子进程
-//   8.  lspManager.disposeAll()     关闭全部 language server（drain 后收，活跃回合仍需）
-//   9.  PermissionService.dispose() reject 所有 pending 审批 Promise
-//  10.  agentAskService.dispose()   清理 pending 提问
-//  11.  FileService.dispose()       关闭所有 chokidar watcher
-//  12.  SearchService.dispose()     终止活跃的 ripgrep 子进程
-//  13.  TerminalService.dispose()   kill 所有 pty 进程
-//  14.  GitService / CodebaseService.dispose()（no-op，保持一致性）
-//  15.  SessionService（resetSessionService，不关 db，由 resetDb 单独处理）
-//  16.  MemoryHub.stop()            sidecar 异步收尾（fire-and-forget）
-//  17.  UpdateService.dispose()     更新事件收尾
-//  17.5 BrowserPreview.dispose()    销毁预览 WebContentsView（窗口先关则安全跳过）
-//  18.  resetAIProvider()           清理 AI Provider 缓存
-//  19.  closeDb()                   关闭 SQLite 连接（必须最后）
-//
-// P1 修复：
-// - 每步经 runStep 独立 try/catch：单服务清理失败不再跳过后续清理，
-//   避免 PTY/ripgrep/chokidar 句柄残留为孤儿进程（退出路径必须可靠）
-//
-// 注意：
-// - ToolRegistry / ToolExecutor / PermissionService 是 class（非模块级单例），
-//   由 ServiceContainer 直接 new，无需 reset 函数
-// - AppConfig 无需 dispose（纯内存对象，进程退出即回收）
-// - 各模块内部已处理 null 检查，本模块无需重复判空
-// - 幂等：多次调用 disposeServices 安全
-
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { app, BrowserWindow } from 'electron';
-// electron-updater 是 CJS 包：ESM 下 named import 运行时失败（cjs-module-lexer 无法静态分析），
-// 必须默认导入后解构（Node ESM 对 CJS 的 default = module.exports，可靠）
 import electronUpdater from 'electron-updater';
 
 const { autoUpdater, CancellationToken } = electronUpdater;
@@ -125,12 +77,10 @@ function resolveMemoryHubRoot(): string | undefined {
   if (app.isPackaged) {
     return join(process.resourcesPath, 'memory-hub');
   }
-  // dev：优先用项目内构建产物（与打包产物同构，避免"dev 可用 prod 不可用"的偏差）
   const localArtifact = join(app.getAppPath(), 'resources', 'memory-hub');
   if (existsSync(join(localArtifact, 'src', 'gateway', 'server.ts'))) {
     return localArtifact;
   }
-  // 逃生口：显式指定其他上游目录（测试 / 临时验证）
   return process.env['MEMORY_HUB_ROOT'];
 }
 
@@ -156,9 +106,6 @@ class ServiceContainer {
   /** cron 调度是否已初始化（幂等标记） */
   private cronInitialized = false;
 
-  // ─── 服务实例缓存（全部懒初始化；按域分组，声明顺序与初始化顺序无关） ───
-
-  // 存储与查询域
   /** FileService（生产 get 单例；测试 set 注入 mock） */
   private fileService: IFileService | null = null;
   /** SearchService（生产 get 单例；测试 set 注入 mock） */
@@ -169,7 +116,6 @@ class ServiceContainer {
   private codebaseService: ICodebaseService | null = null;
   private terminalService: ITerminalService | null = null;
 
-  // AI 域
   /** ToolRegistry：容器直接 new（非模块单例），首次访问时注册全部内置工具 */
   private toolRegistry: IToolRegistry | null = null;
   /** PermissionService：dispose 时 rejectAllPendingApprovals 防内存泄漏 */
@@ -187,7 +133,6 @@ class ServiceContainer {
   private memoryHub: MemoryHubService | null = null;
   private lspManager: LspServerManager | null = null;
 
-  // 通信域
   private imService: ImService | null = null;
   /** IM → Agent 桥接（挂载后订阅渠道消息） */
   private imBridge: ImAgentBridge | null = null;
@@ -196,7 +141,6 @@ class ServiceContainer {
   /** 远程命令 → Agent 桥接（无头执行） */
   private remoteAgentBridge: RemoteAgentBridge | null = null;
 
-  // 其他
   /** 子代理管理器已初始化标记（initSubagents 幂等） */
   private subagentsInitialized = false;
   private updateService: IUpdateService | null = null;
@@ -249,8 +193,6 @@ class ServiceContainer {
     this.searchService = service;
   }
 
-  // ─── 工具系统（ToolRegistry / PermissionService / ToolExecutor） ───
-
   /**
    * 获取 ToolRegistry 实例
    *
@@ -263,8 +205,6 @@ class ServiceContainer {
   getToolRegistry(): IToolRegistry {
     if (this.toolRegistry === null) {
       const registry = new ToolRegistry();
-      // 注册全部内置工具（清单见 tools/index.ts registerBuiltinTools）
-      // 依赖 FileService + SearchService 实例
       registerBuiltinTools(
         registry,
         this.getFileService(),
@@ -299,7 +239,6 @@ class ServiceContainer {
   getPermissionService(): IPermissionService {
     if (this.permissionService === null) {
       this.permissionService = new PermissionService(new CommandClassifier(this.getLlmClient()));
-      // 启动时应用持久化审批模式（approval-pref.json，默认 ask）
       this.permissionService.setApprovalMode(readApprovalModeSync());
     }
     return this.permissionService;
@@ -335,8 +274,6 @@ class ServiceContainer {
     this.toolExecutor = executor;
   }
 
-  // ─── MCPService（多 MCP server 管理器） ───
-
   /**
    * 获取 MCPService 实例
    *
@@ -359,13 +296,8 @@ class ServiceContainer {
     this.mcpService = service;
   }
 
-  // ─── PromptService ───
-
   getPromptService(): IPromptService {
     if (this.promptService === null) {
-      // 注入 git 状态查询：动态上下文的 {{gitBranch}}/{{gitStatus}} 由此变为真实值。
-      // 闭包内延迟取 getGitService()：尊重测试经 setGitService() 注入的 mock；
-      // 非 git 仓库时 status() 抛错，injectDynamicContext 会兜底为占位符。
       this.promptService = new PromptService({
         gitSummaryProvider: gitSummaryProviderFrom((workingDir) =>
           this.getGitService().status(workingDir),
@@ -378,8 +310,6 @@ class ServiceContainer {
   setPromptService(service: IPromptService | null): void {
     this.promptService = service;
   }
-
-  // ─── AgentService ───
 
   /**
    * 获取 AgentService 实例
@@ -395,12 +325,9 @@ class ServiceContainer {
         this.getToolExecutor(),
         this.getPromptService(),
         this.getSessionService(),
-        // titleGenerator：LlmClient 鸭子匹配 ITitleGenerator（同签名 generateText）
         this.getLlmClient(),
         this.concurrencyGate,
-        // 审批生命周期 → 回合状态机 waitingApproval（AgentService 依赖）
         this.getPermissionService(),
-        // llmClient：工具入参自动修复引擎（SDK repairToolCall 钩子）
         this.getLlmClient(),
       );
     }
@@ -438,7 +365,6 @@ class ServiceContainer {
       this.memoryHub = new MemoryHubService({
         hubRoot: resolveMemoryHubRoot(),
         dataDir: join(app.getPath('userData'), 'memory-hub'),
-        // 蒸馏 LLM：复用应用默认供应商 + keychain（协议不兼容/未配 Key 时优雅降级）
         llm: resolveDistillLlmConfig,
       });
     }
@@ -477,7 +403,6 @@ class ServiceContainer {
   getImService(): ImService {
     if (this.imService === null) {
       this.imService = new ImService();
-      // 挂载 IM → Agent 桥接（无头执行；审批模式受控）
       this.imBridge = new ImAgentBridge(
         this.imService,
         this.getAgentService(),
@@ -524,16 +449,12 @@ class ServiceContainer {
       const session = await this.getSessionService().get(task.sessionId, {
         includeMessages: false,
       });
-      // 抢占保护（2026-09-06 审计修复）：会话执行中跳过，否则 preemptExisting 会 abort 用户对话
       if (session.session.lastRunStatus === 'running') {
         logger.warn({ taskId: task.id }, '定时任务跳过：会话正在执行中');
         return;
       }
       const { workingDir } = session.session;
       const prompt = `【定时任务触发】${task.description}`;
-      // 用户消息由 AgentService 回合开始时统一落库（appendMessage 带 turnId）——
-      // 此前这里预落库一份（无 turnId），与回合内落库重复：重开会话会看到
-      // 两条相同触发 prompt，且无 turnId 的那行无法按回合回放（debt.md#d2）。
       await this.getAgentService().startAgent({
         messages: [{ role: 'user', content: prompt }],
         sessionId: task.sessionId,
@@ -571,7 +492,6 @@ class ServiceContainer {
    */
   getRemoteControlService(): IRemoteControlService {
     if (this.remoteControlService === null) {
-      // 绑定范围自 app_settings 读取（remote.bindScope，默认 lan 兼容现状）
       this.remoteControlService = new RemoteControlService({
         bindScope: readRemoteBindScope(),
       });
@@ -633,8 +553,6 @@ class ServiceContainer {
     this.agentService = service;
   }
 
-  // ─── TerminalService（node-pty 终端会话池） ───
-
   /**
    * 获取 TerminalService 实例
    *
@@ -657,8 +575,6 @@ class ServiceContainer {
   setTerminalService(service: ITerminalService | null): void {
     this.terminalService = service;
   }
-
-  // ─── GitService（Git CLI 封装，只读查询） ───
 
   /**
    * 获取 GitService 实例
@@ -683,8 +599,6 @@ class ServiceContainer {
     this.gitService = service;
   }
 
-  // ─── CodebaseService（codegraph CLI 封装，代码智能查询） ───
-
   /**
    * 获取 CodebaseService 实例
    *
@@ -707,8 +621,6 @@ class ServiceContainer {
   setCodebaseService(service: ICodebaseService | null): void {
     this.codebaseService = service;
   }
-
-  // ─── SessionService（SQLite 持久化，会话历史存储） ───
 
   /**
    * 获取 SessionService 实例
@@ -762,13 +674,9 @@ class ServiceContainer {
   async dispose(): Promise<void> {
     logger.info({}, '开始清理应用服务');
 
-    // P1 修复：每步独立异常隔离——单个服务 dispose 抛错不再跳过后续清理，
-    // 否则 PTY/ripgrep/chokidar 句柄会残留为孤儿进程（退出路径必须可靠）。
     const failures: string[] = [];
     const runStep = createDisposeStep(failures);
 
-    // 1.8 停止定时任务调度（fire 会触发 agent 回合，必须最先停——
-    //     先于桥接卸载与 AgentService drain，防半拆解容器再起新回合）
     await runStep('cronService.stop', () => {
       this.cronUnsubscribe?.();
       this.cronUnsubscribe = null;
@@ -776,8 +684,6 @@ class ServiceContainer {
       cronService.stop();
     });
 
-    // 1.9 先停 agent 回合的依赖方（桥接/渠道/远程控制）：drain 窗口内到达的
-    //     IM/远程命令不得再发起新回合（S14 修复：此前卸载晚于 agent drain）
     await runStep('goalService.unmount', async () => {
       this.goalService?.unmount();
       this.goalService = null;
@@ -787,7 +693,6 @@ class ServiceContainer {
       this.imBridge = null;
     });
 
-    // 1.10 停止 IM 渠道长连接（QQ/微信/钉钉/Telegram/飞书/企微 webhook 收尾）
     await runStep('imService.stopAll', async () => {
       if (this.imService !== null) {
         await this.imService.stopAll();
@@ -795,14 +700,10 @@ class ServiceContainer {
       this.imService = null;
     });
 
-    // 1.11 收尾远程控制：解除命令桥接订阅 + 停止 HTTP 监听与 UDP 发现广播
     await runStep('remoteControl.release', async () => {
       await this.releaseRemoteControl();
     });
 
-    // 优雅关闭 AgentService（P4：中断 + 等待活跃 agent stream 真正完成）
-    //    AgentService 依赖 ToolExecutor（已注入到 executeHook 闭包），
-    //    必须在 PermissionService.dispose 之前停止
     await runStep('agentService.dispose', async () => {
       if (this.agentService !== null) {
         await this.agentService.dispose();
@@ -810,13 +711,6 @@ class ServiceContainer {
       this.agentService = null;
     });
 
-    // 1.12 退出善后：把仍在 running 的回合标记为 interrupted
-    //     agentService.dispose 已 drain（正常路径 stream finally 已 markIdle），
-    //     但 3s 超时强清的 stream 协程仍悬挂 → DB 残留 running。
-    //     此步消除"干净退出却留 stale running、依赖下次启动 recoverFromCrash
-    //     才纠正"的窗口（退出后外部工具/备份脚本读到的一律是终态）。
-    //     幂等：markAllInterrupted 只影响 last_run_status='running' 的行；
-    //     必须在 sessionService.dispose / closeDb 之前（此后无人再写 sessions 表）。
     await runStep('markInterruptedOnShutdown', async () => {
       if (this.sessionService !== null) {
         const interrupted = await this.sessionService.markAllInterrupted();
@@ -829,7 +723,6 @@ class ServiceContainer {
       }
     });
 
-    // 2.5 关闭 MCPService（停止所有 MCP server 子进程）
     await runStep('mcpService.stopAll', async () => {
       if (this.mcpService !== null) {
         await this.mcpService.stopAll();
@@ -837,15 +730,11 @@ class ServiceContainer {
       this.mcpService = null;
     });
 
-    // 2.6 关闭全部 language server（S14 修复：移到 agent drain 之后——
-    //     drain 窗口内活跃回合的 LSP 工具调用仍需可用）
     await runStep('lspManager.disposeAll', async () => {
       await this.lspManager?.disposeAll();
       this.lspManager = null;
     });
 
-    // 3. 清理 PermissionService（reject 所有 pending 审批 Promise，避免内存泄漏）
-    //    ToolExecutor 与 ToolRegistry 无外部资源（仅 Map / 协调层），无需 dispose
     await runStep('permissionService.dispose', async () => {
       this.permissionService?.dispose();
       this.permissionService = null;
@@ -853,12 +742,10 @@ class ServiceContainer {
       this.toolRegistry = null;
     });
 
-    // 3.5 Agent 提问 pending 清理（agentAskService 为模块单例，dispose 幂等）
     await runStep('agentAskService.dispose', () => {
       agentAskService.dispose();
     });
 
-    // 4. 关闭 FileService 所有 watcher（释放 chokidar fs 监听句柄）
     await runStep('fileService.dispose', async () => {
       if (this.fileService !== null) {
         await this.fileService.dispose();
@@ -867,7 +754,6 @@ class ServiceContainer {
       this.fileService = null;
     });
 
-    // 5. 终止 SearchService 活跃子进程（释放 ripgrep spawn 句柄）
     await runStep('searchService.dispose', async () => {
       if (this.searchService !== null) {
         await this.searchService.dispose();
@@ -876,7 +762,6 @@ class ServiceContainer {
       this.searchService = null;
     });
 
-    // 6. kill 所有 TerminalService 活跃 pty 进程（释放 node-pty 句柄）
     await runStep('terminalService.dispose', async () => {
       if (this.terminalService !== null) {
         await this.terminalService.dispose();
@@ -885,7 +770,6 @@ class ServiceContainer {
       this.terminalService = null;
     });
 
-    // 7. GitService 无外部资源，dispose 是 no-op，但保持一致性便于未来扩展
     await runStep('gitService.dispose', async () => {
       if (this.gitService !== null) {
         await this.gitService.dispose();
@@ -894,7 +778,6 @@ class ServiceContainer {
       this.gitService = null;
     });
 
-    // 8. CodebaseService 无外部资源，dispose 是 no-op，但保持一致性便于未来扩展
     await runStep('codebaseService.dispose', async () => {
       if (this.codebaseService !== null) {
         await this.codebaseService.dispose();
@@ -903,7 +786,6 @@ class ServiceContainer {
       this.codebaseService = null;
     });
 
-    // 9. SessionService 无外部资源（db 由 closeDb 单独关闭），必须在 closeDb 之前
     await runStep('sessionService.dispose', async () => {
       if (this.sessionService !== null) {
         await this.sessionService.dispose();
@@ -912,10 +794,8 @@ class ServiceContainer {
       this.sessionService = null;
     });
 
-    // 10. PromptService 无外部资源，清空引用即可
     this.promptService = null;
 
-    // 10.2 停止 MemoryHub sidecar 子进程（上游记忆引擎）
     await runStep('memoryHub.stop', async () => {
       if (this.memoryHub !== null) {
         await this.memoryHub.stop();
@@ -923,25 +803,20 @@ class ServiceContainer {
       this.memoryHub = null;
     });
 
-    // 10.5 UpdateService 无外部资源（事件随进程退出释放），清空引用即可
     await runStep('updateService.dispose', () => {
       this.updateService?.dispose();
       this.updateService = null;
     });
 
-    // 10.6 销毁浏览器预览 WebContentsView（独立 session 分区随对象回收；
-    //      窗口先于容器 dispose 关闭时，内部按 isDestroyed 安全跳过）
     await runStep('browserPreview.dispose', () => {
       this.browserPreviewService?.dispose();
       this.browserPreviewService = null;
     });
 
-    // 11. 清理 AI Provider 缓存（DeepSeek provider 无连接池，仅清空引用让 GC 回收）
     await runStep('resetAIProvider', () => {
       resetAIProvider();
     });
 
-    // 11.5 关闭 SQLite 连接（必须最后调用，避免 SessionService 后续访问已关闭的 db）
     await runStep('closeDb', async () => {
       await closeDb();
     });
@@ -1004,15 +879,10 @@ class ServiceContainer {
    * - 调用此函数前应确保已停止相关外部服务
    */
   reset(): void {
-    // AgentService 无模块级单例，直接清空 ServiceContainer 缓存引用
     this.agentService = null;
-    // 工具系统无模块级单例，直接清空 ServiceContainer 缓存引用
     this.permissionService = null;
     this.toolExecutor = null;
     this.toolRegistry = null;
-    // P1 修复：补齐此前遗漏的服务——MCP 子进程停止、挂载解除、IM 渠道停止
-    // reset 为同步 API：stopAll 为异步收尾，fire-and-forget 避免子进程/长连接在测试中泄漏
-    // 定时任务调度停止（防测试间 cron 实例泄漏）
     this.cronUnsubscribe?.();
     this.cronUnsubscribe = null;
     this.cronInitialized = false;
@@ -1025,9 +895,7 @@ class ServiceContainer {
     this.imBridge = null;
     void this.imService?.stopAll();
     this.imService = null;
-    // 远程控制：桥接订阅解除 + HTTP/UDP 收尾（异步 fire-and-forget，防端口泄漏）
     void this.releaseRemoteControl();
-    // MemoryHub 子进程异步收尾（reset 为同步 API，fire-and-forget 防泄漏）
     void this.memoryHub?.stop();
     this.memoryHub = null;
     agentAskService.dispose();
@@ -1041,7 +909,6 @@ class ServiceContainer {
     this.gitService = null;
     resetCodebaseService();
     this.codebaseService = null;
-    // SessionService 模块级单例清理（不关闭 db，由 resetDb 单独处理）
     resetSessionService();
     this.sessionService = null;
     this.promptService = null;
@@ -1049,7 +916,6 @@ class ServiceContainer {
     this.browserPreviewService?.dispose();
     this.browserPreviewService = null;
     resetAIProvider();
-    // 关闭并重置 SQLite 连接（必须最后调用，避免 SessionService 后续访问已关闭的 db）
     resetDb();
     resetConfigCache();
   }
@@ -1108,8 +974,6 @@ export async function recoverFromCrash(): Promise<void> {
     if (interrupted > 0 || wasCrash) {
       logger.info({ interrupted, wasCrash }, '崩溃恢复：残留 running 会话已标记为 interrupted');
     }
-    // 2026-09-08 修复：tasks 表同样持久化 status，此前异常退出后残留 running
-    // 任务在面板永久显示「运行中」。与 sessions 同阶段无条件修正。
     const failedTasks = taskService.markAllRunningFailed();
     if (failedTasks > 0) {
       logger.info({ failedTasks }, '崩溃恢复：残留 running 任务已标记为 failed');

@@ -1,19 +1,6 @@
-// tests/integration/session-goal.test.ts
-// 集成测试种子：SessionService + GoalService 跨服务真实协作 + DB 级联约束
-// ──────────────────────────────────────────────────────────────
-// 验证目标（单测各自为战无法覆盖的协作面）：
-// 1. 会话 → 目标的跨服务数据一致（goal 按 sessionId 过滤，多会话不串）
-// 2. goal:clear 语义（active → aborted）
-// 3. DB 外键级联：删除会话 → 其目标级联删除（schema onDelete: cascade）
-//
-// 基础设施：内存 SQLite（建表 SQL 单一真源 SCHEMA_SQL），真实服务实例。
-// 唯一隔离：getDb 指向内存 DB（与单测同模式的环境注入，非业务 mock）。
-// ──────────────────────────────────────────────────────────────
-
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createTestDb } from '../../src/main/infra/storage/test-utils';
 
-// 内存 DB 注入（环境隔离：测试不使用真实 userData 文件）
 function createInMemoryDb() {
   return createTestDb();
 }
@@ -32,8 +19,6 @@ vi.mock('../../src/main/infra/storage/db', async (importOriginal) => {
     resetDb: () => {
       memoryDb = null;
     },
-    // reclaimFreePages 内部引原模块 getDb（读真实 dbInstance，未初始化即抛错）：
-    // 集成测试用内存库，回收是 no-op，避免 delete 用例崩
     reclaimFreePages: () => {},
   };
 });
@@ -107,7 +92,6 @@ describe('Session ↔ Goal 集成', () => {
     await goalService.create(sessionId, '目标');
 
     await sessionService.delete(sessionId);
-    // 目标表不应残留该会话的目标（外键 onDelete: cascade）
     const goals = await goalService.list(sessionId);
     expect(goals).toHaveLength(0);
   });

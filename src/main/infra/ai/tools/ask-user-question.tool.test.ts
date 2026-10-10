@@ -1,6 +1,3 @@
-// src/main/infra/ai/tools/ask-user-question.tool.test.ts
-// ask_user_question 工具单测：无窗口降级 / 空应答 / 回答序列化渲染
-
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AgentAskService } from '../agent/agent-ask-service';
 import { createAskUserQuestionTool } from './ask-user-question.tool';

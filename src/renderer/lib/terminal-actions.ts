@@ -1,12 +1,3 @@
-// src/renderer/lib/terminal-actions.ts
-// 终端 IPC 桥（create / kill / input / resize / 订阅）
-// ──────────────────────────────────────────────────────────────
-// 职责（direct-ipc 清迁，2026-09-26）：
-// - TerminalView / TerminalPanel 此前直连 window.api.terminal.*，收敛到本文件
-// - 订阅函数返回 unsubscribe，生命周期由组件 effect 管理
-// - 无桥（浏览器模式）时返回明确空结果 / no-op unsubscribe，不抛 TypeError
-// ──────────────────────────────────────────────────────────────
-
 import type {
   TerminalCreateReq,
   TerminalCreateRes,

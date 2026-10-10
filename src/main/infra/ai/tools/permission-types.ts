@@ -1,9 +1,3 @@
-// src/main/infra/ai/tools/permission-types.ts
-// 权限服务契约层（自 permission-service.ts 提取：接口与决策类型单一归属）
-// ──────────────────────────────────────────────────────────────
-// permission-service.ts 对外 re-export 本文件全部符号（外部 import 路径不变）。
-// ──────────────────────────────────────────────────────────────
-
 import type {
   AgentApprovalRequestPayload,
   ApprovalMode,

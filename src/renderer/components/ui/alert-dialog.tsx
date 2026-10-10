@@ -1,11 +1,3 @@
-// src/renderer/components/ui/alert-dialog.tsx
-// 警告对话框组件（shadcn/ui new-york 风格，基于 @radix-ui/react-alert-dialog）
-// ──────────────────────────────────────────────────────────────
-// 照搬自参考项目（F:\TraeProjects\Agent2\1\src\components\ui\alert-dialog.tsx）
-// 与普通 Dialog 的区别：AlertDialog 点击遮罩不会关闭，强制用户显式选择确认或取消。
-// 用途：命令式 confirm/prompt 对话框（DialogHost）、删除确认等不可逆操作。
-// ──────────────────────────────────────────────────────────────
-
 import * as AlertDialogPrimitive from '@radix-ui/react-alert-dialog';
 import type * as React from 'react';
 

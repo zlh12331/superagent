@@ -1,6 +1,3 @@
-// src/main/infra/remote/network-info.test.ts
-// 局域网地址枚举单测：回环/内部/IPv6 过滤 + 端点组装（os.networkInterfaces 桩化）
-
 import { networkInterfaces } from 'node:os';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildRemoteEndpoints, getLanIPv4Addresses } from './network-info';

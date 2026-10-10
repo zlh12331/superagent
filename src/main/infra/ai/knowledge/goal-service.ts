@@ -1,20 +1,3 @@
-// src/main/infra/ai/knowledge/goal-service.ts
-// 会话目标服务：目标 CRUD + 回合结束自动判定
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 创建/查询/清除目标（goals 表持久化，对齐 qwen /goal 语义）
-// - 订阅回合事件（onTurnEvent 类级总线）→ TEXT_DELTA 累积转录 + TURN_END 后判定
-// - 判定满足 → 标记 completed；impossible → 标记 aborted（附理由）
-//
-// 设计：
-// - 每会话一个 active 目标（新建覆盖旧——旧目标标记 aborted）
-// - 判定输入：TEXT_DELTA 累积的助手全文（user 消息不经事件流，不在证据内；
-//   纯工具回合/空转录不判定——无证据）
-// - 判定失败默认 not met（安全），不阻塞主流程
-// - 依赖：IAgentService（onTurnEvent 类级总线）+ GoalJudge + goals 表（getDb）
-//   ——转录经事件累积，不读 ISessionService
-// ──────────────────────────────────────────────────────────────
-
 import type { GoalInfo, GoalStatus, TurnEvent } from '@code-agent/shared/main';
 import { TurnEventType } from '@code-agent/shared/main';
 import { desc, eq } from 'drizzle-orm';
@@ -52,8 +35,6 @@ export class GoalService {
       return;
     }
     this.mounted = true;
-    // P1 修复：保存取消订阅句柄，unmount 时精确移除（此前挂载后无法解除，
-    // 容器 dispose/reset 均不清理，挂载监听成为泄漏源）
     this.unsubscribeTurn = this.agentService.onTurnEvent((event) => {
       void this.handleTurnEvent(event);
     });
@@ -82,7 +63,6 @@ export class GoalService {
   async create(sessionId: string, condition: string): Promise<void> {
     const db = getDb();
     db.transaction((tx) => {
-      // 旧 active 目标标记 aborted
       tx.update(goals)
         .set({ status: 'aborted' as GoalStatusInternal, finishedAt: Date.now() })
         .where(eq(goals.sessionId, sessionId))
@@ -172,7 +152,6 @@ export class GoalService {
     if (active === undefined) {
       return;
     }
-    // 空转录（纯工具回合）不判定——无证据
     if (transcript.trim().length === 0) {
       return;
     }

@@ -1,20 +1,3 @@
-// src/main/config/index.ts
-// 应用配置：从 process.env 读取，zod 校验，提供类型安全的单例
-// 设计文档 §2.6 监控与运维配置
-//
-// P2-8 环境分层：
-// - 显式 appEnv: 'development' | 'production' | 'test' 三态枚举
-// - 优先级：APP_ENV > NODE_ENV > app.isPackaged 推断
-// - test 环境由 Vitest 自动设置 NODE_ENV=test 触发
-// - isDev / isTest / isPackaged 三个布尔派生字段（向后兼容）
-//
-// 环境特定默认值：
-// - development：logLevel=debug、DeepSeek timeout=60s
-// - production：logLevel=info、DeepSeek timeout=60s
-// - test：logLevel=error（减少测试噪音）、DeepSeek timeout=5s（测试不应等 60s 超时）
-//
-// 敏感数据（API Key）不存此处，由 keychain.ts 管理。
-
 import { app } from 'electron';
 import { z } from 'zod';
 
@@ -142,18 +125,14 @@ export type AppConfig = z.infer<typeof AppConfigSchema>;
  * @returns 推断出的运行环境
  */
 function resolveAppEnv(isPackaged: boolean): 'development' | 'production' | 'test' {
-  // noPropertyAccessFromIndexSignature: process.env 必须用方括号访问
   const env = process.env;
-  // 1. APP_ENV 显式覆盖
   const explicit = env['APP_ENV'];
   if (explicit === 'development' || explicit === 'production' || explicit === 'test') {
     return explicit;
   }
-  // 2. NODE_ENV=test（Vitest 自动设置）
   if (env['NODE_ENV'] === 'test') {
     return 'test';
   }
-  // 3. 根据 isPackaged 推断
   return isPackaged ? 'production' : 'development';
 }
 
@@ -165,14 +144,9 @@ function resolveAppEnv(isPackaged: boolean): 'development' | 'production' | 'tes
 export function loadConfig(): AppConfig {
   const isPackaged = app.isPackaged;
   const appEnv = resolveAppEnv(isPackaged);
-  // isDev 包含 development 和 test（test 是开发环境的特化，保留开发模式行为）
   const isDev = appEnv !== 'production';
   const isTest = appEnv === 'test';
 
-  // 环境特定默认值
-  // - test：logLevel=error（减少测试噪音）
-  // - development：logLevel=debug（开发调试）
-  // - production：logLevel=info（默认）
   const defaultLogLevel: 'debug' | 'info' | 'error' = isTest ? 'error' : isDev ? 'debug' : 'info';
 
   const env = process.env;
@@ -182,9 +156,7 @@ export function loadConfig(): AppConfig {
     isTest,
     isPackaged,
     logLevel: env['LOG_LEVEL'] ?? defaultLogLevel,
-    // providers 由 schema preprocess 读取 env（DEEPSEEK_API_BASE 等），此处不重复
     providers: {},
-    // test 环境缩短超时（5s），避免测试等待生产级 60s 超时
     modelTimeoutMs: isTest ? 5000 : undefined,
   });
 }

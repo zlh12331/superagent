@@ -1,15 +1,3 @@
-// src/main/infra/ai/tools/command-guards.ts
-// 权限决策的确定性判定原语（纯函数，无状态、无 IPC 依赖）
-//
-// 从 permission-service.ts 抽出：这些判定是「字符串/路径层面的纯计算」，
-// 与审批流（pending Promise、记忆缓存、webContents 推送）无关，独立成模块
-// 便于单测直接覆盖边界用例，也让 PermissionService 专注决策编排。
-//
-// 包含三组判定：
-// 1. 白名单模式语义：通用模式（空/通配符）识别 + token 级前缀匹配
-// 2. 命令结构：复合命令识别 + 命令文本提取 + 路径越界识别
-// 3. plan 模式控制面逃生舱名单
-
 import { homedir } from 'node:os';
 import { isAbsolute, join, normalize, relative, resolve } from 'node:path';
 import { splitShellWords } from '../../terminal/terminal-service';
@@ -102,10 +90,8 @@ export function commandTargetsOutsideBoundary(command: string, boundary: string)
   try {
     tokens = splitShellWords(command, process.platform);
   } catch {
-    // 分词失败按越界处理（保守：交给 ask 分支人工确认）
     return true;
   }
-  // 边界本身解析失败 → 无法判定，按越界处理（fail closed）
   const realBoundary = resolveRealTarget(normalize(boundary));
   if (realBoundary === null) {
     return true;
@@ -113,8 +99,6 @@ export function commandTargetsOutsideBoundary(command: string, boundary: string)
   const normBoundary = realBoundary.toLowerCase();
   for (const raw of tokens) {
     if (!isPathLikeToken(raw)) continue;
-    // 路径形状 token 含变量/参数展开 → 无法静态解析落点，fail closed
-    // （2026-09-08 安全审计修复：`cat $HOME/.ssh/id_rsa` 此前被判为界内只读命令）
     if (isVariablePathToken(raw)) {
       return true;
     }
@@ -124,8 +108,6 @@ export function commandTargetsOutsideBoundary(command: string, boundary: string)
     } catch {
       return true;
     }
-    // 真实落点：工作区内 symlink 指向边界外时，字符串级 relative 会误判为界内。
-    // 解析失败（损坏/循环链接）同样按越界处理（fail closed）。
     const realTarget = resolveRealTarget(resolved);
     if (realTarget === null) {
       return true;
@@ -183,7 +165,6 @@ function isPathLikeToken(token: string): boolean {
   if (URL_LIKE_PATTERN.test(token)) {
     return false;
   }
-  // 变量形态（`ls $HOME` / `cat $HOME/.ssh/id_rsa`）：落点不可静态解析
   if (isVariablePathToken(token)) {
     return true;
   }
@@ -254,7 +235,6 @@ export function isDeniedByPlanMode(
  * 见 permission-service auto 分支对 MCP 工具的 fail-closed）。
  */
 export function extractCommandFromInput(input: unknown): string | undefined {
-  // 已知命令形键（按序取首个非空字符串；模块内私有，非导出面故不挂 TSDoc）
   const CommandInputKeys = ['command', 'script', 'cmd', 'shell', 'bash'] as const;
   if (typeof input !== 'object' || input === null) {
     return undefined;

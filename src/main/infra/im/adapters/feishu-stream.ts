@@ -1,20 +1,4 @@
-// src/main/infra/im/adapters/feishu-stream.ts
-// 飞书长连接接收器：官方 SDK WSClient（对齐 qwen FeishuChannel 语义收敛）
-// ──────────────────────────────────────────────────────────────
-// 设计（参考 qwen channels/feishu 架构）：
-// - SDK 管理 tenant_access_token / 心跳 / 重连（生产级连接层）
-// - 事件分发：im.message.receive_v1 → parseFeishuEvent（纯函数可测）→ 入站消息
-// - 消息类型：text（文本）；post（富文本含文本）；其余（图片/文件）忽略
-// - @bot 前缀剥离：群聊 mention 场景
-//
-// 借鉴声明：
-// 本模块参考 qwen-code 参考项目 packages/channels/feishu/src/FeishuAdapter.ts
 // （Copyright 2026 Qwen Team，SPDX-License-Identifier: Apache-2.0）的
-// 长连接接入与消息解析语义，按我们的技术栈收敛重写：
-// - 移除交互卡片（卡片状态机/停止按钮，桌面端由既有审批/推送覆盖）
-// - 移除 media 下载（保留扩展位）；事件解析收敛为纯函数
-// - 保留核心：SDK WSClient 长连接 + 消息事件归一化
-// ──────────────────────────────────────────────────────────────
 
 import * as lark from '@larksuiteoapi/node-sdk';
 import { logger } from '../../../utils/logger';
@@ -41,7 +25,7 @@ export interface FeishuMessageEventV1 {
     readonly chat_id?: string;
     readonly chat_type?: string;
     readonly message_type?: string;
-    readonly content?: string; // JSON 字符串
+    readonly content?: string;
     readonly mentions?: Array<{
       readonly key?: string;
       readonly id?: unknown;
@@ -83,7 +67,6 @@ export function parseFeishuEvent(event: FeishuMessageEventV1): ParsedFeishuMessa
   if (text === null || text.trim().length === 0) {
     return null;
   }
-  // 剥离 @bot 前缀（mention 场景：'@_user_1 帮我xxx' → '帮我xxx'）
   const cleaned = stripBotMention(text);
   if (cleaned.length === 0) {
     return null;
@@ -221,9 +204,7 @@ export class FeishuStreamReceiver {
     if (this.wsClient !== null) {
       try {
         void this.wsClient.close();
-      } catch {
-        // 关闭失败不阻断
-      }
+      } catch {}
       this.wsClient = null;
     }
     this.opened = false;

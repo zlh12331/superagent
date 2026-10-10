@@ -1,6 +1,3 @@
-// src/main/infra/ai/tools/codebase.tool.test.ts
-// codebase 工具单测：6 操作分派 + 必填参数校验 + 默认值（mock ICodebaseService）
-
 import { ErrorCode } from '@code-agent/shared/main';
 import { describe, expect, it, vi } from 'vitest';
 import type { ICodebaseService } from '../../codebase/codebase-service';

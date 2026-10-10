@@ -1,16 +1,3 @@
-// src/main/infra/memory-hub/llm-config.ts
-// 蒸馏 LLM 配置解析：复用应用已配置的默认供应商与 Keychain 密钥
-// ──────────────────────────────────────────────────────────────
-// 设计：
-// - 模型来源：设置 ai.defaultModel（渲染层 settings-store 写穿透 SQLite）
-// - 供应商解析：ModelRegistry.resolve（运行时自定义模型含显式 baseUrl/apiKey 时优先）
-// - 协议约束：MemoryCore 蒸馏仅支持 OpenAI-compatible 端点（llm-resolver 直通
-//   openai 形态）；anthropic 协议不兼容 → 返回 undefined 优雅降级（L0 照常，
-//   L1 提取停用并留痕）
-// - URL 拼接规则对齐 providers/registry 工厂：deepseek/openai/ollama 根地址
-//   需补 /v1，其余 kind 的 config 值已是完整 OpenAI 兼容路径
-// ──────────────────────────────────────────────────────────────
-
 import { getAppConfig } from '../../config';
 import { logger } from '../../utils/logger';
 import { modelRegistry } from '../ai/models';
@@ -35,7 +22,6 @@ const TAG = '[memory-hub]';
  */
 export async function resolveDistillLlmConfig(): Promise<MemoryHubLlmConfig | undefined> {
   try {
-    // 1. 用户默认模型（设置 ai 对象整体 JSON 落库；未配置时用默认供应商默认模型）
     const aiSettings = readSetting('ai') as { defaultModel?: unknown } | undefined;
     const requestedModel =
       typeof aiSettings?.defaultModel === 'string' && aiSettings.defaultModel.length > 0
@@ -45,7 +31,6 @@ export async function resolveDistillLlmConfig(): Promise<MemoryHubLlmConfig | un
     const resolved = modelRegistry.resolve(requestedModel);
     const kind = resolved.providerKind;
 
-    // 默认模型已被用户停用 → 蒸馏降级（L0 照常，L1 提取停用）
     if (!resolved.available) {
       logger.warn(
         { model: resolved.modelId },
@@ -62,11 +47,9 @@ export async function resolveDistillLlmConfig(): Promise<MemoryHubLlmConfig | un
       return undefined;
     }
 
-    // 2. baseUrl：运行时模型显式覆盖 > config 根地址映射
     const root = resolved.explicitBaseUrl ?? getAppConfig().providers[kind];
     const baseUrl = V1_SUFFIX_KINDS.has(kind) ? `${root}/v1` : root;
 
-    // 3. apiKey：运行时模型显式覆盖 > keychain；免 Key 供应商（ollama）为空串
     let apiKey = resolved.explicitApiKey;
     if (apiKey === undefined) {
       const definition = providerRegistry.getDefinition(kind);

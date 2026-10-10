@@ -1,18 +1,3 @@
-// src/main/infra/ai/agent-runtime/loop-detector.test.ts
-// LoopDetector 单测：回合循环检测（安全关键——防止无限循环消耗 token）
-//
-// 测试要点：
-// 1. 连续相同工具调用（同 name + 同入参）≥5 → LoopDetectedError
-// 2. 阈值边界（4 次不抛）
-// 3. 入参/工具名变化 → 重置 streak
-// 4. 连续相同文件读取 ≥15 → LoopDetectedError（阈值放宽）
-// 5. reset() 后重新计数
-//
-// 接线背景：recordToolCall 已接线（TurnRunner 读流时对 tool-call 事件记录）；
-// recordFileRead 生产零调用（预留能力）——本组用例是其回归锚，接线前防止
-// 阈值语义腐烂（错误码 AI_LOOP_DETECTED 经 classifyError 透传，回合以
-// error 终态终止）。
-
 import { ErrorCode } from '@code-agent/shared/main';
 import { describe, expect, it } from 'vitest';
 
@@ -54,11 +39,9 @@ describe('LoopDetector.recordToolCall', () => {
     for (let i = 0; i < 4; i += 1) {
       detector.recordToolCall('read_file', '{"path":"a.ts"}');
     }
-    // 入参变化：重新计数（此前 4 次作废）
     for (let i = 0; i < 4; i += 1) {
       detector.recordToolCall('read_file', '{"path":"b.ts"}');
     }
-    // 新入参 streak 已到 4：第 5 次同入参才抛
     expect(() => detector.recordToolCall('read_file', '{"path":"b.ts"}')).toThrow(
       LoopDetectedError,
     );

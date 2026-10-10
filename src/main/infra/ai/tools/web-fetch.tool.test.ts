@@ -1,6 +1,3 @@
-// src/main/infra/ai/tools/web-fetch.tool.test.ts
-// web_fetch 工具单测：协议白名单 / HTTP 错误 / 空正文 / 截断 / 失败降级（mock 全局 fetch）
-
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ToolContext } from './tool';
 import { createWebFetchTool } from './web-fetch.tool';
@@ -97,10 +94,6 @@ describe('web_fetch', () => {
     expect(result.output).toContain('页面无可提取的正文文本');
   });
 
-  // ── 实体解码与标签过滤的回归（CodeQL js/double-escaping / js/bad-tag-filter）──
-  // 两条规则都指向 stripHtml：双重解码会把转义文本还原成标签形态，
-  // 写死 `</script>` 则漏掉 `</script >` 这类合法变体。
-
   it('双重转义不被二次解码（&amp;lt; 保持为字面量 &lt;）', async () => {
     vi.stubGlobal(
       'fetch',
@@ -112,7 +105,6 @@ describe('web_fetch', () => {
       })),
     );
     const result = await createWebFetchTool().execute({ url: 'https://example.com' }, ctx);
-    // 单遍解码：&amp; → &，其余保持字面；不得再解成 <script>
     expect(result.output).toContain('&lt;script&gt;');
     expect(result.output).not.toContain('<script>');
   });

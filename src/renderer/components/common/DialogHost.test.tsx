@@ -1,13 +1,3 @@
-// src/renderer/components/$1/DialogHost.test.tsx
-// DialogHost 命令式对话框宿主单测：confirm / prompt 两种形态全路径
-// ──────────────────────────────────────────────
-// 覆盖动机：组件此前 0% 覆盖，而它是全仓 confirm()/prompt() 的唯一渲染出口——
-// 返回值语义（confirm → true/false；prompt → trim 后字符串 / null）、
-// Esc/遮罩/关闭按钮的取消语义、defaultValue 回填、Enter 确认均无回归锚。
-// 集成方式：直接调 store 的 confirm()/prompt()（真实命令式 API）+ 渲染宿主，
-// 仅对 confirm-dialog-store 之外的第三方（Radix Dialog）保持真实。
-// ──────────────────────────────────────────────
-
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
 
@@ -82,7 +72,6 @@ describe('DialogHost', () => {
     expect(input.value).toBe('旧名');
     fireEvent.change(input, { target: { value: '  新名  ' } });
     clickInDialog(t('common.confirm'));
-    // 确认值经过 trim
     await expect(result).resolves.toBe('新名');
   });
 
@@ -111,12 +100,10 @@ describe('DialogHost', () => {
     const input = within(dialog).getByRole('textbox');
     fireEvent.change(input, { target: { value: '   ' } });
     clickInDialog(t('common.confirm'));
-    // trim 后空串：调用方可据此判「用户清空了输入」而非「取消」
     await expect(result).resolves.toBe('');
   });
 
   it('异常路径：宿主未挂载时 confirm 不抛错（promise 悬空）', () => {
-    // 无宿主：_enqueue 仍可调用，仅无渲染（由 store 语义保证）
     expect(() => {
       void confirm({ title: 'x', message: 'y' });
     }).not.toThrow();
@@ -136,16 +123,6 @@ describe('DialogHost', () => {
     });
   });
 
-  // ── 排队请求不被误取消（2026-09 审计修复的回归锚） ──────────────
-  //
-  // 背景：AlertDialogAction/Cancel 实为 Radix DialogPrimitive.Close，其内部把
-  // onClick 与 onOpenChange(false) 用 composeEventHandlers 串联 → 点击一次会
-  // **连续两次**调 store 的 _resolve：先 handleConfirm/Cancel，再经
-  // handleOpenChange 走取消分支。第二次 _resolve 会把队列中的下一个请求
-  // 当「已取消」解决并出队。实测现象：确认第一个后，第二个
-  // **未经展示即 resolved=false**（用户根本没看到那个弹窗）。
-  // 此前测试都只有单个请求，_resolve 开头的 null 守卫使其侥幸安全，故未暴露。
-
   /** 判断 promise 在 50ms 内是否已解决（用于断言「保持待决」） */
   async function settledWithin50ms(p: Promise<unknown>): Promise<'settled' | 'pending'> {
     return Promise.race([
@@ -163,10 +140,8 @@ describe('DialogHost', () => {
     clickInDialog(t('common.confirm'));
     await expect(first).resolves.toBe(true);
 
-    // 第二个不得被自动解决
     expect(await settledWithin50ms(second)).toBe('pending');
 
-    // 且第二个弹窗可见可交互（用户能真正做选择）
     const dialog2 = await findDialog();
     expect(within(dialog2).getByText('第二个')).toBeDefined();
     clickInDialog(t('common.confirm'));

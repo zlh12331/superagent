@@ -1,14 +1,3 @@
-// approval-preview.tsx（自原 ApprovalDialog 拆分，弹窗已删除）
-// 审批载荷结构化预览（命令 / 文件 diff / Git 变更），由 InlineApprovalCard 消费
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - StructuredPreview：按 ApprovalType 分发的入口组件
-//   （run_command 命令预览 / write_file、edit_file diff 预览 / git_* 变更摘要）
-// - 结构化展示区使用 monospace 字体 + 边框容器，便于查看代码 / 命令
-// 组件化背景（2026-09-15）：原 renderXxx 纯函数形态需调用方穿透 t/useDarkTheme，
-// 且在 DevTools 中无组件边界；组件化后依赖自取（useTranslation）。
-// ──────────────────────────────────────────────────────────────
-
 import type { ReactElement, ReactNode } from 'react';
 import { DiffRowsTable } from '@/components/common/diff/DiffRowsTable';
 import { detectLangFromPath } from '@/components/file-tree/file-viewer-utils';
@@ -160,7 +149,6 @@ function GitAddPreview({ input }: { readonly input: unknown }): ReactElement {
         <ul className="mt-1.5 flex flex-col gap-0.5 text-foreground">
           {paths.map((p) => (
             <li key={p} className="break-all">
-              {/* 装饰性前缀，aria-hidden 避免读屏念出「加号」（路径本身已完整可读） */}
               <span className="text-muted-foreground" aria-hidden="true">
                 +
               </span>{' '}
@@ -182,9 +170,6 @@ function GitCommitPreview({ input }: { readonly input: unknown }): ReactElement 
     <GitPreviewShell>
       <span className="ml-1">{amend ? t('approval.commitAmend') : t('approval.commitNew')}</span>
       {amend && (
-        // 徽标语义是「不可逆」（amend 覆盖原提交），不是「不可用」——工具本身支持
-        // amend（git-commit.tool.ts 的 amend 分支），此前显示「不可用」与能力矛盾。
-        // 该误标源于 i18n 收口时把原型的「不可逆」错配到 unavailable key。
         <span className="rounded bg-amber/15 px-1.5 py-0.5 text-2xs text-warn-text">
           {t('approval.irreversible')}
         </span>
@@ -206,7 +191,6 @@ function GitPushPreview({ input }: { readonly input: unknown }): ReactElement {
   const refspec = getField(input, 'refspec') ?? '';
   const setUpstream = getBooleanField(input, 'setUpstream') ?? false;
   const force = getBooleanField(input, 'force') ?? false;
-  // 未指定 refspec 时展示占位（人类可读，非真实命令 token）
   const target =
     refspec.length > 0 ? `${remote}/${refspec}` : `${remote}/${t('approval.currentBranch')}`;
   return (

@@ -1,14 +1,3 @@
-// packages/shared/src/schemas/browser.ts
-// 浏览器预览域 payload（WebContentsView 进程外预览）
-// ──────────────────────────────────────────────────────────────
-// 背景：Browser 面板 v1 用渲染层 iframe 加载外站，被主进程 defaultSession
-// 统一注入的安全头三层拦截（CSP 无 frame-src → 回退 default-src 'self'；
-// X-Frame-Options 被注入到远端响应本身；注入的 CSP 污染远端文档），
-// 生产环境无法加载任何真实网页。v2 改为主进程 WebContentsView +
-// 独立内存 session 分区（'browser-preview'），彻底脱离 defaultSession
-// 的 CSP/XFO 注入作用域；渲染层只保留工具栏并把视口矩形/缩放推给主进程。
-// ──────────────────────────────────────────────────────────────
-
 import { z } from 'zod';
 
 /** 视口矩形（DIP；frameless 窗口下渲染层视口坐标 = 窗口 contentView 坐标，一一对应） */

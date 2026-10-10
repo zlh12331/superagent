@@ -1,10 +1,3 @@
-// src/renderer/components/common/diff/DiffRowsTable.test.tsx
-// DiffRowsTable 单测：词级差异配对 / 栏标题 / 语法高亮语言直通
-// ──────────────────────────────────────────────
-// 词级（wordDiff）：配对的 del/add 行渲染 .word-del/.word-add 片段；
-// 未配对行退化为整行渲染。shiki 管线在 jsdom 下 mock 为永不 resolve。
-// ──────────────────────────────────────────────
-
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -32,10 +25,8 @@ describe('DiffRowsTable', () => {
         wordDiff={true}
       />,
     );
-    // dmp 片段：等价部分 + 变更词（1 → 2）
     expect(container.querySelectorAll('.word-del').length).toBeGreaterThan(0);
     expect(container.querySelectorAll('.word-add').length).toBeGreaterThan(0);
-    // 片段拼接还原行内容（del 侧；排除增删标记 span）
     const delCell = container.querySelector('.diff-code.is-del');
     const delText = Array.from(delCell?.querySelectorAll('span:not(.diff-marker)') ?? [])
       .map((s) => s.textContent)

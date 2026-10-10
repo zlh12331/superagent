@@ -1,4 +1,3 @@
-// tool-call-view.test.tsx — P4 签名时刻：错误默认展开 / settled·error 钩子
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 

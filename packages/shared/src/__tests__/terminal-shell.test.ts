@@ -1,6 +1,3 @@
-// packages/shared/src/__tests__/terminal-shell.test.ts
-// 终端 shell 档位与字号常量纯函数测试（36 号 B）
-
 import { describe, expect, it } from 'vitest';
 
 import {

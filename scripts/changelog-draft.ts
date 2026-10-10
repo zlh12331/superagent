@@ -1,19 +1,3 @@
-// scripts/changelog-draft.ts
-// CHANGELOG 润色底稿生成 · 把「从零写」降级为「改」
-// ──────────────────────────────────────────────────────────────
-// 为什么需要：release-please 只认 commit，一个 squash 提交 = CHANGELOG 里一行标题，
-// 而 squash 提交正文里保存的子提交明细它完全不看。结果是润色这一步要从零手写，
-// 成本高、最容易被跳过。
-//
-// 本脚本把「版本区间内的全部提交 + 各自明细」展开成底稿，人工/Agent 只需删改：
-//   - 可见类型（feat / fix / perf）单独列出——逐条判断用户能否感知
-//   - 其余类型（refactor / test / chore …）折叠在末尾，供理解上下文
-//
-// 注意：底稿是**开发视角**的事实清单，不是成品文案；直接照抄仍然是开发黑话。
-//
-// 运行：pnpm release:draft          （打印到标准输出，不改动任何文件）
-// ──────────────────────────────────────────────────────────────
-
 import { execFileSync } from 'node:child_process';
 
 /** 进 CHANGELOG 的类型（与 release-please-config.json 的 changelog-sections 对齐） */
@@ -44,9 +28,7 @@ function resolveBaseTag(): string {
     if (SAFE_TAG.test(tag)) {
       return tag;
     }
-  } catch {
-    // 无 tag（浅克隆/新仓库）：回落到全部历史
-  }
+  } catch {}
   return execFileSync('git', ['rev-list', '--max-parents=0', 'HEAD'], { encoding: 'utf-8' })
     .trim()
     .split('\n')[0] as string;

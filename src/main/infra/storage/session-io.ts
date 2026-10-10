@@ -1,21 +1,3 @@
-// src/main/infra/storage/session-io.ts
-// 会话导出/导入的存储层（SessionExportFile v1 文件格式 ↔ SQLite 四表）
-// ──────────────────────────────────────────────────────────────
-// 职责（自 session-service.ts 提取，SessionService 委托至此，文件大小棘轮考量）：
-// - exportAllSessions：聚合 sessions / messages / turns / token_usage → 版本化 payload
-// - importSessionsFromPayload：zod 校验 → 同 id 跳过 → 每会话事务落库
-//
-// 数据完整性设计：
-// - 每会话一个事务：单会话失败只回滚该会话，绝不产生"半截会话"（有 sessions 行
-//   无 messages 行之类）；其余会话不受影响
-// - 导入幂等：同 id 会话整体跳过并计数——同一文件重复导入结果为全 skipped，
-//   不会触发 uq_messages_session_seq / uq_turns_turn_id 唯一约束冲突
-// - uq_turns_turn_id 是全局唯一（跨会话），文件内两个会话携带同 turnId 时按
-//   "先到先得"跳过后到者（记 warn），不使整个会话失败
-// - messages 的 role 列有 CHECK 约束且 NOT NULL：无法解析出合法 role 的损坏
-//   消息跳过（记 warn），不阻断会话导入
-// ──────────────────────────────────────────────────────────────
-
 import type { SessionImportRes, TurnSummary } from '@code-agent/shared/main';
 import {
   AppError,
@@ -66,7 +48,6 @@ const EXPORT_BATCH_SIZE = 500;
 export async function exportAllSessions(): Promise<SessionExportPayload> {
   const db = getDb();
   const rows = db.select().from(sessions).orderBy(desc(sessions.updatedAt)).all();
-  // 分批 IN 拉取三类子行并按会话分组（批内 ORDER BY 保证组内升序）
   const messagesBySession = new Map<string, MessageRow[]>();
   const turnsBySession = new Map<string, TurnRow[]>();
   const usageBySession = new Map<string, TokenUsageRow[]>();
@@ -137,12 +118,10 @@ function toExportMessage(row: MessageRow): SessionExportMessage {
   try {
     content = JSON.parse(row.content);
   } catch {
-    // 损坏的 content 保留原始字符串（导出不丢数据）
     content = row.content;
   }
   return {
     seq: row.seq,
-    // exactOptionalPropertyTypes：未归属回合（NULL）时不携带该字段
     ...(row.turnId !== null ? { turnId: row.turnId } : {}),
     content,
     createdAt: row.createdAt,
@@ -232,7 +211,6 @@ function importOneSession(item: SessionExportItemShape): void {
     createdAt: meta.createdAt,
     updatedAt: meta.updatedAt,
     ...(meta.lastMessage !== undefined ? { lastMessage: meta.lastMessage } : {}),
-    // 以实际入库条数为准：损坏消息被跳过时，冗余计数与 messages 表保持自洽
     messageCount: messageInserts.length,
     workingDir: meta.workingDir,
     lastRunStatus: meta.lastRunStatus,

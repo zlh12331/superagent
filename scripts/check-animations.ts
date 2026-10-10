@@ -1,17 +1,3 @@
-// scripts/check-animations.ts
-// 动画引用完整性门禁：断言 animation 引用的名字都有 @keyframes 定义
-// ──────────────────────────────────────────────────────────────
-// 背景（2026-09 修复）：实测发现 3 处失效动画引用——浏览器静默丢弃整条
-// animation 声明（元素退化为无动画），而 lint / typecheck / 组件测试全绿
-// （组件测试只断言「有该类名」，类名再错也通过）：
-//   - browser-pane.tsx 的 animate-[br-loading-bar_…]（定义随 prototype-v2.html
-//     在 4980885 删除，类名在其后的 82bc2d6 才引入）
-//   - styles/ 各域 css 的 .palette-overlay / .palette 的 animation: fadein / modalin
-// 与 check:css-vars（var(--x) 未定义）同属「防静默失效」家族。
-//
-// 运行：pnpm check:animations
-// ──────────────────────────────────────────────────────────────
-
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -25,8 +11,6 @@ import {
 
 const ROOT = join(import.meta.dirname, '..');
 const STYLE_FILES = [
-  // 渲染层根入口（Tailwind import + 少量全局规则）也要管辖：.search-highlight 的
-  // animation 引用曾游离在清单外，keyframe 被删时门禁不会报（2026-10-02 审计补漏）
   'src/renderer/index.css',
   'src/renderer/styles/index.css',
   'src/renderer/styles/base.css',
@@ -67,7 +51,6 @@ function main(): void {
   const refs: AnimationRef[] = [];
   const defined = new Set<string>();
 
-  // 定义：全部样式文件的 @keyframes
   for (const stylePath of STYLE_FILES) {
     const css = readFileSync(join(ROOT, stylePath), 'utf8');
     for (const name of extractKeyframeNames(css)) defined.add(name);
@@ -76,7 +59,6 @@ function main(): void {
     }
   }
 
-  // 引用：组件里的 Tailwind 任意值动画（行号按行定位，便于报错时点击跳转）
   let tsxCount = 0;
   for (const file of collectTsx(COMPONENT_DIR)) {
     tsxCount += 1;

@@ -1,18 +1,3 @@
-// src/main/infra/update/update-cache.ts
-// 更新缓存的占用统计与清理
-// ──────────────────────────────────────────────────────────────
-// 路径解析必须与 electron-updater 一致，否则统计/清理的是别的目录：
-// - 缓存根 = electron-updater 的 getAppCacheDir()：Windows LOCALAPPDATA /
-//   macOS ~/Library/Caches / Linux XDG_CACHE_HOME 或 ~/.cache
-// - 目录名 = app-update.yml 的 updaterCacheDirName（electron-builder 生成，
-//   默认 <sanitizedName.toLowerCase()>-updater）
-// 解析不到（开发模式无 app-update.yml / 读取失败 / 键缺失）→ path 为 null，
-// 界面不展示该行——不猜路径、不误删。
-//
-// 注意（界面文案必须说明）：Windows 的 installer.exe 与 macOS 的 update.zip 是
-// 差分更新的基线文件，清理后下次升级会退化为全量下载。
-// ──────────────────────────────────────────────────────────────
-
 import { readdir, readFile, rm, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -60,7 +45,6 @@ export async function resolveUpdaterCacheDir(
   try {
     yml = await readFile(join(resourcesPath, ymlFileName), 'utf8');
   } catch {
-    // 无 app-update.yml（开发模式）或读取失败：不展示、不清理
     return null;
   }
   const dirName = yml.match(CACHE_DIR_NAME_RE)?.[1]?.replace(/^['"]|['"]$/g, '');
@@ -80,7 +64,6 @@ export async function measureDirRecursive(dir: string): Promise<{
   readonly bytes: number;
   readonly fileCount: number;
 }> {
-  // 读取失败（不存在/无权限）视为无缓存：不抛错，调用方只展示占用
   const entries = await readdir(dir, { withFileTypes: true }).catch(() => null);
   if (entries === null) {
     return { bytes: 0, fileCount: 0 };
@@ -99,9 +82,7 @@ export async function measureDirRecursive(dir: string): Promise<{
       const info = await stat(full);
       bytes += info.size;
       fileCount += 1;
-    } catch {
-      // 单文件不可读（权限/竞态删除）：跳过
-    }
+    } catch {}
   }
   return { bytes, fileCount };
 }
@@ -170,11 +151,9 @@ export async function pruneStaleDifferentialBaseline(
     stat(installerPath).catch(() => null),
     readBlockMapTotalSize(blockMapPath),
   ]);
-  // 无基准安装包（从未安装过/被清理）：差分本就无从谈起，不处理
   if (installerInfo === null) {
     return 'absent';
   }
-  // 块图缺失：库会自行下载与当前版本匹配的旧块图，无需处理
   if (blockMapTotal === null) {
     return 'absent';
   }

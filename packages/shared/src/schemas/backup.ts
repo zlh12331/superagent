@@ -1,19 +1,3 @@
-// packages/shared/src/schemas/backup.ts
-// Backup 域 zod schema 单一真源（37 号 B：启动备份可见性与手动恢复）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 定义 backup:list / backup:create / backup:restore 请求-响应 zod schema
-// - 供主进程 backup.handler 校验入参、推导响应类型
-//
-// 设计：
-// - 恢复点是 backups/ 目录下的轮转环（sessions-<ISO 时间戳>.db，保留最近
-//   BACKUP_KEEP 份）——启动热备份与手动备份进同一环，语义单一
-// - name 是**裸文件名**（basename 校验 + 必须落在 backups/ 目录内）：
-//   主进程侧再做路径穿越防御（schema 只做形状校验）
-// - healthy 由主进程 quick_check 得出——「假恢复点比没有备份更危险」，
-//   列表与恢复入口都以健康度为分界
-// ──────────────────────────────────────────────────────────────
-
 import { z } from 'zod';
 
 /** 备份恢复点条目（backup:list 响应元素） */

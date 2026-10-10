@@ -1,18 +1,3 @@
-// src/main/infra/storage/im-allowlist-pref.ts
-// IM 群聊执行白名单持久化（app_settings 表，fail closed）
-// ──────────────────────────────────────────────────────────────
-// 背景（2026-09-08 安全审计修复）：
-// IM 入站此前只检查审批模式，不校验发送者——任何能给机器人发消息的人
-// （群聊任意成员）都能驱动 agent 执行工具，yolo 模式下可读本机文件并回发群聊。
-//
-// 策略：
-// - 私聊（channelType !== 'group'）默认放行（只有 owner 本人能私聊机器人）
-// - 群聊必须显式登记 `${channel}:${chatId}` 才执行（默认拒绝）
-//
-// 存储：复用 app_settings 表（key = 'im.allowedGroups'），与设置体系同源，
-// 不新增表/迁移；主进程直接读 SQLite，无需经渲染层。
-// ──────────────────────────────────────────────────────────────
-
 import { readSetting, writeSetting } from './settings-pref';
 
 /** 设置 key（受 KEY_PATTERN 约束：字母开头 + 字母数字/点/下划线/连字符） */

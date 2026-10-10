@@ -1,22 +1,3 @@
-// packages/shared/src/ipc/payloads.ts
-// IPC 请求/响应/事件 payload 类型映射
-// 设计文档 §5.3 完整 Channel 清单
-//
-// 每个请求-响应 channel 定义 Req（请求入参）和 Res（响应数据）类型
-// 流式/事件 channel 定义 Payload 类型
-//
-// P1 改造（Code Agent 架构）：
-// - 新增 6 个域的 Req→Res 映射（agent/file/search/terminal/git/session）
-// - 新增 6 个域的流式事件 payload 映射
-// - 所有 Req 类型从 zod schema 派生（z.infer），schema 作为单一真源
-// - Res / Payload 类型直接从 schema 文件 import（接口定义在 schema 文件中）
-//
-// 类型派生策略：
-// - z.infer 派生 Req：z.object 入参自动获得字段类型与可选性
-// - Res / Payload 接口：直接 import，避免重复定义
-// - exactOptionalPropertyTypes 兼容：schema 用 `.optional().transform(v => v ?? undefined)`
-//   让 z.infer 推断为 `string | undefined`，与显式 `| undefined` 类型对齐
-
 import type { z } from 'zod';
 import type {
   AgentApprovalResponseReqSchema,
@@ -66,10 +47,7 @@ import type { ToolListReqSchema } from '../schemas/tool';
 import type { IPC_DEFINITIONS } from './definitions';
 import type { InferEventMap, InferRequestMap } from './derive';
 
-// 从 schemas/chat.ts 重新导出 ChatMessage 类型（= AI SDK 的 ModelMessage）
 export type { ChatMessage } from '../schemas/chat';
-
-// ─── 应用级 payload ─────────────────────────────────────────────
 
 /**
  * 应用状态（health check）
@@ -88,8 +66,6 @@ export interface AppStatus {
   readonly protocolVersion: number;
 }
 
-// ─── Agent 域 Req 派生（Code Agent 核心） ─────────────────────
-
 /** agent:run 请求 payload：发起一次 agent 对话 */
 export type AgentRunReq = z.infer<typeof AgentRunReqSchema>;
 
@@ -98,8 +74,6 @@ export type AgentStopReq = z.infer<typeof AgentStopReqSchema>;
 
 /** agent:approval:response 请求 payload：渲染层回传审批结果 */
 export type AgentApprovalResponseReq = z.infer<typeof AgentApprovalResponseReqSchema>;
-
-// ─── File 域 Req 派生（文件读写） ──────────────────────────────
 
 /** file:read 请求 payload：读取文件内容（支持分批） */
 export type FileReadReq = z.infer<typeof FileReadReqSchema>;
@@ -128,15 +102,11 @@ export type FileDeleteReq = z.infer<typeof FileDeleteReqSchema>;
 /** file:rename 请求 payload：重命名/移动文件或目录 */
 export type FileRenameReq = z.infer<typeof FileRenameReqSchema>;
 
-// ─── Search 域 Req 派生（ripgrep + glob） ──────────────────────
-
 /** search:grep 请求 payload：正则搜索文件内容 */
 export type GrepReq = z.infer<typeof GrepReqSchema>;
 
 /** search:glob 请求 payload：glob 模式匹配文件路径 */
 export type GlobReq = z.infer<typeof GlobReqSchema>;
-
-// ─── Terminal 域 Req 派生（node-pty 会话池） ───────────────────
 
 /** terminal:create 请求 payload：创建终端会话 */
 export type TerminalCreateReq = z.infer<typeof TerminalCreateReqSchema>;
@@ -149,8 +119,6 @@ export type TerminalResizeReq = z.infer<typeof TerminalResizeReqSchema>;
 
 /** terminal:kill 请求 payload：终止终端会话 */
 export type TerminalKillReq = z.infer<typeof TerminalKillReqSchema>;
-
-// ─── Git 域 Req 派生（Git CLI 封装） ────────────────────────────
 
 /** git:status 请求 payload：获取工作区状态 */
 export type GitStatusReq = z.infer<typeof GitStatusReqSchema>;
@@ -166,8 +134,6 @@ export type GitCommitReq = z.infer<typeof GitCommitReqSchema>;
 
 /** git:push 请求 payload：推送本地提交到远程（git push） */
 export type GitPushReq = z.infer<typeof GitPushReqSchema>;
-
-// ─── Session 域 Req 派生（SQLite 持久化） ──────────────────────
 
 /** session:list 请求 payload：分页列出会话 */
 export type SessionListReq = z.infer<typeof SessionListReqSchema>;
@@ -187,16 +153,8 @@ export type SessionCreateReq = z.infer<typeof SessionCreateReqSchema>;
 /** session:listRecentDirs 请求 payload */
 export type SessionListRecentDirsReq = z.infer<typeof SessionListRecentDirsReqSchema>;
 
-// ─── Dialog 域 Req 派生（原生对话框） ─────────────────────────
-// DialogPickDirectoryReq 直接从 schemas/dialog.ts 导入（schema 文件已导出 z.infer 类型）
-// DialogPickDirectoryReqSchema 供 main 进程 dialog.handler.ts 用于运行时校验入参
-
-// ─── Tool 域 Req 派生（工具系统元数据） ─────────────────────
-
 /** tool:list 请求 payload：列出已注册工具清单（可按权限过滤） */
 export type ToolListReq = z.infer<typeof ToolListReqSchema>;
-
-// ─── Settings 域 Req 派生（API Key 管理） ─────────────────────
 
 /** settings:getApiKey 请求 payload：查询指定提供商的 API Key */
 export type GetApiKeyReq = z.infer<typeof GetApiKeyReqSchema>;
@@ -210,25 +168,14 @@ export type DeleteApiKeyReq = z.infer<typeof DeleteApiKeyReqSchema>;
 /** settings:setTelemetryLevel 请求 payload：设置遥测级别 */
 export type SetTelemetryLevelReq = z.infer<typeof SetTelemetryLevelReqSchema>;
 
-// 重新导出非 z.infer 类型（接口/联合）
+export type { OpenDevToolsReq, OpenDevToolsRes } from '../schemas/devtools';
+export { OpenDevToolsReqSchema } from '../schemas/devtools';
 export type {
   GetTelemetryLevelRes,
   SetTelemetryLevelRes,
   TelemetryLevel,
 } from '../schemas/settings';
 export { SetTelemetryLevelReqSchema, TelemetryLevelSchema } from '../schemas/settings';
-
-// ─── System 域（运行时可观测性） ──────────────────────────────
-// ReadLogsReq 直接从 schemas/system.ts 导入（schema 文件已导出 z.infer 类型）
-// ReadLogsReqSchema 供 main 进程 system.handler.ts 用于运行时校验入参
-
-// ─── DevTools 域 Req 派生（开发者工具集成） ───────────────────
-// OpenDevToolsReq / OpenDevToolsReqSchema / OpenDevToolsRes 直接从 schemas/devtools.ts 导入
-// main 进程 devtools.handler.ts 使用 OpenDevToolsReqSchema 做运行时校验
-export type { OpenDevToolsReq, OpenDevToolsRes } from '../schemas/devtools';
-export { OpenDevToolsReqSchema } from '../schemas/devtools';
-
-// ─── IPC 类型映射 ─────────────────────────────────────────────
 
 /**
  * 请求-响应 channel 类型映射：Req → Res

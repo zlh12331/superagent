@@ -1,11 +1,3 @@
-// src/main/infra/network/proxy-applier.test.ts
-// 代理应用单点测试（34 号 §2.7 收口链：mock 断言应用行为，不真设分区）
-// ──────────────────────────────────────────────────────────────
-// 覆盖：四路径语义（set/import/resetAll/启动共用本函数的参数形态）——
-// fixed 应用三分区 + env + resetAIProvider；system 清 env；setProxy 单分区
-// 失败不阻断其余分区（反例 7 固定顺序下的韧性）。
-// ──────────────────────────────────────────────────────────────
-
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => {
@@ -62,7 +54,6 @@ describe('applyProxyChange（四路径统一收口）', () => {
       proxyRules: 'http=127.0.0.1:7890;https=127.0.0.1:7890',
       proxyBypassRules: '<local>;corp',
     });
-    // env 侧门（axios 栈）：大小写双写 + NO_PROXY localhost 家族
     expect(process.env['HTTPS_PROXY']).toBe('http://127.0.0.1:7890');
     expect(process.env['https_proxy']).toBe('http://127.0.0.1:7890');
     expect(process.env['NO_PROXY']).toBe('localhost,127.0.0.1,::1');

@@ -1,20 +1,3 @@
-// src/main/infra/ai/mcp/mcp-tool-adapter.ts
-// MCP 工具适配器：把 MCP server 的工具转换为项目内 Tool 接口
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 把 MCP SDK 的 Tool（JSON Schema 描述）转换为项目内 Tool 接口
-// - 通过 MCP Client 转发工具调用，并把结果转换为统一格式
-// - 决定 permission：基于 annotations.readOnlyHint 或用户配置覆盖
-//
-// 设计原则：
-// - 适配器不持有 MCP Client 引用（避免生命周期耦合），通过 callTool 回调注入
-// - inputSchema 用 AI SDK jsonSchema() 原样透传 MCP server 的 JSON Schema，
-//   让模型看到真实参数定义（此前降级为宽松 zod，模型只能猜字段名）；
-//   入参运行时校验由 MCP server 完成（MCP 协议规定 server 必须 validate input）
-// - 工具名加命名空间前缀（mcp__${serverName}__${toolName}），避免与内置工具重名
-// - 工具描述透传 server 返回的 description，让 LLM 据此决定是否调用
-// ──────────────────────────────────────────────────────────────
-
 import { AppError, ErrorCode } from '@code-agent/shared/main';
 import { jsonSchema } from 'ai';
 import type { Tool, ToolContext, ToolResult } from '../tools/tool';
@@ -119,15 +102,12 @@ export function decideMcpToolPermission(
   config: McpServerConfig,
   annotations: McpToolDescriptor['annotations'],
 ): 'auto' | 'ask' {
-  // 1. 用户显式覆盖（优先级最高）
   if (config.permissionOverride !== undefined) {
     return config.permissionOverride;
   }
-  // 2. 只读工具自动放行
   if (annotations?.readOnlyHint === true) {
     return 'auto';
   }
-  // 3. 安全默认
   return 'ask';
 }
 
@@ -146,7 +126,6 @@ export function decideMcpToolPermission(
  * @throws AppError(TOOL_EXECUTION_FAILED) 当 server 返回 isError=true
  */
 export function normalizeMcpToolResult(result: McpToolCallResult): unknown {
-  // server 端错误：抛出 AppError，由 ToolExecutor 捕获转为 ToolResult.error
   if (result.isError) {
     const errorText = result.content
       .filter((c): c is { type: 'text'; text: string } => c.type === 'text')
@@ -158,23 +137,17 @@ export function normalizeMcpToolResult(result: McpToolCallResult): unknown {
     );
   }
 
-  // 优先返回 structuredContent（若 server 声明了 outputSchema）
   if (result.structuredContent !== undefined) {
     return result.structuredContent;
   }
 
-  // 拼接所有 text 块
   const textParts: string[] = [];
   for (const block of result.content) {
     if (block.type === 'text') {
       textParts.push(block.text);
     }
-    // 其他类型（image/audio/resource）暂不处理
   }
 
-  // 单个 text 块 → 直接返回字符串
-  // 多个 text 块 → 用换行拼接
-  // 无 text 块 → 返回空字符串（避免 undefined 污染下游）
   if (textParts.length === 0) {
     return '';
   }
@@ -212,27 +185,16 @@ export function adaptMcpTool(
   return {
     name: namespacedName,
     description,
-    // 透传 server 的 JSON Schema：模型能看到参数定义，客户端不重复校验
     inputSchema: toAiSdkInputSchema(descriptor.inputSchema),
     permission,
-    // category 恒为 'exec'：第三方工具不参与权限服务的 read 快速路径
-    // （对齐 qwen 白名单排除 MCP 的语义）。permission 可为 'auto'（readOnlyHint/
-    // permissionOverride），但权限层对 MCP 有额外防线——auto 标记不担保免审批：
-    // permission-service 对 MCP 工具的无命令形状入参仍强制 ask，命令形状入参
-    // 走 Layer-0 确定性守卫（危险/复合/越界命令降级 ask）
     category: 'exec',
     async execute(input: unknown, ctx: ToolContext): Promise<ToolResult> {
-      // 中断信号软检查（调用前拦截已中断的请求，不发起无效调用）；
-      // callTool 内部还会把 signal 透传到 MCP SDK（M1：cancellation
-      // notification + AbortError），软检查与 SDK 级取消双层保障
       if (ctx.abortSignal.aborted) {
         throw new AppError(ErrorCode.TOOL_ABORTED, `MCP 工具已中断：${namespacedName}`);
       }
 
-      // 转发到 MCPClient.callTool（内部调用 MCP SDK 的 client.callTool）
       const result = await callTool(descriptor.name, input, ctx);
 
-      // 标准化结果
       const output = normalizeMcpToolResult(result);
 
       return {

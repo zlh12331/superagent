@@ -1,23 +1,3 @@
-// src/main/infra/file/file-service.ts
-// FileService：主进程文件读写 + 目录列表 + 文件监听能力
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - read：读取文件内容（支持大文件分批读取 offset/limit）
-// - write：写入文件（覆盖 / 追加，可选自动创建父目录）
-// - list：递归列出目录内容（深度可控，可包含隐藏文件）
-// - watch / unwatch：基于 chokidar v5 监听文件变更，推送 file:watch 事件
-// - dispose：统一清理所有 watcher（应用退出时调用）
-//
-// 设计：
-// - 接口化（IFileService）：与 IChatService 一致，便于测试 mock 与未来替换实现
-// - 单例模式：通过 getFileService() 获取，整个应用生命周期共享一个实例
-// - 错误分类：把 Node.js 原生 errno 映射到项目 ErrorCode（NOT_FOUND / UNAUTHORIZED / FS_*）
-// - 路径校验：当前 P2 阶段仅做基础校验（非空、绝对路径），workingDir 边界检查
-//   由后续 P3 PermissionService 统一引入（避免越权访问）
-// - 文件监听：chokidar v5 是 ESM，事件名需映射到 file:watch payload
-//   （'add'/'addDir' → 'create'，'change' → 'modify'，'unlink'/'unlinkDir' → 'delete'）
-// ──────────────────────────────────────────────────────────────
-
 import { randomUUID } from 'node:crypto';
 import { promises as fs, type Stats } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -269,12 +249,9 @@ class FileService implements IFileService {
    */
   async read(options: FileReadOptions): Promise<FileReadRes> {
     const { path, offset, limit } = options;
-    // 基础校验：路径必须为绝对路径
     this.assertAbsolutePath(path);
 
     try {
-      // P1 修复：超大文件明确报错而非 OOM（fs.readFile 全量读入内存，
-      // limit 只是行切片——先 stat 检查大小，>2MB 拒绝）
       const stat = await fs.stat(path);
       if (stat.size > MAX_READ_BYTES) {
         throw new AppError(
@@ -283,8 +260,6 @@ class FileService implements IFileService {
         );
       }
       const buffer = await fs.readFile(path);
-      // 编码检测：chardet 返回 null（ASCII/无法识别）→ 按 UTF-8 处理
-      // 只取头部样本（见 CHARDET_SAMPLE_BYTES）：编码特征集中于文件头
       const detectBuffer =
         buffer.length > CHARDET_SAMPLE_BYTES ? buffer.subarray(0, CHARDET_SAMPLE_BYTES) : buffer;
       const detected = chardet.detect(detectBuffer);
@@ -294,7 +269,6 @@ class FileService implements IFileService {
       if (encoding === 'utf-8') {
         content = buffer.toString('utf-8');
       } else {
-        // 非 UTF-8（GBK/GB18030 等）：iconv-lite 转码，失败回退 UTF-8 并告警
         try {
           content = iconv.decode(buffer, encoding);
         } catch (decodeError) {
@@ -303,20 +277,15 @@ class FileService implements IFileService {
         }
       }
 
-      // 按换行符分割（保留 \r\n 与 \n 两种情况）
-      // 不使用 split('\n') 是为了避免行尾 \r 残留影响渲染层渲染
       const lines = content.split(/\r?\n/);
       const totalLines = lines.length;
 
-      // 应用 offset/limit 切片
       const start = offset ?? 0;
-      // offset 超出范围时返回空字符串（不视为错误）
       if (start >= totalLines) {
         return { content: '', totalLines, encoding };
       }
       const end = limit === undefined ? totalLines : Math.min(start + limit, totalLines);
       const sliced = lines.slice(start, end);
-      // 重新拼接为字符串（用 \n 统一行尾，避免 \r\n 混杂）
       return { content: sliced.join('\n'), totalLines, encoding };
     } catch (error) {
       throw this.classifyReadError(error);
@@ -335,17 +304,12 @@ class FileService implements IFileService {
     this.assertAbsolutePath(path);
 
     try {
-      // 自动创建父目录
       if (createDirs) {
         await fs.mkdir(dirname(path), { recursive: true });
       }
 
-      // 写入文件（覆盖或追加）
-      // Buffer.byteLength 计算 UTF-8 字节数（与文件系统实际写入一致）
       const buffer = Buffer.from(content, 'utf-8');
       if (append) {
-        // O_APPEND 模式：文件不存在时会创建
-        // 使用 { flag: 'a' } 而非 fs.appendFile，便于统一错误处理
         await fs.writeFile(path, buffer, { flag: 'a' });
       } else {
         await fs.writeFile(path, buffer);
@@ -370,7 +334,6 @@ class FileService implements IFileService {
   async list(options: FileListOptions): Promise<FileListRes> {
     const { path, depth, includeHidden } = options;
     this.assertAbsolutePath(path);
-    // 忽略模式：用户配置 + 内置基线（node_modules 与 watch ignored 对齐）
     const ignorePatterns = [...DEFAULT_TREE_IGNORE_PATTERNS, ...(options.ignorePatterns ?? [])];
 
     try {
@@ -398,18 +361,15 @@ class FileService implements IFileService {
     output: FileEntry[],
     ignorePatterns: readonly string[],
   ): Promise<void> {
-    // 深度耗尽，停止递归
     if (remainingDepth <= 0) {
       return;
     }
 
     const items = await fs.readdir(currentPath, { withFileTypes: true });
     for (const item of items) {
-      // 跳过隐藏文件（除非显式要求包含）
       if (!includeHidden && item.name.startsWith('.')) {
         continue;
       }
-      // 用户忽略模式（名称级；命中后文件不展示、目录不递归）
       if (matchIgnorePattern(item.name, ignorePatterns)) {
         continue;
       }
@@ -417,8 +377,6 @@ class FileService implements IFileService {
       const itemPath = join(currentPath, item.name);
       const stats = await fs.stat(itemPath);
 
-      // 根据 dirent 类型映射 FileEntry.type
-      // 注意：isSymbolicLink() 时 stats 仍是 lstat 结果（不解析目标）
       let type: FileEntry['type'];
       if (item.isSymbolicLink()) {
         type = 'symlink';
@@ -433,13 +391,9 @@ class FileService implements IFileService {
         path: itemPath,
         type,
         size: stats.size,
-        // Unix timestamp（毫秒）——mtimeMs 是浮点（NTFS 100ns 精度），
-        // FileEntrySchema 要求 int：不取整会触发 INVALID_RESPONSE（目录有文件时
-        // file:list 必失败 → 文件树显示「空目录」，实测 bug）
         modifiedAt: Math.floor(stats.mtimeMs),
       });
 
-      // 递归子目录
       if (item.isDirectory()) {
         await this.listRecursive(
           itemPath,
@@ -473,42 +427,28 @@ class FileService implements IFileService {
     const { path, webContents } = options;
     this.assertAbsolutePath(path);
 
-    // 同 (path, webContents) 复用已有 watcher（2026-09-08 修复句柄累积）
     const existingId = findExistingWatcher(this.watchers, path, webContents);
     if (existingId !== null) return { watcherId: existingId };
     const watcherId = randomUUID();
-    // 忽略隐藏文件和 node_modules（与 list 默认行为一致）
-    // 注意：chokidar v5 ignored 接受 string | RegExp | 函数 | 数组
     const watcher = watch(path, {
       ignoreInitial: true,
       ignored: shouldIgnoreWatchPath,
       depth: 10,
-      // Windows CI：libuv 原生 fs-event 在监视目录被移除时断言崩溃（fail-fast 0xC0000409，
-      // src\win\fs-event.c）→ 测试环境（FILE_WATCH_USE_POLLING=1）用轮询模式绕开原生监视器。
-      // 条件展开避免 exactOptionalPropertyTypes 下显式 undefined 报错。
       ...(process.env['FILE_WATCH_USE_POLLING'] === '1' ? { usePolling: true } : {}),
     });
 
-    // 监听 'all' 事件统一处理（避免为每个事件单独绑定）
-    // 'all' 事件签名：(eventName: string, path: string, stats?: Stats)
     watcher.on('all', (eventName: string, changedPath: string) => {
       this.handleWatchEvent(watcherId, eventName, changedPath, webContents);
     });
 
-    // 监听 error 事件，避免未捕获异常
-    // chokidar v5 的 error 事件签名为 (err: unknown) => void，与 Node EventEmitter 一致
     watcher.on('error', (error: unknown) => {
       logger.error({ watcherId, error }, 'FileService watcher 异常');
     });
 
-    // 监听 ready 事件，标记 watcher 已就绪
     watcher.on('ready', () => {
       logger.info({ watcherId, path }, 'FileService watcher 已就绪');
     });
 
-    // P1 修复：watcher 生命周期绑定 webContents——窗口销毁（macOS 关窗不退出 /
-    // 渲染层崩溃）时自动回收 watcher，此前只能靠渲染层恰好调用 watchStop，
-    // 否则 chokidar 句柄泄漏并持续推送到已销毁的 webContents
     const onDestroyed = (): void => {
       logger.warn({ watcherId }, 'webContents 已销毁，自动回收 watcher');
       this.unwatch(watcherId);
@@ -521,11 +461,7 @@ class FileService implements IFileService {
     this.watchers.set(watcherId, { watcher, webContents, path, removeDestroyedListener });
     logger.info({ watcherId, path }, 'FileService watcher 已注册');
 
-    // 等待 chokidar 就绪再返回（真实竞态修复：ignoreInitial: true 下，
-    // ready 之前创建的文件会被当作初始状态吞掉 add 事件——调用方在
-    // watch() resolve 后立刻创建文件会丢事件，单测暴露）
     await new Promise<void>((resolve, reject) => {
-      // optionsReady 为 Node 20.13+ 的 FSWatcher 属性（@types/node 版本差异——类型断言）
       const watcherWithReady = watcher as FSWatcher & { optionsReady?: boolean };
       if (watcherWithReady.optionsReady) {
         resolve();
@@ -548,9 +484,7 @@ class FileService implements IFileService {
     if (ctx === undefined) {
       return false;
     }
-    // 移除 destroyed 监听（避免窗口存活时反复 watch/unwatch 累积监听器）
     ctx.removeDestroyedListener();
-    // void 表示不等待 close 完成（close 是异步的，但调用即视为已停止）
     void ctx.watcher.close();
     this.watchers.delete(watcherId);
     logger.info({ watcherId }, 'FileService watcher 已停止');
@@ -568,13 +502,11 @@ class FileService implements IFileService {
       return;
     }
 
-    // 并行关闭所有 watcher
     await Promise.all(
       ctxs.map(async (ctx) => {
         try {
           await ctx.watcher.close();
         } catch (error) {
-          // close 失败不阻塞 dispose 流程，仅记录日志
           logger.warn({ error }, 'FileService watcher 关闭失败');
         }
       }),
@@ -597,8 +529,6 @@ class FileService implements IFileService {
       if (createDirs) {
         await fs.mkdir(dirname(path), { recursive: true });
       }
-      // 使用 'x' 标志：文件已存在时抛 EEXIST，避免覆盖已有文件
-      // fs.open 写入空内容后立即关闭，实现「创建空文件」语义
       const handle = await fs.open(path, 'wx');
       await handle.close();
       return { path: resolve(path) };
@@ -636,8 +566,6 @@ class FileService implements IFileService {
     this.assertAbsolutePath(path);
 
     try {
-      // P0 修复：recursive 必填（schema 与 options 类型均已收紧），
-      // 移除静默 rm -rf 默认——递归删除必须由调用方显式声明
       await fs.rm(path, { recursive, force: false });
       return { deleted: true };
     } catch (error) {
@@ -657,16 +585,13 @@ class FileService implements IFileService {
     this.assertAbsolutePath(newPath);
 
     try {
-      // 目标已存在时处理：overwrite=false 抛错，overwrite=true 先删除目标
       try {
         await fs.access(newPath);
-        // newPath 存在
         if (!overwrite) {
           throw new AppError(ErrorCode.ALREADY_EXISTS, '目标路径已存在', { newPath });
         }
         await fs.rm(newPath, { recursive: true, force: true });
       } catch (accessError) {
-        // access 抛 ENOENT 表示目标不存在，是期望情况，直接继续 rename
         const nodeErr = accessError as { code?: string };
         if (nodeErr.code !== 'ENOENT') {
           throw accessError;
@@ -697,13 +622,11 @@ class FileService implements IFileService {
     changedPath: string,
     webContents: WebContents,
   ): void {
-    // webContents 销毁后停止推送
     if (webContents.isDestroyed()) {
       logger.warn({ watcherId }, 'webContents 已销毁，停止推送 watch 事件');
       return;
     }
 
-    // chokidar 事件名映射到 file:watch:event payload type
     let type: FileWatchEventPayload['type'];
     switch (eventName) {
       case 'add':
@@ -718,12 +641,9 @@ class FileService implements IFileService {
         type = 'delete';
         break;
       default:
-        // 其他事件（'raw' 等）忽略
         return;
     }
 
-    // payload 携带 watcherId，渲染层用此 id 过滤事件来源
-    // R2：统一出口 emitEvent（dev 契约校验 + isDestroyed 防御）
     const payload: FileWatchEventPayload = { watcherId, type, path: changedPath };
     emitEvent(webContents, IPC_DEFINITIONS.file.subscribeWatchEvent, payload);
   }
@@ -738,8 +658,6 @@ class FileService implements IFileService {
     if (!path || path.length === 0) {
       throw new AppError(ErrorCode.INVALID_INPUT, '路径不能为空');
     }
-    // resolve 会把相对路径转为绝对路径（基于 cwd），因此判断是否已是绝对路径
-    // 用 resolve(path) === path 判断（Windows 下会标准化盘符大小写）
     if (resolve(path) !== path) {
       throw new AppError(ErrorCode.INVALID_INPUT, '路径必须是绝对路径');
     }
@@ -768,35 +686,26 @@ class FileService implements IFileService {
    * @param fallbackCode 兜底错误码（FS_READ_FAILED 或 FS_WRITE_FAILED）
    */
   private classifyFsError(error: unknown, fallbackCode: ErrorCode): AppError {
-    // AppError 直接透传（避免嵌套包装）
     if (error instanceof AppError) {
       return error;
     }
 
-    // Node.js 系统错误的 code 字段（如 'ENOENT', 'EACCES'）
     const nodeError = error as { code?: string; message?: string };
     switch (nodeError.code) {
       case 'ENOENT':
-        // 文件或目录不存在
         return new AppError(ErrorCode.NOT_FOUND, '文件或目录不存在', error);
       case 'EEXIST':
-        // 文件或目录已存在（createFile 的 wx 标志 / rename 目标冲突）
         return new AppError(ErrorCode.ALREADY_EXISTS, '文件或目录已存在', error);
       case 'EACCES':
       case 'EPERM':
-        // 权限不足（读/写/执行权限被拒绝）
         return new AppError(ErrorCode.UNAUTHORIZED, '权限不足', error);
       case 'ENOSPC':
-        // 磁盘空间不足
         return new AppError(ErrorCode.FS_DISK_FULL, '磁盘空间不足', error);
       case 'ENOTDIR':
-        // 路径不是目录（对文件执行了目录操作）
         return new AppError(ErrorCode.INVALID_INPUT, '路径不是目录', error);
       case 'EISDIR':
-        // 是目录（对目录执行了文件操作）
         return new AppError(ErrorCode.INVALID_INPUT, '路径是目录，不能作为文件操作', error);
       default:
-        // 其他错误用 fallbackCode 包装
         return new AppError(fallbackCode, nodeError.message ?? '文件操作失败', error);
     }
   }

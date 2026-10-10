@@ -1,12 +1,3 @@
-// src/renderer/components/layout/right-panel-panes.tsx
-// 右面板 pane 集：会话详情 / 文件变更（对齐原型 chat-right-panel 的 info/diff）
-// ──────────────────────────────────────────────────────────────
-// 数据源：
-// - InfoPane：task:list（L3 Query）+ 会话元信息（props 传入）
-// - DiffPane：tool-store 中 edit_file/write_file 调用记录（本轮文件变更；行项可展开 diff 或直接打开文件）
-// - 会话目标已迁移至对话区输入框上方（ChatPanel 目标栏），右面板不再重复展示
-// ──────────────────────────────────────────────────────────────
-
 import { useQuery } from '@tanstack/react-query';
 import { ChevronDown, ChevronRight, ExternalLink, FileText, Loader2 } from 'lucide-react';
 import { type ReactElement, useEffect, useState } from 'react';
@@ -44,7 +35,6 @@ export function InfoPane({ sessionId }: InfoPaneProps): ReactElement {
   const { t } = useTranslation();
   const { getErrorMessage } = useErrorMessage();
 
-  // L3：待办列表（按会话过滤）
   const {
     data: tasksData,
     isError,
@@ -57,8 +47,6 @@ export function InfoPane({ sessionId }: InfoPaneProps): ReactElement {
 
   const tasks = (tasksData?.tasks ?? []) as readonly LocalTask[];
 
-  // 引用文件（对齐原型 crpFiles）：从 tool-store 提取 read_file 调用路径（去重，保留最新）
-  // 纯派生，交给 React Compiler 记忆化（calls 为 store 原始数组引用）
   const calls = useToolStore((state) => state.callsBySession.get(sessionId) ?? EMPTY_CALLS);
   const seen = new Set<string>();
   const referencedFiles: string[] = [];
@@ -75,13 +63,10 @@ export function InfoPane({ sessionId }: InfoPaneProps): ReactElement {
   }
   return (
     <div className="flex h-full flex-col gap-3 p-3 text-xs">
-      {/* 计划待办（占 40% 空间，用户要求）：状态视觉对齐参考项目 PlanNode（completed 删除线 / running spinner / failed error） */}
       <div className="min-h-0 flex-[2] overflow-y-auto">
         <div className="text-muted-foreground mb-1.5 text-2xs font-semibold tracking-wide uppercase">
           {t('panel.tasks')}
         </div>
-        {/* P3-56：isError 此前未消费——查询失败渲染成空态，误导「无任务」。
-            形态对齐 models-section：QueryErrorRow 行内提示 + 重试，空态仅在非错误时展示 */}
         <QueryErrorRow
           isError={isError}
           errorMessage={error instanceof Error ? unwrapErrorMessage(error, getErrorMessage) : null}
@@ -93,7 +78,6 @@ export function InfoPane({ sessionId }: InfoPaneProps): ReactElement {
           ) : (
             <ul className="flex flex-col gap-1">
               {tasks.map((task) => {
-                // 状态视觉（对齐参考项目 PlanNode：完成 = 删除线淡色；运行中 = spinner + accent；失败 = error 色）
                 const status = task.status;
                 const isDone = status === 'completed';
                 const isActive = status === 'running';
@@ -107,7 +91,6 @@ export function InfoPane({ sessionId }: InfoPaneProps): ReactElement {
                       status === 'failed' && 'text-error-text',
                     )}
                   >
-                    {/* 运行中：旋转 spinner（对齐参考项目 active 态） */}
                     {isActive && (
                       <Loader2 className="text-accent-text mt-0.5 size-3 shrink-0 animate-spin" />
                     )}
@@ -119,9 +102,7 @@ export function InfoPane({ sessionId }: InfoPaneProps): ReactElement {
           ))}
       </div>
 
-      {/* 分割线（用户要求：计划待办与引用文件之间；加深——--border 在暗背景对比弱） */}
       <div className="border-muted-foreground/40 shrink-0 border-t" aria-hidden="true" />
-      {/* 引用文件（占 60% 空间，用户要求）：从 tool-store 提取 read_file 路径去重 */}
       <div className="min-h-0 flex-[3] overflow-y-auto">
         <div className="text-muted-foreground mb-1.5 text-2xs font-semibold tracking-wide uppercase">
           {t('panel.referencedFiles')}
@@ -221,21 +202,15 @@ export function DiffPane({
 }): ReactElement {
   const { t } = useTranslation();
   const openFile = useFileViewerStore((state) => state.openFile);
-  // 已展开的变更项（change.id 集合；行级 diff 由 ChangeDiffBody 经 useGitDiffQuery 拉取）
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
 
-  // 会话切换清空展开态（DevPanel 跨会话保持，避免旧会话展开态残留）
   // biome-ignore lint/correctness/useExhaustiveDependencies: sessionId 是故意的触发键（effect 仅用 setter）
   useEffect(() => {
     setExpanded(new Set());
   }, [sessionId]);
 
-  // selector 只取稳定引用（Map.get 返回的数组；无记录时用模块级常量）：
-  // 在 selector 内 filter/map 会每次返回新数组 → Zustand 认为状态变化 → 无限重渲染
   const calls = useToolStore((state) => state.callsBySession.get(sessionId) ?? EMPTY_CALLS);
 
-  // 派生：文件变更记录（纯派生，交给 React Compiler；calls 为 store 原始数组引用）
-  // 注意：filter/map 留在 hook 体内，绝不能放进 selector（会每次返回新数组 → 无限重渲染）
   const changes = calls
     .filter((c) => c.toolName === 'edit_file' || c.toolName === 'write_file')
     .filter((c) => c.status === 'success' || c.status === 'error')
@@ -262,9 +237,6 @@ export function DiffPane({
     );
   }
 
-  // 展开/收起一个变更项（P3 修复：仅切换展开态——行级 diff 改由
-  // ChangeDiffBody 的 useGitDiffQuery 拉取，删除手写 diffCache/loadingDiff 状态机，
-  // 获得竞态取消、错误语义与缓存一致性）
   const toggleChange = (changeId: string, _changePath: string): void => {
     setExpanded((prev) => {
       const next = new Set(prev);
@@ -309,7 +281,6 @@ export function DiffPane({
                 {change.toolName === 'write_file' ? 'NEW' : 'EDIT'}
               </Badge>
             </Button>
-            {/* 打开文件（合并自原"文件"tab 的快速打开场景） */}
             <Button
               variant="ghost"
               size="icon"
@@ -321,7 +292,6 @@ export function DiffPane({
               <ExternalLink className="size-3" strokeWidth={1.5} />
             </Button>
           </div>
-          {/* 行级 diff（展开态；useGitDiffQuery → UnifiedDiffView 双栏渲染） */}
           {expanded.has(change.id) && (
             <ChangeDiffBody
               changePath={change.path}

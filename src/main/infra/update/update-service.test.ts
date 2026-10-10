@@ -1,10 +1,5 @@
-// src/main/infra/update/update-service.test.ts
-// UpdateService 单测：事件桥接 / 启动调度与退避 / 开关 / 进度透传 / 快照 / 取消 / 静默安装
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-// mock electron：BrowserWindow.getAllWindows（事件推送目标窗口）、app.quit（退出触发）、
-// app.getAppPath（差分基线的开发版缓存目录解析，测试下返回不存在路径即跳过）、
-// app.getVersion（接收预发布的版本判定，默认稳定版无 `-`；beta 用例改写）
 const { mockGetAllWindows, mockAppQuit, mockGetAppPath, mockGetVersion } = vi.hoisted(() => ({
   mockGetAllWindows: vi.fn(),
   mockAppQuit: vi.fn(),
@@ -13,7 +8,6 @@ const { mockGetAllWindows, mockAppQuit, mockGetAppPath, mockGetVersion } = vi.ho
 }));
 
 vi.mock('electron', () => ({
-  // 字符串键：避免 useNamingConvention 对 PascalCase 属性名的检查
   ['BrowserWindow']: { getAllWindows: mockGetAllWindows },
   ['app']: { quit: mockAppQuit, getAppPath: mockGetAppPath, getVersion: mockGetVersion },
 }));
@@ -103,7 +97,6 @@ describe('UpdateService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useRealTimers();
-    // 挂起标志（模块级，跨实例共享）：逐测清零，防用例间串味
     clearDeferredInstall();
     updater = createFakeUpdater();
     tokens = [];
@@ -186,7 +179,6 @@ describe('UpdateService', () => {
       expect(updater.forceDevUpdateConfig).toBe(true);
       await vi.advanceTimersByTimeAsync(5_000);
       expect(updater.checkForUpdates).toHaveBeenCalledOnce();
-      // 手动检查同样放行（不再返回"开发模式不支持"）
       const result = await devService.check(true);
       expect(result).toEqual({ status: 'checking' });
       devService.dispose();
@@ -205,12 +197,12 @@ describe('UpdateService', () => {
       vi.useFakeTimers();
       updater.checkForUpdates.mockRejectedValue(new Error('offline'));
       service.start();
-      await vi.advanceTimersByTimeAsync(5_000); // 首次
-      await vi.advanceTimersByTimeAsync(60_000); // 第 1 次重试
-      await vi.advanceTimersByTimeAsync(5 * 60_000); // 第 2 次重试
-      await vi.advanceTimersByTimeAsync(15 * 60_000); // 第 3 次重试
+      await vi.advanceTimersByTimeAsync(5_000);
+      await vi.advanceTimersByTimeAsync(60_000);
+      await vi.advanceTimersByTimeAsync(5 * 60_000);
+      await vi.advanceTimersByTimeAsync(15 * 60_000);
       expect(updater.checkForUpdates).toHaveBeenCalledTimes(4);
-      await vi.advanceTimersByTimeAsync(60 * 60_000); // 再等一小时也无新检查
+      await vi.advanceTimersByTimeAsync(60 * 60_000);
       expect(updater.checkForUpdates).toHaveBeenCalledTimes(4);
     });
 
@@ -232,19 +224,16 @@ describe('UpdateService', () => {
     });
 
     it('接收预发布开关：check() 入口幂等应用用户设置（每次检查前重读）', async () => {
-      // 未注入开关（缺省视为关闭）+ 稳定版（版本号无 `-`）→ false
       service.start();
       await service.check(false);
       expect(updater.allowPrerelease).toBe(false);
 
-      // 注入开关 true → 检查时置 true（UI 开启后立即补检即生效）
       service.start({ allowPrereleaseEnabled: () => true });
       await service.check(false);
       expect(updater.allowPrerelease).toBe(true);
     });
 
     it('接收预发布：beta 版本（版本号含 `-`）恒收预发布，不受开关关闭影响', async () => {
-      // 与库构造器的版本判定同语义：app.getVersion() 含 `-` → 恒 true
       mockGetVersion.mockReturnValue('1.5.0-beta.1');
       service.start({ allowPrereleaseEnabled: () => false });
       await service.check(false);
@@ -259,7 +248,6 @@ describe('UpdateService', () => {
       service.start();
       fire(updater, 'update-available', { version: '1.2.0' });
       expect(lastPayload(win)).toEqual({ phase: 'available', version: '1.2.0' });
-      // 发起下载前有一步异步的差分基线检查（文件 I/O），下载在其后开始
       await vi.waitFor(() => {
         expect(updater.downloadUpdate).toHaveBeenCalledOnce();
       });
@@ -517,7 +505,6 @@ describe('UpdateService', () => {
 
     it('检查超时（网络黑洞）：45s 后判失败并复位在途标记，可再次发起检查', async () => {
       vi.useFakeTimers();
-      // 永不 settle：模拟 Electron net 路径下无 socket 超时的悬挂请求
       updater.checkForUpdates.mockImplementation(() => new Promise<void>(() => {}));
       const win = createFakeWindow();
       mockGetAllWindows.mockReturnValue([win]);
@@ -538,7 +525,6 @@ describe('UpdateService', () => {
         message: expect.stringContaining('超时'),
       });
 
-      // 关键回归：看门狗复位了 checkInFlight，手动重试必须真的再发一次请求
       updater.checkForUpdates.mockResolvedValueOnce(undefined);
       await expect(service.check(true)).resolves.toEqual({ status: 'checking' });
       expect(updater.checkForUpdates).toHaveBeenCalledTimes(2);
@@ -580,7 +566,6 @@ describe('UpdateService', () => {
       expect(updater.quitAndInstall).not.toHaveBeenCalled();
       expect(mockAppQuit).toHaveBeenCalledOnce();
       expect(isCloseConfirmed()).toBe(true);
-      // 退出善后完成（dispose 已跑）后：拉起安装向导（isSilent=false，进度可见）
       service.dispose();
       service.runDeferredInstall();
       expect(updater.quitAndInstall).toHaveBeenCalledWith(false, false);
@@ -592,9 +577,6 @@ describe('UpdateService', () => {
     });
 
     it('Windows：挂起标志跨实例可见（退出链末端取到的是 dispose 后惰性新建的实例）', async () => {
-      // 回归锚：挂起标志若退回实例字段，容器 dispose 置空引用后新建的实例
-      // 看不到标记，退出链末端安装被静默吞掉（2026-09-19 实测：点「重启并安装」
-      // 应用退出但安装器从未拉起）
       await service.quitAndInstall();
       service.dispose();
       const freshUpdater = createFakeUpdater();
@@ -605,7 +587,6 @@ describe('UpdateService', () => {
       );
       freshService.runDeferredInstall();
       expect(freshUpdater.quitAndInstall).toHaveBeenCalledWith(false, false);
-      // 标志已被消费：再次执行为空操作（不重复拉起安装器）
       const secondUpdater = createFakeUpdater();
       const secondService = new UpdateService(
         secondUpdater,
@@ -618,14 +599,12 @@ describe('UpdateService', () => {
 
     describe('refreshAutoInstallOnAppQuit', () => {
       it('按退出时刻的开关状态重算（运行中切换立即生效——2026-10-02 缺口回归锚）', () => {
-        // 修复前：start 时读一次，运行中切换只落库、内存值不变——
-        // 「开着启动 → 下载完成 → 运行中关掉 → 退出仍被静默安装」
         let autoCheck = true;
         service.start({ autoCheckEnabled: () => autoCheck });
         expect(updater.autoInstallOnAppQuit).toBe(true);
 
-        autoCheck = false; // 用户运行中关闭开关（只写库，autoInstallOnAppQuit 不自动变）
-        service.refreshAutoInstallOnAppQuit(); // 退出链重读
+        autoCheck = false;
+        service.refreshAutoInstallOnAppQuit();
         expect(updater.autoInstallOnAppQuit).toBe(false);
       });
 

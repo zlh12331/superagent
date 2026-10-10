@@ -1,11 +1,3 @@
-// src/main/infra/ai/tools/task-update.tool.ts
-// task_update 工具：更新任务状态（对齐 qwen task_update 工具语义）
-// ──────────────────────────────────────────────────────────────
-// 设计：
-// - 状态机：pending → running → completed / failed / cancelled（终端锁定）
-// - permission='auto'：纯元数据写入；终端状态不可逆转（TaskService 强制）
-// ──────────────────────────────────────────────────────────────
-
 import { z } from 'zod';
 import { t } from '../../i18n';
 import { TaskStatus, taskService } from '../agent/task-service';
@@ -37,7 +29,6 @@ export function createTaskUpdateTool(): Tool<TaskUpdateInput> {
       '更新任务状态（pending/running/completed/failed/cancelled）。任务进入终端状态（completed/failed/cancelled）后不可再改变。',
     inputSchema: TaskUpdateInputSchema,
     permission: 'auto',
-    // 零副作用控制面（改 agent 自己的任务记账）——plan 模式需可用（2026-10-08）
     category: 'control',
     execute: async (input: TaskUpdateInput, _ctx: ToolContext): Promise<ToolResult> => {
       const ok = taskService.update(input.taskId, input.status);

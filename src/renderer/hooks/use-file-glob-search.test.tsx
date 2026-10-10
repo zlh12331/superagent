@@ -1,17 +1,3 @@
-// src/renderer/hooks/use-file-glob-search.test.tsx
-// 文件名搜索 hook 单测（正向 / 边界 / 异常）
-// ──────────────────────────────────────────────────────────────
-// 覆盖（含此前内联在对话框组件、无独立覆盖的竞态路径）：
-// 1. 正向：防抖窗口后调用 search:glob，参数契约（pattern/path/maxResults）
-// 2. 竞态：查询变化后旧响应晚到 → 丢弃（不覆盖新结果）
-// 3. 竞态：卸载后响应晚到 → 丢弃（不 setState）
-// 4. 竞态：提交后搜索被禁用（关闭对话框）→ 在途响应丢弃
-// 5. 边界：空查询 / 仅空格 / rootDir=null / enabled=false → 不调 IPC 且结果为空
-// 6. 边界：浏览器模式（无 window.api）→ 不调 IPC、不报错
-// 7. 异常：错误信封与异常均触发 onError，且不残留陈旧结果
-// 8. onError 经 ref 转发：内联回调不会重置防抖窗口（否则输入期间永不发起请求）
-// ──────────────────────────────────────────────────────────────
-
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -52,7 +38,6 @@ describe('useFileGlobSearch', () => {
 
       const { result } = renderHook(() => useFileGlobSearch(makeOptions()));
 
-      // 防抖窗口内未发起
       expect(glob).not.toHaveBeenCalled();
 
       await flushDebounce();
@@ -62,7 +47,6 @@ describe('useFileGlobSearch', () => {
       expect(arg['path']).toBe(ROOT);
       expect(arg['includeHidden']).toBe(false);
       expect(arg['maxResults']).toBe(50);
-      // 模式由 lib/file-search 构造：递归通配 + 大小写展开 + 尾通配
       expect(arg['pattern']).toBe('**/*[aA][pP][pP]*');
       expect(result.current).toEqual(['/proj/src/App.tsx']);
     });
@@ -97,7 +81,6 @@ describe('useFileGlobSearch', () => {
       await flushDebounce();
       expect(glob).toHaveBeenCalledTimes(1);
 
-      // 查询变化 → 上一轮 effect cleanup 置 cancelled
       rerender({ query: 'new' });
       await flushDebounce();
       expect(glob).toHaveBeenCalledTimes(2);
@@ -107,7 +90,6 @@ describe('useFileGlobSearch', () => {
       if (firstResolver === undefined || secondResolver === undefined) {
         throw new Error('两次 glob 调用未被捕获');
       }
-      // 新查询先返回，随后旧查询才返回
       secondResolver({ data: { files: ['/proj/src/new.ts'] } });
       await waitFor(() => expect(result.current).toEqual(['/proj/src/new.ts']));
       firstResolver({ data: { files: ['/proj/src/stale.ts'] } });
@@ -127,9 +109,6 @@ describe('useFileGlobSearch', () => {
           }),
       );
       window.api.search = { glob } as never;
-      // 卸载后 setState 在 React 19 已无警告，故此路径的**可观测**回归信号是
-      // 「cancelled 守卫是否生效」——用错误分支验证（见下一个用例）；
-      // 本用例锁定成功分支不再触发任何新请求。
       const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
       const { unmount } = renderHook(() => useFileGlobSearch(makeOptions()));
@@ -168,7 +147,6 @@ describe('useFileGlobSearch', () => {
         await Promise.resolve();
       });
 
-      // 关键断言：卸载后的失败不得回调 onError（否则会弹一个已消失界面的 toast）
       expect(onError).not.toHaveBeenCalled();
     });
 
@@ -280,7 +258,6 @@ describe('useFileGlobSearch', () => {
       const glob = vi.fn().mockResolvedValue({ data: { files: [] } });
       window.api.search = { glob } as never;
 
-      // 每次渲染都传入新的内联箭头函数（模拟组件内 `onError: () => toast(...)`）
       const { rerender } = renderHook(
         ({ query }: { query: string }) =>
           useFileGlobSearch({
@@ -294,7 +271,6 @@ describe('useFileGlobSearch', () => {
         { initialProps: { query: 'a' } },
       );
 
-      // 频繁重渲染（回调引用每次都变）不应无限期推迟防抖
       rerender({ query: 'a' });
       rerender({ query: 'a' });
       await flushDebounce();

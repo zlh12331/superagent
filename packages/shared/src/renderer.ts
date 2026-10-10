@@ -1,16 +1,3 @@
-// packages/shared/src/renderer.ts
-// 渲染层专用出口：类型契约 + 轻量常量（无 zod schema 运行时）
-//
-// 消费方：src/renderer/**（24 个文件）
-// - IpcApi：window.api 完整形状（自动推导，享受智能提示）
-// - IpcResponse / IpcRequestMap / IpcEventMap：IPC 类型映射（纯类型）
-// - IPC_CHANNELS：通道常量（值，零依赖）
-// - ERROR_META：错误码元数据（值）
-//
-// 设计目标：渲染层只获取类型契约与轻量常量，不加载 zod schema 运行时，
-// 保持打包体积最小、依赖边界清晰（主进程专属逻辑不泄漏到浏览器环境）。
-// ──────────────────────────────────────────────────────────────
-
 export {
   APPROVAL_TIMEOUT_MINUTES,
   ASK_TIMEOUT_SECONDS,
@@ -24,17 +11,14 @@ export {
   TERMINAL_DEFAULT_COLS,
   TERMINAL_DEFAULT_ROWS,
 } from './constants/defaults';
-// 编辑器代码面排版（37 号 A：Tab 宽度档位，查看器/聊天代码块/diff 单点收敛）
 export {
   clampEditorTabSize,
   DEFAULT_EDITOR_TAB_SIZE,
   EDITOR_TAB_SIZES,
 } from './constants/editor';
 export type { ErrorMeta, IpcError } from './constants/errors';
-// 错误码与错误元数据（值 + 类型）
 export { ERROR_META, ErrorCode } from './constants/errors';
 export { IPC_PROTOCOL_VERSION } from './constants/protocol';
-// 终端设置（36 号 B：shell 档位/平台适用性 + 字号档位，设置 UI 与 store 消费）
 export {
   clampFontSize,
   DEFAULT_TERMINAL_FONT_SIZE,
@@ -45,7 +29,6 @@ export {
   type TerminalShellChoice,
   terminalShellChoicesForPlatform,
 } from './constants/terminal-shell';
-// 界面缩放（35 号：档位集 + 纯函数，UI Select 与快捷键消费）
 export {
   clampZoom,
   DEFAULT_ZOOM,
@@ -53,18 +36,13 @@ export {
   stepZoom,
   ZOOM_LEVELS,
 } from './constants/zoom';
-// IPC 类型契约（纯类型，自动推导）
 export type { IpcApi } from './ipc/api';
 export type { IpcChannel } from './ipc/channels';
-// IPC 通道常量（值，零 zod 依赖）
 export { IPC_CHANNELS } from './ipc/channels';
-// 类型定义表（仅类型，供推导消费）
 export type { IpcDefinitions } from './ipc/definitions';
-// IPC 类型映射（Req/Res 别名，由 IpcRequestMap 推导）
 export type * from './ipc/payloads';
 export type { IpcEventMap, IpcRequestMap } from './ipc/payloads';
 export type { IpcResponse } from './ipc/response';
-// zod schema 的类型部分（仅类型重导出，不携带 schema 运行时）
 export type * from './schemas/agent';
 export type * from './schemas/agent-ask';
 export type * from './schemas/agent-events';
@@ -80,7 +58,6 @@ export type * from './schemas/git';
 export type * from './schemas/goal';
 export type * from './schemas/im';
 export type * from './schemas/invalidation';
-// 失效域词表（值：渲染层映射/回落判定与主进程声明侧共用单一真源，31 号设计文档 §2.2）
 export { INVALIDATION_DOMAINS, TURN_END_GLOBAL_DOMAINS } from './schemas/invalidation';
 export type * from './schemas/memory';
 export type * from './schemas/models';
@@ -90,7 +67,6 @@ export type * from './schemas/search';
 export type * from './schemas/session';
 export type * from './schemas/settings';
 export type { SettingKey } from './schemas/settings';
-// settings:set 可写键白名单（值：遗留 localStorage 迁移过滤用；schema 内含 lsp 值级门禁）
 export { SETTING_KEYS } from './schemas/settings';
 export type * from './schemas/skill';
 export type * from './schemas/system';

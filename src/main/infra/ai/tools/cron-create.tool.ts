@@ -1,11 +1,3 @@
-// src/main/infra/ai/tools/cron-create.tool.ts
-// cron_create 工具：创建定时任务（对齐 qwen cron_create 工具语义）
-// ──────────────────────────────────────────────────────────────
-// 设计：
-// - 表达式 5 字段（分 时 日 月 周）；非法表达式返回明确错误
-// - 任务绑定当前会话；sqlite 持久化（重启保留）
-// ──────────────────────────────────────────────────────────────
-
 import { z } from 'zod';
 import { t } from '../../i18n';
 import { cronService } from '../agent/cron-service';

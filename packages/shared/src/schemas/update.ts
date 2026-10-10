@@ -1,15 +1,3 @@
-// packages/shared/src/schemas/update.ts
-// 自动更新域 schema（electron-updater 状态桥接）
-// ──────────────────────────────────────────────────────────────
-// 设计（见 docs/design/27-auto-update-spec.md）：
-// - 请求-响应：update:check（触发检查）/ update:install（安装重启）/
-//   update:cancel（取消下载）/ update:getStatus（取主进程状态快照）
-// - 事件推送：update:event:status（检查/下载进度/就绪/取消/错误）
-// - payload 用 phase 区分阶段，渲染层据此渲染提示
-// - 进度字段对齐 electron-updater 的 ProgressInfo：差分下载时 total 是
-//   本次需下载的字节数（差分包大小），不是完整安装包体积
-// ──────────────────────────────────────────────────────────────
-
 import { z } from 'zod';
 
 /** update:check 入参 */
@@ -41,13 +29,13 @@ export const UpdateCheckResSchema = z.object({
 
 /** 更新状态推送阶段 */
 export type UpdatePhase =
-  | 'checking' // 正在检查更新
-  | 'available' // 发现新版本（提示用户）
-  | 'downloading' // 正在下载（带进度）
-  | 'downloaded' // 下载完成（可安装重启）
-  | 'not-available' // 已是最新
-  | 'cancelled' // 用户取消下载
-  | 'error'; // 检查/下载失败
+  | 'checking'
+  | 'available'
+  | 'downloading'
+  | 'downloaded'
+  | 'not-available'
+  | 'cancelled'
+  | 'error';
 
 /**
  * 更新错误分类（主进程按错误特征归类，渲染层映射本地化文案）
@@ -55,12 +43,7 @@ export type UpdatePhase =
  * 原始 message 是 electron-updater 的英文技术文本（含 net:: / sha512 / ENOSPC
  * 等），直接展示对用户不可操作，故由主进程分类后下发。
  */
-export type UpdateErrorKind =
-  | 'network' // 网络不可达 / DNS / 连接超时
-  | 'rate-limited' // 被限流（HTTP 403/429）
-  | 'checksum' // 包校验失败
-  | 'disk' // 磁盘空间不足
-  | 'unknown'; // 其他（保留原始 message 供排查）
+export type UpdateErrorKind = 'network' | 'rate-limited' | 'checksum' | 'disk' | 'unknown';
 
 /** update:event:status 事件 payload */
 export interface UpdateStatusPayload {

@@ -1,5 +1,3 @@
-// src/main/infra/update/update-cache.test.ts
-// 更新缓存模块单测：目录解析（真实临时目录，绝不触碰真实缓存）/ 占用统计 / 清理
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -63,8 +61,8 @@ describe('update-cache', () => {
     it('递归统计文件数与字节数', async () => {
       const dir = join(cacheRoot, 'pending');
       await mkdir(join(dir, 'nested'), { recursive: true });
-      await writeFile(join(dir, 'a.bin'), 'abc'); // 3 字节
-      await writeFile(join(dir, 'nested', 'b.bin'), 'defg'); // 4 字节
+      await writeFile(join(dir, 'a.bin'), 'abc');
+      await writeFile(join(dir, 'nested', 'b.bin'), 'defg');
       expect(await measureDirRecursive(dir)).toEqual({ bytes: 7, fileCount: 2 });
     });
 
@@ -122,11 +120,10 @@ describe('update-cache', () => {
       const cacheDir = join(cacheRoot, 'app-updater');
       await mkdir(cacheDir, { recursive: true });
       await writeFile(join(cacheDir, 'installer.exe'), 'x'.repeat(20));
-      await writeBlockMap(cacheDir, [10, 5]); // 总 15 ≠ 20
+      await writeBlockMap(cacheDir, [10, 5]);
 
       expect(await pruneStaleDifferentialBaseline(cacheDir)).toBe('pruned');
       await expect(readFile(join(cacheDir, 'current.blockmap'))).rejects.toThrow();
-      // 基准安装包保留（库仍需它做差分的 COPY 来源）
       await expect(readFile(join(cacheDir, 'installer.exe'))).resolves.toBeDefined();
     });
 

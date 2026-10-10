@@ -1,23 +1,3 @@
-// scripts/lib/function-metrics.ts
-// 函数度量纯函数：形参计数（2026-09-15 起仅存此职——函数体行数已迁移 Biome）
-// ──────────────────────────────────────────────────────────────
-// 2026-09-15 体长度量退役（用户拍板）：函数体行数改由 Biome 内置规则
-// noExcessiveLinesPerFunction 度量（scripts/check-functions.ts 从其 JSON 诊断读取）。
-// 本模块曾以正则启发式同时度量形参与体长，其「已知边界」（对象字面量返回类型、
-// 多层嵌套形参括号、嵌套模板串的漏报；花括号深度扫描的手写词法歧义）中体长相关
-// 部分随迁移消失；形参相关边界（多层嵌套形参括号漏报）仍在。
-// 迁移方向记录：若形参度量也要迁移，Biome 无 max-params 规则，届时评估 oxc-parser。
-// ──────────────────────────────────────────────────────────────
-//
-// 2026-08-30 修正一处**误报**：箭头函数带显式返回类型（`(p: T): R => …`）时，
-// 原形参捕获 `(\(([\s\S]*?)\)\s*=>)` 无法就地闭合，惰性组会一路跑到下文最近的
-// `) =>`，把两个函数之间的一段代码当成形参表——params 被逗号数放大、真实函数体
-// 反而被跳过（基线里因此沉淀了 `#q params 24` 这类幽灵条目）。
-// 现改为：① 形参区不跨越第二层括号；② 返回类型段顶层禁 `=`、`;`、`{}`，
-// 只允许再嵌一层括号。于是签名总在**自己的** `=>` 处闭合，
-// `): (() => void) => {` 也能正确定位函数体，跨行吞并从根上消除。
-// ──────────────────────────────────────────────────────────────
-
 /** 单个函数的度量结果 */
 export interface FnMetric {
   readonly name: string;
@@ -135,7 +115,6 @@ export function scanFunctions(source: string): FnMetric[] {
   const seenAt = new Set<number>();
   for (const match of source.matchAll(FN_RE)) {
     const index = match.index ?? 0;
-    // 四种形态：function 声明(1,2)、括号箭头(3,4)、裸标识符箭头(3,5)、const = function(6,7)
     const name = match[1] ?? match[3] ?? match[6] ?? 'anonymous';
     const paramsText = match[2] ?? match[4] ?? match[7];
     const bareParam = match[5];
@@ -147,20 +126,16 @@ export function scanFunctions(source: string): FnMetric[] {
 
     const counted =
       bareParam !== undefined
-        ? { count: 1, destructured: false } // `props => {}` 单形参
+        ? { count: 1, destructured: false }
         : countParams(paramsText as string);
     out.push({ name, line, params: counted.count, destructured: counted.destructured });
     seenAt.add(index);
   }
 
-  // class 方法（2026-09-08 补覆盖）：正则按行锚定缩进 + 修饰符前缀，
-  // 与 FN_RE 的匹配位置不会重叠（方法签名不以 function/const 开头），
-  // seenAt 仅作防御性去重。
   for (const match of source.matchAll(METHOD_RE)) {
     const index = match.index ?? 0;
     if (seenAt.has(index)) continue;
     const name = match[1] ?? 'method';
-    // 控制流语句形态（if/for/while…）不是方法，跳过
     if (CONTROL_FLOW_KEYWORDS.has(name)) continue;
     const paramsText = match[2] ?? '';
     const line = source.slice(0, index).split('\n').length;

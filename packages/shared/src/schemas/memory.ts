@@ -1,11 +1,3 @@
-// packages/shared/src/schemas/memory.ts
-// 记忆系统域（memory:list / clear / clearAll / status）
-// ──────────────────────────────────────────────
-// 设计：记忆条目绑定会话；capture 自动记录 + recall 跨会话召回。
-// 用户可控：enabled 开关（关闭后不捕获新记忆、不注入召回）；
-// 状态可见：status 暴露引擎配置/运行/健康与数据量。
-// ──────────────────────────────────────────────
-
 import { z } from 'zod';
 
 /** 记忆条目（memory:list 响应条目） */

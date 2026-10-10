@@ -1,19 +1,3 @@
-// src/main/infra/ai/tools/git-commit.tool.ts
-// git_commit 工具：提交暂存区改动（git commit）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 提交当前暂存区的改动到本地仓库
-// - 支持普通提交（git commit -m）和追加提交（git commit --amend -m）
-// - 创建新的不可逆提交，需用户审批后执行
-//
-// 设计：
-// - permission='ask'：提交是不可逆操作（虽然可 reset 但有副作用），需用户确认
-// - 不自动 git add：调用方应先调用 git_add 暂存改动
-// - amend=true 时执行 git commit --amend -m <message>（覆盖原提交）
-// - 通过 IGitService 注入，便于测试 mock
-// - 返回新提交的 SHA 和统计信息，便于 UI 展示
-// ──────────────────────────────────────────────────────────────
-
 import { z } from 'zod';
 import type { IGitService } from '../../git/git-service';
 import type { Tool, ToolContext, ToolResult } from './tool';
@@ -23,7 +7,6 @@ const GitCommitInputSchema = z.object({
     .string()
     .min(1)
     .describe('提交信息（建议遵循 Conventional Commits 规范，如 "feat: 新增X" "fix: 修复Y"）'),
-  // 是否追加到上一次提交（amend），默认 false
   amend: z
     .boolean()
     .default(false)

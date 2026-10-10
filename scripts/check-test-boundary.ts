@@ -1,19 +1,3 @@
-// scripts/check-test-boundary.ts
-// 测试边界门禁（工程化强制）· 设计文档 §3.6
-// ──────────────────────────────────────────────────────────────
-// 依据：单元/集成/E2E 边界 = 被测范围 × 替身位置 × 断言对象（§3.6 判定框架）
-// 可程序化的结构信号：
-//   1. 集成测试（tests/integration/**）禁止 vi.mock 同仓业务模块
-//      （IO 边界模块允许替身：infra/storage、utils/logger、telemetry——业界简化环境方案）
-//   2. 单测目录（src/**/*.test.ts）真实 IO 信号（真实 DB/WebSocket/HTTP server）
-//      = "准集成测试"，必须登记 scripts/test-boundary-exempt.json
-//   3. 恒真断言静态扫描（expect(true).toBe(true) 等字面量恒真 = 空跑）
-// 级别：三条规则均为 error（卡关）。规则 3 于 2026-09-17 由 warning 升 error——
-//      存量（sidebar-account.test.tsx）已改为断言真实副作用后清零，升级防回归。
-//
-// 运行：pnpm check:test-boundary
-// ──────────────────────────────────────────────────────────────
-
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 
@@ -21,9 +5,9 @@ const ROOT = join(import.meta.dirname, '..');
 
 /** IO 边界允许清单：集成测试允许替身的同仓模块（简化环境 Medium Test 的边界替身） */
 const IO_BOUNDARY_MOCKS = [
-  'infra/storage', // DB 层（替换为内存实现是标准做法）
-  'llm-client/ai-provider', // LLM provider 工厂（外部服务边界，fake model 注入点）
-  'mcp/mcp-client', // MCP SDK 客户端（外部 MCP server 子进程边界，fake client 注入点）
+  'infra/storage',
+  'llm-client/ai-provider',
+  'mcp/mcp-client',
   'utils/logger',
   'telemetry',
 ];
@@ -77,19 +61,15 @@ function isIoBoundaryMock(specifier: string): boolean {
 function main(): void {
   const errors: Finding[] = [];
 
-  // 登记表加载
   const exemptRaw = JSON.parse(
     readFileSync(join(ROOT, 'scripts', 'test-boundary-exempt.json'), 'utf-8'),
   ) as { entries: Array<{ file: string }> };
   const exemptFiles = new Set(exemptRaw.entries.map((e) => e.file.replaceAll('\\', '/')));
 
-  // ── 规则 1：集成测试禁止 vi.mock 同仓业务模块 ───────────────
   const integrationDir = join(ROOT, 'tests', 'integration');
   for (const f of collectFiles(integrationDir, /\.test\.ts$/)) {
     const content = readFileSync(f, 'utf-8');
     const rel = relative(ROOT, f).replaceAll('\\', '/');
-    // 全文扫描（含跨行 vi.mock(\n '...' )），按匹配位置换算行号；
-    // 提取时剔除注释行内容（避免把注释里的示例误报）
     const contentNoComments = content
       .split('\n')
       .map((l) => (l.trim().startsWith('//') || l.trim().startsWith('*') ? '' : l))
@@ -98,7 +78,6 @@ function main(): void {
     for (const m of contentNoComments.matchAll(re)) {
       const spec = m[1] as string;
       if (!isSameRepoPath(spec)) continue;
-      // IO 边界替身（infra/storage 等）是简化环境 Medium Test 的标准做法，完全允许
       if (isIoBoundaryMock(spec)) continue;
       const line = contentNoComments.slice(0, m.index).split('\n').length;
       errors.push({
@@ -109,7 +88,6 @@ function main(): void {
     }
   }
 
-  // ── 规则 2：单测目录真实 IO = 准集成，必须登记 ───────────────
   const srcDir = join(ROOT, 'src');
   for (const f of collectFiles(srcDir, /\.test\.(ts|tsx)$/)) {
     const content = readFileSync(f, 'utf-8');
@@ -124,7 +102,6 @@ function main(): void {
     }
   }
 
-  // ── 规则 3：恒真断言（字面量自比 = 空跑；覆盖单测 + 集成）────────
   for (const dir of [join(ROOT, 'src'), join(ROOT, 'tests', 'integration')]) {
     for (const f of collectFiles(dir, /\.test\.(ts|tsx)$/)) {
       const content = readFileSync(f, 'utf-8');
@@ -142,7 +119,6 @@ function main(): void {
     }
   }
 
-  // ── 输出 ───────────────────────────────────────────────────
   if (errors.length > 0) {
     console.error(`❌ 测试边界违规 ${errors.length} 处（error）：`);
     for (const e of errors) {

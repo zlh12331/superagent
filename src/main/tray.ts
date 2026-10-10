@@ -1,14 +1,3 @@
-// src/main/tray.ts
-// 系统托盘（后台驻留中心）：状态驱动的 tooltip/动态菜单
-// ──────────────────────────────────────────────────────────────
-// 设计（docs/design/28-tray-spec.md）：
-// - 菜单在右键时即时构建（读取实时回合/更新状态与当前语言），无重建时机簿记
-// - tooltip 随更新状态变化（空闲/下载中/就绪），经 onUpdateStatus 订阅驱动；
-//   托盘图标的视觉变体（角标）需要设计资源，列 P2（见 §5 角标实现口径）
-// - 左键唤回主窗口；「退出」走完整善后链（app.quit() → before-quit 协商）
-// - 依赖全部注入（index.ts 装配），本模块不触碰 service-container
-// ──────────────────────────────────────────────────────────────
-
 import { join } from 'node:path';
 import type { UpdateStatusPayload } from '@code-agent/shared/main';
 import {
@@ -130,19 +119,14 @@ function createTrayImage(): Electron.NativeImage {
   const resourcesDir = join(app.getAppPath(), 'resources/icons');
 
   if (process.platform === 'darwin') {
-    // 只 load 1x 文件：createFromPath 对带 @2x 后缀的同名文件自动挂 2x 表示
-    // （16pt 逻辑尺寸 + retina 高清）；直接 load @2x 会把 32px 当 1x 尺寸用
     const template = nativeImage.createFromPath(join(resourcesDir, 'trayTemplate.png'));
     if (!template.isEmpty()) {
       template.setTemplateImage(true);
       return template;
     }
-    // 无 template 资源：回退常规图标
     logger.info({}, 'macOS template 图标不存在，回退常规图标');
   }
 
-  // 多尺寸表示：100%/150%/200% DPI 各取最近档，预生成图比单张源图运行时
-  // 缩到 16px 更清晰（spec §9 Windows 按 DPI 选尺寸避免模糊）
   const base = nativeImage.createFromPath(join(resourcesDir, 'tray16.png'));
   if (!base.isEmpty()) {
     for (const [scaleFactor, file] of [
@@ -168,26 +152,22 @@ function createTrayImage(): Electron.NativeImage {
  */
 export function createTray(trayDeps: TrayDeps): void {
   if (tray !== null) {
-    return; // 已创建（如 macOS activate 重建窗口路径），复用
+    return;
   }
   deps = trayDeps;
 
-  // macOS 优先 template 图标（系统自动深浅色），无则回退常规彩色图标
   const trayImage = createTrayImage();
   tray = new Tray(trayImage);
   updateTrayPresentation();
 
-  // 左键单击 → 显示/聚焦主窗口（Windows 默认行为；macOS Linux 需显式绑定）
   tray.on('click', () => {
     showMainWindow();
   });
 
-  // 右键 → 即时构建菜单（实时状态 + 当前语言），无静态菜单的重建时机问题
   tray.on('right-click', () => {
     void popUpMenu();
   });
 
-  // 更新状态变化 → 刷新 tooltip（菜单在右键时即时构建，无需跟随）
   trayDeps.onUpdateStatus(() => {
     updateTrayPresentation();
   });
@@ -221,7 +201,6 @@ function updateTrayPresentation(): void {
 
 /** 右键菜单：即时构建（状态行 / 新建会话 / 最近会话 / 更新 / 自启 / 退出） */
 async function popUpMenu(): Promise<void> {
-  // 局部捕获：闭包内引用模块级可变变量会让 TS 收窄失效（且运行时更稳）
   const d = deps;
   const t = tray;
   if (t === null || d === null) {
@@ -231,7 +210,6 @@ async function popUpMenu(): Promise<void> {
   const running = d.hasRunningTurns();
   const status = d.getUpdateStatus();
   const template: MenuItemConstructorOptions[] = [
-    // 状态行（只读）：回合运行态即时读取
     { label: running ? text.running : text.idle, enabled: false },
     { type: 'separator' },
     {
@@ -264,7 +242,6 @@ async function popUpMenu(): Promise<void> {
 
   template.push({ type: 'separator' });
   if (status?.phase === 'downloaded') {
-    // 更新就绪：菜单项升级为安装动作（复用两段式安装链路）
     template.push({
       label: text.installUpdate,
       click: () => {
@@ -285,9 +262,6 @@ async function popUpMenu(): Promise<void> {
     });
   }
 
-  // 开机自启（与设置页开关同源，均经 infra/autostart 读写；读取用
-  // executableWillLaunchAtLogin / XDG 文件 / macOS status 的真实状态——
-  // 此前直读 openAtLogin 在 Windows 上恒 false，勾选框永远不勾且点击只会重复开启）
   const autostart = await readAutostartState(createAutostartDeps());
   template.push({
     label: text.autostart,
@@ -299,9 +273,6 @@ async function popUpMenu(): Promise<void> {
     },
   });
 
-  // 关闭时最小化到托盘（spec 28 §6:134 菜单形态里的第二个勾选项）
-  // 数据源与上一项不同：读 settings.window.closeAction（SQLite），非 OS 登录项。
-  // 写入走主进程直写 + 广播 settings:event:changed，渲染层设置页据此保持同步。
   const closeAction = d.getCloseAction();
   template.push({
     label: text.closeToTray,
@@ -355,7 +326,6 @@ export function notifyMinimizedToTray(): void {
     });
     notification.show();
   } catch (err) {
-    // 通知失败（构造异常等）非致命：记录后继续运行
     logger.warn({ error: String(err) }, '最小化引导通知发送失败（忽略）');
   }
 }

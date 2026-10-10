@@ -1,12 +1,3 @@
-// src/renderer/components/$1/model-config-dialog.test.tsx
-// ModelConfigDialog 单测：编辑模式连通性测试用「表单里的请求地址」而非默认端点
-// ──────────────────────────────────────────────────────────────
-// 回归背景：runConnectivityTest 曾以 !isEdit 守卫传 baseUrl，导致编辑模式改了
-// 请求地址后，连通性测试仍打默认端点（改动不生效）。本测试锁定修复后行为。
-// 数据源 mock：window.api.models.test/listBuiltin + settings.updateRuntimeModel 全 stub；
-// 表单交互（改地址 → 保存 → 测试 → 保存）保持真实实现断言。
-// ──────────────────────────────────────────────────────────────
-
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -96,12 +87,10 @@ describe('ModelConfigDialog 编辑模式连通性测试', () => {
     const user = userEvent.setup();
     renderDialog();
 
-    // 表单预填原地址 → 改成新地址
     const urlInput = await screen.findByPlaceholderText('https://api.openai.com/v1');
     await user.clear(urlInput);
     await user.type(urlInput, 'https://new.example.com');
 
-    // 保存流程：校验 → 连通性测试 → 更新
     await user.click(screen.getByRole('button', { name: '保存' }));
 
     await waitFor(() => {
@@ -115,7 +104,6 @@ describe('ModelConfigDialog 编辑模式连通性测试', () => {
       expect(mocks.updateRuntimeModel).toHaveBeenCalledTimes(1);
     });
     expect(updateArg().baseUrl).toBe('https://new.example.com');
-    // 逐字符输入 24 字符 + 弹窗渲染，全量并发 + coverage 插桩下会超默认 5000ms
   }, 15_000);
 
   it('不改地址：连通性测试用表单预填的模型自身 baseUrl（而非厂商默认端点）', async () => {
@@ -129,7 +117,6 @@ describe('ModelConfigDialog 编辑模式连通性测试', () => {
       expect(mocks.modelsTest).toHaveBeenCalledTimes(1);
     });
     expect(testArg().baseUrl).toBe('https://old.example.com');
-    // 全量并发 + coverage 插桩下弹窗渲染 + 保存链可超默认 5000ms，放宽超时
   }, 15_000);
 
   it('modelId 只读：编辑模式锁定主键（改动会让 update 命中不到行）', async () => {
@@ -154,7 +141,6 @@ describe('ModelConfigDialog 编辑模式连通性测试', () => {
     renderDialog();
 
     const timeoutInput = await screen.findByPlaceholderText('留空不限制，如：3600');
-    // 预填 1.5 先清空再输入（type 是追加语义）
     await user.clear(timeoutInput);
     await user.type(timeoutInput, '120');
     await user.click(screen.getByRole('button', { name: '保存' }));
@@ -163,7 +149,6 @@ describe('ModelConfigDialog 编辑模式连通性测试', () => {
       expect(mocks.updateRuntimeModel).toHaveBeenCalledTimes(1);
     });
     expect(updateArg().timeoutMs).toBe(120_000);
-    // 逐字符输入 + 弹窗渲染，全量并发 + coverage 插桩下会超默认 5000ms
   }, 15_000);
 
   it('超时字段：清空后保存发送 null（清除语义，回不限制）', async () => {

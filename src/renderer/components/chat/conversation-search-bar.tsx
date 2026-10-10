@@ -1,14 +1,3 @@
-// src/renderer/components/chat/conversation-search-bar.tsx
-// 会话内搜索栏（对齐参考项目 superagent ConversationSearchBar + 原型 .conv-search-bar）
-// ──────────────────────────────────────────────────────────────
-// 受控组件：query / 匹配计数 / 导航由父组件（ChatPanel）持有状态，
-// 本组件仅负责 UI 展示与事件转发。
-// 键盘：Enter=下一个匹配 / Shift+Enter=上一个 / Esc=关闭
-// 组合态（IME）内的 Enter/Esc 属于「上字/取消候选」，不触发导航与关闭
-// （与 ChatInput 的 isComposing 处理同源；React 合成事件不暴露该字段，
-// 须读 nativeEvent）。
-// ──────────────────────────────────────────────────────────────
-
 import { ChevronDown, ChevronUp, X } from 'lucide-react';
 import { type KeyboardEvent, type ReactElement, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
@@ -45,7 +34,6 @@ export function ConversationSearchBar({
   onClose,
 }: ConversationSearchBarProps): ReactElement | null {
   const { t } = useTranslation();
-  // 挂载时聚焦输入框（autoFocus 属性被 biome noAutofocus 禁用，改用 ref）
   const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     if (visible) {
@@ -93,7 +81,6 @@ export function ConversationSearchBar({
         aria-label={t('chat.searchInputAriaLabel')}
         className="border-border bg-background focus:border-primary min-w-0 flex-1 rounded-[calc(var(--radius)-4px)] border px-2 py-1 text-xs transition-colors focus:outline-none"
       />
-      {/* 匹配计数（有查询时显示） */}
       {hasQuery && (
         <span
           className="text-muted-foreground shrink-0 font-mono text-xs tabular-nums"
@@ -102,7 +89,6 @@ export function ConversationSearchBar({
           {hasMatches ? `${currentMatch}/${totalMatches}` : '0/0'}
         </span>
       )}
-      {/* 上一个匹配（↑） */}
       <Button
         variant="ghost"
         size="icon"
@@ -114,7 +100,6 @@ export function ConversationSearchBar({
       >
         <ChevronUp className="size-3" />
       </Button>
-      {/* 下一个匹配（↓） */}
       <Button
         variant="ghost"
         size="icon"
@@ -126,7 +111,6 @@ export function ConversationSearchBar({
       >
         <ChevronDown className="size-3" />
       </Button>
-      {/* 关闭（X） */}
       <Button
         variant="ghost"
         size="icon"

@@ -1,16 +1,3 @@
-// src/main/infra/storage/approval-pref.ts
-// 工具审批模式持久化（用户偏好，JSON 文件）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 读写 ApprovalMode 配置（plan / ask / auto / yolo）
-// - 存储位置：userData/approval-pref.json（与 telemetry-pref 同模式）
-// - 读取失败回退 'ask'（保守默认：写操作需审批）
-//
-// 设计：
-// - 与 telemetry-pref 对齐：无状态模块函数 + 同步/异步读写
-// - 启动时由 PermissionService 读取并应用（setApprovalMode）
-// ──────────────────────────────────────────────────────────────
-
 import { mkdirSync, readFileSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -38,9 +25,7 @@ export function readApprovalModeSync(): ApprovalMode {
     ) {
       return parsed.mode;
     }
-  } catch {
-    // 文件不存在 / 解析失败：回退默认
-  }
+  } catch {}
   return DEFAULT_APPROVAL_MODE;
 }
 

@@ -1,10 +1,3 @@
-// src/renderer/components/settings/sections/proxy-section.test.tsx
-// ProxySection 测试（34 号 spec §2.7 组件断言：store 实质状态 + 测试按钮三态）
-// ──────────────────────────────────────────────────────────────
-// 覆盖：三模式渲染与切换写 store / fixed 展开地址与 bypass 编辑（blur 写穿透）/
-// 非法地址不入库（V9 UI 半）/ 测试连接三态（ok / not-applicable）。
-// ──────────────────────────────────────────────────────────────
-
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';

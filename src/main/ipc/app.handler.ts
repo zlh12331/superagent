@@ -1,13 +1,3 @@
-// src/main/ipc/app.handler.ts
-// 应用级 IPC handler（定义表驱动，注册由 registerIpcHandlers 统一执行）
-//
-// 当前仅实现 2 个应用级 channel：
-// - app:getStatus：返回应用就绪状态（health check）
-// - app:openExternal：通过系统浏览器打开外链
-//
-// 说明：handler 对象形状受 InferHandlers 约束（缺方法编译期报错）；
-// channel / schema 由 IPC_DEFINITIONS 提供，本文件只写业务实现。
-
 import { join } from 'node:path';
 import type { InferHandlers } from '@code-agent/shared/main';
 import {
@@ -51,20 +41,16 @@ function readBuildInfo(): BuildInfo {
         return parsed;
       }
     }
-  } catch {
-    // 文件缺失/损坏：非阻塞，回退 dev 标记
-  }
+  } catch {}
   return { channel: 'dev' };
 }
 
 /** 应用级 handler 实现（app 域） */
 export const appHandlers: InferHandlers<typeof IPC_DEFINITIONS, IpcHandlerContext>['app'] = {
-  // 应用状态查询：返回就绪标记 + IPC 协议版本（渲染层启动校验，防版本错配）
   getStatus: async () => {
     return { ready: true, protocolVersion: IPC_PROTOCOL_VERSION };
   },
 
-  // 应用信息查询：版本与环境信息（「关于」面板数据源）
   getInfo: async () => {
     const build = readBuildInfo();
     return {
@@ -81,7 +67,6 @@ export const appHandlers: InferHandlers<typeof IPC_DEFINITIONS, IpcHandlerContex
     };
   },
 
-  // 外链打开：仅允许 http/https 协议，防止 file:// / javascript: 等危险协议
   openExternal: async (input) => {
     if (!input.url.startsWith('http://') && !input.url.startsWith('https://')) {
       throw new AppError(ErrorCode.INVALID_INPUT, '仅允许 http/https 协议');
@@ -90,33 +75,25 @@ export const appHandlers: InferHandlers<typeof IPC_DEFINITIONS, IpcHandlerContex
     return { ok: true };
   },
 
-  // 打开用户数据目录（会话/备份/日志所在，数据资产可迁移入口）
   openDataDir: async () => {
     const dir = app.getPath('userData');
     const error = await shell.openPath(dir);
     return { ok: error.length === 0 };
   },
 
-  // 开机自启回显（OS 登录项真实状态；设置页开关与托盘菜单同源）
-  // 平台差异（Windows 命令行比对 / macOS 审批态 / Linux XDG autostart）与 dev 守卫
-  // 集中在 infra/autostart（该文件头注释记录了 Electron v44 源码核实与实测结论）
   getLoginItemSettings: async () => {
     return await readAutostartState(createAutostartDeps());
   },
 
-  // 开机自启写入（返回写后回读的真实状态——注册失败/审批未通过会如实反映，
-  // 不再回显入参；此前回显曾让 Linux 空实现与 macOS 待审批都显示"成功"）
   setLoginItemSettings: async (input) => {
     return await setAutostartEnabled(createAutostartDeps(), input.openAtLogin);
   },
 
-  // 退出应用（走完整善后链：before-quit 协商 → dispose → 延迟安装）
   quit: async () => {
     app.quit();
     return { ok: true };
   },
 
-  // 诊断包导出：日志 + 设置（脱敏）+ 版本清单 → 用户选定路径的 zip（取消时 saved=false）
   exportDiagnostics: async () => {
     const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
     const { canceled, filePath } = await dialog.showSaveDialog({
@@ -128,8 +105,6 @@ export const appHandlers: InferHandlers<typeof IPC_DEFINITIONS, IpcHandlerContex
       return { saved: false };
     }
     try {
-      // 开机自启状态读好传入（诊断模块不直接依赖 autostart/Electron app，见
-      // ExportDiagnosticsOptions.autostart 的说明）；读失败不阻断导出，记 null
       const autostart = await readAutostartState(createAutostartDeps()).catch(() => null);
       await exportDiagnosticsPackage({
         filePath,

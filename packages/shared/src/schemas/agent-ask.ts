@@ -1,12 +1,3 @@
-// packages/shared/src/schemas/agent-ask.ts
-// Agent 交互式提问契约（ask_user_question 工具 → 渲染层提问 UI）
-// ──────────────────────────────────────────────────────────────
-// 设计（对齐 qwen-code askUserQuestion 工具 + 本项目审批闭环模式）：
-// - 主进程工具执行时经 webContents.send 推送 AGENT_ASK_REQUEST 事件
-// - 渲染层弹出提问对话框，用户选择/输入后 invoke agent:ask:respond 回传
-// - 工具 await 回答后作为 ToolResult 返回给 LLM（继续执行）
-// ──────────────────────────────────────────────────────────────
-
 import { z } from 'zod';
 
 /** 问题选项（单选/多选场景） */

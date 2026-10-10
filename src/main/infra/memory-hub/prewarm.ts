@@ -1,19 +1,3 @@
-// src/main/infra/memory-hub/prewarm.ts
-// 记忆引擎启动预热（方案 B：后台拉起，消除首次记忆操作的冷启动等待）
-// ──────────────────────────────────────────────────────────────
-// 背景：生产环境以 tsx 直跑上游 TypeScript 源码（见 prepare-memory-hub.mjs），
-//   冷启动需即时编译整棵依赖图，本机实测 v2.0.2 约 14s。引擎是懒启动的
-//   （首次 capture/recall 才 ensureStarted），因此应用刚启动后的首次记忆操作
-//   要等这段编译——用户可感知的卡顿。
-//
-// 方案：应用启动流程结束后（窗口已创建、首帧有保证），延迟一小段再用
-//   fire-and-forget 方式拉起引擎；用户真正发起记忆操作时引擎通常已就绪。
-//   不阻塞启动、失败静默（记忆功能降级为空实现，不影响主流程）。
-//
-// 边界：预热只是把冷启动成本前移，不消除它（根治需预处理为 JS，见 README）。
-//   生产 tsx 编译是 CPU 密集的，故延迟启动以避免与渲染层启动争抢。
-// ──────────────────────────────────────────────────────────────
-
 import { logger } from '../../utils/logger';
 import type { MemoryHubService } from './memory-hub-service';
 import { isMemoryEnabled } from './memory-pref';
@@ -96,7 +80,6 @@ export function scheduleMemoryPrewarm(params: SchedulePrewarmParams): void {
         );
       })
       .catch((error: unknown) => {
-        // 预热失败不影响主流程：后续真实调用会再尝试（ensureStarted 可重入）
         logger.warn(
           {
             elapsedMs: Date.now() - startedAt,
@@ -106,6 +89,5 @@ export function scheduleMemoryPrewarm(params: SchedulePrewarmParams): void {
         );
       });
   }, delayMs);
-  // 不阻止进程退出（预热未完成时应用仍可正常关闭）
   timer.unref();
 }

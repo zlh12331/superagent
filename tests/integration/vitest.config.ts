@@ -1,13 +1,3 @@
-// tests/integration/vitest.config.ts
-// 集成测试配置（跨服务真实协作验证）
-// ──────────────────────────────────────────────────────────────
-// 与单测的区别：
-// - 单测（src/main/**/*.test.ts）：服务 + fake 依赖（DI 接口）
-// - 集成（本目录）：多个真实服务 + 真实内存 DB 的协作验证 + DB 约束验证
-//
-// 环境：Node（主进程服务均为 Node 环境）
-// ──────────────────────────────────────────────────────────────
-
 import { resolve } from 'node:path';
 import { defineConfig } from 'vitest/config';
 
@@ -15,19 +5,15 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   resolve: {
     alias: {
-      // 集成测试引用主进程源码（相对路径即可，无需 alias；保留以备扩展）
       '@main': resolve(__dirname, '../src/main'),
     },
   },
   test: {
-    // 与 src/main / src/renderer 保持一致：启用 globals
     globals: true,
     environment: 'node',
     include: ['**/*.test.ts'],
     exclude: ['node_modules/**'],
-    // 速度约束（设计文档 §3.6）：集成测试为秒级 Medium Test，单链路 60s 上限
     testTimeout: 60_000,
-    // 全局 setup：electron SDK 边界替身（app.getPath → 临时 userData / dialog）
     setupFiles: ['./setup.ts'],
   },
 });

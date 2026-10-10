@@ -1,17 +1,3 @@
-// scripts/lib/coverage-floors.ts
-// 覆盖率门槛「单一真源」读取与校验（对应门禁 scripts/check-coverage-floors.ts）
-// ──────────────────────────────────────────────────────────────
-// 背景问题：各层 vitest.config.ts 内联了互不一致的四组数字
-// （main 80/75/80/80、renderer 59/50/54/59、shared 80/30/39/80），
-// 而对外文档一律自称「按规范值 80/75/80/80 卡关」——门槛与事实脱钩，
-// 且任何人可以在 config 里悄悄调低数字而不被发现。
-//
-// 本模块把三件事分离并保持可校验：
-//   specTarget 该层应达到的规范目标（shared 是类型包，目标本身低于业务层）
-//   floor      当前真正强制的门槛（vitest 直接读本 JSON，config 内不再出现数字）
-//   ratchet    已批准的历史最高门槛（floor 只能 ≥ 它，降级必须显式改此处并留理由）
-//   measured   最近一次真实实测（报告口径：必须 ≥ floor，且不得过期太久）
-// ──────────────────────────────────────────────────────────────
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -115,8 +101,6 @@ export function parseCoverageFloors(raw: string): CoverageFloorsFile {
   if (!isRecord(parsed)) {
     throw new Error('覆盖率真源格式错误：顶层必须是含 layers 对象');
   }
-  // 先取出并收窄到局部变量：`parsed['layers']` 在 noPropertyAccessFromIndexSignature
-  // 下必须用方括号访问，且收窄结果无法穿过属性访问表达式（否则为 unknown）。
   const layers = parsed['layers'];
   if (!isRecord(layers)) {
     throw new Error('覆盖率真源格式错误：顶层必须是含 layers 对象');
@@ -295,7 +279,7 @@ export function validateConfigWiring(root: string): FloorsProblem[] {
   const problems: FloorsProblem[] = [];
   for (const layer of LAYER_KEYS) {
     const rel = LAYER_CONFIGS[layer];
-    if (rel === undefined) continue; // 治理层无 vitest 配置（JSON 治理，见 LAYER_KEYS 注释）
+    if (rel === undefined) continue;
     let text: string;
     try {
       text = readFileSync(join(root, rel), 'utf-8');

@@ -1,7 +1,3 @@
-// src/main/infra/ai/tools/url-guard.test.ts
-// web_fetch SSRF 守卫单测（2026-09-06 安全审计）
-// 覆盖：受限网段判定 / 主机名黑名单 / 出站 URL 检查（字面量 IP 路径不走 DNS）
-
 import {
   checkUrlAllowed,
   isBlockedAddress,

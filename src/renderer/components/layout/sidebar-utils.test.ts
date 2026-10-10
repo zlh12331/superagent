@@ -1,12 +1,3 @@
-// src/renderer/components/$1/sidebar-utils.test.ts
-// 侧边栏纯函数单测（2026-09-12 提取自 Sidebar 内联逻辑）
-//
-// 测试要点：
-// - filterSessions：大小写不敏感、双字段匹配、空白关键词原样返回
-// - groupSessionsByFolder：按 basename 分组、跨平台分隔符、保持输入顺序
-// - buildSidebarEntries：置顶置前（updatedAt 倒序）、覆盖排序、陈旧 id 跳过、
-//   折叠语义（搜索时自动展开）、置顶不重复出现在文件夹段、sortableIds 只含可见项
-
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -45,15 +36,12 @@ describe('getFolderName', () => {
   });
 
   it('回归：尾部分隔符不产生空串（此前 split().pop() 返回 ""，与无尾斜杠路径分裂成两组）', () => {
-    // 修复前 'C:\\proj\\src\\' → ''（被当成「未分组」），与 'C:\\proj\\src' 分组不一致
     expect(getFolderName('C:\\proj\\src\\')).toBe('src');
     expect(getFolderName('/proj/src/')).toBe('src');
-    // 同一目录的两种写法必须归入同一组
     expect(getFolderName('C:\\proj\\src\\')).toBe(getFolderName('C:\\proj\\src'));
   });
 
   it('边界：文件系统根给出真实标签（而非空串归入「未分组」）', () => {
-    // 复用 lib/utils.basename 后，根的语义是「就在根目录」而非「无分组」
     expect(getFolderName('/')).toBe('/');
     expect(getFolderName('C:\\')).toBe('C:');
   });
@@ -151,14 +139,13 @@ describe('buildSidebarEntries', () => {
       groupedSessions: grouped,
       collapsedFolders: [],
       isSearching: false,
-      // 'ghost-id' 已删除；'c' 是拖拽覆盖之后新建的会话（不在覆盖里）
       orderOverrides: { r: ['b', 'ghost-id', 'a'] },
     });
     expect(entries.map((e) => (e.type === 'item' ? e.session.id : `label:${e.name}`))).toEqual([
       'label:r',
       'b',
       'a',
-      'c', // 覆盖序不排他：新建会话按默认序追加，不会「消失」
+      'c',
     ]);
   });
 

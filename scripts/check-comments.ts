@@ -1,21 +1,3 @@
-// scripts/check-comments.ts
-// 注释一致性审计（工程化强制）：发现"过期注释"（注释与代码漂移）
-// ──────────────────────────────────────────────────────────────
-// 规则（判据核在 scripts/lib/comments-rules.ts，反例测试同目录）：
-//   A. JSDoc @param 与函数签名一致性——@param 名在签名中不存在 = 过期注释
-//   B. 注释/文档中 file:/// 引用路径存在性 + #L行号 越界检查
-//   C. TODO/FIXME 过期——带日期超 90 天 = error；无日期 = warning
-//   D. pnpm 命令引用存在性——非内置/scripts/.bin 的命令引用 = 过期
-// 范围：src/**/*.{ts,tsx} + docs/design/*.md
-//
-// 分工说明（2026-09-25）：
-//   - "缺失 TSDoc"（规则 18.1）由 check:tsdoc（scripts/lib/tsdoc-rules.ts）拦截；
-//   - 本脚本规则 A 拦"过期 @param"（注释与签名漂移）——两者互补。
-//     原「已知盲区」登记（debt.md#d3）已随 check:tsdoc 落地关闭。
-//
-// 运行：pnpm check:comments
-// ──────────────────────────────────────────────────────────────
-
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 
@@ -38,7 +20,7 @@ const BIN_STEMS: ReadonlySet<string> = (() => {
       ),
     );
   } catch {
-    return new Set(); // .bin 不存在（未装依赖）时跳过该判据，不阻断门禁
+    return new Set();
   }
 })();
 
@@ -54,7 +36,6 @@ function collectFiles(dir: string, acc: string[] = []): string[] {
     if (entry.name === 'node_modules') continue;
     const full = join(dir, entry.name);
     if (entry.isDirectory()) collectFiles(full, acc);
-    // 测试文件不参与注释审计（此前按 __tests__ 目录排除，测试改为与源码同目录后按文件名排除）
     else if (entry.name.includes('.test.')) continue;
     else if (
       entry.name.endsWith('.ts') ||
@@ -72,15 +53,12 @@ function main(): number {
   const problems: CommentProblem[] = [];
 
   for (const file of files) {
-    if (file.endsWith('.test.ts') || file.endsWith('.test.tsx')) continue; // 测试文件内 file:/// 为测试数据
+    if (file.endsWith('.test.ts') || file.endsWith('.test.tsx')) continue;
     const content = readFileSync(file, 'utf8');
     const rel = relative(ROOT, file);
     rules.checkJsDoc(content, rel, problems);
     rules.checkFileRefs(content, rel, problems);
     rules.checkCommandRefs(content, rel, problems);
-    // TODO 过期检查仅针对 src 代码（docs 文档内 TODO 为格式示例，非待办管理对象）
-    // 注：file 为绝对路径，必须与 ROOT 拼接后的 src 前缀比较（此前误用相对串
-    // 'src' 导致条件恒假，TODO 检查静默失效）
     if (file.startsWith(join(ROOT, 'src'))) rules.checkTodos(content, rel, problems);
   }
 

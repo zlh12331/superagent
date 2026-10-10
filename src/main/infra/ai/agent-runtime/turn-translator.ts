@@ -1,23 +1,3 @@
-// src/main/infra/ai/agent-runtime/turn-translator.ts
-// AI SDK part → TurnEvent 翻译器（纯函数）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 把 AI SDK 的 UIMessageStreamPart 翻译为领域事件 TurnEvent
-// - 是"回合显式化"的翻译层：TurnRunner 读流时逐 part 调用，SDK 形状不出模块
-//
-// 翻译范围（单一信息源原则）：
-// - text-delta → TurnTextDeltaEvent（流侧信息完整）
-// - tool-call  → TurnToolCallEvent（流侧信息完整）
-// - tool-result 不在此翻译：其完整信息（耗时/错误详情）在 ToolExecutor
-//   执行侧最全，由 agent-service 的 buildToolExecuteHook 直接 emit TOOL_RESULT
-//   事件并转录 output/error（与事件同源）
-// - 其余 part（step-start/finish/error 等）由回合层（TurnRunner/agent-service）处理
-//
-// 不变量：纯函数——同 part 同 ctx 输入恒产出同事件，无状态、无副作用；
-// 不可翻译或字段缺失的 part 一律返回 null（静默跳过而非抛错，读流不因
-// 形状漂移中断）。
-// ──────────────────────────────────────────────────────────────
-
 import type { TurnEvent, TurnEventContext, TurnEventType } from '@code-agent/shared/main';
 import { TurnEventType as TurnEventTypeConst } from '@code-agent/shared/main';
 
@@ -46,7 +26,6 @@ export interface StreamPart {
 export function translatePart(part: StreamPart, ctx: TurnEventContext): TurnEvent | null {
   switch (part.type) {
     case 'text-delta':
-      // 运行时守卫：SDK 形状变化时静默跳过而非抛错
       if (part.delta === undefined) {
         return null;
       }
@@ -67,9 +46,6 @@ export function translatePart(part: StreamPart, ctx: TurnEventContext): TurnEven
         input: part.args,
       };
     default:
-      // step-start / step-finish / tool-result / finish / error / abort：
-      // 由回合层按需处理（tool-result 由 agent-service executeHook emit；
-      // reasoning-delta 由 turn-assembly 的 onPart 转录），翻译器保持最小职责
       return null;
   }
 }

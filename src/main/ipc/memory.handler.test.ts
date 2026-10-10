@@ -1,19 +1,9 @@
-// src/main/ipc/memory.handler.test.ts
-// memory.handler 单测：list（按会话列 L0）/ clear（会话级删除）/ clearAll（全量）
-//   / status（引擎状态与开关）
-// ──────────────────────────────────────────────────────────────
-// 测试策略：L0 读取器 / 引擎清除器 / JSONL 清理器 / 会话枚举 / 状态依赖为外部
-//   依赖 → 注入 fake；handler 业务逻辑（逐 key 删除聚合、JSONL 单遍清理编排、
-//   状态聚合）保持真实
-// ──────────────────────────────────────────────────────────────
-
 import { describe, expect, it, vi } from 'vitest';
 import { broadcastInvalidation } from '../infra/invalidation/invalidation';
 import type { L0Record } from '../infra/memory-hub/memory-hub-service';
 import type { MemoryClearResult } from '../infra/memory-hub/types';
 import { createMemoryHandlers, type MemoryStatusDeps } from './memory.handler';
 
-// 失效域广播替身（基础设施边界，规范允许 vi.mock；S9 断言用）
 vi.mock('../infra/invalidation/invalidation', () => ({ broadcastInvalidation: vi.fn() }));
 
 /** 创建 fake 状态依赖（各方法可被用例覆盖） */
@@ -145,7 +135,6 @@ describe('memory:clearAll', () => {
     const res = await handlers.clearAll({}, {} as never);
     expect(res).toEqual({ ok: true, clearedSessions: 3, deletedCount: 6 });
     expect(engineClear).toHaveBeenCalledTimes(3);
-    // JSONL 清理一次性拿到全部 key（单遍扫描），不再每 key 一次
     expect(removeL0Jsonl).toHaveBeenCalledTimes(1);
     expect(removeL0Jsonl).toHaveBeenCalledWith(['s1', 's2', 's3']);
   });
@@ -163,7 +152,6 @@ describe('memory:clearAll', () => {
     expect(res.clearedSessions).toBe(2);
     expect(res.deletedCount).toBe(2);
     expect(res.message).toContain('1 个会话清除失败');
-    // 引擎删除已返回（即便 ok=false）的 key 参与镜像清理——与原语义一致
     expect(removeL0Jsonl).toHaveBeenCalledWith(['ok1', 'bad', 'ok2']);
   });
 
@@ -218,7 +206,7 @@ describe('memory:clearAll', () => {
 
 describe('memory:status', () => {
   it('引擎未运行 → running=false 且不探测健康（healthy=false）', async () => {
-    const isHealthy = vi.fn(async () => true); // 不应被调用
+    const isHealthy = vi.fn(async () => true);
     const { handlers } = createHandlers([], {
       status: { isRunning: () => false, isHealthy },
     });

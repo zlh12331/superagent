@@ -1,23 +1,3 @@
-// scripts/check-commit-msg.ts
-// 提交信息严格校验（.husky/commit-msg 钩子调用；CI 亦可单独跑）
-// ──────────────────────────────────────────────────────────────
-// 用法（钩子）：tsx scripts/check-commit-msg.ts <commit-msg-文件路径>
-//   Git 约定：钩子收到 `.git/COMMIT_EDITMSG` 路径，首行即 header。
-//   带 --stdin 时从标准输入读标题（便于手工验证）。
-//
-// 为什么需要（2026-09-20 实证）：commitlint 的默认 header 解析对
-// `fix(autostart)+build(release): …` 会贪婪地把 `(autostart)+build(release)`
-// 当作 scope 吞掉，于是只触发 warning 级的 scope-enum 而放行；但 release-please
-// 用严格解析器，对该 header 抛 `unexpected token '+' at 1:15` 并跳过提交——
-// 当它是版本区间内唯一提交时即「0 commits」→ 不开 Release PR（发版通道静默阻断）。
-// commitlint 21.x 无 header-pattern 规则（未知规则会抛错），故以本脚本补齐。
-//
-// 路径安全：本脚本只应读取仓库 git 目录下的提交信息文件（钩子约定）。传入的路径经
-// resolve 后必须位于真实 git 目录之内，否则拒绝——避免被用作任意文件读取入口。
-// linked worktree 的 git 目录不在 <cwd>/.git/ 而在主仓 .git/worktrees/<name>/，
-// 按 .git 指针文件解析（见 resolveGitDir）。
-// ──────────────────────────────────────────────────────────────
-
 import { readFileSync, type Stats, statSync } from 'node:fs';
 import { resolve, sep } from 'node:path';
 
@@ -87,7 +67,6 @@ export function resolveCommitMsgPath(
   if (base === null) {
     return null;
   }
-  // git 输出 posix 风格分隔符，resolve 统一为平台分隔符再比较（Windows 必需）
   const dir = resolve(base) + sep;
   return absolute.startsWith(dir) ? absolute : null;
 }
@@ -115,7 +94,6 @@ function main(): void {
   try {
     raw = readInput(argv, process.cwd());
   } catch (error) {
-    // 读不到文件（如首次提交尚无 COMMIT_EDITMSG）：不阻断，交由 commitlint 处理
     console.error(`[check-commit-msg] 跳过：无法读取提交信息（${String(error)}）`);
     return;
   }

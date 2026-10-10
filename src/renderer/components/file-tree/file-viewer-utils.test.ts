@@ -1,12 +1,3 @@
-// src/renderer/components/$1/file-viewer-utils.test.ts
-// 文件预览纯函数单测（shiki 语言检测 / 行数计算）
-// ──────────────────────────────────────────────────────────────
-// detectLangFromPath 决定「按什么语言高亮」与工具栏是否显示语言名，
-// 此前零直接覆盖。未命中一律回落到 'text'（normalizeLang 的兜底），
-// 因此「目录名含点」这类异常输入不会产生乱码语言，只会退化为不高亮。
-// lineCount 用于查看态无 IPC totalLines 的回退与编辑态行数实时显示。
-// ──────────────────────────────────────────────────────────────
-
 import { describe, expect, it } from 'vitest';
 
 import { detectLangFromPath, lineCount } from './file-viewer-utils';
@@ -28,7 +19,6 @@ describe('detectLangFromPath', () => {
   });
 
   it('未在映射表但属受支持语言：按原名透传（非 text）', () => {
-    // 映射表未列 'toml'，但 shiki 受支持语言会由 normalizeLang 原样返回
     expect(detectLangFromPath('/proj/a.toml')).not.toBe('');
   });
 

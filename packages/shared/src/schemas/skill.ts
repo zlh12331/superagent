@@ -1,9 +1,3 @@
-// packages/shared/src/schemas/skill.ts
-// 技能系统域（skill:list / learn / listLearned / removeLearned）
-// ──────────────────────────────────────────────
-// 设计：技能为纯数据（name/description/prompt），内置注册表 + SQLite learned 提供
-// ──────────────────────────────────────────────
-
 import { z } from 'zod';
 
 export interface SkillInfo {

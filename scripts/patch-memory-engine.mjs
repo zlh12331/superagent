@@ -1,21 +1,3 @@
-// scripts/patch-memory-engine.mjs
-// 上游补丁通道（导出 / 重放 / 回滚）
-// ──────────────────────────────────────────────────────────────
-// 背景：packages/memory-engine/MemoryCore 是 vendored 第三方源码。
-//   直接修改会被 memory-engine:integrity 拦下；改动必须走补丁：
-//   - export：把当前 MemoryCore 相对锚点的改动导出为 patches/NNNN-<name>.patch
-//   - apply ：重放 patches/ 下全部补丁（sync 会自动调用）
-//   - reset ：把 MemoryCore 恢复到锚点状态（丢弃未导出改动）
-//
-// 实现说明：用 `git diff --no-index` 产出补丁、`git apply` 重放——
-//   依赖仓库内已有 git，无需额外依赖。
-//
-// 用法：
-//   node scripts/patch-memory-engine.mjs export <name>
-//   node scripts/patch-memory-engine.mjs apply
-//   node scripts/patch-memory-engine.mjs reset
-// ──────────────────────────────────────────────────────────────
-
 import { spawnSync } from 'node:child_process';
 import { cpSync, existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -44,8 +26,6 @@ function extractBaseline() {
   const dir = mkdtempSync(join(tmpdir(), 'memory-engine-baseline-'));
   const res = spawnSync('git', ['stash', 'list'], { cwd: ROOT, encoding: 'utf8' });
   void res;
-  // 用 git show 取当前 HEAD 的 MemoryCore（HEAD 即锚点，因为改动尚未提交时
-  // 也会被 integrity 拦下，故此处假设 HEAD 是干净的锚点）
   const archive = spawnSync('git', ['archive', 'HEAD', 'packages/memory-engine/MemoryCore'], {
     cwd: ROOT,
     encoding: 'buffer',
@@ -54,7 +34,6 @@ function extractBaseline() {
     rmSync(dir, { recursive: true, force: true });
     fail('无法从 HEAD 提取基线（packages/memory-engine/MemoryCore 未提交？）');
   }
-  // 解开 tar 到临时目录
   const tar = spawnSync('tar', ['-x', '-C', dir], { input: archive.stdout });
   if (tar.status !== 0) {
     rmSync(dir, { recursive: true, force: true });
@@ -78,7 +57,6 @@ if (action === 'export') {
     ['diff', '--no-index', '--src-prefix=a/', '--dst-prefix=b/', baselineCore, CORE],
     { encoding: 'utf8' },
   );
-  // git diff --no-index 有差异时返回 1，属预期
   const out = (diff.stdout ?? '').replaceAll(baselineCore.replace(/\\/g, '/'), 'MemoryCore');
   if (out.trim().length === 0) {
     rmSync(dir, { recursive: true, force: true });

@@ -1,12 +1,3 @@
-// src/main/infra/memory-hub/adapter.ts
-// HttpMemoryPort：MemoryPort 的 HTTP 实现（对上游 gateway v1 数据面的薄封装）
-// ──────────────────────────────────────────────────────────────
-// 边界纪律：
-// - 本文件是全项目唯一允许知晓上游 HTTP 细节（路径 / 鉴权头 / 响应形状）的模块
-// - 上游 v1 端点返回裸 JSON（无 envelope）；鉴权 = Bearer + x-tdai-service-id
-// - 所有调用带超时；capture/recall 失败降级为失败结果而非抛错（记忆故障不拖垮回合）
-// ──────────────────────────────────────────────────────────────
-
 import { logger } from '../../utils/logger';
 import type {
   MemoryCaptureInput,
@@ -94,7 +85,6 @@ export class HttpMemoryPort implements MemoryPort {
         code?: number;
         message?: string;
       };
-      // 上游结构化失败信号：code 非 0 / 缺省视为成功
       if (typeof data.code === 'number' && data.code !== 0) {
         return {
           ok: false,
@@ -170,9 +160,6 @@ export class HttpMemoryPort implements MemoryPort {
 
   async clear(sessionKey: string): Promise<MemoryClearResult> {
     try {
-      // 上游 v2 envelope：成功 { code:0, message:'ok', data:{ deleted_count } }
-      // 删除映射 l0_conversations.session_key = sessionId（capture 写入的字段）
-      // 注意：不传 message_ids（空数组会触发 zod .min(1) 校验失败 → 400）
       const data = (await this.requestJson('POST', '/v2/conversation/delete', {
         // biome-ignore lint/style/useNamingConvention: 上游 gateway 协议字段（snake_case）
         session_ids: [sessionKey],

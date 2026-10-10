@@ -1,27 +1,3 @@
-// src/renderer/hooks/use-approval-bridge.ts
-// 审批桥接 Hook · 连接 IPC 推送与 approvals-store
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 订阅主进程 approval:request 事件，将 payload 转换为 ApprovalItem 入队 store
-// - 在组件挂载时自动订阅，卸载时自动取消订阅
-// （审批结果回传不在此 hook：由 InlineApprovalCard 按钮直接调用 approvalResponse）
-//
-// 设计：
-// - 纯桥接层：不做业务决策（批准/拒绝由用户在 UI 中操作）
-// - toolName → ApprovalType 的映射规则集中在此 hook，UI 组件不感知工具名
-// - rememberDecision 由 InlineApprovalCard「批准并记住」按钮传入，透传到主进程
-//
-// 数据流：
-//   主进程 ToolExecutor
-//     ↓ agent:approval:request IPC 推送
-//   useApprovalBridge（本 hook）
-//     ↓ enqueue
-//   useApprovalsStore.pending[]
-//     ↓ 用户点击拒绝 / 批准并记住 / 批准（InlineApprovalCard）
-//     ↓ agent:approval:response IPC 回传
-//   主进程 PermissionService.handleApprovalResponse
-// ──────────────────────────────────────────────────────────────
-
 import { useEffect } from 'react';
 import { hasIpcBridge } from '@/lib/ipc';
 import { type ApprovalType, useApprovalsStore } from '@/stores/transient/approvals-store';
@@ -61,8 +37,6 @@ interface ApprovalResolvedPayload {
  */
 function classifyTool(toolName: string): ApprovalType {
   const name = toolName.toLowerCase();
-  // 顺序敏感：先匹配更具体的 Git 写操作，再匹配通用规则
-  // Git 工具命名固定为 git_add / git_commit / git_push，用精确匹配避免误判
   if (name === 'git_push') {
     return 'git_push';
   }
@@ -72,7 +46,6 @@ function classifyTool(toolName: string): ApprovalType {
   if (name === 'git_add') {
     return 'git_add';
   }
-  // 顺序敏感：先匹配更具体的（如 install_package 优先于 external_call）
   if (name.includes('install') || name.includes('npm') || name.includes('pip')) {
     return 'install_package';
   }
@@ -96,7 +69,6 @@ function classifyTool(toolName: string): ApprovalType {
   ) {
     return 'run_command';
   }
-  // 兜底：MCP 工具 / 外部 API 调用等无法归类的工具
   return 'external_call';
 }
 
@@ -112,15 +84,12 @@ function classifyTool(toolName: string): ApprovalType {
  * 会永久残留在界面上（2026-10-08 修复）。
  */
 export function useApprovalBridge(): void {
-  // 订阅 IPC approval:request 事件，将 payload 入队到 store
   useEffect(() => {
     if (!hasIpcBridge()) {
-      // SSR / 测试环境下 window.api 可能不存在，安全跳过
       return;
     }
     const unsubscribeRequest = window.api.agent.subscribeApprovalRequest((payload) => {
       const typedPayload = payload as ApprovalRequestPayload;
-      // 将 IPC payload 映射为 store ApprovalItem（status / resolvedAt 由 store 内部填充）
       useApprovalsStore.getState().enqueue({
         id: typedPayload.approvalId,
         sessionId: typedPayload.sessionId,
@@ -131,7 +100,6 @@ export function useApprovalBridge(): void {
         createdAt: Date.now(),
       });
     });
-    // 决议回推：超时/中断路径清理界面残留（用户已自行操作时 settleExternal 幂等 no-op）
     const unsubscribeResolved = window.api.agent.subscribeApprovalResolved((payload) => {
       const typed = payload as ApprovalResolvedPayload;
       if (typed.decision === 'timed-out' || typed.decision === 'aborted') {

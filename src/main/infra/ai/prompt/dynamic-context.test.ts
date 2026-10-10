@@ -1,11 +1,3 @@
-// src/main/infra/ai/prompt/dynamic-context.test.ts
-// dynamic-context 单测：模板变量注入（git 提供者注入 + 失败容忍）
-//
-// 接线背景：生产中 gitSummaryProvider 由 service-container 的 getPromptService
-// 装配（gitSummaryProviderFrom 包装 gitService.status，闭包内延迟取实例）；
-// 本文件的 dirtyProvider/cleanProvider 等是等价形状的测试替身——失败容忍
-// （占位符）、`$&` 转义、单次遍历语义全在此覆盖。
-
 import { homedir } from 'node:os';
 
 import { describe, expect, it, vi } from 'vitest';
@@ -45,7 +37,6 @@ describe('injectDynamicContext', () => {
       workingDir: '/tmp/proj',
       gitSummaryProvider: dirtyProvider,
     });
-    // 路径经 resolve 规范化（Windows 下含盘符），用片段断言
     expect(result).toContain('proj');
     expect(result).toContain('分支: feature/agent');
     expect(result).toContain('状态: dirty (3 个文件未提交)');
@@ -93,7 +84,6 @@ describe('injectDynamicContext', () => {
     const result = await injectDynamicContext('{{workingDir}} + {{workingDir}}', {
       workingDir: '/a/b',
     });
-    // 两处都被替换且一致（Windows 下含盘符前缀）
     const parts = result.split(' + ');
     expect(parts).toHaveLength(2);
     expect(parts[0]).toBe(parts[1]);
@@ -142,7 +132,6 @@ describe('injectDynamicContext', () => {
       gitSummaryProvider: provider,
     });
     const home = homedir();
-    // 只有模板自身的 homeDir 占位符被替换（出现一次），注入进来的字面量保持原样
     expect(result.match(new RegExp(home.replace(/[\\^$*+?.()|[\]{}]/g, '\\$&'), 'g'))).toHaveLength(
       1,
     );
@@ -158,7 +147,6 @@ describe('injectDynamicContext', () => {
 });
 
 describe('dynamic-context 批次13 缺口补全', () => {
-  // PowerShell 回退仅 win32 语义：非 Windows 返回原生 shell，断言 powershell.exe 无意义
   it.skipIf(process.platform !== 'win32')(
     'COMSPEC 缺失：shell 占位符回退 powershell.exe（win32）',
     async () => {
@@ -195,7 +183,7 @@ describe('gitSummaryProviderFrom（GitService → GitSummary 适配）', () => {
     const provider = gitSummaryProviderFrom(getStatus);
     const first = await provider('/repo');
     const second = await provider('/repo');
-    expect(getStatus).toHaveBeenCalledTimes(1); // 同回合内复用，不重复 spawn
+    expect(getStatus).toHaveBeenCalledTimes(1);
     expect(second).toEqual(first);
   });
 
@@ -209,7 +197,6 @@ describe('gitSummaryProviderFrom（GitService → GitSummary 适配）', () => {
     expect(await provider('/a')).toMatchObject({ branch: 'branch-a' });
     expect(await provider('/b')).toMatchObject({ branch: 'branch-b' });
     expect(getStatus).toHaveBeenCalledTimes(2);
-    // 命中各自缓存
     expect(await provider('/a')).toMatchObject({ branch: 'branch-a' });
     expect(getStatus).toHaveBeenCalledTimes(2);
   });

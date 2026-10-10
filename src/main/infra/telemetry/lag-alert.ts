@@ -1,10 +1,3 @@
-// src/main/infra/telemetry/lag-alert.ts
-// 事件循环阻塞告警（2026-09-06 审计修复：补充现场上下文）
-// ──────────────────────────────────────────────────────────────
-// 此前只上报 lagMs，无法定位阻塞源。现在附带「当时是否有活跃回合」与堆占用，
-// 便于把阻塞关联到具体操作（长会话分词 / 大库查询 / 备份 / 迁移）。
-// ──────────────────────────────────────────────────────────────
-
 import { reportMessage } from '../../utils/error-report';
 import { logger } from '../../utils/logger';
 import type { EventLoopLagSample } from './event-loop-lag';

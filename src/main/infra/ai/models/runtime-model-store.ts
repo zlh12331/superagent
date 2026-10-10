@@ -1,21 +1,3 @@
-// src/main/infra/ai/models/runtime-model-store.ts
-// 运行时模型存储：用户手动配置模型的持久化 + 注册
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - runtime_models 表持久化（元数据：modelId / providerKind / baseUrl）
-// - apiKey 存 keychain（key = `runtime:${modelId}`，不落库）
-// - 启动时加载并注册到 ModelRegistry（运行时快照与内置模型统一解析）
-//
-// 设计：
-// - 对应 ModelRegistry 的 RuntimeModelSnapshot（AI 域模型注册表）
-// - CRUD 消费方：settings.handler（设置页模型配置 add/update/remove/list）
-//   + models.handler（list，models:list 数据源）+ ServiceContainer init
-//   （loadAll，LLM 首次调用前）
-// - LlmClient per-model 缓存失效：注册表同步在本类内完成，缓存失效由调用方
-//   settings.handler 负责（add/update/remove 三处均调 llmClient.invalidateModel）
-// - keychain key 约定与 keychain 域一致（`${前缀}-api-key` 风格：`runtime:${modelId}`）
-// ──────────────────────────────────────────────────────────────
-
 import {
   AppError,
   ErrorCode,
@@ -106,7 +88,6 @@ function rowToRecord(row: {
     ...(row.baseUrl !== null ? { baseUrl: row.baseUrl } : {}),
     ...(row.displayName !== null ? { displayName: row.displayName } : {}),
     ...(row.timeoutMs !== null ? { timeoutMs: row.timeoutMs } : {}),
-    // 单边校验：仅放行三种合法格式（NULL / 脏值一律按未设置 = openai-chat）
     ...(isModelApiFormat(row.apiFormat) ? { apiFormat: row.apiFormat } : {}),
     isEnabled: row.isEnabled === 1,
     createdAt: row.createdAt,
@@ -167,7 +148,6 @@ export class RuntimeModelStore {
       .values({
         modelId: input.modelId,
         providerKind: input.providerKind,
-        // exactOptionalPropertyTypes：可空列 undefined 时条件展开
         ...(input.baseUrl !== undefined ? { baseUrl: input.baseUrl } : {}),
         ...(input.displayName !== undefined ? { displayName: input.displayName } : {}),
         ...(input.timeoutMs !== undefined ? { timeoutMs: input.timeoutMs } : {}),
@@ -180,7 +160,6 @@ export class RuntimeModelStore {
     if (input.apiKey !== undefined) {
       await setSecret(runtimeModelKeychainKey(input.modelId), input.apiKey);
     }
-    // 注册到模型注册表（与内置模型统一解析；停用模型不注册，仅登记停用身份）
     if (input.isEnabled === false) {
       modelRegistry.registerDisabledModel(input.modelId);
       return;
@@ -218,9 +197,6 @@ export class RuntimeModelStore {
     if (existing === undefined) {
       throw new AppError(ErrorCode.NOT_FOUND, undefined, undefined, { modelId: input.modelId });
     }
-    // 仅当有落库字段时执行 UPDATE（仅 apiKey 时 set 空对象会被 drizzle 拒绝）
-    // isEnabled 落库为 0/1（与 schema 的 $type<0 | 1> 对齐）；timeoutMs 为
-    // 三态语义（省略不改 / null 清除落 NULL / number 设置）
     const dbSet: {
       displayName?: string;
       baseUrl?: string;
@@ -242,7 +218,6 @@ export class RuntimeModelStore {
     if (input.apiKey !== undefined) {
       await setSecret(runtimeModelKeychainKey(input.modelId), input.apiKey);
     }
-    // 注册表同步：注销旧快照后按最新记录重建（停用则仅注销 + 登记停用身份）
     const snapshotId = buildRuntimeSnapshotId(existing.providerKind as ProviderKind, input.modelId);
     modelRegistry.unregisterRuntimeModel(snapshotId);
     modelRegistry.unregisterDisabledModel(input.modelId);
@@ -258,12 +233,10 @@ export class RuntimeModelStore {
    * 删除运行时模型：DB 删除 + keychain 清 key + 注销注册
    */
   async remove(modelId: string): Promise<void> {
-    // 先查记录（providerKind 用于注销快照 id；DB 删除后不可查）
     const existing = await this.get(modelId);
     const db = getDb();
     db.delete(runtimeModels).where(eq(runtimeModels.modelId, modelId)).run();
     await deleteSecret(runtimeModelKeychainKey(modelId));
-    // 删除即移除停用身份（后续可重新添加为启用模型）
     modelRegistry.unregisterDisabledModel(modelId);
     if (existing !== undefined) {
       modelRegistry.unregisterRuntimeModel(buildRuntimeSnapshotId(existing.providerKind, modelId));
@@ -280,7 +253,6 @@ export class RuntimeModelStore {
   async loadAll(): Promise<void> {
     const records = await this.list();
     for (const record of records) {
-      // 停用模型不注册（不可路由），仅登记停用身份
       if (!record.isEnabled) {
         modelRegistry.registerDisabledModel(record.modelId);
         continue;

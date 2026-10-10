@@ -1,20 +1,3 @@
-// src/main/ipc/remote.handler.ts
-// 远程控制域 IPC handler（状态查询 / 启停 / 绑定范围，定义表驱动）
-// ──────────────────────────────────────────────────────────────
-// 实现 4 个请求-响应方法：
-// - remote:getStatus     运行状态 + 配对令牌 + 直连地址 + 执行活动
-// - remote:start         开启监听（HTTP 命令入口 + LAN 发现广播），返回新状态
-// - remote:stop          关闭监听（幂等），返回新状态
-// - remote:setBindScope  切换绑定范围（lan=0.0.0.0 / loopback=仅本机），返回新状态
-//
-// 设计：
-// - 变更后立即回读状态返回，渲染层无需二次请求即可刷新面板
-// - setBindScope 先应用后落库：应用失败（重启监听出错）不写偏好，
-//   偏好与运行态保持一致（渲染层收到错误 toast，回读仍是旧值）
-// - 令牌只在 running 时回传（停止后 token=null，面板不残留可配对凭据）
-// - 命令执行由 RemoteAgentBridge 挂载在传输层 onCommand 上，本 handler 不碰执行
-// ──────────────────────────────────────────────────────────────
-
 import type { InferHandlers, IPC_DEFINITIONS, RemoteStatusRes } from '@code-agent/shared/main';
 
 import type { buildRemoteEndpoints, getLanIPv4Addresses } from '../infra/remote/network-info';
@@ -51,7 +34,6 @@ export function createRemoteHandlers(params: {
       token: isPairable ? token : null,
       instanceName: remoteControl.getInstanceName(),
       bindScope,
-      // 仅本机模式不列局域网端点（列出也无法连通，只会误导配对），回本机回环端点
       addresses:
         isPairable && port !== null
           ? bindScope === 'loopback'
@@ -77,7 +59,6 @@ export function createRemoteHandlers(params: {
     },
 
     setBindScope: async (input) => {
-      // 先应用后落库：应用失败时偏好保持旧值（渲染层 toast 报错，回读一致）
       await remoteControl.setBindScope(input.scope);
       writeRemoteBindScope(input.scope);
       return snapshot();

@@ -1,11 +1,3 @@
-// scripts/merge-update-metadata.test.ts
-// 合并 CLI 的「双架构来源判定」单测
-// ──────────────────────────────────────────────────────────────
-// CLI 主体做的是目录遍历与文件读写（在 CD 里验证），但其**判定逻辑**是纯函数，
-// 且是 CD 回滚路径的关键：回滚到「单 job 双架构」后 merge job 仍在流水线里，
-// 必须识别「这份已是双架构」并原样透传，否则回滚后流水线会卡在 merge 阶段。
-// ──────────────────────────────────────────────────────────────
-
 import { isAlreadyDualArch } from './merge-update-metadata';
 
 /**
@@ -90,9 +82,6 @@ sha512: bbb
   });
 
   it('判定是字面匹配 -<arch>.：无关文案里的 arm64 不算数', () => {
-    // 刻意保持廉价（不做语义解析）：判定只看内容里有没有 `-x64.` 与 `-arm64.`
-    // 两个字面串。语义正确性由 mergeUpdateMetadata 的结构校验兜底
-    // （真正的双架构输入必然能通过 parseUpdateInfo）。
     const decoy = `${SINGLE_X64}note: 修复 arm64-bugfix-1234 相关路径
 `;
     expect(isAlreadyDualArch(decoy)).toBe(false);

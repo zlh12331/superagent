@@ -1,20 +1,3 @@
-// src/main/infra/ai/tools/url-guard.ts
-// web_fetch 出站 URL 安全守卫（SSRF 防护）
-// ──────────────────────────────────────────────────────────────
-// 背景（2026-09-06 安全审计）：web_fetch 此前只校验协议，不拦环回/私网/
-// 链路本地地址且跟随重定向。auto 模式下所有非 exec 工具免审批，模型（或经
-// IM / remote-control 触发的无头回合）可探测本机与内网服务——例如本机
-// 开发服务(127.0.0.1:9000)、Ollama(11434)、路由器管理面(192.168.x.x)、
-// 云元数据(169.254.169.254)——并把响应正文回灌进上下文。
-//
-// 策略（fail closed）：
-// - 仅 http / https
-// - 主机名命中本地名（localhost / *.localhost / *.local / 元数据域名）→ 拒
-// - 字面量 IP → 直接按受限网段判定
-// - 域名 → DNS 解析**全部**地址，任一落入受限段即拒
-// - 重定向由调用方逐跳复查（fetch redirect: 'manual'）
-// ──────────────────────────────────────────────────────────────
-
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 
@@ -71,19 +54,19 @@ function parseIPv4(ip: string): number[] | null {
 export function isBlockedIPv4(ip: string): boolean {
   const octets = parseIPv4(ip);
   if (octets === null) {
-    return true; // 解析失败 fail closed
+    return true;
   }
   const [a = 0, b = 0] = octets;
-  if (a === 0 || a === 10 || a === 127) return true; // 未指定 / 私网 / 环回
-  if (a === 169 && b === 254) return true; // 链路本地（含云元数据 169.254.169.254）
-  if (a === 172 && b >= 16 && b <= 31) return true; // 172.16/12 私网
-  if (a === 192 && b === 168) return true; // 192.168/16 私网
-  if (a === 100 && b >= 64 && b <= 127) return true; // 100.64/10 CGNAT
-  if (a === 192 && b === 0) return true; // 192.0.0/24 + 192.0.2/24 保留/文档
-  if (a === 198 && (b === 18 || b === 19)) return true; // 198.18/15 基准测试
-  if (a === 198 && b === 51) return true; // 198.51.100/24 文档
-  if (a === 203 && b === 0) return true; // 203.0.113/24 文档
-  if (a >= 224) return true; // 组播 / 保留 / 广播
+  if (a === 0 || a === 10 || a === 127) return true;
+  if (a === 169 && b === 254) return true;
+  if (a === 172 && b >= 16 && b <= 31) return true;
+  if (a === 192 && b === 168) return true;
+  if (a === 100 && b >= 64 && b <= 127) return true;
+  if (a === 192 && b === 0) return true;
+  if (a === 198 && (b === 18 || b === 19)) return true;
+  if (a === 198 && b === 51) return true;
+  if (a === 203 && b === 0) return true;
+  if (a >= 224) return true;
   return false;
 }
 
@@ -93,18 +76,17 @@ export function isBlockedIPv6(ip: string): boolean {
   if (addr === '::1' || addr === '::') {
     return true;
   }
-  // IPv4 映射（::ffff:127.0.0.1）与 IPv4 兼容（::127.0.0.1）形式
   const mapped = /^::(?:ffff:)?(\d{1,3}(?:\.\d{1,3}){3})$/.exec(addr);
   if (mapped !== null) {
     return isBlockedIPv4(mapped[1] ?? '');
   }
   const head = Number.parseInt(addr.split(':')[0] ?? '', 16);
   if (Number.isNaN(head)) {
-    return true; // 无法解析 fail closed
+    return true;
   }
-  if ((head & 0xfe00) === 0xfc00) return true; // fc00::/7 唯一本地地址
-  if ((head & 0xffc0) === 0xfe80) return true; // fe80::/10 链路本地
-  if ((head & 0xff00) === 0xff00) return true; // ff00::/8 组播
+  if ((head & 0xfe00) === 0xfc00) return true;
+  if ((head & 0xffc0) === 0xfe80) return true;
+  if ((head & 0xff00) === 0xff00) return true;
   return false;
 }
 

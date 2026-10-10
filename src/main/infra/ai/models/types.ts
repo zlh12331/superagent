@@ -1,19 +1,3 @@
-// src/main/infra/ai/models/types.ts
-// 模型领域层类型定义（模型级路由的单一真源）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 定义 ModelEntry（模型条目：模型 id → 供应商 + 能力 + 生成参数）
-// - 定义 ModelCapabilities（能力元数据，功能路由用：vision / contextWindowSize / fastOnly / reasoning）
-// - 定义 RuntimeModelSnapshot（运行时模型快照：用户手动配置的模型）
-//
-// 设计（对标 qwen-code 的 models/types.ts）：
-// - 模型是路由的最小单元（区别于旧设计的"供应商"级路由）
-// - 模型 id 全局唯一（如 'deepseek-v4-flash'），ModelRegistry 负责 id → 供应商解析
-// - 运行时快照让"手动配置的模型"（设置 UI 添加的自定义端点）与内置模型并存，
-//   来源可追踪（$runtime|providerKind|modelId）
-// - 本文件不依赖任何 SDK / config / keychain，纯类型与常量
-// ──────────────────────────────────────────────────────────────
-
 import type { ModelApiFormat } from '@code-agent/shared/main';
 
 import type { ProviderKind } from '../providers/types';

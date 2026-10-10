@@ -1,6 +1,3 @@
-// src/renderer/components/chat/use-auto-compact.test.ts
-// 长会话自动压缩 hook 回归（opt-in / 阈值 / 空闲态 / 水位线防风暴 / 会话重置）
-
 import { renderHook } from '@testing-library/react';
 import type { UIMessage } from 'ai';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -100,11 +97,9 @@ describe('useAutoCompact', () => {
     );
     expect(compact).toHaveBeenCalledOnce();
 
-    // 消息数不变（压缩失败场景）：rerender 不重复触发
     rerender({ length: 700 });
     expect(compact).toHaveBeenCalledOnce();
 
-    // 再增长 600（760→1360）：新的水位区间触发第二次
     rerender({ length: 1360 });
     expect(compact).toHaveBeenCalledTimes(2);
   });
@@ -125,7 +120,6 @@ describe('useAutoCompact', () => {
     );
     expect(compact).toHaveBeenCalledOnce();
 
-    // 切到已压缩至阈值以下的新消息集：归零后不触发
     rerender({ chatId: 's2', length: 100 });
     expect(compact).toHaveBeenCalledOnce();
   });

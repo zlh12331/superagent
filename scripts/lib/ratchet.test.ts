@@ -1,5 +1,3 @@
-// scripts/lib/ratchet.test.ts
-// 棘轮基线工具单测：三类违规（新增 / 变大 / 陈旧）+ 单向收紧
 import { describe, expect, it } from 'vitest';
 import {
   evaluateRatchet,
@@ -21,11 +19,8 @@ describe('parseBaseline', () => {
   });
 
   it('缺指标合法（未超限维度不记录），未知指标报错', () => {
-    // 2026-09-08：棘轮只锁超限维度，缺指标 = 该维度未超限，属合法
     expect(parseBaseline('{"a.ts":{"raw":700}}', METRICS)['a.ts']).toEqual({ raw: 700 });
-    // 未知指标是配置错误（此前静默丢弃，现报错）
     expect(() => parseBaseline('{"a.ts":{"raw":700,"extra":1}}', METRICS)).toThrow(/未知指标/);
-    // 空指标对象也是错误
     expect(() => parseBaseline('{"a.ts":{}}', METRICS)).toThrow(/不含任何指标/);
   });
 
@@ -100,7 +95,7 @@ describe('proposeBaseline', () => {
     ]);
     const next = proposeBaseline(current, baseline, METRICS);
     expect(next['gone.ts']).toBeUndefined();
-    expect(next['a.ts']).toEqual({ raw: 700, net: 100 }); // raw 劣化不写高
+    expect(next['a.ts']).toEqual({ raw: 700, net: 100 });
     expect(next['b.ts']).toEqual({ raw: 610, net: 605 });
   });
 

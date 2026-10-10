@@ -1,32 +1,13 @@
-// src/main/infra/ai/providers/registry.test.ts
-// ProviderRegistry deepseek 工厂单测：DeepSeek 官方文档深度适配
-//
-// 测试要点：
-// 1. transformRequestBody：思考模式显式开启（thinking: enabled）
-// 2. transformRequestBody：已有 thinking 配置时不覆盖
-// 3. convertUsage：DeepSeek 非标准字段（prompt_cache_hit_tokens /
-//    prompt_cache_miss_tokens）映射为 cacheRead / noCache
-// 4. convertUsage：兼容标准 OpenAI 字段（prompt_tokens_details.cached_tokens）
-// 5. convertUsage：reasoning_tokens 映射
-//
-// 接线背景：生产消费方 = ai-provider 的工厂装配（getDefaultKind/
-// getDefinition/createFactory）；本文件 mock @ai-sdk/openai-compatible（拦截
-// createOpenAICompatible 入参断言），真实 SDK 消费集成在 registry-factory.test.ts。
-
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getProviderName, ProviderRegistry, toKeychainKey } from './registry';
 
 const mocks = vi.hoisted(() => {
-  // provider 工厂 mock（createOpenAICompatible 返回值）
   const mockProviderFactory = vi.fn();
-  // createOpenAICompatible mock（deepseek / ollama 走该协议）
   const mockCreateOpenAICompatible = vi.fn(() => mockProviderFactory);
-  // electron app mock（config 依赖 app.isPackaged）
   const mockApp = {
     isPackaged: false,
     getPath: vi.fn((name: string) => `/tmp/test-userdata/${name}`),
   };
-  // logger mock
   const mockLogger = {
     info: vi.fn(),
     warn: vi.fn(),
@@ -41,15 +22,12 @@ const mocks = vi.hoisted(() => {
   };
 });
 
-// mock @ai-sdk/openai-compatible：拦截 createOpenAICompatible 调用
 vi.mock('@ai-sdk/openai-compatible', () => ({
   createOpenAICompatible: mocks.mockCreateOpenAICompatible,
 }));
 
-// mock electron：config 依赖 app.isPackaged（registry 从 config.providers 读取 baseURL）
 vi.mock('electron', () => ({ app: mocks.mockApp }));
 
-// mock logger：避免触发真实 electron-log 初始化
 vi.mock('../../utils/logger', () => ({
   logger: mocks.mockLogger,
 }));
@@ -58,7 +36,6 @@ vi.mock('../../utils/logger', () => ({
 function getDeepSeekOptions(): Record<string, unknown> {
   const registry = new ProviderRegistry();
   registry.createFactory('deepseek', { apiKey: 'sk-test' });
-  // mock 调用参数元组为空（vi.fn 无参类型），需显式 cast 后访问
   const calls = mocks.mockCreateOpenAICompatible.mock.calls as unknown[][];
   const options = calls[0]?.[0];
   if (options === undefined) {
@@ -107,7 +84,6 @@ describe('deepseek 工厂（DeepSeek 官方适配）', () => {
       const body = transform({ model: 'deepseek-v4-pro', messages: [] });
 
       expect(body['thinking']).toEqual({ type: 'enabled' });
-      // 其余字段原样保留
       expect(body['model']).toBe('deepseek-v4-pro');
       expect(body['messages']).toEqual([]);
     });
@@ -126,7 +102,6 @@ describe('deepseek 工厂（DeepSeek 官方适配）', () => {
       const convert = getConvertUsage();
 
       const usage = convert({
-        // snake_case 字段名来自 OpenAI/DeepSeek API 响应：计算属性规避命名规范
         ['prompt_tokens']: 100,
         ['completion_tokens']: 50,
         ['total_tokens']: 150,
@@ -220,7 +195,6 @@ describe('ProviderRegistry 注册表（类行为三件套）', () => {
           requiresApiKey: true,
           isDefault: false,
         },
-        // 故意传未注册 kind（as never 绕过类型收窄——运行时验证抛错）
         {
           kind: 'nonexistent' as never,
           defaultModel: 'm',
@@ -256,7 +230,7 @@ describe('ProviderRegistry 注册表（类行为三件套）', () => {
         isDefault: false,
       },
     ]);
-    expect(registry.getDefaultKind()).toBe('deepseek'); // 回落第一个注册
+    expect(registry.getDefaultKind()).toBe('deepseek');
   });
 
   it('getDefaultKind 异常：空注册表抛错', () => {

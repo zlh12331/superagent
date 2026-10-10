@@ -1,28 +1,4 @@
-// src/main/infra/ai/agent/subagent-manager.ts
-// 子代理管理器：任务委派 → 独立回合执行 → 结果收集（对齐 qwen subagents 语义收敛）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 内置子代理定义（general / code_review / plan），register 可覆盖或新增
-// - run：委派任务给子代理——生成独立 sessionId，走无头回合执行（不传 webContents）
-// - 结果收集：订阅类级回合事件总线，按 sessionId 过滤累积文本，TURN_END 收敛
-//
-// 并发隔离机制（多子代理并发不串流的关键）：
-// 每个 run 生成唯一 sessionId；dispatch 内注册的 onTurnEvent 是**类级总线**
-// （收到所有会话的回合事件），因此回调首行即 `event.sessionId !== sessionId`
-// 提前返回，只累积本回合事件。TeamService 的并行委派正是靠此隔离保证互不干扰。
-//
-// 委派即任务：每次 run 在 taskService 建一条 AGENT 任务并随回合推进状态
-// （RUNNING → COMPLETED / FAILED），任务面板据此展示委派工作单元。
-//
-// 借鉴声明：
-// 本模块参考 qwen-code 参考项目 packages/core/src/subagents/
 // （Copyright 2025 Qwen，SPDX-License-Identifier: Apache-2.0）的
-// BuiltinAgentRegistry（内置代理注册表）+ SubagentManager（委派执行）语义，
-// 按我们的技术栈收敛重写：
-// - 移除文件配置层（frontmatter schema / validation / 四级加载，强耦合不搬运）
-// - 复用我们的无头执行基础（webContents 可空化）+ onTurnEvent 类级总线
-// - 并发安全：多子代理并发时按 sessionId 过滤事件累积
-// ──────────────────────────────────────────────────────────────
 
 import { randomUUID } from 'node:crypto';
 import { TurnEventType } from '@code-agent/shared/main';
@@ -67,14 +43,12 @@ const SUBAGENT_TIMEOUT_MS = 5 * 60 * 1000;
 /** 内置子代理集（冻结只读；构造期装入实例 Map，register 可覆盖） */
 const BUILTIN_SUBAGENTS: readonly SubagentSpec[] = Object.freeze([
   {
-    // 通用代理：步数上限最高（15），面向开放式子任务
     name: 'general',
     description: '通用子代理：处理任意独立子任务（研究/分析/实现）',
     prompt: '你是一个专注的通用子代理。完成被委派的任务并输出结论。',
     maxSteps: 15,
   },
   {
-    // 代码审查：只需阅读与输出结论，步数收敛到 10
     name: 'code_review',
     description: '代码审查子代理：独立审查代码变更',
     prompt: [
@@ -86,7 +60,6 @@ const BUILTIN_SUBAGENTS: readonly SubagentSpec[] = Object.freeze([
     maxSteps: 10,
   },
   {
-    // 方案代理：提示词显式约束「只读、不改文件」，靠 prompt 而非权限闸保证零副作用
     name: 'plan',
     description: '方案子代理：只读分析并输出实施计划（不执行）',
     prompt: [
@@ -154,15 +127,11 @@ export class SubagentManager {
 
     const sessionId = randomUUID();
     const startTime = Date.now();
-    // 任务跟踪：委派即任务
-    // create 失败显式抛出（任务未创建属真实 DB 故障，非跟踪故障——调用方应感知）；
-    // 创建后的状态更新统一走容错路径（跟踪失败不阻断执行）
     const taskId = taskService.create(
       sessionId,
       TaskKind.AGENT,
       `子代理 ${name}：${task.slice(0, 60)}`,
     );
-    // 创建后的状态更新走容错路径（跟踪失败不阻断执行）
     this.updateTaskStatus(taskId, TaskStatus.RUNNING);
 
     const watchdog = new StallWatchdog({
@@ -172,7 +141,6 @@ export class SubagentManager {
     const finalOutput = await watchdog.guard({
       label: `子代理 ${name}`,
       dispatch: async (signal, report) => {
-        // 回合转录累积（按 sessionId 过滤：多子代理并发不串流）
         let output = '';
         let resolveDone: (() => void) | undefined;
         let done = false;
@@ -180,7 +148,7 @@ export class SubagentManager {
         const unsubscribe = this.agentService.onTurnEvent((event) => {
           try {
             if (event.sessionId !== sessionId) {
-              return; // 其他回合/子代理的事件，忽略
+              return;
             }
             if (event.type === TurnEventType.TEXT_DELTA) {
               output += event.text;
@@ -191,7 +159,6 @@ export class SubagentManager {
               report({ type: 'tool-end' });
             } else if (event.type === TurnEventType.TURN_END && !done) {
               done = true;
-              // reason 区分：completed → 完成；其余（aborted/max-steps/error）→ 失败
               const reason = event.reason;
               this.updateTaskStatus(
                 taskId,
@@ -205,13 +172,7 @@ export class SubagentManager {
           }
         });
 
-        // 完成信号：TURN_END / 超时兜底 / 停滞 abort
-        // 2026-09-08 修复：① 超时分支此前只标 FAILED 并 resolve，**未中断回合**——
-        // 子代理在后台继续跑、继续消耗 token/工具副作用并占用并发槽位；
-        // ② setTimeout 与 abort 监听不清理，最长持有闭包 5 分钟。
-        // 逻辑已提取为 waitForTurnCompletion（下方）。
         try {
-          // 启动无头回合；完成信号由 waitForTurnCompletion 统一管理
           const completion = this.waitForTurnCompletion({
             name,
             sessionId,
@@ -231,12 +192,10 @@ export class SubagentManager {
             workingDir,
             systemPrompt: spec.prompt,
             maxSteps: spec.maxSteps ?? 15,
-            // 无头：不传 webContents
           });
           await completion;
           return output;
         } finally {
-          // 无论正常/异常/停滞 abort，都退订类级总线，防监听器泄漏
           unsubscribe();
         }
       },
@@ -276,7 +235,6 @@ export class SubagentManager {
     readonly setResolve: (fn: () => void) => void;
   }): Promise<void> {
     const { name, sessionId, taskId, signal, isDone, markDone, setResolve } = params;
-    // 停滞/父取消路径：已 done 则幂等返回；否则标 FAILED 并真实中断回合
     const fail = (): void => {
       if (isDone()) {
         return;
@@ -299,15 +257,12 @@ export class SubagentManager {
           if (!isDone()) {
             markDone();
             logger.warn({ subagent: name, sessionId }, '子代理回合超时');
-            // 与停滞分支对齐：真实中断回合，避免后台空跑
             this.agentService.abort(sessionId);
             this.updateTaskStatus(taskId, TaskStatus.FAILED);
             resolve();
           }
         }, SUBAGENT_TIMEOUT_MS);
-        // unref：超时定时器不阻止进程退出（应用退出时无需等满 5 分钟）
         timeoutTimer.unref?.();
-        // 停滞 abort：真实中断回合（agentService.abort）+ 本次尝试失败
         signal.addEventListener('abort', abortListener);
       });
     } finally {

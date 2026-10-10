@@ -1,13 +1,3 @@
-// src/renderer/components/$1/browser-pane.test.tsx
-// 浏览器预览 pane 测试（WebContentsView 进程外预览的渲染层侧）
-// ──────────────────────────────────────────────────────────────
-// 覆盖：空状态 / URL 规范化 / Enter 导航（非 Enter 不导航）/ 状态事件驱动 UI
-// （地址栏、导航按钮、加载条、首载 spinner）/ 导航动作 IPC 与失败提示 /
-// 视口推送（遮挡让位、deps 变化不产生多余「先隐后显」）/ 严格沙箱 configure /
-// 设备预设切换与宽高输入禁用。
-// jsdom 无原生视图：主进程侧交互全部经 window.api.browser fake 断言。
-// ──────────────────────────────────────────────────────────────
-
 import type { BrowserState } from '@code-agent/shared/renderer';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -33,9 +23,7 @@ const EMPTY_STATE: BrowserState = {
 describe('BrowserPane', () => {
   beforeEach(() => {
     localStorage.clear();
-    // 设置全量重置为默认（browser 分组由各用例注入初值，避免用例间串味）
     applySettingsSnapshot({});
-    // fake window.api.browser：jsdom 无主进程原生视图，主进程交互全部经 fake 断言
     stateSubs = new Set();
     failSubs = new Set();
     currentState = { ...EMPTY_STATE };
@@ -96,13 +84,6 @@ describe('BrowserPane', () => {
     fireEvent.keyDown(screen.getByLabelText('输入网址，回车打开…'), { key: 'Enter' });
     expect(navigateMock).not.toHaveBeenCalled();
   });
-
-  // ── 无桥路径（2026-09 审计修复的回归锚） ──────────────────────
-  //
-  // 背景：整个文件此前无 hasIpcBridge 判定，window.api 缺失（浏览器模式 /
-  // preload 打包异常）时 `window.api.browser.getState()` 在**成员访问阶段**同步抛
-  // TypeError，其后的 .catch 兜不住（求值顺序：先取属性才轮到 .catch）。
-  // 仓库共 35 处 hasIpcBridge 调用，本目录此前为 0。
 
   it('无桥：挂载不抛错且渲染空状态（不访问 window.api）', () => {
     const saved = window.api;
@@ -195,7 +176,6 @@ describe('BrowserPane', () => {
     );
     expect(screen.getByLabelText('后退')).toBeEnabled();
     expect(screen.getByLabelText('前进')).toBeDisabled();
-    // 加载条位于占位区之外（原生视图会盖住占位区内的渲染层 UI）
     expect(document.querySelector('[class*="browser-loading-bar"]')).not.toBeNull();
   });
 
@@ -222,7 +202,6 @@ describe('BrowserPane', () => {
         cb({ ...EMPTY_STATE, url: 'https://a.com/', isLoading: true, canGoBack: true });
       }
     });
-    // 不定式进度条：不设 aria-valuenow，靠 aria-label 说明正在加载
     expect(screen.getByRole('progressbar', { name: '页面加载中' })).toBeDefined();
   });
 
@@ -238,7 +217,6 @@ describe('BrowserPane', () => {
         cb({ ...EMPTY_STATE, url: 'https://x.com/', isLoading: true });
       }
     });
-    // 不抛错 + 加载条已出现（错误经 toast 反馈，UI 可继续交互）
     expect(document.querySelector('[class*="browser-loading-bar"]')).not.toBeNull();
   });
 
@@ -248,7 +226,6 @@ describe('BrowserPane', () => {
     const first = setViewportMock.mock.calls[0]?.[0] as { rect: unknown; visible: boolean };
     expect(first.rect).toBeNull();
     expect(first.visible).toBe(false);
-    // 卸载（关闭浏览器 tab）→ 再推送一次隐藏（主进程侧页面保活）
     const calls = setViewportMock.mock.calls.length;
     unmount();
     expect(setViewportMock.mock.calls.length).toBeGreaterThan(calls);
@@ -264,19 +241,16 @@ describe('BrowserPane', () => {
           cb({ ...EMPTY_STATE, url: 'https://a.com/' });
         }
       });
-      // 打开设备工具栏并切换缩放 → deps 变化一次
       fireEvent.click(screen.getByLabelText('设备工具栏'));
       const before = setViewportMock.mock.calls.length;
       fireEvent.change(screen.getByLabelText('缩放'), { target: { value: '150' } });
       const after = setViewportMock.mock.calls.slice(before);
-      // 只应有一条新推送（新 zoomFactor），不得先插一条 visible=false
       expect(after).toHaveLength(1);
       const pushed = lastViewport();
       expect(pushed.visible).toBe(true);
       expect(pushed.zoomFactor).toBe(1.5);
       expect(pushed.rect).toMatchObject({ width: 400, height: 600 });
 
-      // 卸载才隐藏
       unmount();
       const last = lastViewport();
       expect(last.visible).toBe(false);
@@ -323,7 +297,6 @@ describe('BrowserPane', () => {
     fireEvent.click(screen.getByLabelText('设备工具栏'));
     fireEvent.change(screen.getByLabelText('设备预设'), { target: { value: 'mobile' } });
     expect((screen.getByLabelText('宽度') as HTMLInputElement).value).toBe('375');
-    // 跟随宿主语义：尺寸保留，否则矩形宽高为 0 会被 IPC schema 拒绝
     fireEvent.change(screen.getByLabelText('设备预设'), { target: { value: 'responsive' } });
     expect((screen.getByLabelText('宽度') as HTMLInputElement).value).toBe('375');
     expect((screen.getByLabelText('高度') as HTMLInputElement).value).toBe('667');
@@ -354,7 +327,6 @@ describe('BrowserPane', () => {
 
   it('导航动作：后退/前进/刷新分别调用对应 IPC（此前回调零覆盖）', async () => {
     render(<BrowserPane />);
-    // 历史能力来自状态推送；刷新要求已加载 URL
     await act(async () => {
       for (const cb of stateSubs) {
         cb({ ...EMPTY_STATE, url: 'https://a.com/', canGoBack: true, canGoForward: true });
@@ -433,13 +405,11 @@ describe('BrowserPane', () => {
       expect(shown.visible).toBe(true);
       expect(shown.rect).toMatchObject({ width: 400, height: 600 });
 
-      // 遮挡源 1：全局模态（设置 / 命令面板 / 快捷键帮助）
       await act(async () => {
         useUiStore.setState({ settingsOpen: true });
       });
       expect(lastViewport().visible).toBe(false);
 
-      // 遮挡源 2：命令式确认弹窗（overlayOpen 为 false 时走 confirmOpen 分支）
       useUiStore.setState({ settingsOpen: false });
       await act(async () => {
         useConfirmDialogStore.setState({
@@ -458,8 +428,6 @@ describe('BrowserPane', () => {
     }
   });
 });
-
-// ── browser-pane fake 基础设施（模块级变量，beforeEach 重置） ──
 
 let stateSubs = new Set<(p: BrowserState) => void>();
 let failSubs = new Set<(p: { errorCode: number; errorDescription: string; url: string }) => void>();

@@ -1,14 +1,3 @@
-// src/main/infra/ai/tools/run-workflow.tool.ts
-// run_workflow 工具：串行多步工作流编排（对齐 qwen Workflow 工具语义）
-// ──────────────────────────────────────────────────────────────
-// 设计：
-// - permission='ask' / category='exec'：子代理回合可能产生副作用（写文件），
-//   保守审批（与 run_subagent / run_team 一致）
-// - 串行执行 + 上一步产出注入下一步上下文：面向依赖链任务
-//   （先方案 → 再实现 → 后审查），与 run_team 的并行独立委派互补
-// - 状态机/预算软闸/journal 全程跟踪在 WorkflowService（本工具保持薄壳）
-// ──────────────────────────────────────────────────────────────
-
 import { z } from 'zod';
 import { t } from '../../i18n';
 import { workflowService } from '../agent/workflow-service';
@@ -58,14 +47,12 @@ export function createRunWorkflowTool(): Tool<RunWorkflowInput> {
     category: 'exec',
     execute: async (input: RunWorkflowInput, ctx: ToolContext): Promise<ToolResult> => {
       try {
-        // exactOptionalPropertyTypes：zod 推导的 agent?: string|undefined 需条件展开
         const stepTasks = input.steps.map((step) => ({
           name: step.name,
           task: step.task,
           ...(step.agent !== undefined ? { agent: step.agent } : {}),
         }));
         const result = await workflowService.runWorkflow(input.goal, stepTasks, ctx.workingDir, {
-          // exactOptionalPropertyTypes：可选字段条件展开
           ...(input.onFailure !== undefined ? { onFailure: input.onFailure } : {}),
           abortSignal: ctx.abortSignal,
         });

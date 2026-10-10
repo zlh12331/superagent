@@ -1,8 +1,3 @@
-// src/renderer/components/dev/InspectorPanel.test.tsx
-// InspectorPanel 单测（停靠模式 IPC 分流 / 状态自动清除 / 卸载清理）
-// 策略：mock window.api.devtools（IPC 边界），组件自身逻辑走真实实现。
-// （原 dev-panels.test 按被测组件拆分至此）
-
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -21,7 +16,6 @@ describe('InspectorPanel', () => {
     expect(screen.getByText('独立窗口')).toBeTruthy();
     expect(screen.getByText('右侧')).toBeTruthy();
     expect(screen.getByText('底部')).toBeTruthy();
-    // 文案已从硬编码迁移到 i18n（dev.reactDevtoolsDesc）
     expect(screen.getByText(/electron-devtools-installer/)).toBeTruthy();
   });
 
@@ -127,7 +121,6 @@ describe('InspectorPanel', () => {
       await act(async () => {
         fireEvent.click(screen.getByLabelText('以独立窗口 模式打开 DevTools'));
       });
-      // 第一次调用后 2.5s（未到 3s 清除点）再次调用 → 覆盖上一次定时器
       await act(async () => {
         vi.advanceTimersByTime(2500);
       });
@@ -136,12 +129,10 @@ describe('InspectorPanel', () => {
         fireEvent.click(screen.getByLabelText('以右侧 模式打开 DevTools'));
       });
       expect(screen.getByText('打开失败：sender 窗口不存在')).toBeTruthy();
-      // 距第一次点击已 5s：若旧定时器未被清理，状态会在 3s 处被清空 → 此处断言它仍在
       await act(async () => {
         vi.advanceTimersByTime(2500);
       });
       expect(screen.getByText('打开失败：sender 窗口不存在')).toBeTruthy();
-      // 第二次点击后满 3s 才清除
       await act(async () => {
         vi.advanceTimersByTime(500);
       });

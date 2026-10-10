@@ -1,20 +1,3 @@
-// src/main/infra/ai/tools/code-review.tool.ts
-// code_review 工具：代码审查工具，供 Code Agent 分析代码质量
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 接收 LLM 生成的 path 入参
-// - 通过 path-guard 把路径解析为 workingDir 内的绝对路径
-// - 调用 FileService.read 读取文件内容
-// - 返回结构化的代码审查结果（给 LLM 看，由 LLM 生成具体审查意见）
-//
-// 权限：'auto'（只读操作，无副作用，自动执行）
-//
-// 入参：
-// - path：文件路径（相对或绝对，相对路径基于 workingDir 解析）
-//
-// 输出：ToolResult（title + output 文本 + metadata 结构化数据）
-// ──────────────────────────────────────────────────────────────
-
 import type { FileReadRes } from '@code-agent/shared/main';
 import { z } from 'zod';
 import type { IFileService } from '../../file/file-service';
@@ -42,7 +25,6 @@ export function createCodeReviewTool(fileService: IFileService): Tool<CodeReview
     permission: 'auto',
     category: 'read',
     execute: async (input: CodeReviewInput, ctx: ToolContext): Promise<ToolResult> => {
-      // realTarget：IO 用真实落点（TOCTOU，debt.md#d1）；metadata.path 保持输入形态
       const { resolved, realTarget } = resolveWithinWorkspace(input.path, ctx.workingDir);
 
       const result: FileReadRes = await fileService.read({

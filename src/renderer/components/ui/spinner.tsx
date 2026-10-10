@@ -1,18 +1,3 @@
-// src/renderer/components/ui/spinner.tsx
-// 环形加载指示器（统一原语：替代散落的手写 CSS 圆环）
-// ──────────────────────────────
-// 变体：无（尺寸/颜色经 className 与 currentColor 控制）
-// 状态：纯展示
-// 依赖：lucide-react Loader2（Icon 组件，随字体栈渲染，无独立 CSS 动画依赖）
-// 用法：
-//   <Spinner className="size-6" />
-//   <Spinner aria-hidden />   {/* 父级已有加载语义时降级为纯装饰 */}
-// 可访问性：默认 role="status" + sr-only "Loading"，屏幕阅读器播报加载语义；
-//   容器若已有 role="status"/aria-busy 父级，可传 aria-hidden 降级为装饰
-//   ——aria-hidden 必须作用在**外层 span**（role 与文案都在这一层）才有意义，
-//   故本组件单独取出它，其余 props 才透传给图标。
-// ──────────────────────────────
-
 import { Loader2 } from 'lucide-react';
 import type * as React from 'react';
 import { useTranslation } from '@/i18n/use-translation';
@@ -27,9 +12,6 @@ export interface SpinnerProps extends React.ComponentProps<typeof Loader2> {
 /** 加载指示器：外层 role="status" + sr-only 文案，aria-hidden 可整体降级为装饰（见文件头注释） */
 export function Spinner({ className, label, ...props }: SpinnerProps): React.ReactElement {
   const { t } = useTranslation();
-  // 降级开关：此前 {...props} 整体展开到 Loader2，调用方写 aria-hidden 只会给
-  // 图标再叠一次 aria-hidden（图标本就 aria-hidden），外层 role="status" 与
-  // sr-only 文案照旧播报——本文件注释承诺的降级路径实际走不通。
   const decorative = props['aria-hidden'] === true || props['aria-hidden'] === 'true';
   const { 'aria-hidden': _ariaHidden, ...iconProps } = props;
   return (

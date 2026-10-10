@@ -1,15 +1,3 @@
-// src/main/ipc/models.handler.ts
-// 模型域 handler（models:list + models:listBuiltin + models:test）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - models:list：暴露主进程 modelRegistry 中**已配置可用**的模型清单
-//   （对齐同类桌面 LLM 客户端：配置好才显示，未配置不出现——没有就是没有）
-//   仅适用于聊天框模型选择器
-// - models:listBuiltin：厂商内置模型全集（不依赖 keychain 配置状态）——
-//   配置页数据源（配置页恰恰为未配置用户服务，"配置好才显示"会造成死锁）
-// - models:test：连通性测试——真实 HTTP 探测供应商端点（不落库、不改状态）
-// ──────────────────────────────────────────────────────────────
-
 import type {
   AvailableModelInfo,
   ModelApiFormat,
@@ -42,7 +30,6 @@ const TEST_TIMEOUT_MS = 10_000;
  * 之列（仍按受限处理，交由 url-guard 拦截）。
  */
 function isLoopbackTarget(hostname: string): boolean {
-  // URL.hostname 对 IPv6 字面量带方括号（如 [::1]），与 url-guard 同样剥除
   const host = hostname
     .trim()
     .toLowerCase()
@@ -236,8 +223,6 @@ export const modelsHandlers = {
   }): Promise<TestModelRes> => {
     const { providerKind } = input;
     const baseUrl = input.baseUrl ?? getAppConfig().providers[providerKind];
-    // 生效格式：显式传入 > 已存运行时模型的记录 > 该 kind 默认
-    // （保存前测试时模型尚未落库，走显式传入；编辑历史模型时为记录值）
     const storedFormat =
       input.apiFormat ??
       (input.modelId !== undefined
@@ -249,7 +234,6 @@ export const modelsHandlers = {
       assertSafeTestBaseUrl(input.baseUrl, input.apiKey);
     }
 
-    // API Key 回退链（显式优先）
     let apiKey = input.apiKey;
     if (apiKey === undefined) {
       apiKey = (await getSecret(`${providerKind}-api-key`)) ?? undefined;
@@ -265,7 +249,6 @@ export const modelsHandlers = {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
-          // anthropic 用 x-api-key；其余（含 Responses）用 Bearer
           ...(apiFormat === 'anthropic-messages'
             ? { 'x-api-key': apiKey ?? '' }
             : apiKey !== undefined
@@ -282,8 +265,6 @@ export const modelsHandlers = {
       if (response.status === 401 || response.status === 403) {
         return { ok: false, error: 'API Key 无效或未授权' };
       }
-      // 附上实际探测 URL：拼接/协议选错类问题（如 /v1/v1、格式与端点不匹配）
-      // 一眼可辨，无需反查代码
       return { ok: false, error: `HTTP ${response.status}（${url}）` };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

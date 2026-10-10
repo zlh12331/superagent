@@ -1,9 +1,3 @@
-// scripts/lib/comments-rules.test.ts
-// 注释规则核反例 fixture 测试：每条规则「最小违规样本必须命中 + 干净样本必须放过」
-// ──────────────────────────────────────────────────────────────
-// 背景外部审计点名 check-comments 判据内联零测试（L2 缺口）——本文件补齐。
-// ──────────────────────────────────────────────────────────────
-
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -74,7 +68,6 @@ describe('规则 B · stale-file-ref / stale-line-ref（file:/// 引用）', () 
   });
 
   it('边界：模板插值路径（运行时构造）→ 跳过', () => {
-    // \u0024 = $：样本需含 "${dynamic}" 文本，但源码字面量禁写相邻 ${（noTemplateCurlyInString）
     expect(run(RULES.checkFileRefs, '参见 file:///\u0024{dynamic}')).toHaveLength(0);
   });
 });

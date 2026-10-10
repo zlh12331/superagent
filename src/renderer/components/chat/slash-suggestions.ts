@@ -1,10 +1,3 @@
-// src/renderer/components/chat/slash-suggestions.ts
-// 斜杠命令建议表 + 过滤（自 ChatInput 提取：数据与纯函数独立可测）
-// ──────────────────────────────────────────────
-// 对齐参考项目 useSlashSuggest：命令可执行（action）而非仅填充文本。
-// 消费方：ChatInput（下拉渲染 + 键盘应用）、ChatPanel（经 executeSlashCommand 执行）。
-// ──────────────────────────────────────────────
-
 /** 斜杠命令动作（对齐参考项目：命令可执行而非仅填充文本） */
 export type SlashAction =
   | 'new'
@@ -31,10 +24,8 @@ export const SLASH_SUGGESTIONS: readonly SlashSuggestion[] = [
   { command: '/clear', labelKey: 'chat.slashSuggest.clear', action: 'clear' },
   { command: '/compact', labelKey: 'chat.slashSuggest.compact', action: 'compact' },
   { command: '/models', labelKey: 'chat.slashSuggest.models', action: 'models' },
-  // 对齐参考项目 SLASH_CMD_DEFS：/interrupt 即时中断（ChatPanel 调 stop）、/goal toast 引导
   { command: '/interrupt', labelKey: 'chat.slashSuggest.interrupt', action: 'interrupt' },
   { command: '/goal', labelKey: 'chat.slashSuggest.goal', action: 'goal' },
-  // mock 演示命令（前端开发专用）：/demo 全类型消息演示、/limit 限流横幅
   { command: '/demo', labelKey: 'chat.slashSuggest.demo', action: 'demo' },
   { command: '/limit', labelKey: 'chat.slashSuggest.limit', action: 'limit' },
 ];

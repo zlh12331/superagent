@@ -1,23 +1,3 @@
-// src/renderer/stores/persistent/create-persistent-store.ts
-// 持久化 Zustand Store 工厂（L2 客户端共享状态层 - persistent 子层）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 统一封装 zustand persist 中间件的配置（storage key 前缀 / 版本迁移 / 错误降级）
-// - 持久化策略：跨应用重启保留状态（settings / sessions 等）
-// - 与 transient/ 目录的 store 区分：transient 不持久化，重启即失
-//
-// 设计要点：
-// - storage key 统一前缀 `code-agent:`，避免与其他应用冲突
-// - 默认 partialize：仅持久化非函数字段（函数自动被过滤）
-// - 版本字段 + migrate 函数支持 schema 演进（如 v1 → v2 字段重命名）
-// - localStorage 失败时（隐私模式 / 配额超限）静默降级到内存 store
-// - createJSONStorage(() => localStorage) 显式声明存储后端，便于未来切换到 IndexedDB
-//
-// 与原生 persist() 的差异：
-// - 原生 persist 需要每个 store 重复写 name / partialize
-// - 本工厂统一默认值，业务 store 只关心 state shape 与 actions
-// ──────────────────────────────────────────────────────────────
-
 import { create, type StateCreator, type StoreApi, type UseBoundStore } from 'zustand';
 import {
   createJSONStorage,
@@ -69,9 +49,6 @@ export function createPersistentStore<TState extends object>() {
     const { name, version = 1, migrate, partialize, ...rest } = config;
     const storageKey = `${STORAGE_KEY_PREFIX}${name}`;
 
-    // 显式声明 PersistStorage 类型，避免 exactOptionalPropertyTypes 下的兼容问题
-    // createJSONStorage(() => localStorage) 返回 PersistStorage<unknown>，
-    // 通过 cast 与 TSlice 对齐
     const storage: PersistStorage<Partial<TSlice>> | undefined = createJSONStorage(
       () => localStorage,
     ) as PersistStorage<Partial<TSlice>> | undefined;
@@ -80,10 +57,7 @@ export function createPersistentStore<TState extends object>() {
       persist(initializer, {
         name: storageKey,
         version,
-        // createJSONStorage 显式声明存储后端
-        // 若 localStorage 不可用（隐私模式 / SSR），zustand 会自动降级为内存存储
         storage,
-        // 默认仅持久化非函数字段（自动过滤 actions）
         partialize:
           partialize ??
           ((state) => {
@@ -95,9 +69,6 @@ export function createPersistentStore<TState extends object>() {
             }
             return data as Partial<TSlice>;
           }),
-        // P4 修复：migrate 显式兜底——版本升级（version 递增）时必须由业务 store
-        // 提供 migrate 做字段迁移；未提供时保留 zustand 默认行为（旧 state 原样透传，
-        // 不静默丢数据），但注释强调约定：version 递增 = migrate 必填
         migrate: migrate ?? ((persisted) => persisted as never),
         ...rest,
       }),

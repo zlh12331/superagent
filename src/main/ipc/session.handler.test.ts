@@ -1,19 +1,8 @@
-// src/main/ipc/session.handler.test.ts
-// session.handler 单测：session:* 方法的参数转发与错误路径（三件套）
-// ──────────────────────────────────────────────────────────────
-// 测试策略（遵循"业务逻辑不 mock、外部依赖注入 fake"）：
-// - fake SessionService 经 deps 注入（handler 薄层：参数转发断言）
-// - electron dialog/app 用 vi.mock 外壳（原生模块，允许 mock）
-// - exportAll 三态：取消 / 成功写文件 / 写文件失败
-// - importAll 三态：取消 / 成功读文件转发 / 非法 JSON（大小上限同 utils/json-file）
-// ──────────────────────────────────────────────────────────────
-
 import { writeFile } from 'node:fs/promises';
 import { ErrorCode } from '@code-agent/shared/main';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createSessionHandlers, type SessionHandlerDeps } from './session.handler';
 
-// hoisted：vi.mock 工厂提升先于模块级变量初始化，mock 函数需在 hoisted 块定义
 const mocks = vi.hoisted(() => ({
   mockGetPath: vi.fn(() => 'C:\\Users\\test\\Documents'),
   mockShowSaveDialog: vi.fn(async () => ({ canceled: false, filePath: 'C:\\out.json' })),
@@ -209,7 +198,6 @@ describe('session.handler.exportAll（三态）', () => {
   });
 
   it('边界：用户取消 → { saved: false } 不写文件', async () => {
-    // exactOptionalPropertyTypes：filePath 类型必需——取消时传空串（handler 忽略）
     mocks.mockShowSaveDialog.mockResolvedValueOnce({ canceled: true, filePath: '' });
     const res = await handlers.exportAll(undefined, EMPTY_CTX);
     expect(res).toEqual({ saved: false });

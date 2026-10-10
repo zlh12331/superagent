@@ -1,9 +1,3 @@
-// src/renderer/lib/devtools-actions.ts
-// DevTools 打开动作 IPC 桥
-// ──────────────────────────────────────────────────────────────
-// 职责（direct-ipc 清迁，2026-09-26）：InspectorPanel 不再直连 window.api
-// ──────────────────────────────────────────────────────────────
-
 import type { OpenDevToolsRes } from '@code-agent/shared/renderer';
 
 import { hasIpcBridge, unwrap } from '@/lib/ipc';

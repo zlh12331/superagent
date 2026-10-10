@@ -1,24 +1,3 @@
-// scripts/check-changelog-polish.ts
-// CHANGELOG 润色门禁 · 拦「Release PR 忘润色就合并」
-// ──────────────────────────────────────────────────────────────
-// 为什么需要：release-please 以 commit 为粒度产出 CHANGELOG，项目走 squash 合并，
-// 于是一个含几十个修复的 PR 在 CHANGELOG 里只剩一行 PR 标题——里面用户能感知的
-// 改动全部不可见。RELEASING.md 要求「发版前在 Release PR 中人工润色」，但该步骤
-// 此前无任何机制看守，漏做不会被发现（2026-09-17 实测漏做 v1.1.1）。
-//
-// 本门禁接入两处，形成闭环（详见 RELEASING.md）：
-//   1. ci.yml 的 quality job——仅对 Release PR（head_ref 前缀 release-please--）执行，
-//      利用既有必需检查获得合并阻塞力，无需新增 ruleset 条目。
-//   2. release.yml 的 gate job——发版打 tag 前兜底；未润色则 gate 失败，
-//      不占版本号、可重试。
-//
-// 判定与豁免规则见 scripts/lib/changelog-polish.ts 的头注释。
-//
-// 运行：
-//   pnpm check:changelog-polish                     # 检查最新版本段
-//   tsx scripts/check-changelog-polish.ts --version 1.1.1
-// ──────────────────────────────────────────────────────────────
-
 import { readFileSync } from 'node:fs';
 
 import {

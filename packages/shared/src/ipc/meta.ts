@@ -1,14 +1,3 @@
-// packages/shared/src/ipc/meta.ts
-// IPC 通道元数据（纯字符串，零依赖，preload 沙箱安全）
-// ──────────────────────────────────────────────────────────────
-// 为什么需要本文件：
-// - preload 运行在 sandbox:true 下，不能 import 纯 ESM 包（如 zod）
-// - definitions.ts 含 zod schema（运行时求值），preload 引入会静默失败
-// - 因此把 channel + kind 提取为纯字符串元数据，preload 生成器只消费本文件
-//
-// 依赖方向：meta（零依赖）← definitions（加 schema）← channels（推导常量）
-// ──────────────────────────────────────────────────────────────
-
 /** 请求-响应方法元数据（channel + kind，无 schema） */
 export const request = <C extends string>(channel: C) => ({ kind: 'request', channel }) as const;
 
@@ -27,55 +16,38 @@ export const IPC_META = {
     getInfo: request('app:getInfo'),
     openExternal: request('app:openExternal'),
     openDataDir: request('app:openDataDir'),
-    // 诊断包导出（日志 + 版本信息 → 用户选择路径的 zip，支持排障闭环）
     exportDiagnostics: request('app:exportDiagnostics'),
-    // 开机自启（读写 OS 登录项，不走 SQLite 设置——托盘菜单与设置页同源）
     getLoginItemSettings: request('app:getLoginItemSettings'),
     setLoginItemSettings: request('app:setLoginItemSettings'),
-    // 退出应用（走完整善后链：before-quit 协商 → dispose → 延迟安装）
     quit: request('app:quit'),
-    // 深度链接事件（协议唤起 `code-agent://` 时主进程广播，渲染层导航）
     subscribeDeepLink: event('app:event:deepLink'),
-    // 登录项变更事件（主进程主动写入后推送真实回读值——托盘菜单改自启，设置页据此回显）
     subscribeLoginItemChanged: event('app:event:loginItemChanged'),
   },
 
   window: {
-    // 应用界面缩放（35 号：主进程遍历全部 BrowserWindow 执行 setZoomFactor +
-    // Windows titleBarOverlay.height 联动——渲染层无 webContents 句柄，单点收口）
     applyZoom: request('window:applyZoom'),
   },
 
   backup: {
-    // 备份恢复点列表（37 号 B：backups/ 轮转环 + quick_check 健康度，最新在前）
     list: request('backup:list'),
-    // 手动立即备份（复用启动备份同一路径，进同一轮转环）
     create: request('backup:create'),
-    // 从指定恢复点恢复（暂存 + 重启生效；运行中回合拒绝）
     restore: request('backup:restore'),
   },
 
   agent: {
     run: request('agent:run'),
     subscribeAsk: event('agent:event:ask'),
-    // 提问决议事件（含超时等非用户路径）——渲染层据此把提问移出队列，
-    // 与 agent:event:ask 配对：有提问必有决议，前端不会残留「僵尸提问弹窗」，
-    // 队列化后也不会被已超时的队头永久阻塞（2026-10-08）
     subscribeAskResolved: event('agent:event:ask:resolved'),
     respondAsk: request('agent:ask:respond'),
     stop: request('agent:stop'),
     approvalResponse: request('agent:approval:response'),
     subscribeStreamPart: event('agent:stream:part'),
-    // 回合开始事件（D4A：渲染层据此点亮侧栏跨会话运行徽标）
     subscribeStreamStart: event('agent:stream:start'),
     subscribeStreamEnd: event('agent:stream:end'),
     subscribeStreamError: event('agent:stream:error'),
     subscribeToolCall: event('agent:tool:call'),
     subscribeToolResult: event('agent:tool:result'),
     subscribeApprovalRequest: event('agent:approval:request'),
-    // 审批决议事件（含超时/中断等非用户决策路径）——渲染层据此清理待审批条目，
-    // 与 approval:request 配对：有请求必有决议，前端不会残留"僵尸审批卡"
-    // （2026-10-08：此前决议只走进程内 lifecycle，渲染层无从得知超时）
     subscribeApprovalResolved: event('agent:approval:resolved'),
   },
 
@@ -83,14 +55,12 @@ export const IPC_META = {
     list: request('session:list'),
     get: request('session:get'),
     delete: request('session:delete'),
-    // 清空全部会话（36-D：破坏性批量操作，主进程拒绝运行中回合）
     clearAll: request('session:clearAll'),
     rename: request('session:rename'),
     pin: request('session:pin'),
     create: request('session:create'),
     listRecentDirs: request('session:listRecentDirs'),
     exportAll: request('session:exportAll'),
-    // 导入会话（JSON 导出文件，version=1 格式；同 id 会话跳过并计数）
     importAll: request('session:import'),
     getUsageSummary: request('session:getUsageSummary'),
     getTurns: request('session:getTurns'),
@@ -122,9 +92,7 @@ export const IPC_META = {
     back: request('browser:back'),
     forward: request('browser:forward'),
     reload: request('browser:reload'),
-    // 视口同步：渲染层测量占位区后推送矩形/缩放/可见性（高频 invoke，页面保活）
     setViewport: request('browser:setViewport'),
-    // 严格模式（禁用预览页 JS）切换：与当前值不同时重建视图
     configure: request('browser:configure'),
     getState: request('browser:getState'),
     subscribeState: event('browser:event:state'),
@@ -167,18 +135,13 @@ export const IPC_META = {
     removeRuntimeModel: request('settings:removeRuntimeModel'),
     listRuntimeModels: request('settings:listRuntimeModels'),
     updateRuntimeModel: request('settings:updateRuntimeModel'),
-    // 设置导出/导入（app_settings 全表 JSON；keychain 凭据除外）
     exportSettings: request('settings:export'),
     importSettings: request('settings:import'),
-    // 恢复所有设置为默认（删除 SETTING_KEYS 全部键，app_settings 回到空表）
     resetAll: request('settings:resetAll'),
-    // 设置变更事件（主进程主动写入某域后推送——托盘菜单改关窗行为，设置页据此更新 store）
     subscribeChanged: event('settings:event:changed'),
   },
 
   proxy: {
-    // 测试代理连通性（34 号网络代理：主进程经 proxiedFetch 探测轻量端点，
-    // 渲染层测试连接按钮消费；mode 非 fixed 时返回不可测）
     test: request('proxy:test'),
   },
 
@@ -195,9 +158,7 @@ export const IPC_META = {
   memory: {
     list: request('memory:list'),
     clear: request('memory:clear'),
-    // 清空全部会话记忆（上游无全清接口，主进程枚举会话后批量删）
     clearAll: request('memory:clearAll'),
-    // 引擎状态（配置/运行/健康/数据量）与用户开关状态
     status: request('memory:status'),
   },
 
@@ -257,7 +218,6 @@ export const IPC_META = {
   },
 
   invalidation: {
-    // 失效域事件（主进程写路径声明受影响域后广播，渲染层前缀失效缓存——31 号设计文档）
     subscribeDomains: event('invalidation:event:domains'),
   },
 

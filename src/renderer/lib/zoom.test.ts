@@ -1,7 +1,3 @@
-// src/renderer/lib/zoom.test.ts
-// applyZoom 薄壳测试（35 号 §2.7：无桥 no-op / 归一 / 错误吞掉）
-// ──────────────────────────────────────────────────────────────
-
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { applyZoom } from './zoom';

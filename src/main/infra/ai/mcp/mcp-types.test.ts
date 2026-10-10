@@ -1,15 +1,3 @@
-// src/main/infra/ai/mcp/mcp-types.test.ts
-// mcp-types 单测：命名空间 helper 函数
-//
-// 测试要点：
-// 1. buildMcpToolName：构建 mcp__${serverName}__${toolName}
-// 2. isMcpTool：判断是否以 mcp__ 开头
-// 3. parseMcpToolName：解析命名空间名称为 { serverName, toolName }
-//
-// 接线背景：isMcpTool 被权限层的 MCP 防线消费（permission-service 对 MCP
-// 工具有额外审批防线）；buildMcpToolName/parseMcpToolName 被适配器与
-// tool-registry 命名约定依赖——本组用例守住命名空间格式的往返一致性。
-
 import { describe, expect, it } from 'vitest';
 
 import { buildMcpToolName, isMcpTool, parseMcpToolName } from './mcp-types';
@@ -57,7 +45,6 @@ describe('mcp-types', () => {
     });
 
     it('toolName 包含双下划线时仅切分第一个', () => {
-      // 仅切分第一个 __，后续 __ 归入 toolName
       expect(parseMcpToolName('mcp__git__create__branch')).toEqual({
         serverName: 'git',
         toolName: 'create__branch',
@@ -74,12 +61,10 @@ describe('mcp-types', () => {
     });
 
     it('serverName 为空（mcp____tool）返回 undefined', () => {
-      // sepIdx <= 0：第一个 __ 在位置 0，表示 serverName 为空
       expect(parseMcpToolName('mcp____tool')).toBeUndefined();
     });
 
     it('toolName 为空（mcp__server__）返回 undefined', () => {
-      // sepIdx >= rest.length - 2：分隔符后没有 toolName
       expect(parseMcpToolName('mcp__server__')).toBeUndefined();
     });
   });

@@ -1,12 +1,3 @@
-// src/main/infra/storage/test-utils.ts
-// 测试共享工具：用 drizzle-kit 迁移创建内存数据库
-// ──────────────────────────────────────────────────────────────
-// 目的：
-// - schema.ts 为全库唯一真源，测试建库必须走同一套迁移（drizzle/ 目录），
-//   避免测试再维护一份 SQL（schema-sql.ts 已退役）
-// - 内存库每次 createTestDb 重新执行全部基线迁移（journal 表为空）
-// ──────────────────────────────────────────────────────────────
-
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';

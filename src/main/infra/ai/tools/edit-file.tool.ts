@@ -1,7 +1,3 @@
-// src/main/infra/ai/tools/edit-file.tool.ts
-// edit_file 工具：基于字符串替换的结构化文件编辑
-// ──────────────────────────────────────────────────────────────
-
 import { promises as fs } from 'node:fs';
 import { AppError, ErrorCode } from '@code-agent/shared/main';
 import { z } from 'zod';
@@ -42,11 +38,8 @@ export function createEditFileTool(): Tool<EditFileInput> {
     permission: 'ask',
     category: 'edit',
     execute: async (input: EditFileInput, ctx: ToolContext): Promise<ToolResult> => {
-      // realTarget：文件 IO 用真实落点（TOCTOU，debt.md#d1）；title/metadata 保持输入形态
       const { resolved, realTarget } = resolveWithinWorkspace(input.path, ctx.workingDir);
 
-      // priorReadEnforcement：修改已存在文件前必须已 read_file（防盲目编辑）
-      // 键与 read-file 的 record 侧一致（均为 realTarget）
       if (!readTracker.has(ctx.sessionId, realTarget)) {
         return {
           title: t('tools.fileNotRead'),

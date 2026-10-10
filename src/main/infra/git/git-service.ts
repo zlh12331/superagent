@@ -1,36 +1,3 @@
-// src/main/infra/git/git-service.ts
-// GitService：Git 操作封装（simple-git 实现）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - status：获取工作区状态（branch/ahead/behind/files/clean）
-// - diff：获取 unified diff 文本 + 统计（additions/deletions/filesChanged）
-// - add：暂存工作区改动到暂存区（git add）
-// - commit：提交暂存区改动（git commit -m，支持 --amend）
-// - push：推送本地提交到远程（git push，支持 --force-with-lease 和 -u）
-//
-// 设计（2026-08 重构）：
-// - 由手写 child_process.spawn 迁移到 simple-git（qwen-code/opencode 生产验证）
-//   - 统一 Git 操作接口，跨平台兼容性与错误处理由库保障
-//   - simple-git 自带子进程管理与超时（timeout.block），替代手写 activeProcesses
-// - 保持 IGitService 接口与错误分类语义不变（IPC handler 无需改动）：
-//   - 非 git 仓库 → INVALID_INPUT（rev-parse 失败）
-//   - git 命令失败 → INTERNAL_ERROR
-//   - push 失败不抛错，返回 ok=false 便于 UI 友好提示
-// - 单例模式：与 FileService / SearchService 一致，便于统一生命周期管理
-//
-// ⚠️ simple-git v4 环境守卫（2026-10-07 实测登记，v3→v4 升版的行为变化）：
-// v4 默认在 git 子进程启动前**静默剥除**父进程环境中的「git-impacting」变量——
-// 任意 GIT_ 前缀 + editor/pager/prefix/ssh_askpass/visual 共 20 类
-// （GIT_SSH_COMMAND / GIT_ASKPASS / SSH_ASKPASS / GIT_PROXY_COMMAND /
-// GIT_CONFIG_GLOBAL / GIT_CONFIG_SYSTEM / GIT_EXTERNAL_DIFF 等，清单在
-// @simple-git/argv-parser）。行为探针实证：ambient GIT_CONFIG_* 注入的
-// user.name 不再被 git 看到。影响：依赖 ambient GIT_SSH_COMMAND 的 SSH 推送、
-// GIT_PROXY_COMMAND 代理的用户经本服务操作会降级（push 优雅 ok=false）；
-// HTTPS + credential.helper（git config 文件，非 env）主流路径不受影响。
-// 应用自身不读写 GIT_* 环境变量；如未来需要透传，用 simpleGit 的
-// allowEnvironment 选项显式放行，勿回退 v3。
-// ──────────────────────────────────────────────────────────────
-
 import {
   AppError,
   ErrorCode,
@@ -166,7 +133,6 @@ class GitService implements IGitService {
       const x = file.index;
       const y = file.working_dir;
 
-      // untracked：index='?'（not_added 中会重复出现，此处统一处理）
       if (x === '?' || y === '?') {
         files.push({
           path: file.path,
@@ -177,7 +143,6 @@ class GitService implements IGitService {
         continue;
       }
 
-      // staged：index 列非空（' ' 或 '.' 表示无暂存变更）
       const staged = x !== ' ' && x !== '.';
       files.push({
         path: file.path,
@@ -188,7 +153,6 @@ class GitService implements IGitService {
     }
 
     return {
-      // simple-git 的 current 在 detached/无分支时为 null，回退旧实现的 '(unknown)'
       branch: result.current ?? '(unknown)',
       ahead: result.ahead,
       behind: result.behind,
@@ -215,7 +179,6 @@ class GitService implements IGitService {
     if (x === 'A') {
       return 'added';
     }
-    // 其余（M / 未知）统一归为 modified（与旧实现 fallback 一致）
     return 'modified';
   }
 
@@ -229,20 +192,15 @@ class GitService implements IGitService {
    */
   async diff(options: GitDiffOptions): Promise<GitDiffRes> {
     const { path, ref, staged, filePath } = options;
-    // P0 收口（服务层 choke point）：agent git 工具直连本服务不经过 IPC
-    // schema——ref 在此处兜底校验，选项形参数（-- 开头）直接拒绝
     if (ref !== undefined && ref.length > 0 && !isSafeGitRefValue(ref)) {
       throw new AppError(ErrorCode.INVALID_INPUT, `git diff ref 含非法字符：${ref}`);
     }
     await this.assertGitRepo(path);
 
-    // simple-git 的 diff 方法内部已拼 'diff' 前缀，此处只传差异化参数
     const args: string[] = [];
     if (staged) {
       args.push('--cached');
     }
-    // ref 可选（省略 = 工作区 vs index）：直接调用方可能不传（与 zod schema 一致），
-    // 避免拼出 'git diff undefined' 命令
     if (ref !== undefined && ref.length > 0) {
       args.push(ref);
     }
@@ -311,8 +269,6 @@ class GitService implements IGitService {
     const { path, paths = [] } = options;
     await this.assertGitRepo(path);
 
-    // simple-git add 透传参数：空数组 → -A（全量），否则 -- <paths>
-    // paths 可选：直接调用方可能不传（与 zod schema 默认 [] 一致），service 层防御性默认
     const args: string[] = paths.length === 0 ? ['-A'] : ['--', ...paths];
     const stdout = await this.runGit((git) => git.add(args), path);
 
@@ -361,9 +317,6 @@ class GitService implements IGitService {
    */
   async push(options: GitPushOptions): Promise<GitPushRes> {
     const { path, remote, refspec, setUpstream, force } = options;
-    // P0 收口（服务层 choke point）：agent git_push 工具直连本服务不经过
-    // IPC schema——remote（ext:: 传输会运行本地命令）与 refspec（选项形
-    // 参数）在此处兜底校验
     if (!isSafeGitRemote(remote)) {
       throw new AppError(ErrorCode.INVALID_INPUT, `git push remote 含非法字符：${remote}`);
     }
@@ -372,19 +325,15 @@ class GitService implements IGitService {
     }
     await this.assertGitRepo(path);
 
-    // 记录推送前的远程 SHA（用于计算推送的 commit 数）
     const beforeSha = await this.getRemoteHeadSha(path, remote, refspec);
 
     const pushOptions: Record<string, string | null> = {};
     if (force) {
       pushOptions['--force-with-lease'] = null;
     }
-    // --set-upstream 需要显式 refspec（分支名）；refspec 为空且 setUpstream 时取当前分支
     const pushRefspec =
       refspec.length > 0 ? refspec : setUpstream ? await this.getCurrentBranch(path) : undefined;
 
-    // 建立上游（setUpstream）：simple-git 的 options 追加在命令末尾，部分 git 版本
-    // 不识别末尾 --set-upstream（报 no upstream branch）——改用显式上游配置（确定性）
     if (setUpstream && pushRefspec !== undefined) {
       await this.runGit((git) => git.addConfig(`branch.${pushRefspec}.remote`, remote), path);
       await this.runGit(
@@ -411,7 +360,6 @@ class GitService implements IGitService {
         stderr: '',
       };
     } catch (error) {
-      // push 失败（远程拒绝/网络）：返回 ok=false 而非抛出
       const message = error instanceof Error ? error.message : String(error);
       logger.warn({ error, remote, refspec }, 'git push 失败');
       return {
@@ -426,11 +374,7 @@ class GitService implements IGitService {
   }
 
   /** 优雅关闭：simple-git 内部管理子进程，接口兼容为 no-op */
-  async dispose(): Promise<void> {
-    // simple-git 实例为每命令短期使用，无长期句柄需清理
-  }
-
-  // ─── 内部辅助方法 ───────────────────────────────────
+  async dispose(): Promise<void> {}
 
   /**
    * 执行 simple-git 操作并统一错误分类
@@ -444,7 +388,6 @@ class GitService implements IGitService {
     try {
       return await op(this.git(path));
     } catch (error) {
-      // 命令失败（非 git 仓库、权限、命令不存在等）
       throw new AppError(
         ErrorCode.INTERNAL_ERROR,
         `git 命令失败：${error instanceof Error ? error.message : String(error)}`,

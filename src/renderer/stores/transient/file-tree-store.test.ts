@@ -1,6 +1,3 @@
-// src/renderer/stores/transient/file-tree-store.test.ts
-// 文件树 store 单测：根目录重置 / 展开集合 / 条目缓存增量更新 / 内联新建 / 操作中状态 / 搜索
-
 import type { FileEntry } from '@code-agent/shared/renderer';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { useFileTreeStore } from './file-tree-store';

@@ -1,7 +1,3 @@
-// scripts/lib/css-vars.test.ts
-// CSS 变量引用完整性规则核反例 fixture 测试
-// ──────────────────────────────────────────────────────────────
-
 import { describe, expect, it } from 'vitest';
 
 import { extractRefs, findMissingVars, isRuntimeInjected, scanCssVars } from './css-vars';

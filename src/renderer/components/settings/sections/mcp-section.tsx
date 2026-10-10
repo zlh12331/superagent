@@ -1,14 +1,3 @@
-// src/renderer/components/settings/sections/mcp-section.tsx
-// MCP 服务器管理 pane（对齐参考项目 superagent McpSettingsPane）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 列出已启动的 MCP server（名称 / 状态徽章 / 工具数 / 错误信息）
-// - 添加服务器表单：transport 三态（stdio 本地进程 / sse / streamable-http 远程）
-//   · stdio → 命令 + 参数；远程 → URL + 可选请求头（每行 Key: Value）
-// - 启动 / 停止操作（mcp:start / mcp:stop IPC）
-// - 数据源：mcp:list（L3 TanStack Query，启动/停止后 invalidate）
-// ──────────────────────────────────────────────────────────────
-
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronDown, ChevronRight, Plus, Square, Wrench } from 'lucide-react';
 import { type ReactElement, useState } from 'react';
@@ -140,13 +129,11 @@ function McpServerRow({
           <Square className="size-3" />
         </Button>
       </SettingRow>
-      {/* 最后一次错误（主进程 lastError 字段，此前仅展示状态徽章、错误信息丢失） */}
       {server.lastError !== undefined && server.lastError !== '' && (
         <p className="text-error-text px-1 font-mono text-2xs break-all" role="status">
           {server.lastError}
         </p>
       )}
-      {/* 工具列表详情（展开态，对齐参考项目 McpServerDetailDialog） */}
       {expanded && (
         <div className="bg-card rounded-lg border px-3 py-2">
           {server.toolNames.length === 0 ? (
@@ -213,7 +200,6 @@ export function McpSection(): ReactElement {
   const { t } = useTranslation();
   const { getErrorMessage } = useErrorMessage();
   const queryClient = useQueryClient();
-  // 添加表单状态（transport 三态 + 按 transport 切换字段组）
   const [name, setName] = useState('');
   const [transport, setTransport] = useState<McpTransport>('stdio');
   const [command, setCommand] = useState('');
@@ -221,11 +207,9 @@ export function McpSection(): ReactElement {
   const [url, setUrl] = useState('');
   const [headersText, setHeadersText] = useState('');
   const isRemote = transport !== 'stdio';
-  // 请求头实时解析（非法行 → 禁用启动按钮 + 行内错误提示）
   const parsedHeaders = parseHeadersText(headersText);
   const headersInvalid = parsedHeaders.headers === null;
 
-  // L3 查询：服务器列表
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: MCP_SERVERS_QUERY_KEY,
     queryFn: listMcpServers,
@@ -236,7 +220,6 @@ export function McpSection(): ReactElement {
     void queryClient.invalidateQueries({ queryKey: MCP_SERVERS_QUERY_KEY });
   };
 
-  // 启动 mutation
   const startMutation = useMutation({
     mutationFn: (config: McpStartConfig) => startMcpServer(config),
     onSuccess: () => {
@@ -254,7 +237,6 @@ export function McpSection(): ReactElement {
     },
   });
 
-  // 停止 mutation
   const stopMutation = useMutation({
     mutationFn: (serverName: string) => stopMcpServer(serverName),
     onSuccess: () => {
@@ -268,7 +250,6 @@ export function McpSection(): ReactElement {
   });
 
   const servers = data?.servers ?? [];
-  // 已展开工具列表的 server 名（对齐参考项目 McpServerDetailDialog 的详情查看）
   const [expandedServer, setExpandedServer] = useState<string | null>(null);
 
   return (
@@ -276,8 +257,6 @@ export function McpSection(): ReactElement {
       <SectionTitle>{t('settings.mcpServers')}</SectionTitle>
       <p className="text-muted-foreground text-xs leading-[1.5]">{t('settings.mcpHint')}</p>
 
-      {/* 服务器列表 */}
-      {/* 加载状态区（error 优先 / loading / 空态）—— 提取为子组件，避免 McpSection 主体过长 */}
       <McpListStatus
         isError={isError}
         errorMessage={error instanceof Error ? unwrapErrorMessage(error, getErrorMessage) : null}
@@ -298,7 +277,6 @@ export function McpSection(): ReactElement {
         />
       ))}
 
-      {/* 添加服务器表单 */}
       <SectionTitle>{t('settings.mcpAdd')}</SectionTitle>
       <div className="flex flex-col gap-1.5">
         <Input
@@ -307,7 +285,6 @@ export function McpSection(): ReactElement {
           onChange={(e) => setName(e.target.value)}
           spellCheck={false}
         />
-        {/* 传输类型三态切换（stdio 本地进程 / sse / streamable-http 远程；toggle button 组模式） */}
         <p className="text-muted-foreground text-2xs">{t('settings.mcpTransport')}</p>
         <div className="border-border bg-muted/30 flex w-fit gap-0.5 rounded-md border p-0.5">
           {TRANSPORT_OPTIONS.map((option) => (

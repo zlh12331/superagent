@@ -1,13 +1,3 @@
-// src/renderer/hooks/use-remote-control.ts
-// 远程控制 hook（L3 服务端请求状态层）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - remote:getStatus 查询（设置「移动端」面板数据源）；运行中轮询活动计数
-// - remote:start / remote:stop mutation（成功后用返回快照直接写入缓存，
-//   避免"开关刚点完又显示旧状态"的竞态）
-// 说明：令牌只在服务运行期间由主进程下发，停止后快照置 null（不落渲染层缓存）
-// ──────────────────────────────────────────────────────────────
-
 import type { RemoteBindScope, RemoteStatusRes } from '@code-agent/shared/renderer';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 

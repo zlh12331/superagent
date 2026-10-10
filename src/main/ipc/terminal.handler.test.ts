@@ -1,8 +1,3 @@
-// src/main/ipc/terminal.handler.test.ts
-// terminal.handler 单测：4 个方法（fake TerminalService DI 注入）
-// + cwd 真实性校验（P2 加固：不存在的 cwd 转类型化错误，而不是裸 spawn 失败）
-// + 集成终端不被路径收口（合法 cwd = 任意真实目录，含工作区外）
-
 import { mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';

@@ -1,29 +1,4 @@
-// src/renderer/lib/motion/transitions.ts
-// 动画过渡预设 · 统一项目内动效节奏
-// ──────────────────────────────────────────────────────────────
-// 设计哲学：
-// - 借鉴 Material Design 的 duration easing 规范
-// - 与 styles/ 各域 css 的 --ease-soft / --ease-paper 变量对齐
-// - 4 档时长：micro(短促反馈) / fast(组件过渡) / normal(面板展开) / slow(全屏切换)
-//
-// 使用方式：
-//   import { smoothEaseOut, springTransition } from '@/lib/motion/transitions';
-//   <motion.div animate={...} transition={smoothEaseOut} />
-//
-// 与 tw-animate-css 的边界：
-// - tw-animate-css：负责 Radix 组件基于 data-state 的 CSS enter/exit
-// - 本文件：负责业务 JS 动画的过渡曲线预设
-// ──────────────────────────────────────────────────────────────
-
 import type { Transition } from 'motion/react';
-
-/* ──────────────────────────────────────────────────────────────
-   缓动曲线（与 styles/ 各域 css 的 --ease-soft / --ease-paper 对齐）
-   ──────────────────────────────────────────────────────────────
-   注意：类型用 [number, number, number, number] 而非 Transition['ease']，
-   因为 exactOptionalPropertyTypes 模式下 Transition['ease'] 会带上 undefined，
-   导致赋值给内联 transition.ease 时报错。
-   cubic-bezier tuple 是 motion Easing 类型的合法子集，可安全赋值。 */
 
 /**
  * 标准缓出（最常用）
@@ -47,10 +22,6 @@ export const easePaper: [number, number, number, number] = [0.25, 0.46, 0.45, 0.
  * 配合 easeOut 形成自然的进入-退出节奏
  */
 export const easeIn: [number, number, number, number] = [0.4, 0, 1, 1];
-
-/* ──────────────────────────────────────────────────────────────
-   过渡预设
-   ────────────────────────────────────────────────────────────── */
 
 /**
  * 微交互过渡（按钮点击、图标反馈）
@@ -91,10 +62,6 @@ export const slowTransition: Transition = {
   duration: 0.3,
   ease: easePaper,
 };
-
-/* ──────────────────────────────────────────────────────────────
-   弹簧预设（物理感更强，适合可拖拽元素）
-   ────────────────────────────────────────────────────────────── */
 
 /**
  * 弹簧预设（柔和）

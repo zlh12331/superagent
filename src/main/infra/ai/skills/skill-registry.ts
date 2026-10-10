@@ -1,29 +1,4 @@
-// src/main/infra/ai/skills/skill-registry.ts
-// 技能系统：可复用技能定义 + 注册表（对齐 qwen skills 语义收敛）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 技能定义（name/description/prompt 纯数据）
-// - 内置技能注册表 + 按名加载（模型经 load_skill 工具获取提示词）
-//
-// 接线与消费方（本目录无桶出口，消费者深度导入）：
-// - load_skill 工具：tools/index.ts 注册 createLoadSkillTool(skillRegistry)——
-//   模型按名加载提示词的入口；不存在时工具返回可用技能列表
-// - 启动合并加载：index.ts 用 loadFromRows(LearnSkillService.listLearned())
-//   把 skills 表合并回内存（重启保留）
-// - learn-skill-agent：list（构建现有技能名清单避重名）/ register（学习
-//   技能动态注册）/ remove（删除 + 内置回退）
-//
-// 数据归属：内置技能仅驻注册表内存——skills 表只存 learned 行
-// （唯一写入路径是 learn-skill-agent.learn），重启由 loadFromRows 合并回来。
-//
-// 借鉴声明：
-// 本模块参考 qwen-code 参考项目 packages/core/src/skills/
 // （Copyright 2025 Qwen，SPDX-License-Identifier: Apache-2.0）的
-// SkillManager + SKILL.md 语义，按我们的技术栈收敛重写：
-// - 移除 YAML frontmatter / 文件系统四级加载（强耦合不搬运）
-// - 收敛为 TypeScript 内置技能注册表（用户技能目录加载标注后置）
-// - 保留核心语义：模型通过专用工具（load_skill）按名加载技能提示词
-// ──────────────────────────────────────────────────────────────
 
 /**
  * 技能定义（纯数据）

@@ -1,7 +1,3 @@
-// src/main/utils/json-file.ts
-// 导入通道的 JSON 文件读取（大小上限 + 解析，session:import / settings:import 共用）
-// ──────────────────────────────────────────────────────────────
-
 import { readFile, stat } from 'node:fs/promises';
 import { AppError, ErrorCode } from '@code-agent/shared/main';
 

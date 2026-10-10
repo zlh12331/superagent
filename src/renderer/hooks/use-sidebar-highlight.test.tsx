@@ -1,16 +1,3 @@
-// src/renderer/hooks/use-sidebar-highlight.test.tsx
-// 侧边栏搜索高亮测试（正向 / 边界 / 异常）
-// ──────────────────────────────────────────────────────────────
-// 该副作用此前内联在 Sidebar（3 个 effect/ref，是复杂度 16 + 函数体 219 行
-// 双超限的主因），提取后首次获得独立覆盖。
-//
-// 测试要点：
-// 1. computeHighlightedIds（纯函数）：三态语义 —— null（关键词过短，不动作）
-//    / 命中集合 / 空集合（够长但无匹配，需清除高亮）
-// 2. hook：300ms 防抖后才计算；2s 后自动清除；卸载清理在途定时器
-// 3. 边界：sessions 变化不重置防抖（经 ref 读取最新值，但不打断计时）
-// ──────────────────────────────────────────────────────────────
-
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -54,7 +41,6 @@ describe('computeHighlightedIds（纯函数）', () => {
   });
 
   it('边界：关键词过短 → null（表示「不动作」，让既有高亮自然过期）', () => {
-    // 空串、纯空格、以及长度恰为 MIN-1 的输入都属「过短」
     expect(computeHighlightedIds(sessions, '')).toBeNull();
     expect(computeHighlightedIds(sessions, '   ')).toBeNull();
     const tooShort = 'a'.repeat(Math.max(0, SEARCH_HIGHLIGHT_MIN_CHARS - 1));
@@ -72,9 +58,7 @@ describe('computeHighlightedIds（纯函数）', () => {
   });
 
   it('异常：关键词含正则元字符按字面量处理（不抛错、不误匹配）', () => {
-    // 实现用 String.includes 而非正则，故 '.*' 是字面量比较、不会匹配所有
     expect(computeHighlightedIds(sessions, '.*')?.size).toBe(0);
-    // 单字符 '[' 长度不足 → null（走「过短不动作」分支而非匹配）
     expect(computeHighlightedIds(sessions, '[')).toBeNull();
   });
 });
@@ -98,7 +82,6 @@ describe('useSidebarHighlight（hook）', () => {
   it('正向：防抖窗口内不计算，到点后高亮命中项', () => {
     const { result } = renderHook(() => useSidebarHighlight('login', sessions));
 
-    // 防抖窗口内尚未计算
     expect(result.current.highlightedIds.size).toBe(0);
 
     flushDebounce();
@@ -124,7 +107,6 @@ describe('useSidebarHighlight（hook）', () => {
     flushDebounce();
     expect(result.current.highlightedIds.size).toBe(1);
 
-    // 输入退到过短：既有高亮应保留（不被清空），直到 2s 自然过期
     rerender({ q: 'l' });
     flushDebounce();
     expect(result.current.highlightedIds.size).toBe(1);
@@ -154,11 +136,9 @@ describe('useSidebarHighlight（hook）', () => {
       { initialProps: { list: sessions } },
     );
 
-    // 防抖窗口内替换 sessions 引用：不应重启动计时器
     rerender({ list: [...sessions] });
     flushDebounce();
 
-    // 到点后仍能正确计算（读到的是最新引用）
     expect([...result.current.highlightedIds]).toEqual(['a']);
   });
 
@@ -167,7 +147,6 @@ describe('useSidebarHighlight（hook）', () => {
     flushDebounce();
 
     unmount();
-    // 卸载后推进到过期时点：不应有 act 警告或异常
     act(() => {
       vi.advanceTimersByTime(SEARCH_HIGHLIGHT_EXPIRE_MS * 2);
     });

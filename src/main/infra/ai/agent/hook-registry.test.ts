@@ -1,6 +1,3 @@
-// src/main/infra/ai/hook-registry.test.ts
-// 钩子注册表单测：注册/取消/阻断/错误隔离/阻断原因
-
 import { describe, expect, it, vi } from 'vitest';
 import { HookEventName, HookRegistry } from './hook-registry';
 

@@ -1,12 +1,3 @@
-// src/main/infra/ai/agent/team-service.test.ts
-// TeamService 单测：并行委派 / 失败隔离 / leader 汇总
-//
-// 测试要点：
-// 1. runTeam 全部成功：成员结果 + succeeded/failed 计数
-// 2. 失败隔离：单成员 reject → success=false + 错误信息，不阻断其他成员
-// 3. leader 汇总：默认 general / 自定义 agent / 无输出兜底 / 失败兜底
-// 4. manager 缺省回退模块单例（未初始化抛错）
-
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SubagentManager } from './subagent-manager';
 import { TeamService } from './team-service';
@@ -88,7 +79,6 @@ describe('TeamService 批次6 缺口补全', () => {
       expect.objectContaining({ agent: 'general', error: expect.any(Error) }),
       '团队成员执行失败',
     );
-    // 第二个成员仍执行
     expect(manager.run).toHaveBeenCalledTimes(2);
   });
 
@@ -100,7 +90,6 @@ describe('TeamService 批次6 缺口补全', () => {
     const result = await service.runTeam([{ agent: 'general', task: '任务' }], '/tmp/proj', {});
 
     expect(result.leaderSummary).toBe('成员结论');
-    // 领导调用：agent 默认 general + 任务含序列化成员结果
     const leaderCall = manager.run.mock.calls[1];
     expect(leaderCall?.[0]).toBe('general');
     expect(String(leaderCall?.[1])).toContain('团队成员的执行结果');
@@ -156,7 +145,6 @@ describe('TeamService 批次6 缺口补全', () => {
     await service.runTeam([{ agent: 'general', task: '任务' }], '/tmp/proj', {});
 
     const leaderTask = String(manager.run.mock.calls[1]?.[1]);
-    // 序列化内容截断到 1500 字符
     expect(leaderTask).toContain('x'.repeat(1500));
     expect(leaderTask).not.toContain('x'.repeat(1501));
   });
@@ -174,7 +162,6 @@ describe('TeamService 批次6 缺口补全', () => {
 
   it('manager 未注入且模块单例未初始化：runTeam 抛错', async () => {
     const service = new TeamService();
-    // 本文件未调用 initSubagentManager，模块单例为 null
     await expect(
       service.runTeam([{ agent: 'general', task: '任务' }], '/tmp/proj'),
     ).rejects.toThrow(/SubagentManager 未初始化/);

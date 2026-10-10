@@ -1,7 +1,3 @@
-// src/renderer/lib/utils.ts
-// 渲染层通用工具函数
-// 设计文档 §3 目录结构：lib/utils.ts 含 cn() + 其他工具
-
 import { type ClassValue, clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -40,7 +36,6 @@ export function cn(...inputs: ClassValue[]): string {
  */
 export function basename(path: string): string {
   const stripped = path.replace(/[\\/]+$/, '');
-  // 纯分隔符（'/'、'\'）或空串：原样返回，避免剥成空串
   if (stripped === '') return path;
   const idx = Math.max(stripped.lastIndexOf('/'), stripped.lastIndexOf('\\'));
   return idx === -1 ? stripped : stripped.slice(idx + 1);

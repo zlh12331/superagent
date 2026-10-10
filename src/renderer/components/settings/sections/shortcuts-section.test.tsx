@@ -1,5 +1,3 @@
-// src/renderer/components/settings/sections/shortcuts-section.test.tsx
-// ShortcutsSection 测试：快捷键行渲染 + 冲突拒绝 + 恢复默认（36 号 C）
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -30,8 +28,6 @@ beforeEach(() => {
     configurable: true,
   });
   setSpy.mockClear();
-  // 复位快捷键到默认（store 是跨测试共享的单例；不能 spread 现值——上个测试的
-  // 自定义值会泄漏进后续用例）
   useSettingsStore.getState().updateShortcuts({ ...DEFAULT_SHORTCUTS });
 });
 
@@ -50,17 +46,14 @@ describe('ShortcutsSection', () => {
   it('正向：渲染六个录键控件 + 恢复默认按钮（默认值时禁用）+ 固定键只读区块', () => {
     render(<ShortcutsSection />);
 
-    // 6 个 ShortcutPicker + 1 个「恢复默认快捷键」按钮
     expect(screen.getAllByRole('button')).toHaveLength(7);
     expect(
       (screen.getByRole('button', { name: t('settings.shortcutResetAll') }) as HTMLButtonElement)
         .disabled,
     ).toBe(true);
-    // 固定键速查区块（与帮助对话框同源 FIXED_SHORTCUTS；只读非 button，key 串原样展示）
     expect(screen.getByText(t('settings.shortcuts.fixedTitle'))).toBeDefined();
     expect(screen.getByText('Ctrl + B')).toBeDefined();
     expect(screen.getByText('Shift + Enter')).toBeDefined();
-    // 自定义键行卡片化（SettingRow）：六行标签全量渲染
     for (const item of [
       t('palette.commandPaletteShortcut'),
       t('common.saveFileShortcut'),
@@ -85,7 +78,6 @@ describe('ShortcutsSection', () => {
   it('V1 与其他自定义键冲突 → toast 指明冲突动作，store 不写', async () => {
     render(<ShortcutsSection />);
 
-    // commandPalette 行录入 Ctrl+S（已被 saveFile 占用）
     await record({ key: 's', ctrlKey: true });
 
     expect(mocks.toastError).toHaveBeenCalledTimes(1);
@@ -104,7 +96,6 @@ describe('ShortcutsSection', () => {
   it('无冲突录入 → 写穿透（对照组）', async () => {
     render(<ShortcutsSection />);
 
-    // Ctrl+E 不与任何自定义键/固定键冲突
     await record({ key: 'e', ctrlKey: true });
 
     expect(mocks.toastError).not.toHaveBeenCalled();
@@ -133,7 +124,6 @@ describe('ShortcutsSection', () => {
     await userEvent.click(
       screen.getByRole('button', { name: t('settings.shortcutResetAll') }) as HTMLElement,
     );
-    // 危险操作先确认：confirm store（DialogHost 未挂载 → 手动放行）
     const { useConfirmDialogStore } = await import('@/stores/transient/confirm-dialog-store');
     await waitFor(() => expect(useConfirmDialogStore.getState().currentRequest).not.toBeNull());
     useConfirmDialogStore.getState()._resolve(true);

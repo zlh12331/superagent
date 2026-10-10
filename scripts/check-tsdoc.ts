@@ -1,18 +1,3 @@
-// scripts/check-tsdoc.ts
-// TSDoc 覆盖门禁（规则 18.1）：export 的函数/类/接口/类型/enum 必须有 TSDoc
-// ──────────────────────────────────────────────────────────────
-// 落实 typescript-dev-standards-ai.md 规则 18.1 的自动门禁（此前无，debt.md#d3）。
-// 判据核在 scripts/lib/tsdoc-rules.ts（@babel/parser AST，反例测试同目录）。
-//
-// 棘轮：per-file 基线（key = 文件相对路径，metric = count），只允许下降——
-// 存量已清零（2026-09-25 落地日实测 75 处并全部补写；量化首跑的 1126 系判据
-// 误判，修正 Export 节点锚定后 75 为真值，详见 debt.md#d3）；新代码即写即 100% 覆盖。
-// 基线：scripts/tsdoc-baseline.json（--update-baseline 收紧）
-//
-// 运行：pnpm check:tsdoc
-//       pnpm check:tsdoc --update-baseline   # 消化后收紧基线
-// ──────────────────────────────────────────────────────────────
-
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import {
@@ -40,8 +25,6 @@ function collectFiles(dir: string, acc: string[] = []): string[] {
     if (SKIP_DIRS.has(entry.name)) continue;
     const full = join(dir, entry.name);
     if (entry.isDirectory()) collectFiles(full, acc);
-    // 测试文件不参与（file:/// 引用等测试数据非产线文档）；index.ts 为 barrel
-    // （export * from 形态，文档责任在被指向的声明）
     else if (
       (entry.name.endsWith('.ts') || entry.name.endsWith('.tsx')) &&
       !entry.name.includes('.test.') &&
@@ -55,7 +38,6 @@ function collectFiles(dir: string, acc: string[] = []): string[] {
 
 function main(): number {
   const files = SCAN_DIRS.flatMap((d) => collectFiles(d));
-  // current：仅含超限（count > 0）条目，per-file
   const current = new Map<string, Metrics>();
   let documented = 0;
   let constMissing = 0;
@@ -72,7 +54,6 @@ function main(): number {
   const total = [...current.values()].reduce((sum, m) => sum + (m['count'] ?? 0), 0);
 
   if (wantsBaselineUpdate(process.argv.slice(2))) {
-    // 首次建立时允许无基线文件（空基线起步）
     const baseline = existsSync(BASELINE_PATH)
       ? parseBaseline(readFileSync(BASELINE_PATH, 'utf8'), METRICS)
       : {};

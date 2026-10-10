@@ -1,17 +1,9 @@
-// src/main/infra/ai/tools/terminal.tool.ts
-// terminal 工具：创建和管理交互式终端会话
-// ──────────────────────────────────────────────────────────────
-
 import { z } from 'zod';
 import { t } from '../../i18n';
 import type { ITerminalService } from '../../terminal/terminal-service';
 import { resolveWithinWorkspace } from './path-guard';
 import type { Tool, ToolContext, ToolResult } from './tool';
 
-// 扁平 object（而非 discriminatedUnion）：DeepSeek 等 OpenAI 兼容 API 对
-// 判别联合 + transform 的 JSON Schema 序列化产出 `type: null`，整请求 400
-//（实测错误：Invalid schema for function 'terminal': ... got 'type: null'）。
-// 各 action 的必填约束由 execute 内运行时守卫兜底（对 LLM 生成宽松、对执行严格）。
 const TerminalActionSchema = z.object({
   action: z.enum(['create', 'input', 'read', 'clear', 'resize', 'kill']).describe('操作类型'),
   command: z.string().optional().describe('启动命令（省略时打开默认 shell；仅 create 使用）'),
@@ -53,7 +45,6 @@ export function createTerminalTool(terminalService: ITerminalService): Tool<Term
     permission: 'ask',
     category: 'exec',
     execute: async (input: TerminalInput, ctx: ToolContext): Promise<ToolResult> => {
-      // 无头场景（IM 桥接等）拒绝：终端输出推送依赖桌面窗口
       if (ctx.webContents === undefined) {
         return {
           title: t('tools.terminal.unavailable'),
@@ -62,7 +53,6 @@ export function createTerminalTool(terminalService: ITerminalService): Tool<Term
       }
       switch (input.action) {
         case 'create': {
-          // realTarget：终端进程落点用真实路径（TOCTOU，debt.md#d1）；展示/metadata 保持输入形态
           const { resolved, realTarget } =
             input.cwd !== undefined
               ? resolveWithinWorkspace(input.cwd, ctx.workingDir)
@@ -73,7 +63,6 @@ export function createTerminalTool(terminalService: ITerminalService): Tool<Term
             env: undefined,
             cols: input.cols ?? 80,
             rows: input.rows ?? 24,
-            // 守卫后已收窄为非空，直接传递
             webContents: ctx.webContents,
           });
           const title = input.command ?? 'shell';

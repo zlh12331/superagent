@@ -1,11 +1,3 @@
-// src/main/infra/ai/skills/skill-registry.test.ts
-// 技能注册表单测：内置技能列表/加载/注册
-//
-// 接线背景：load_skill 工具已在 tools/index.ts 接线（createLoadSkillTool，
-// 模型按名加载提示词）；启动合并加载（loadFromRows）与 learn-skill-agent
-// 的注册/删除走真实单例。本文件守住内置技能集（≥4 个）、覆盖语义与
-// remove 的内置回退语义（批次 13 缺口节）。
-
 import { describe, expect, it } from 'vitest';
 import { createLoadSkillTool } from '../tools/load-skill.tool';
 import type { ToolContext } from '../tools/tool';
@@ -17,7 +9,6 @@ describe('SkillRegistry', () => {
     const skills = registry.list();
     expect(skills.length).toBeGreaterThanOrEqual(4);
     expect(skills[0]?.name).toBe('code_review');
-    // 按名排序
     const names = skills.map((s) => s.name);
     expect(names).toEqual([...names].sort());
   });
@@ -75,13 +66,11 @@ describe('SkillRegistry 批次13 缺口补全', () => {
 
   it('remove 内置技能：删除后回退内置定义', () => {
     const registry = new SkillRegistry();
-    // 内置技能存在（BUILTIN_SKILLS 有定义）
     const builtinName = registry.list()[0]?.name;
     expect(builtinName).toBeDefined();
     if (builtinName === undefined) return;
     const removed = registry.remove(builtinName);
     expect(removed).toBe(true);
-    // 回退内置定义：仍然可查询
     expect(registry.load(builtinName)).toBeDefined();
   });
 });

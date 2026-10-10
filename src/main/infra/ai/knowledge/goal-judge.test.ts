@@ -1,10 +1,3 @@
-// src/main/infra/ai/knowledge/goal-judge.test.ts
-// 目标判定器单测：LLM 判定映射 + 失败默认 not met（安全）
-//
-// 接线背景：唯一生产调用方 = goal-service.evaluate（TURN_END 后判定）。
-// 本组用例守住判定映射（met/impossible 语义）与失败安全（不抛错给调用方、
-// 不误判达成）。
-
 import { describe, expect, it, vi } from 'vitest';
 import type { LlmClient } from '../llm-client';
 import { GoalJudge } from './goal-judge';
@@ -48,7 +41,6 @@ describe('GoalJudge', () => {
     const result = await new GoalJudge(failing).judge('x', 't');
     expect(result.met).toBe(false);
     expect(result.impossible).toBe(false);
-    // 不抛错给调用方
   });
 
   it('impossible 缺省（undefined）→ 归一为 false', async () => {

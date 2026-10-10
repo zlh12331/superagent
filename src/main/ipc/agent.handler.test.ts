@@ -1,6 +1,3 @@
-// src/main/ipc/agent.handler.test.ts
-// agent.handler 单测：run/stop（fake AgentService DI 注入）
-
 import { type AppError, ErrorCode, MAX_USER_INPUT_HARD_CAP } from '@code-agent/shared/main';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -71,7 +68,6 @@ describe('agent.handler', () => {
       },
       ctx as never,
     );
-    // emitEvent → webContents.send(channel, payload)；channel 契约见 meta.ts
     const startCall = ctx.sender.send.mock.calls.find((c) => c[0] === 'agent:stream:start');
     expect(startCall).toBeDefined();
     expect(startCall?.[1]).toEqual({ sessionId: 'session-abc' });

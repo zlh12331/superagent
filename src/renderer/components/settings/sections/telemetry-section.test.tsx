@@ -1,5 +1,3 @@
-// src/renderer/components/settings/sections/telemetry-section.test.tsx
-// TelemetrySection 测试：三档遥测渲染 + 浏览器模式降级
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react';
 import type { ReactElement } from 'react';
@@ -40,7 +38,6 @@ describe('TelemetrySection', () => {
     (window as unknown as { api: undefined }).api = undefined;
     renderWithQuery(<TelemetrySection />);
 
-    // 无桥时查询回落 off，UI 仍完整渲染
     expect(screen.getByText(t('settings.telOff'))).toBeDefined();
   });
 });

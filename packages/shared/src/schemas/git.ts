@@ -1,26 +1,4 @@
-// packages/shared/src/schemas/git.ts
-// Git 域 zod schema 单一真源
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 定义 git:status / git:diff 请求-响应 zod schema
-// - 供主进程 GitService 校验入参，封装 git CLI 子进程调用
-//
-// 设计：
-// - GitService 通过 child_process.spawn('git', [...args]) 调用 git CLI
-// - path 必须为绝对路径，GitService 内部校验为 git 仓库根目录
-// - status 返回结构化数据（非 git status 原始文本），便于渲染层消费
-// - diff 返回 unified diff 原始文本 + 结构化统计（additions/deletions/filesChanged）
-// ──────────────────────────────────────────────────────────────
-
 import { z } from 'zod';
-
-// ── Git 引用/远程安全校验（P0 收口共享工具） ──────────────────
-//
-// 背景：git remote/refspec/ref 曾为自由字符串透传。git 对位置参数处的
-// `--flag` 按选项解析（option implantation），且 `ext::<cmd>` 远程传输会
-// 由 git 直接运行本地命令——IPC 边界与 agent 工具层都必须拦截。
-// 本组校验器同时被 zod schema（IPC 边界）与 GitService（服务层 choke
-// point，覆盖 agent git 工具的直连调用）消费。
 
 /** Git 引用段合法字符集（分支/tag/sha 通用）：字母数字与 . _ / - ~ ^ * @ { } */
 const GIT_REF_SEGMENT = /^[A-Za-z0-9._~^*@{}/-]+$/;
@@ -63,13 +41,11 @@ export function isSafeGitRemote(value: string): boolean {
   if (value === '' || value.startsWith('-') || value.includes('::')) {
     return false;
   }
-  // 控制字符检测不用 \s（空格是合法路径成分），仅拒换行/NUL
   return !/[\n\r\0]/.test(value);
 }
 
 /** git:status 入参 zod schema */
 export const GitStatusReqSchema = z.object({
-  // Git 仓库路径（绝对路径，可为仓库根或子目录，GitService 内部解析根目录）
   path: z.string().min(1),
 });
 
@@ -89,9 +65,7 @@ export const GitStatusReqSchema = z.object({
 export const GitFileStatusSchema = z.object({
   path: z.string(),
   status: z.enum(['modified', 'added', 'deleted', 'renamed', 'untracked', 'conflicted']),
-  // 是否已暂存（git add 过）
   staged: z.boolean(),
-  // rename 时的原路径（仅 status='renamed' 时有值）
   oldPath: z
     .string()
     .optional()
@@ -132,15 +106,11 @@ export const GitStatusResSchema = z.object({
 /** git:diff 入参 zod schema */
 export const GitDiffReqSchema = z.object({
   path: z.string().min(1),
-  // 对比的 ref（默认 'HEAD'，可为分支名、commit hash、'HEAD~1' 等）
-  // 安全：拒绝 `--` 开头的选项形参数（git diff --output=<file> 可任意写文件）
   ref: z
     .string()
     .default('HEAD')
     .refine(isSafeGitRefValue, 'ref 含非法字符或选项形参数（- 开头 / 空白）'),
-  // 是否只看暂存区（git diff --cached）
   staged: z.boolean().default(false),
-  // 指定文件路径（可选，省略时查看整个仓库 diff）
   filePath: z
     .string()
     .optional()
@@ -172,8 +142,6 @@ export const GitDiffResSchema = z.object({
   filesChanged: z.number().int().nonnegative(),
 });
 
-// ── Git 写操作（add / commit / push）──────────────────────
-
 /**
  * git:add 入参 zod schema
  *
@@ -184,10 +152,7 @@ export const GitDiffResSchema = z.object({
  * paths 内若含相对路径，则相对于 path 解析。
  */
 export const GitAddReqSchema = z.object({
-  // 仓库路径（绝对路径，可为仓库根或子目录）
   path: z.string().min(1),
-  // 要暂存的路径列表（相对 path 或绝对路径）
-  // 省略或空数组时执行 git add -A（暂存所有改动）
   paths: z.array(z.string().min(1)).default([]).describe('要暂存的路径列表（省略时暂存所有改动）'),
 });
 
@@ -219,7 +184,6 @@ export const GitAddResSchema = z.object({
 export const GitCommitReqSchema = z.object({
   path: z.string().min(1),
   message: z.string().min(1).describe('提交信息（支持多行，用 \\n 分隔）'),
-  // 是否追加到上一次提交（amend），默认 false
   amend: z.boolean().default(false).describe('是否追加到上一次提交（git commit --amend）'),
 });
 
@@ -266,24 +230,17 @@ export const GitCommitResSchema = z.object({
  */
 export const GitPushReqSchema = z.object({
   path: z.string().min(1),
-  // 远程名（默认 'origin'）
-  // 安全：拒绝 `::` 传输语法（ext::<cmd> 会让 git 直接运行本地命令）
-  // 与 `-` 开头的选项形参数；远程名/URL/本地路径均合法
   remote: z
     .string()
     .default('origin')
     .refine(isSafeGitRemote, 'remote 含非法形态（:: 传输语法 / - 开头选项 / 空串 / 换行）')
     .describe('远程名，默认 origin'),
-  // 引用规格（默认当前分支，可为 'master'、'feature/x' 等）
-  // 安全：拒绝选项形参数与空白（位置参数处的 --flag 会被 git 按选项解析）
   refspec: z
     .string()
     .default('')
     .refine(isSafeGitRefValue, 'refspec 含非法字符或选项形参数（- 开头 / 空白 / 多个冒号）')
     .describe('引用规格（省略时推送当前分支到同名远程分支）'),
-  // 是否设置上游（首次推送时使用），默认 false
   setUpstream: z.boolean().default(false).describe('是否设置上游（git push -u）'),
-  // 是否使用 --force-with-lease（更安全的强制推送），默认 false
   force: z.boolean().default(false).describe('是否使用 --force-with-lease 强制推送'),
 });
 

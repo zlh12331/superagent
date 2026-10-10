@@ -1,16 +1,3 @@
-// src/main/infra/file/tree-ignore.ts
-// 文件树忽略规则：用户配置的名称模式过滤（file:list 每次调用现读设置，改后即生效）
-// ──────────────────────────────────────────────────────────────
-// 职责（纯函数，不依赖 DB——设置读取在 handler 层薄封装）：
-// - matchIgnorePattern：名称级匹配（精确 / * 通配任意非分隔符序列 / ? 单字符）
-// - normalizeTreeIgnorePatterns：用户配置归一化（trim / 去空 / 限长限量）
-//
-// 设计原则：
-// - 匹配作用于 basename（用户心智模型：node_modules / dist / *.log），不做路径 glob
-// - 内置基线 node_modules（与 watch ignored 对齐；此前 list 不过滤导致大目录卡顿）
-// - 零依赖自写通配转换（* → [^\\]*，? → 单字符；Windows/POSIX 分隔符均不跨）
-// ──────────────────────────────────────────────────────────────
-
 /** 内置忽略基线（始终生效，叠加在用户配置之上） */
 export const DEFAULT_TREE_IGNORE_PATTERNS: readonly string[] = ['node_modules'];
 
@@ -50,7 +37,6 @@ function wildcardToRegExp(pattern: string): RegExp {
     } else if (char === '?') {
       source += '[^\\\\/]';
     } else {
-      // 其余字符按字面量转义
       source += char.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     }
   }

@@ -1,19 +1,4 @@
-// src/main/infra/im/adapters/wecom-stream.ts
-// 企业微信长连接接收器：官方 aibot SDK WSClient（对齐 qwen WeComAdapter 语义收敛）
-// ──────────────────────────────────────────────────────────────
-// 设计（参考 qwen channels/wecom 架构）：
-// - SDK 管理认证/心跳/指数退避重连（生产级连接层）
-// - 消息事件：'message' 帧 → parseWecomEvent（纯函数可测）→ 入站消息
-// - 文本提取：text.content → voice.content → mixed 图文混排拼接 → 媒体占位
-// - 群聊 chatid 优先；单聊 chatid 缺省 senderId
-//
-// 借鉴声明：
-// 本模块参考 qwen-code 参考项目 packages/channels/wecom/src/WeComAdapter.ts
 // （Copyright 2026 Qwen Team，SPDX-License-Identifier: Apache-2.0）的
-// extractBody/extractText 消息解析语义，按我们的技术栈收敛重写：
-// - 移除媒体下载/去重窗口/断线回退调度（SDK 已内置重连；去重由桥接层负责）
-// - 保留核心：payload 归一化 + 多类型文本提取
-// ──────────────────────────────────────────────────────────────
 
 import { WSClient } from '@wecom/aibot-node-sdk';
 import { logger } from '../../../utils/logger';
@@ -106,7 +91,6 @@ function extractWecomText(body: RecordLike): string {
   if (voiceText.length > 0) {
     return voiceText;
   }
-  // 媒体占位（对齐 qwen：agent 可感知媒体消息存在）
   if (msgType === 'image') {
     return '(image)';
   }
@@ -203,9 +187,7 @@ export class WecomStreamReceiver {
     if (this.client !== null) {
       try {
         this.client.disconnect();
-      } catch {
-        // 关闭失败不阻断
-      }
+      } catch {}
       this.client = null;
     }
     this.opened = false;

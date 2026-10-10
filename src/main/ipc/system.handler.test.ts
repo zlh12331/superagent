@@ -1,8 +1,3 @@
-// src/main/ipc/system.handler.test.ts
-// system.handler 单测：运行时状态 + 日志读取（真实文件 IO）
-//
-// 测试维度：getStatus 字段完整性 / read 正向与异常
-
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -34,13 +29,10 @@ describe('system.handler', () => {
     rmSync(tempDir, { recursive: true, force: true });
   });
 
-  // 每个用例前清理日志文件（保证"文件不存在"用例的隔离性）
   beforeEach(() => {
     try {
       rmSync(join(tempDir, 'main.log'), { force: true });
-    } catch {
-      // 文件不存在则忽略
-    }
+    } catch {}
   });
 
   describe('getStatus', () => {
@@ -70,7 +62,6 @@ describe('system.handler', () => {
     });
 
     it('lines 上限截断：超过 MAX_LINES 标记 truncated', async () => {
-      // 需要文件存在（文件不存在走 catch 返回 truncated=false）
       writeFileSync(join(tempDir, 'main.log'), '[info] x\n', 'utf8');
       const result = await logsHandlers.read({ lines: 9999 }, {} as never);
       expect(result.truncated).toBe(true);
@@ -86,7 +77,6 @@ describe('system.handler', () => {
 
     it('文件不存在：返回空结果不抛错', async () => {
       const result = await logsHandlers.read({ lines: 10 }, {} as never);
-      // 文件不存在时 readTailLines 抛错被捕获，返回空数组
       expect(Array.isArray(result.lines)).toBe(true);
       expect(result.total).toBe(0);
     });

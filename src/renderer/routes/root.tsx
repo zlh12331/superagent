@@ -1,15 +1,3 @@
-// src/renderer/routes/root.tsx
-// 根布局路由
-// 设计文档 §3 路由结构 + §4 AppShell 布局
-//
-// 职责：
-// - 挂载 AppShell（Topbar + Sidebar + StatusBar）
-// - 通过 <Outlet /> 渲染子路由内容
-// - 提供 errorElement 处理子路由抛出的错误
-//
-// 注意：root 不使用 lazy 加载（启动时必须立即渲染，避免首屏白屏）。
-// 错误边界使用简单的回退 UI，避免 React Router 默认错误堆栈。
-
 import type { ReactElement } from 'react';
 import { isRouteErrorResponse, Outlet, useRouteError } from 'react-router';
 
@@ -55,7 +43,6 @@ export function RootHydrateFallback(): ReactElement {
  * - 其他错误：显示错误消息与"重试"按钮
  */
 export function RootErrorBoundary(): ReactElement {
-  // 本地化文案
   const { t } = useTranslation();
   const error = useRouteError();
 

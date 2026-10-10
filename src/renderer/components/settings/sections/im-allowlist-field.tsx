@@ -1,14 +1,3 @@
-// im-allowlist-field.tsx（自 im-channels-section 拆分）
-// 设置对话框 · IM 群聊执行白名单（2026-09-08 安全修复）
-// ──────────────────────────────────────────────
-// 背景：IM 入站此前只检查审批模式、不校验发送者，任何能给机器人发消息的人
-// （群聊任意成员）都能驱动 agent 执行工具。现策略：私聊默认放行，群聊必须
-// 在此显式登记 `渠道:会话ID` 才执行（主进程 im-allowlist-pref.ts 读同一 key）。
-//
-// 存储：复用 settings 通道（key = 'im.allowedGroups'），不新增 IPC——
-// 与设置体系同源，主进程直接读 SQLite。
-// ──────────────────────────────────────────────
-
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type ReactElement, useState } from 'react';
 import { toast } from 'sonner';
@@ -42,7 +31,6 @@ function parseGroups(text: string): readonly string[] {
 export function ImAllowlistField(): ReactElement {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
-  // null 表示「跟随服务端值」（用户尚未编辑）；编辑后为本地草稿
   const [draft, setDraft] = useState<string | null>(null);
   const {
     data: allowed,
@@ -66,9 +54,7 @@ export function ImAllowlistField(): ReactElement {
     },
   });
 
-  // 编辑器文本（单次求值，供 value 与保存共用，避免两处漂移）
   const text = draft ?? (allowed ?? []).join('\n');
-  // 服务端值未就绪/读取失败时禁止写入（防覆盖）
   const saveDisabled = saveMutation.isPending || isPending || isError;
 
   return (

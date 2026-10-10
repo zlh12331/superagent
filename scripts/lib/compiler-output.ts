@@ -1,11 +1,3 @@
-// scripts/lib/compiler-output.ts
-// React Compiler 产物调用点统计核（纯函数层，供 check-compiler.ts CLI 调用）
-// ──────────────────────────────────────────────────────────────
-// 从 check-compiler.ts 抽出的原因：判据此前内联零测试（外部审计点名）。
-// 反例 fixture 测试见 compiler-output.test.ts——「编译器真失效」（0 调用点）、
-// vendor 定义混入（假阳性剔除）、「大面积失效」（低于下限）三态都有断言。
-// ──────────────────────────────────────────────────────────────
-
 /** interop 函数名（下划线，来自模块路径 react-compiler-runtime.production 的映射；
  * 连字符的 'compiler-runtime' 只是 vendor 内路径字符串——用它过滤会把应用 chunk 全漏掉） */
 const INTEROP_NAME = 'require_compiler_runtime';

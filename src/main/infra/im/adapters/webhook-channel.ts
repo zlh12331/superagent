@@ -1,18 +1,3 @@
-// src/main/infra/im/adapters/webhook-channel.ts
-// Webhook 渠道适配器基类：群机器人 webhook 发送（钉钉/企业微信/飞书 共用）
-// ──────────────────────────────────────────────────────────────
-// 设计：
-// - token 格式：webhookUrl（钉钉加签时 URL#secret）
-// - connect = 配置就绪（webhook 型无握手；真实发送时才验证 URL）
-// - sendMessage：构造渠道专属 payload → HTTP POST（超时 + 错误映射 + 重试）
-// - 入站：webhook 型群机器人无接收通道（接收需公网回调/长连接，显式标注）
-//
-// 实现约定（对齐 IChannelAdapter 契约）：
-// - 失败分类：URL 缺失 → IM_CHANNEL_NOT_CONFIGURED；格式非法 → IM_CHANNEL_INVALID_TOKEN；
-//   网络/非 2xx → IM_CHANNEL_REQUEST_FAILED
-// - 发送失败重试 2 次退避（对齐渠道接口注释约定）
-// ──────────────────────────────────────────────────────────────
-
 import { AppError, type ChannelKind, ErrorCode } from '@code-agent/shared/main';
 import { logger } from '../../../utils/logger';
 import { proxiedFetch } from '../../network/proxied-fetch';
@@ -127,14 +112,10 @@ export abstract class WebhookChannelAdapter implements IChannelAdapter {
   }
 
   /** 连接后钩子（长连接接收渠道覆写；默认 no-op） */
-  protected async afterConnect(): Promise<void> {
-    // no-op
-  }
+  protected async afterConnect(): Promise<void> {}
 
   /** 断开后钩子（长连接接收渠道覆写；默认 no-op） */
-  protected async afterDisconnect(): Promise<void> {
-    // no-op
-  }
+  protected async afterDisconnect(): Promise<void> {}
 
   /** 加签 secret（子类读取用） */
   protected getSecret(): string | null {
@@ -158,7 +139,6 @@ function parseWebhookToken(
     const rest = trimmed.slice(hashIndex + 1);
     secret = rest.length > 0 ? rest : null;
   }
-  // URL 合法性校验（http/https）
   try {
     const parsed = new URL(url);
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
@@ -175,7 +155,6 @@ async function postWebhook(url: string, payload: unknown): Promise<void> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort('timeout'), WEBHOOK_TIMEOUT_MS);
   try {
-    // 34 号：经 proxiedFetch（fixed 模式走代理；此前无缝直调全局 fetch）
     const response = await (proxiedFetch as unknown as typeof fetch)(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -185,7 +164,6 @@ async function postWebhook(url: string, payload: unknown): Promise<void> {
     if (!response.ok) {
       throw new Error(`HTTP ${response.status} ${response.statusText}`);
     }
-    // 渠道业务错误码检查（钉钉/企业微信/飞书均返回 JSON 状态）
     const text = await response.text();
     if (text.length > 0) {
       try {
@@ -195,7 +173,6 @@ async function postWebhook(url: string, payload: unknown): Promise<void> {
           throw new Error(`渠道错误 ${errorCode}：${body.errmsg ?? body.msg ?? '未知'}`);
         }
       } catch (err: unknown) {
-        // 非 JSON 或渠道错误：JSON 解析失败直接抛渠道错误信息
         if (err instanceof AppError) {
           throw err;
         }
@@ -222,7 +199,6 @@ export async function dingtalkSign(secret: string, timestamp: number): Promise<s
   const signString = `${timestamp}\n${secret}`;
   const key = new TextEncoder().encode(secret);
   const data = new TextEncoder().encode(signString);
-  // Node 20+ 内置 WebCrypto（零依赖）
   return cryptoSign(key, data);
 }
 

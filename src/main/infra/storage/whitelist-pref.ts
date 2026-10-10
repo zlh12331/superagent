@@ -1,16 +1,3 @@
-// src/main/infra/storage/whitelist-pref.ts
-// 命令白名单持久化（用户偏好，JSON 文件）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 读写命令白名单条目（toolName + pattern，跨会话持久）
-// - 存储位置：userData/whitelist.json（与 approval-pref / telemetry-pref 同模式）
-// - 读取失败回退空列表（白名单为空 = 全部走审批流）
-//
-// 与「记住决策」的区别：
-// - 记住决策：permission-service 内存 Map，5 分钟 TTL（会话级）
-// - 白名单：本文件持久化，应用重启仍生效（跨会话）
-// ──────────────────────────────────────────────────────────────
-
 import { mkdirSync, readFileSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -39,9 +26,7 @@ export function readWhitelistSync(): WhitelistEntry[] {
           typeof (e as WhitelistEntry).pattern === 'string',
       );
     }
-  } catch {
-    // 文件不存在 / 解析失败：回退空列表
-  }
+  } catch {}
   return [];
 }
 

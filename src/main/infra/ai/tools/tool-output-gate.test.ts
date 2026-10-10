@@ -1,14 +1,3 @@
-// src/main/infra/ai/tools/tool-output-gate.test.ts
-// 工具输出闸门单测（clampToolOutput / toolOutputLimitFor / clampToolPartOutput）
-//
-// 背景（2026-10-08 窗口感知化）：闸门此前是全局固定 200KB——对 128K+ 窗口
-// 成立（原注释的隐含前提），但项目支持的模型窗口跨 32K ~ 1M：32K 窗口的
-// 本地模型若按 200KB 放行，单次输出即占满全部上下文。现按模型窗口收敛为
-// min(绝对上限, 窗口比例上限)，本文件锁定两端行为与向后兼容语义。
-//
-// 注：本文件是该闸门的第一份测试（此前零覆盖——原实现仅被各工具的间接用例
-// 带到，边界行为未被锁定）。
-
 import { describe, expect, it } from 'vitest';
 import { clampToolOutput, clampToolPartOutput, toolOutputLimitFor } from './tool-executor';
 
@@ -25,17 +14,14 @@ describe('toolOutputLimitFor（窗口 → 字节上限）', () => {
   });
 
   it('大窗口（1M，DeepSeek v4）：仍是绝对上限 200KB（比例上限更高，取小者）', () => {
-    // 1_000_000 × 3 × 0.25 = 750_000 > 200KB → 取 200KB
     expect(toolOutputLimitFor(1_000_000)).toBe(200 * 1024);
   });
 
   it('128K 窗口（GPT-4o）：仍是绝对上限（128_000 × 0.75 = 96KB < 200KB → 取 96KB）', () => {
-    // 修复前：200KB 占该窗口 39%（约 5 万 token / 128K）——现收紧到 1/4
     expect(toolOutputLimitFor(128_000)).toBe(Math.floor(128_000 * 3 * 0.25));
   });
 
   it('32K 窗口（本地 ollama）：收紧到 24KB——修复"单次输出占满上下文"', () => {
-    // 修复前：200KB ≈ 6.7 万 token > 32K 窗口，单次工具输出即可撑爆
     const limit = toolOutputLimitFor(32_000);
     expect(limit).toBe(Math.floor(32_000 * 3 * 0.25));
     expect(limit).toBeLessThan(200 * 1024);
@@ -67,26 +53,23 @@ describe('clampToolOutput（按字节截断 + 标注）', () => {
     expect(clamped.length).toBeLessThan(text.length);
     expect(clamped).toContain('已截断');
     expect(clamped).toContain('共 300KB');
-    expect(clamped).toContain('200KB'); // 默认上限（无窗口信息）
+    expect(clamped).toContain('200KB');
   });
 
   it('窗口感知：同一份输出在 32K 窗口下被截得更短，标注含实际生效上限', () => {
     const text = textOfBytes(100 * 1024);
-    const wide = clampToolOutput(text, 1_000_000); // 上限 200KB → 不截断
-    const narrow = clampToolOutput(text, 32_000); // 上限 24000 字节 → 截断
+    const wide = clampToolOutput(text, 1_000_000);
+    const narrow = clampToolOutput(text, 32_000);
     expect(wide).toBe(text);
     expect(narrow).toContain('已截断');
-    // 标注按 KB 取整：24000 字节 → 23KB
     expect(narrow).toContain('23KB');
   });
 
   it('多字节安全：UTF-8 字符不被劈开（无替换字符）', () => {
-    // 每字符 3 字节的中文：在任意切点都不应产出 U+FFFD
-    const text = '中'.repeat(100_000); // 300KB
+    const text = '中'.repeat(100_000);
     const clamped = clampToolOutput(text, 32_000);
     const head = clamped.split('\n\n…')[0] as string;
     expect(head).not.toContain('\uFFFD');
-    // 头部字节数不超过上限
     expect(Buffer.byteLength(head, 'utf8')).toBeLessThanOrEqual(32_000 * 3 * 0.25 + 3);
   });
 
@@ -118,7 +101,7 @@ describe('clampToolPartOutput（SDK 流式 part 通道）', () => {
     };
     const clamped = clampToolPartOutput(part, 32_000) as { output: string };
     expect(clamped.output).toContain('已截断');
-    expect(clamped.output).toContain('23KB'); // 24000 字节 → 23KB
+    expect(clamped.output).toContain('23KB');
   });
 
   it('tool-output-error：同样被截断（错误通道也是输出通道）', () => {

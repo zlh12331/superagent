@@ -1,14 +1,3 @@
-// src/renderer/lib/diff/diff-rows.ts
-// diff 渲染行模型桥（自研 DiffRowsTable 的数据装配层）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - rowsFromTextPair：oldText/newText 原始文本对（审批预览的 write_file /
-//   edit_file 输入形态）→ 编号渲染行。复用 line-diff 的 dmp 行级对齐，
-//   行号按行类型推进（与 unified-diff 的 hunk 行号推算同构）。
-// - computeWordSegments：行内词级差异片段（dmp diff_main 直跑），
-//   供 wordDiff 模式在配对的 del/add 行内高亮变更词。
-// ──────────────────────────────────────────────────────────────
-
 import { DIFF_DELETE, DIFF_INSERT, type Diff, diff_match_patch } from 'diff-match-patch';
 
 import { computeLineDiff, type DiffLine } from './line-diff';

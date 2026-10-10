@@ -1,21 +1,4 @@
-// src/main/infra/ai/tools/command-classifier.ts
-// AUTO 模式命令安全分类器（LLM 判定，fail-closed）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - auto 模式下"非只读非破坏性"的命令 → LLM 判定安全性
-// - safe → 自动放行；dangerous / unknown → 降级 ask
-// - fail-closed：任何失败（API 错误/超时/schema 失败）→ unknown（必拦）
-//
-// 借鉴声明：
-// 本模块参考 qwen-code 参考项目 packages/core/src/permissions/classifier.ts
 // （Copyright 2025 Qwen Team，SPDX-License-Identifier: Apache-2.0）的两阶段
-// 分类流程与 fail-closed 语义，按我们的技术栈收敛重写：
-// - 移除 @google/genai / Config / classifier-transcript 依赖（强耦合不搬运）
-// - 收敛为单阶段：generateJson 结构化输出（{ safe, reason }），
-//   语义对齐 qwen Stage-1 的 shouldBlock 快速判定
-// - 超时对齐 qwen STAGE1_TIMEOUT_MS=10s（我们由 LlmClient 请求超时兜底）
-// - 会话内缓存：同命令重复判定不重复调用（qwen 无缓存，我们为防每轮重复调用增加）
-// ──────────────────────────────────────────────────────────────
 
 import { z } from 'zod';
 import { logger } from '../../../utils/logger';
@@ -74,7 +57,6 @@ export class CommandClassifier {
     userPrompt?: string,
     signal?: AbortSignal,
   ): Promise<CommandClassification> {
-    // 缓存命中（含 previous dangerous 判定——拦截结果也缓存，防绕过后重判）
     const cached = this.cache.get(command);
     if (cached !== undefined) {
       return cached;
@@ -93,22 +75,17 @@ export class CommandClassifier {
         ].join('\n'),
         system: CLASSIFIER_SYSTEM_PROMPT,
         maxAttempts: 1,
-        // 超时由 LlmClient 模型级配置兜底；调用方可传 AbortSignal 提前中断
         ...(signal !== undefined ? { signal } : {}),
       });
-      // 结构化输出失败（schema 不符）会被 generateJson 抛错 → fail-closed
       result = {
         verdict: output.safe ? 'safe' : 'dangerous',
         reason: output.reason,
       };
     } catch (err: unknown) {
-      // fail-closed：任何失败（API 错误/超时/schema 失败）→ unknown（必拦）
       logger.warn({ command, error: err }, '命令分类失败（fail-closed：降级拦截）');
       result = { verdict: 'unknown', reason: '分类器不可用，降级人工确认' };
     }
 
-    // 缓存写入：达限时淘汰最旧条目（Map 迭代序 first 为最旧，逐出至阈值以下），
-    // 保留较新判定——此前误写为整体 clear()，会把仍高频复用的判定一并丢掉重判
     while (this.cache.size >= CommandClassifier.CACHE_LIMIT) {
       const oldest = this.cache.keys().next().value;
       if (oldest === undefined) {

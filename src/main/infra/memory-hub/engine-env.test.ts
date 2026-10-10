@@ -1,10 +1,3 @@
-// src/main/infra/memory-hub/engine-env.test.ts
-// 引擎子进程环境构造单测：锁定 tsx 注入路径（NODE_OPTIONS）不被改回 execArgv
-//
-// 背景：2026-09-14 实测 Electron utilityProcess 不透传 execArgv 的 --import，
-// 导致 tsx 未加载、子进程 ~150ms 退出码 1、引擎静默降级为空实现（见 engine-env.ts 头注释）。
-// 本测试锁住"useTsx 时必须经 NODE_OPTIONS 注入 tsx"这一契约。
-
 import { describe, expect, it } from 'vitest';
 import { buildEngineEnv, TSX_NODE_OPTIONS_VALUE } from './engine-env';
 

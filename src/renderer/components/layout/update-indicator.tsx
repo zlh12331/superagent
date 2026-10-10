@@ -1,14 +1,3 @@
-// src/renderer/components/layout/update-indicator.tsx
-// 顶栏更新常驻指示（静默可见性：下载中/就绪时可见但不打扰）
-// ──────────────────────────────────────────────────────────────
-// 设计（docs/design/27-auto-update-spec.md §6.4）：
-// - 只在"下载中"与"就绪"两态出现，其余隐藏（启动时不闪图标）
-// - 下载中：旋转图标 + 百分比；点击 → 打开设置并直达"关于"面板
-// - 就绪：强调色圆点 + 操作菜单（重启并安装 / 稍后）；"稍后"只在本会话隐藏该
-//   版本的提示，出现更高版本后自动恢复（按版本号记忆，本地瞬态，不入库）
-// - 提示文案走 aria-label/title（与顶栏既有图标按钮同惯例）
-// ──────────────────────────────────────────────────────────────
-
 import { Loader2, PackageCheck } from 'lucide-react';
 import { type ReactElement, useState } from 'react';
 
@@ -37,12 +26,9 @@ import { useUiStore } from '@/stores/transient/ui-store';
  */
 export function UpdateIndicator(): ReactElement | null {
   const { state } = useUpdate();
-  // 重启并安装（有回合在跑时先确认；与关于面板共用同一语义）
   const installUpdate = useInstallUpdate();
   const openSettings = useUiStore((s) => s.openSettings);
   const { t } = useTranslation();
-  // 持久跳过（settings.update.skippedVersion，跨会话）与本次会话"稍后"
-  // （local 瞬态，按版本号记忆）两个来源都让徽标静默
   const skippedVersion = useSettingsStore((s) => s.update.skippedVersion);
   const setUpdate = useSettingsStore((s) => s.setUpdate);
   const [dismissedVersion, setDismissedVersion] = useState<string | null>(null);

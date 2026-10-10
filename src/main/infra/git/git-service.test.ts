@@ -1,7 +1,3 @@
-// src/main/infra/git/git-service.test.ts
-// GitService 单测（simple-git 实现）· 真实 git 仓库
-// 无业务 mock：每次用例在临时目录 init 真实 git 仓库驱动。
-
 import { spawnSync } from 'node:child_process';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -41,8 +37,6 @@ describe('GitService（真实 git 仓库）', () => {
 
   afterEach(async () => {
     resetGitService();
-    // Windows 上 git 子进程退出后目录句柄延迟释放，rm 立即执行会 EBUSY（push 用例最易触发）；
-    // 用 fs.rm 原生重试（maxRetries/retryDelay）兜底，避免环境性清理竞态导致测试失败
     await rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   });
 
@@ -127,15 +121,12 @@ describe('GitService（真实 git 仓库）', () => {
   });
 
   gitIt('push：首推建立基准，二次推送可计算 pushedCount', async () => {
-    // 真实 git 操作在全量并发下可能 >5s（init + bare 远程 + 2 次 push），放宽超时
     await initRepo();
-    // 创建 bare 远程仓库
     const remoteDir = await mkdtemp(join(tmpdir(), 'git-remote-test-'));
     try {
       spawnGit(['init', '--bare'], remoteDir);
       spawnGit(['remote', 'add', 'origin', remoteDir], dir);
 
-      // 第一次推送（无基准 SHA，pushedCount 不可精确计算，仅断言成功 + 上游建立）
       await writeFile(join(dir, 'a.txt'), 'line1\nline2\nline3\n');
       await svc.add({ path: dir, paths: [] });
       await svc.commit({ path: dir, message: 'feat: push test 1', amend: false });
@@ -148,7 +139,6 @@ describe('GitService（真实 git 仓库）', () => {
       });
       expect(first.ok).toBe(true);
 
-      // 第二次推送：有基准 SHA，pushedCount 应为 1
       await writeFile(join(dir, 'a.txt'), 'line1\nline2\nline3\nline4\n');
       await svc.add({ path: dir, paths: [] });
       await svc.commit({ path: dir, message: 'feat: push test 2', amend: false });

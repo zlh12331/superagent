@@ -1,6 +1,3 @@
-// src/main/infra/ai/tools/lsp-tools.test.ts
-// LSP 工具单测：真实 fake 语言服务器 + LspServerManager 注入（无 mock 框架）
-
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -11,8 +8,6 @@ import { createLspHoverTool } from './lsp-hover.tool';
 import { createLspReferencesTool } from './lsp-references.tool';
 import type { ToolContext } from './tool';
 
-// 2026-09-08：LSP 工具现经 resolveWithinWorkspace 收口（fail closed），
-// 测试需用真实存在的目录（虚构盘符 realpath 不可解析会被拒绝）
 const WORK_DIR = mkdtempSync(join(tmpdir(), 'lsp-tools-'));
 mkdirSync(join(WORK_DIR, 'src'), { recursive: true });
 const MAIN_TS = join(WORK_DIR, 'src', 'main.ts');
@@ -104,7 +99,7 @@ describe('LSP 工具', () => {
     const result = await tool.execute({ filePath: MAIN_TS, line: 0, character: 0 }, makeCtx());
     expect(result.title).toContain('1 处');
     expect(result.output).toContain('a.ts');
-    expect(result.output).toContain('5:1'); // line 4 + 1 = 5, character 0 + 1 = 1
+    expect(result.output).toContain('5:1');
   });
 
   it('lsp_references：多引用位置', async () => {
@@ -129,7 +124,6 @@ describe('LSP 工具', () => {
   });
 
   it('服务器不可用：返回明确错误（不抛异常）', async () => {
-    // 命令不存在 → 启动失败 → 明确错误
     const manager = new LspServerManager({
       serverOverrides: { typescript: { command: 'nonexistent-server-binary-xyz', args: [] } },
       timeoutMs: 500,
