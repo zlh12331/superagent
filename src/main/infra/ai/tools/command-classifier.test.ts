@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from 'vitest';
 import type { LlmClient } from '../llm-client';
 import { CommandClassifier } from './command-classifier';
 
-/** fake LlmClient（手写最小实现，符合无 mock 原则的 fake 注入） */
 function createFakeLlm(output: unknown, throwError = false): LlmClient {
   return {
     generateJson: vi.fn(async () => {

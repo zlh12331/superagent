@@ -2,20 +2,12 @@ import { logger } from '../../../utils/logger';
 import type { ChannelIncomingMessage, ChannelTarget, IChannelAdapter } from '../channel/types';
 import { sendWeixinText, WEIXIN_DEFAULT_BASE_URL, WeixinStreamReceiver } from './weixin-stream';
 
-/**
- * 微信渠道适配器（iLink 轮询接收 + 消息发送）
- */
 export class WeixinAdapter implements IChannelAdapter {
   readonly kind = 'wechat';
   readonly displayName = '微信';
   readonly implemented = true;
   readonly configHint = 'iLink 机器人 token';
 
-  /**
-   * 外部依赖注入点（测试传 fake，生产默认实现）：
-   * - sendTextFn：消息发送（网络）
-   * - Receiver：长轮询接收器（网络）
-   */
   private readonly sendTextFn: typeof sendWeixinText;
   private readonly receiverCtor: typeof WeixinStreamReceiver;
 
@@ -31,12 +23,8 @@ export class WeixinAdapter implements IChannelAdapter {
 
   isConnected = false;
   private token: string | null = null;
-  /** from_user_id → context_token（回发携带） */
   private receiver: WeixinStreamReceiver | null = null;
 
-  /**
-   * 连接（token 为 iLink 机器人 token）
-   */
   async connect(token: string | undefined): Promise<void> {
     if (token === undefined || token.trim().length === 0) {
       throw new Error('微信：缺少 iLink token');
@@ -59,16 +47,12 @@ export class WeixinAdapter implements IChannelAdapter {
     logger.info({ kind: this.kind }, '微信渠道已连接（iLink 轮询）');
   }
 
-  /** 断开连接 */
   async disconnect(): Promise<void> {
     this.receiver?.close();
     this.receiver = null;
     this.isConnected = false;
   }
 
-  /**
-   * 回发消息（chatId 即 from_user_id；携带 context_token）
-   */
   async sendMessage(target: ChannelTarget, text: string): Promise<void> {
     if (this.token === null) {
       throw new Error('微信：渠道未连接');
@@ -83,7 +67,6 @@ export class WeixinAdapter implements IChannelAdapter {
     });
   }
 
-  /** 订阅入站消息（多订阅者：与 im-service 兼容） */
   onMessage(handler: (message: ChannelIncomingMessage) => void): () => void {
     this.messageHandlers.add(handler);
     return () => {

@@ -4,12 +4,6 @@ import { validateMcpServerConfig } from '../infra/ai/mcp';
 import type { IToolRegistry } from '../infra/ai/tools/tool-registry';
 import type { IpcHandlerContext } from '../utils/wrap';
 
-/**
- * MCP handler 工厂
- *
- * @param mcpService MCP 服务实例（ServiceContainer.getMcpService()）
- * @param toolRegistry 工具注册表（启动前重名校验用）
- */
 export function createMcpHandlers(
   mcpService: IMCPService,
   toolRegistry: IToolRegistry,

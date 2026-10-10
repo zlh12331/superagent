@@ -13,7 +13,6 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../../../utils/logger', () => ({ logger: mocks.mockLogger }));
 vi.mock('../../../telemetry/otel', () => ({ withSpan: mocks.mockWithSpan }));
 
-/** 创建 mock 工具 */
 function createMockTool(
   permission: 'auto' | 'ask' = 'ask',
   execute: (input: unknown, ctx: ToolContext) => Promise<ToolResult> = async () => ({
@@ -30,7 +29,6 @@ function createMockTool(
   } as unknown as Tool;
 }
 
-/** 创建 mock 注册表 */
 function createMockRegistry(tool: Tool | undefined): IToolRegistry {
   return {
     get: vi.fn(() => tool),
@@ -41,7 +39,6 @@ function createMockRegistry(tool: Tool | undefined): IToolRegistry {
   } as unknown as IToolRegistry;
 }
 
-/** 创建 mock WebContents（记录 send 调用） */
 function createMockWebContents() {
   return {
     isDestroyed: vi.fn(() => false),
@@ -49,7 +46,6 @@ function createMockWebContents() {
   } as unknown as WebContents & { send: ReturnType<typeof vi.fn> };
 }
 
-/** 创建基础 ToolContext */
 function createBaseCtx(overrides: Partial<ToolContext> = {}): ToolContext {
   return {
     workingDir: '/tmp/project',

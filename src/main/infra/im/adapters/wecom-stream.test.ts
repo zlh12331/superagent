@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseWecomEvent } from './wecom-stream';
 
-/** 构造企业微信文本消息帧 */
 function textFrame(content: string, overrides?: Record<string, unknown>): unknown {
   return {
     body: {

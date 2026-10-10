@@ -1,16 +1,12 @@
-// （Copyright 2026 Qwen Team，SPDX-License-Identifier: Apache-2.0）的
-
 import * as lark from '@larksuiteoapi/node-sdk';
 import { logger } from '../../../utils/logger';
 import type { ChannelIncomingMessage } from '../channel/types';
 
-/** 飞书长连接配置 */
 export interface FeishuStreamConfig {
   readonly appId: string;
   readonly appSecret: string;
 }
 
-/** 飞书 im.message.receive_v1 事件形状（SDK 解耦：自定义宽松类型） */
 export interface FeishuMessageEventV1 {
   readonly sender?: {
     readonly sender_id?: {
@@ -35,7 +31,6 @@ export interface FeishuMessageEventV1 {
   readonly event?: { readonly type?: string; readonly event_time?: number };
 }
 
-/** 解析结果：null = 非文本消息（忽略） */
 export interface ParsedFeishuMessage {
   readonly text: string;
   readonly chatId: string;
@@ -44,15 +39,8 @@ export interface ParsedFeishuMessage {
   readonly timestamp: number;
 }
 
-/** @bot mention key 前缀（群聊中 @机器人 的标记） */
 const BOT_MENTION_PREFIX = '@_user_1';
 
-/**
- * 飞书消息事件解析（纯函数，可测）
- *
- * 支持：text 消息（content JSON {text}）；post 消息（富文本，取纯文本拼接）
- * 忽略：图片/文件/音频等（消息体无文本语义）
- */
 export function parseFeishuEvent(event: FeishuMessageEventV1): ParsedFeishuMessage | null {
   const message = event.message;
   if (message === undefined || message.message_type === undefined) {
@@ -86,7 +74,6 @@ export function parseFeishuEvent(event: FeishuMessageEventV1): ParsedFeishuMessa
   };
 }
 
-/** text 消息 content（JSON 字符串 → {text}） */
 function parseTextContent(content: string | undefined): string | null {
   if (content === undefined) {
     return null;
@@ -99,7 +86,6 @@ function parseTextContent(content: string | undefined): string | null {
   }
 }
 
-/** post 消息 content（JSON → 富文本段落拼接纯文本） */
 function parsePostContent(content: string | undefined): string | null {
   if (content === undefined) {
     return null;
@@ -122,7 +108,6 @@ function parsePostContent(content: string | undefined): string | null {
   }
 }
 
-/** 剥离 @bot mention 前缀 */
 function stripBotMention(text: string): string {
   const trimmed = text.trim();
   if (trimmed.startsWith(BOT_MENTION_PREFIX)) {
@@ -131,17 +116,10 @@ function stripBotMention(text: string): string {
   return trimmed;
 }
 
-/**
- * 飞书长连接接收器（SDK WSClient；生命周期 open/close）
- */
 export class FeishuStreamReceiver {
   private readonly appId: string;
   private readonly appSecret: string;
 
-  /**
-   * 外部依赖注入点（测试传 fake，生产默认 lark SDK）：
-   * - EventDispatcherCtor / WSClientCtor：飞书长连接 SDK 类
-   */
   private readonly eventDispatcherCtor: typeof lark.EventDispatcher;
   private readonly wsClientCtor: typeof lark.WSClient;
 
@@ -166,14 +144,10 @@ export class FeishuStreamReceiver {
     return this.opened;
   }
 
-  /** 订阅入站消息（单订阅者：适配器转发用） */
   onMessage(handler: (message: ChannelIncomingMessage) => void): void {
     this.messageHandler = handler;
   }
 
-  /**
-   * 打开长连接（SDK 自动管理 token/心跳/重连）
-   */
   async open(): Promise<void> {
     if (this.opened) {
       return;
@@ -199,7 +173,6 @@ export class FeishuStreamReceiver {
     logger.info({}, '飞书长连接已建立（接收就绪）');
   }
 
-  /** 关闭长连接（幂等） */
   close(): void {
     if (this.wsClient !== null) {
       try {
@@ -210,7 +183,6 @@ export class FeishuStreamReceiver {
     this.opened = false;
   }
 
-  /** 事件分发：解析 → 转发入站消息 */
   private dispatchEvent(event: FeishuMessageEventV1): void {
     const parsed = parseFeishuEvent(event);
     if (parsed === null) {

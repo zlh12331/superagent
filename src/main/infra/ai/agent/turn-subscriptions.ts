@@ -6,13 +6,6 @@ import type { TurnTranscriptEntry } from '../agent-runtime/turn-transcript';
 import type { IPermissionService } from '../tools/permission-service';
 import type { AgentAskService } from './agent-ask-service';
 
-/**
- * 审批生命周期订阅（waitingApproval 状态运行时数据源）
- *
- * 审批推送 → waitingApproval；决议完成 → 恢复 running（按 sessionId 过滤）。
- * 返回 permissionService 提供的退订函数；permissionService 缺席（未注入）时
- * 返回 undefined——调用方须容忍该分支（无审批服务即无 waitingApproval 状态）。
- */
 export function subscribeApprovalLifecycle(
   permissionService: IPermissionService | undefined,
   sessionId: string,
@@ -36,13 +29,6 @@ export function subscribeApprovalLifecycle(
   });
 }
 
-/**
- * 提问生命周期订阅（waitingInput 状态运行时数据源，38 号阶段 2 收尾）
- *
- * 提问推送 → waitingInput；回答/超时完成 → 回 streaming（按 sessionId 过滤）。
- * 与 subscribeApprovalLifecycle 同构：此前机器不感知提问，挂起期间显示 streaming。
- * 恒返回退订函数（askService 为模块单例，不缺席）。
- */
 export function subscribeAskLifecycle(
   askService: AgentAskService,
   sessionId: string,
@@ -64,12 +50,6 @@ export function subscribeAskLifecycle(
   });
 }
 
-/**
- * 回合事件累积订阅：TEXT_DELTA 拼接助手全文；TOOL_CALL 转录入转录表
- *
- * 返回合并退订函数（回合收尾 cleanup 出口调用）：内部一次性摘除 TEXT_DELTA 与
- * TOOL_CALL 两个监听器，调用方无需分别持有。
- */
 export function subscribeTurnAccumulators(
   emitter: TurnEventEmitter,
   sinks: {

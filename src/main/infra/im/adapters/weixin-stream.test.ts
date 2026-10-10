@@ -7,7 +7,6 @@ import {
   type WeixinMessage,
 } from './weixin-stream';
 
-/** 构造 iLink 文本消息 */
 function textMessage(text: string, overrides?: Partial<WeixinMessage>): WeixinMessage {
   return {
     message_id: 101,

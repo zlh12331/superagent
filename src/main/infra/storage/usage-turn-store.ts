@@ -9,17 +9,8 @@ import { logger } from '../../utils/logger';
 import { getDb, reclaimFreePages } from './db';
 import { tokenUsage, turns } from './schema';
 
-/** 用量统计窗口（90 天）：查询成本有界 + 关注近期消耗 */
 const USAGE_SUMMARY_WINDOW_MS = 90 * 24 * 60 * 60 * 1000;
 
-/**
- * 清理统计窗口之外的 token_usage 行（启动时调用）
- *
- * 窗口外的行永远不会进入 getUsageSummary 的结果，留着只会让库文件单调增长。
- * 批量删除后页只进 freelist，不回收则库文件永久停在历史高水位。
- *
- * @returns 被删除的行数
- */
 export function pruneExpiredUsage(): number {
   const db = getDb();
   const cutoff = Date.now() - USAGE_SUMMARY_WINDOW_MS;
@@ -31,9 +22,6 @@ export function pruneExpiredUsage(): number {
   return result.changes;
 }
 
-/**
- * 记录一次 LLM 调用用量（agent/chat 回合结束时写入一行）
- */
 export async function recordUsage(usage: {
   readonly sessionId: string;
   readonly modelId: string;
@@ -58,16 +46,6 @@ export async function recordUsage(usage: {
     .run();
 }
 
-/**
- * 用量统计汇总（总量 / 按模型 / 按日）
- *
- * 90 天窗口过滤：设置页只关心近期消耗；全表扫描随数据增长变慢，
- * 窗口限制保证查询成本有界（token_usage 按日索引命中）。
- *
- * 2026-09-08 性能修复：此前 `select()` 取窗口内全列全行再在 JS 里三趟累加
- * （1 万行 × 7 列的对象分配 + Map 更新）。现改为三条 GROUP BY 下推 SQL——
- * 只回传聚合结果（模型数 / 天数，量级远小于行数）。
- */
 export async function getUsageSummary(): Promise<UsageSummaryRes> {
   const db = getDb();
   const windowStart = Date.now() - USAGE_SUMMARY_WINDOW_MS;
@@ -124,9 +102,6 @@ export async function getUsageSummary(): Promise<UsageSummaryRes> {
   };
 }
 
-/**
- * 记录一个回合（agent:run 结束后写入一行）
- */
 export async function recordTurn(turn: {
   readonly turnId: string;
   readonly sessionId: string;
@@ -161,9 +136,6 @@ export async function recordTurn(turn: {
     .run();
 }
 
-/**
- * 查询会话的回合列表（按 seq 升序，Transcript 查询）
- */
 export async function getTurns(sessionId: string): Promise<SessionGetTurnsRes> {
   const db = getDb();
   const rows = db
@@ -186,9 +158,6 @@ export async function getTurns(sessionId: string): Promise<SessionGetTurnsRes> {
   return { sessionId, turns: summaries };
 }
 
-/**
- * 查询最近回合（跨会话，按 createdAt 倒序，设置页展示）
- */
 export async function getRecentTurns(req: {
   readonly limit: number;
 }): Promise<SessionRecentTurnsRes> {

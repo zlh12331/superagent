@@ -12,7 +12,6 @@ vi.mock('electron', () => ({
 import type { BrowserWindow, WebContentsView } from 'electron';
 import { BrowserPreviewService } from './preview-service';
 
-/** fake 窗口（记录 addChildView/removeChildView） */
 function createFakeWin(): BrowserWindow & {
   added: unknown[];
   removed: unknown[];
@@ -34,7 +33,6 @@ function createFakeWin(): BrowserWindow & {
   } as unknown as BrowserWindow & { added: unknown[]; removed: unknown[] };
 }
 
-/** fake webContents（事件注册表 + 可编程状态） */
 interface FakeWebContents {
   handlers: Map<string, (...args: unknown[]) => void>;
   emit(event: string, ...args: unknown[]): void;
@@ -49,7 +47,6 @@ interface FakeWebContents {
   destroyed: boolean;
 }
 
-/** fake 视图工厂（记录 javascript 选项；测试经返回的 wc 触发事件） */
 function createFakeViewFactory() {
   const created: { javascript: boolean; wc: FakeWebContents }[] = [];
   const factory = (options: { readonly javascript: boolean }): WebContentsView => {
@@ -114,7 +111,6 @@ function createFakeViewFactory() {
 
 type Broadcast = [channel: string, payload: unknown];
 
-/** 组装被测服务（fake 窗口 + fake 视图工厂 + 广播捕获） */
 function createHarness() {
   const win = createFakeWin();
   const { factory, created } = createFakeViewFactory();
@@ -131,7 +127,6 @@ function createHarness() {
 
 const RECT = { x: 800, y: 52, width: 400, height: 600 };
 
-/** 取当前视图的 fake webContents（未创建即测试失败） */
 function mustWc(h: ReturnType<typeof createHarness>): FakeWebContents {
   const wc = h.created[0]?.wc;
   if (wc === undefined) {

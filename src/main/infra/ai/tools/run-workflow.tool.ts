@@ -3,40 +3,29 @@ import { t } from '../../i18n';
 import { workflowService } from '../agent/workflow-service';
 import type { Tool, ToolContext, ToolResult } from './tool';
 
-/** run_workflow 入参 */
 const RunWorkflowInputSchema = z.object({
-  /** 工作流目标描述 */
   goal: z.string().min(1).max(500),
-  /** 步骤委派列表（1-8 个；按顺序串行执行） */
   steps: z
     .array(
       z.object({
-        /** 步骤名（简短，展示与日志用） */
         name: z.string().min(1).max(100),
-        /** 委派任务描述（自动附加前一步产出作为上下文） */
         task: z.string().min(1).max(2000),
-        /** 子代理名（general / code_review / plan 等；缺省 general） */
         agent: z.string().min(1).max(100).optional(),
       }),
     )
     .min(1)
     .max(8),
-  /** 单步失败策略：halt 中止后续（默认）/ continue 继续执行剩余步骤 */
   onFailure: z.enum(['halt', 'continue']).optional(),
 });
 
 type RunWorkflowInput = z.infer<typeof RunWorkflowInputSchema>;
 
-/** 工作流终态中文标签 */
 const STATUS_LABELS: Record<string, string> = {
   completed: '✅ 已完成',
   failed: '❌ 失败',
   cancelled: '⏹ 已取消',
 };
 
-/**
- * 创建 run_workflow 工具（依赖模块级 WorkflowService 单例）
- */
 export function createRunWorkflowTool(): Tool<RunWorkflowInput> {
   return {
     name: 'run_workflow',

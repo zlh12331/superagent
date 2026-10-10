@@ -21,29 +21,11 @@ import { emitEvent } from '../../utils/emit-event';
 import { logger } from '../../utils/logger';
 import { DEFAULT_TREE_IGNORE_PATTERNS, matchIgnorePattern } from './tree-ignore';
 
-/** UTF-8 同族编码（chardet 检测结果 → 无需转码直接解码） */
 const UTF8_LIKE_ENCODINGS = new Set(['UTF-8', 'ASCII']);
 
-/**
- * 文件读取字节上限（P1：防 OOM）
- *
- * fs.readFile 一次性全量读入内存（offset/limit 仅做行切片，不降低内存峰值），
- * 超大文件会进程 OOM。读取前 stat 前置检查，超过上限明确报错而非崩溃。
- */
 const MAX_READ_BYTES = 2 * 1024 * 1024;
-/** 编码检测采样上限：编码特征集中于文件头部，64KB 远超判定所需（全量检测大文件秒级且方差大） */
 const CHARDET_SAMPLE_BYTES = 64 * 1024;
 
-/**
- * chokidar 忽略判定（2026-09-08 从 watch 提取，保持其函数体在棘轮基线内）
- *
- * - 目录放行（chokidar 递归扫描，由子项 filter）
- * - 跳过 node_modules 与点开头文件
- *
- * L1 修复保留：chokidar 在 Windows 上传入的 testPath 可能混合 \\ 与 /，
- * 单独用 sep split 会漏掉以 / 分隔的路径（node_modules/.git 子文件未被过滤），
- * 故用正则 [\\/] 同时匹配两种分隔符。
- */
 function shouldIgnoreWatchPath(testPath: string, stats?: Stats): boolean {
   if (stats?.isDirectory()) {
     return false;
@@ -52,13 +34,6 @@ function shouldIgnoreWatchPath(testPath: string, stats?: Stats): boolean {
   return normalized === 'node_modules' || normalized.startsWith('.');
 }
 
-/**
- * 查找同 (path, webContents) 的已有 watcher（2026-09-08 修复句柄累积）
- *
- * 从 FileService.watch 提取（模块级，保持其函数体在棘轮基线内）。
- *
- * @returns 已存在的 watcherId；无匹配返回 null
- */
 function findExistingWatcher(
   watchers: ReadonlyMap<string, { readonly path: string; readonly webContents: WebContents }>,
   path: string,
@@ -72,12 +47,6 @@ function findExistingWatcher(
   return null;
 }
 
-/**
- * 规范化 chardet 检测结果 → iconv-lite 可解码的编码名
- *
- * - null / UTF-8 同族 → 'utf-8'（直接 Buffer.toString）
- * - 其他（GB2312/GB18030/windows-1252 等）→ 小写（iconv-lite 兼容大小写）
- */
 function normalizeEncoding(detected: string | null): string {
   if (detected === null || UTF8_LIKE_ENCODINGS.has(detected)) {
     return 'utf-8';
@@ -85,168 +54,79 @@ function normalizeEncoding(detected: string | null): string {
   return detected.toLowerCase();
 }
 
-/**
- * read 方法入参
- *
- * 注意：与 FileReadReqSchema 字段对齐，但类型独立定义以便测试 mock。
- * offset/limit 用 `number | undefined` 而非 `?: number` 兼容 exactOptionalPropertyTypes。
- */
 export interface FileReadOptions {
-  /** 文件绝对路径 */
   readonly path: string;
-  /** 起始行（0-based），省略时从第 0 行开始 */
   readonly offset: number | undefined;
-  /** 读取行数，省略时读到文件末尾 */
   readonly limit: number | undefined;
 }
 
-/** write 方法入参（与 FileWriteReqSchema 字段对齐） */
 export interface FileWriteOptions {
   readonly path: string;
   readonly content: string;
-  /** 是否追加（默认 false 覆盖） */
   readonly append: boolean;
-  /** 是否自动创建父目录（默认 true） */
   readonly createDirs: boolean;
 }
 
-/** list 方法入参（与 FileListReqSchema 字段对齐） */
 export interface FileListOptions {
   readonly path: string;
-  /** 递归深度（1=仅直接子项，最大 10） */
   readonly depth: number;
-  /** 是否包含隐藏文件（点开头文件/目录） */
   readonly includeHidden: boolean;
-  /**
-   * 忽略模式列表（名称级匹配：精确 / * / ?；叠加在内置 node_modules 基线之上）
-   * 缺省 = 仅内置基线。来源：设置 workspace.treeIgnorePatterns（handler 每次现读，改后即生效）
-   */
   readonly ignorePatterns?: readonly string[];
 }
 
-/** watch 方法入参 */
 export interface FileWatchOptions {
-  /** 监听根目录（绝对路径） */
   readonly path: string;
-  /** 接收 file:watch 事件的 webContents（通常是发起请求的窗口） */
   readonly webContents: WebContents;
 }
 
-/** watch 方法返回值：watcherId 用于后续 unwatch */
 export interface FileWatchHandle {
-  /** watcher 唯一 ID（用于 unwatch 时定位） */
   readonly watcherId: string;
 }
 
-/** createFile 方法入参 */
 export interface FileCreateOptions {
-  /** 文件绝对路径（父目录不存在时自动创建） */
   readonly path: string;
-  /** 是否自动创建父目录（默认 true） */
   readonly createDirs: boolean;
 }
 
-/** createDir 方法入参 */
 export interface FileCreateDirOptions {
-  /** 目录绝对路径（递归创建父目录） */
   readonly path: string;
 }
 
-/** delete 方法入参 */
 export interface FileDeleteOptions {
-  /** 目标绝对路径（文件或目录） */
   readonly path: string;
-  /** 是否递归删除目录（必填：true 递归删除；false 仅空目录/文件） */
   readonly recursive: boolean;
 }
 
-/** rename 方法入参 */
 export interface FileRenameOptions {
-  /** 原路径（绝对路径） */
   readonly oldPath: string;
-  /** 新路径（绝对路径） */
   readonly newPath: string;
-  /** 目标已存在时是否覆盖（默认 false） */
   readonly overwrite: boolean;
 }
 
-/**
- * FileService 接口
- *
- * 解耦 IPC handler 对具体类的依赖，便于：
- * - 单元测试：注入 mock 实现，不依赖真实文件系统
- * - 未来扩展：替换为支持远程文件系统 / 内存 FS 的实现
- */
 export interface IFileService {
-  /** 读取文件内容（UTF-8 解码，支持分批读取） */
   read(options: FileReadOptions): Promise<FileReadRes>;
-  /** 写入文件（覆盖或追加） */
   write(options: FileWriteOptions): Promise<FileWriteRes>;
-  /** 列出目录内容（递归深度可控） */
   list(options: FileListOptions): Promise<FileListRes>;
-  /** 监听文件变更，返回 watcherId */
   watch(options: FileWatchOptions): Promise<FileWatchHandle>;
-  /** 停止指定 watcher */
   unwatch(watcherId: string): boolean;
-  /** 优雅关闭：停止所有 watcher 并释放资源 */
   dispose(): Promise<void>;
-  /** 创建新文件（空文件，若已存在则报错） */
   createFile(options: FileCreateOptions): Promise<FileCreateRes>;
-  /** 创建新目录（递归创建父目录） */
   createDir(options: FileCreateDirOptions): Promise<FileCreateDirRes>;
-  /** 删除文件或目录（目录递归删除） */
   delete(options: FileDeleteOptions): Promise<FileDeleteRes>;
-  /** 重命名/移动文件或目录 */
   rename(options: FileRenameOptions): Promise<FileRenameRes>;
 }
 
-/**
- * FileService 默认实现
- *
- * 内部维护 watcherId → { watcher, webContents } 映射，支持多窗口独立监听。
- *
- * 错误分类：
- * - ENOENT（文件不存在）：NOT_FOUND
- * - EACCES / EPERM（权限不足）：UNAUTHORIZED
- * - ENOSPC（磁盘满）：FS_DISK_FULL
- * - ENOTDIR（路径不是目录）：INVALID_INPUT
- * - EISDIR（对目录执行文件操作）：INVALID_INPUT
- * - 其他读错误：FS_READ_FAILED
- * - 其他写错误：FS_WRITE_FAILED
- */
 class FileService implements IFileService {
-  /**
-   * 活跃 watcher Map：watcherId → watcher 上下文
-   *
-   * 每个 watcher 独立关联一个 webContents，避免：
-   * - 多窗口同时监听同一目录时互相干扰
-   * - 单个 webContents 销毁后影响其他窗口的监听
-   */
   private readonly watchers = new Map<
     string,
     {
       readonly watcher: FSWatcher;
       readonly webContents: WebContents;
-      /** 被监听路径（2026-09-08：同路径去重复用判定用） */
       readonly path: string;
-      /** webContents destroyed 监听清理函数（unwatch 时移除，避免监听累积） */
       readonly removeDestroyedListener: () => void;
     }
   >();
 
-  /**
-   * 读取文件内容（自动编码检测）
-   *
-   * 流程：
-   * 1. 读取整个文件为 Buffer
-   * 2. chardet 检测编码（Windows 场景支持 GBK/GB18030 等非 UTF-8 文件）
-   * 3. UTF-8 同族直接解码；其他编码经 iconv-lite 转码
-   * 4. 按换行符分割为行数组，应用 offset/limit 切片
-   * 5. 返回切片后的内容 + 总行数 + 实际编码
-   *
-   * 注意：读取前 stat 前置检查（>2MB 拒绝），避免超大文件全量进内存导致 OOM；
-   * offset/limit 仅控制返回行切片，不影响内存峰值。
-   */
   async read(options: FileReadOptions): Promise<FileReadRes> {
     const { path, offset, limit } = options;
     this.assertAbsolutePath(path);
@@ -292,13 +172,6 @@ class FileService implements IFileService {
     }
   }
 
-  /**
-   * 写入文件
-   *
-   * append=false：覆盖写入（默认）
-   * append=true：追加写入（在文件末尾追加）
-   * createDirs=true：自动创建父目录（避免 ENOENT）
-   */
   async write(options: FileWriteOptions): Promise<FileWriteRes> {
     const { path, content, append, createDirs } = options;
     this.assertAbsolutePath(path);
@@ -321,16 +194,6 @@ class FileService implements IFileService {
     }
   }
 
-  /**
-   * 列出目录内容
-   *
-   * 递归读取目录，返回 FileEntry 数组。
-   * depth 控制递归深度：
-   * - 1：仅列出直接子项
-   * - N：递归 N 层
-   *
-   * includeHidden=false：跳过点开头文件/目录（.git, .vscode 等）
-   */
   async list(options: FileListOptions): Promise<FileListRes> {
     const { path, depth, includeHidden } = options;
     this.assertAbsolutePath(path);
@@ -345,15 +208,6 @@ class FileService implements IFileService {
     }
   }
 
-  /**
-   * 递归列出目录内容的内部实现
-   *
-   * @param currentPath 当前正在遍历的目录
-   * @param remainingDepth 剩余深度（0 时停止递归）
-   * @param includeHidden 是否包含隐藏文件
-   * @param output 输出数组（递归填充）
-   * @param ignorePatterns 忽略模式（名称级匹配；命中即跳过，目录不递归）
-   */
   private async listRecursive(
     currentPath: string,
     remainingDepth: number,
@@ -406,23 +260,6 @@ class FileService implements IFileService {
     }
   }
 
-  /**
-   * 监听文件变更
-   *
-   * 基于 chokidar v5，监听指定目录及其子目录。
-   * 事件映射：
-   * - chokidar 'add' / 'addDir' → file:watch 'create'
-   * - chokidar 'change' → file:watch 'modify'
-   * - chokidar 'unlink' / 'unlinkDir' → file:watch 'delete'
-   * - chokidar 不直接支持 'rename'，rename 会被拆分为 unlink + add
-   *
-   * 默认忽略：
-   * - 点开头文件/目录（.git, .vscode 等）
-   * - node_modules 目录（避免大型依赖库频繁变更）
-   *
-   * 注意：chokidar 默认 ignoreInitial=false 会触发初始扫描事件，
-   * 这里显式设置 ignoreInitial: true 避免大量初始推送。
-   */
   async watch(options: FileWatchOptions): Promise<FileWatchHandle> {
     const { path, webContents } = options;
     this.assertAbsolutePath(path);
@@ -474,11 +311,6 @@ class FileService implements IFileService {
     return { watcherId };
   }
 
-  /**
-   * 停止指定 watcher
-   *
-   * @returns 是否成功停止（watcherId 不存在时返回 false）
-   */
   unwatch(watcherId: string): boolean {
     const ctx = this.watchers.get(watcherId);
     if (ctx === undefined) {
@@ -491,11 +323,6 @@ class FileService implements IFileService {
     return true;
   }
 
-  /**
-   * 优雅关闭：停止所有 watcher
-   *
-   * 应用退出时调用，避免 watcher 句柄泄漏导致进程不退出。
-   */
   async dispose(): Promise<void> {
     const ctxs = Array.from(this.watchers.values());
     if (ctxs.length === 0) {
@@ -515,12 +342,6 @@ class FileService implements IFileService {
     logger.info({}, 'FileService 所有 watcher 已关闭');
   }
 
-  /**
-   * 创建新文件
-   *
-   * 创建空文件，若文件已存在则抛 ALREADY_EXISTS 错误（不覆盖）。
-   * createDirs=true 时自动创建父目录。
-   */
   async createFile(options: FileCreateOptions): Promise<FileCreateRes> {
     const { path, createDirs } = options;
     this.assertAbsolutePath(path);
@@ -537,12 +358,6 @@ class FileService implements IFileService {
     }
   }
 
-  /**
-   * 创建新目录
-   *
-   * 递归创建父目录（与 mkdir -p 语义一致）。
-   * 目录已存在时不报错（recursive=true 容错）。
-   */
   async createDir(options: FileCreateDirOptions): Promise<FileCreateDirRes> {
     const { path } = options;
     this.assertAbsolutePath(path);
@@ -555,12 +370,6 @@ class FileService implements IFileService {
     }
   }
 
-  /**
-   * 删除文件或目录
-   *
-   * recursive=true（默认）：目录递归删除（rm -rf 语义）
-   * recursive=false：仅删除空目录或文件，目录非空时抛 ENOTEMPTY
-   */
   async delete(options: FileDeleteOptions): Promise<FileDeleteRes> {
     const { path, recursive } = options;
     this.assertAbsolutePath(path);
@@ -573,12 +382,6 @@ class FileService implements IFileService {
     }
   }
 
-  /**
-   * 重命名/移动文件或目录
-   *
-   * overwrite=true（默认 false）：目标已存在时覆盖
-   * overwrite=false：目标已存在时抛 EEXIST，避免误覆盖
-   */
   async rename(options: FileRenameOptions): Promise<FileRenameRes> {
     const { oldPath, newPath, overwrite } = options;
     this.assertAbsolutePath(oldPath);
@@ -608,14 +411,6 @@ class FileService implements IFileService {
     }
   }
 
-  /**
-   * 处理 chokidar 事件并推送 file:watch:event 事件到渲染层
-   *
-   * @param watcherId watcher 唯一 ID（用于渲染层过滤事件来源）
-   * @param eventName chokidar 事件名（'add' / 'addDir' / 'change' / 'unlink' / 'unlinkDir'）
-   * @param changedPath 变更的文件路径（绝对路径）
-   * @param webContents 接收事件的 webContents
-   */
   private handleWatchEvent(
     watcherId: string,
     eventName: string,
@@ -648,12 +443,6 @@ class FileService implements IFileService {
     emitEvent(webContents, IPC_DEFINITIONS.file.subscribeWatchEvent, payload);
   }
 
-  /**
-   * 断言路径为绝对路径
-   *
-   * 相对路径在多窗口场景下有歧义（每个窗口的 cwd 可能不同），
-   * 强制要求绝对路径避免误操作。
-   */
   private assertAbsolutePath(path: string): void {
     if (!path || path.length === 0) {
       throw new AppError(ErrorCode.INVALID_INPUT, '路径不能为空');
@@ -663,28 +452,14 @@ class FileService implements IFileService {
     }
   }
 
-  /**
-   * 分类读取错误：把 Node.js 原生 errno 映射到 AppError
-   *
-   * @param error 原始错误（通常是 Node.js 系统错误，含 code 字段如 'ENOENT'）
-   */
   private classifyReadError(error: unknown): AppError {
     return this.classifyFsError(error, ErrorCode.FS_READ_FAILED);
   }
 
-  /**
-   * 分类写入错误：把 Node.js 原生 errno 映射到 AppError
-   */
   private classifyWriteError(error: unknown): AppError {
     return this.classifyFsError(error, ErrorCode.FS_WRITE_FAILED);
   }
 
-  /**
-   * 统一的 FS 错误分类：处理 Node.js errno
-   *
-   * @param error 原始错误
-   * @param fallbackCode 兜底错误码（FS_READ_FAILED 或 FS_WRITE_FAILED）
-   */
   private classifyFsError(error: unknown, fallbackCode: ErrorCode): AppError {
     if (error instanceof AppError) {
       return error;
@@ -711,18 +486,8 @@ class FileService implements IFileService {
   }
 }
 
-/** FileService 单例（内部按具体实现类持有，外部暴露为 IFileService 接口） */
 let fileService: FileService | null = null;
 
-/**
- * 获取 FileService 单例
- *
- * 整个应用生命周期共享一个实例，内部 Map 管理 watcher。
- *
- * 返回类型为 IFileService 接口而非具体类：
- * - 强制调用方面向接口编程，不依赖 FileService 内部细节
- * - ServiceContainer 注入到 IPC handler 时类型一致
- */
 export function getFileService(): IFileService {
   if (fileService === null) {
     fileService = new FileService();
@@ -730,11 +495,6 @@ export function getFileService(): IFileService {
   return fileService;
 }
 
-/**
- * 重置 FileService（仅测试用）
- *
- * 调用 dispose 停止所有 watcher，并清空单例缓存。
- */
 export async function resetFileService(): Promise<void> {
   if (fileService !== null) {
     await fileService.dispose();

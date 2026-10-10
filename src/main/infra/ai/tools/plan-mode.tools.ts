@@ -5,14 +5,8 @@ import { writeApprovalMode } from '../../storage/approval-pref';
 import type { IPermissionService } from './permission-service';
 import type { Tool, ToolResult } from './tool';
 
-/** 进入 plan 模式前保存的模式（exit 时恢复；进程内单实例） */
 let previousMode: ApprovalMode | null = null;
 
-/**
- * 创建 enter_plan_mode 工具
- *
- * @param permissionService 权限服务（模式切换 + 持久化）
- */
 export function createEnterPlanModeTool(permissionService: IPermissionService): Tool {
   return {
     name: 'enter_plan_mode',
@@ -43,11 +37,6 @@ export function createEnterPlanModeTool(permissionService: IPermissionService): 
   };
 }
 
-/**
- * 创建 exit_plan_mode 工具
- *
- * @param permissionService 权限服务（模式切换 + 持久化）
- */
 export function createExitPlanModeTool(permissionService: IPermissionService): Tool {
   return {
     name: 'exit_plan_mode',

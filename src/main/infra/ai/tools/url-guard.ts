@@ -1,12 +1,10 @@
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 
-/** 出站 URL 检查结论（fail closed：不明确允许即拒绝） */
 export type UrlGuardResult =
   | { readonly allowed: true }
   | { readonly allowed: false; readonly reason: string };
 
-/** 受限主机名（本地名 / 云元数据服务名） */
 const BLOCKED_HOSTNAMES = new Set([
   'localhost',
   'metadata.google.internal',
@@ -15,7 +13,6 @@ const BLOCKED_HOSTNAMES = new Set([
   'metadata',
 ]);
 
-/** 主机名是否为本地/元数据名（含 *.localhost / *.local 后缀） */
 export function isBlockedHostname(hostname: string): boolean {
   const host = hostname
     .trim()
@@ -30,7 +27,6 @@ export function isBlockedHostname(hostname: string): boolean {
   return host.endsWith('.localhost') || host.endsWith('.local') || host.endsWith('.internal');
 }
 
-/** 点分十进制 IPv4 → 四段数字（非法返回 null） */
 function parseIPv4(ip: string): number[] | null {
   const parts = ip.split('.');
   if (parts.length !== 4) {
@@ -50,7 +46,6 @@ function parseIPv4(ip: string): number[] | null {
   return nums;
 }
 
-/** IPv4 是否落在环回/私网/链路本地/保留段（SSRF 受限地址） */
 export function isBlockedIPv4(ip: string): boolean {
   const octets = parseIPv4(ip);
   if (octets === null) {
@@ -70,7 +65,6 @@ export function isBlockedIPv4(ip: string): boolean {
   return false;
 }
 
-/** IPv6 是否落在环回/未指定/ULA/链路本地/组播（含 IPv4 映射地址） */
 export function isBlockedIPv6(ip: string): boolean {
   const addr = ip.trim().toLowerCase().split('%')[0] ?? '';
   if (addr === '::1' || addr === '::') {
@@ -90,7 +84,6 @@ export function isBlockedIPv6(ip: string): boolean {
   return false;
 }
 
-/** IP 字面量是否受限（v4/v6 分派；非 IP 返回 false 交由主机名规则处理） */
 export function isBlockedAddress(ip: string): boolean {
   const family = isIP(ip.trim().replace(/^\[|\]$/g, ''));
   if (family === 4) {
@@ -102,11 +95,6 @@ export function isBlockedAddress(ip: string): boolean {
   return false;
 }
 
-/**
- * 检查出站 URL 是否允许访问（协议 + 主机名 + 全部解析地址）
- *
- * fail closed：DNS 解析失败、地址解析异常一律拒绝。
- */
 export async function checkUrlAllowed(url: URL): Promise<UrlGuardResult> {
   if (url.protocol !== 'http:' && url.protocol !== 'https:') {
     return { allowed: false, reason: `不支持的协议 ${url.protocol}（仅 http/https）` };

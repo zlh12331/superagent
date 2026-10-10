@@ -4,19 +4,10 @@ import type { ISessionService } from '../../storage/session-service';
 import { DEFAULT_SESSION_TITLE } from '../../storage/session-service';
 import type { LlmGenerateTextOptions, LlmGenerateTextResult } from '../llm-client';
 
-/**
- * 标题生成器接口（DI 窄接口：仅依赖 generateText 能力）
- *
- * LlmClient 结构满足本接口（service-container 鸭子匹配注入）；
- * 注入接口而非具体类，便于测试替换。
- */
 export interface ITitleGenerator {
   generateText(options: LlmGenerateTextOptions): Promise<LlmGenerateTextResult>;
 }
 
-/**
- * 提取首条 user 消息文本（标题生成输入）
- */
 export function firstUserMessageText(messages: ChatMessage[]): string | undefined {
   const first = messages.find((m) => m.role === 'user');
   if (first === undefined) {
@@ -25,9 +16,6 @@ export function firstUserMessageText(messages: ChatMessage[]): string | undefine
   return typeof first.content === 'string' ? first.content : '';
 }
 
-/**
- * 提取最后一条 user 消息文本（权限决策：当前回合用户意图，意图豁免破坏性拦截）
- */
 export function lastUserMessageText(messages: ChatMessage[]): string | undefined {
   for (let i = messages.length - 1; i >= 0; i -= 1) {
     const message = messages[i];
@@ -38,13 +26,6 @@ export function lastUserMessageText(messages: ChatMessage[]): string | undefined
   return undefined;
 }
 
-/**
- * 异步生成会话标题（失败静默，不阻断主流程）
- *
- * 仅当会话仍为默认标题时执行；用首条用户消息生成简洁标题（超 50 字符
- * 截断，生成输入超 200 字符截断）。生产调用点唯一：agent-service 的
- * finalizeCompletedTurn（agent-service.ts；titleGenerator 未注入时跳过）。
- */
 export async function ensureSessionTitle(params: {
   readonly sessionService: ISessionService;
   readonly titleGenerator: ITitleGenerator;

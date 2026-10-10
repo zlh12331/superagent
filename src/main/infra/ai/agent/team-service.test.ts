@@ -16,7 +16,6 @@ vi.mock('../../../utils/logger', () => ({
   logger: mocks.mockLogger,
 }));
 
-/** 创建 fake SubagentManager（run 可控；mock 方法类型显式化） */
 function createFakeManager(): { run: ReturnType<typeof vi.fn> } {
   return { run: vi.fn() };
 }

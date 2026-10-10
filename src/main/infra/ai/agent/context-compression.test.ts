@@ -18,7 +18,6 @@ const user = (content: string): ModelMessage => ({ role: 'user', content });
 const assistant = (content: string): ModelMessage => ({ role: 'assistant', content });
 const system = (content: string): ModelMessage => ({ role: 'system', content });
 
-/** assistant 消息：任意 content parts（text / reasoning / tool-call 混排） */
 const assistantParts = (parts: unknown[]): ModelMessage =>
   ({ role: 'assistant', content: parts }) as unknown as ModelMessage;
 
@@ -29,7 +28,6 @@ const toolCallPart = (id: string, input: unknown = { path: 'src/a.ts' }): unknow
   input,
 });
 
-/** SDK v7 工具结果消息（tool-result part + output 判别联合） */
 const toolResult = (id: string, value: string): ModelMessage =>
   ({
     role: 'tool',
@@ -43,7 +41,6 @@ const toolResult = (id: string, value: string): ModelMessage =>
     ],
   }) as unknown as ModelMessage;
 
-/** v7 允许一条 tool 消息携带多个 tool-result 段 */
 const toolResults = (ids: string[]): ModelMessage =>
   ({
     role: 'tool',
@@ -55,7 +52,6 @@ const toolResults = (ids: string[]): ModelMessage =>
     })),
   }) as unknown as ModelMessage;
 
-/** 带工具调用的 assistant 消息（旧版 toolCalls 字段形态，供 compressContext 用例） */
 const assistantCall = (id: string): ModelMessage =>
   ({
     role: 'assistant',
@@ -63,11 +59,9 @@ const assistantCall = (id: string): ModelMessage =>
     toolCalls: [{ type: 'function', id, function: { name: 'grep', arguments: '{}' } }],
   }) as unknown as ModelMessage;
 
-/** 工具结果消息（旧版形态） */
 const legacyToolResult = (id: string): ModelMessage =>
   ({ role: 'tool', content: 'ok', toolCallId: id }) as unknown as ModelMessage;
 
-/** 收集消息里所有 tool-call / tool-result 的 id，用于校验配对完整性 */
 function collectToolIds(messages: ModelMessage[]): { calls: string[]; results: string[] } {
   const calls: string[] = [];
   const results: string[] = [];

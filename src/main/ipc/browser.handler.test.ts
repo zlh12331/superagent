@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { type BrowserHandlerDeps, createBrowserHandlers } from './browser.handler';
 
-/** 创建 fake BrowserPreviewService */
 function createFakePreviewService() {
   return {
     navigate: vi.fn(async () => ({ ok: true })),

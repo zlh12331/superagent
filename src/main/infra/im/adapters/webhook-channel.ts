@@ -3,14 +3,10 @@ import { logger } from '../../../utils/logger';
 import { proxiedFetch } from '../../network/proxied-fetch';
 import type { ChannelIncomingMessage, ChannelTarget, IChannelAdapter } from '../channel/types';
 
-/** webhook 发送超时（毫秒） */
 const WEBHOOK_TIMEOUT_MS = 10_000;
-/** 发送重试次数（对齐渠道接口约定：最多 2 次退避） */
 const SEND_RETRY_COUNT = 2;
-/** 退避基数（毫秒） */
 const RETRY_BASE_MS = 500;
 
-/** webhook 发送结果（渠道错误信息） */
 interface WebhookErrorResponse {
   readonly errcode?: number;
   readonly errmsg?: string;
@@ -18,11 +14,6 @@ interface WebhookErrorResponse {
   readonly msg?: string;
 }
 
-/**
- * Webhook 渠道适配器基类
- *
- * 子类职责：实现 kind/displayName/buildPayload（渠道专属消息格式）+ 可选 decorateUrl（加签）。
- */
 export abstract class WebhookChannelAdapter implements IChannelAdapter {
   abstract readonly kind: ChannelKind;
   abstract readonly displayName: string;
@@ -34,9 +25,6 @@ export abstract class WebhookChannelAdapter implements IChannelAdapter {
   private webhookUrl: string | null = null;
   private secret: string | null = null;
 
-  /**
-   * 连接（webhook 型 = 配置就绪；token 为 webhook URL，钉钉加签格式 URL#secret）
-   */
   async connect(token: string | undefined): Promise<void> {
     const parsed = parseWebhookToken(this.parseToken(token ?? ''));
     if (parsed === null) {
@@ -52,20 +40,15 @@ export abstract class WebhookChannelAdapter implements IChannelAdapter {
     await this.afterConnect();
   }
 
-  /** 断开（webhook 无长连接，仅清状态） */
   async disconnect(): Promise<void> {
     this.isConnected = false;
     await this.afterDisconnect();
   }
 
-  /** 入站：webhook 群机器人无接收通道（需公网回调，桌面端后置） */
   onMessage(_handler: (message: ChannelIncomingMessage) => void): () => void {
     return () => {};
   }
 
-  /**
-   * 回发消息（构造 payload → POST → 重试）
-   */
   async sendMessage(target: ChannelTarget, text: string): Promise<void> {
     const url = this.webhookUrl;
     if (url === null || !this.isConnected) {
@@ -98,32 +81,25 @@ export abstract class WebhookChannelAdapter implements IChannelAdapter {
     );
   }
 
-  /** 渠道专属 payload（子类实现） */
   protected abstract buildPayload(text: string): unknown;
 
-  /** URL 装饰（加签渠道覆写；钉钉 timestamp+sign） */
   protected async decorateUrl(url: string): Promise<string> {
     return url;
   }
 
-  /** token 预处理（多配置渠道覆写；默认原样返回） */
   protected parseToken(token: string): string {
     return token;
   }
 
-  /** 连接后钩子（长连接接收渠道覆写；默认 no-op） */
   protected async afterConnect(): Promise<void> {}
 
-  /** 断开后钩子（长连接接收渠道覆写；默认 no-op） */
   protected async afterDisconnect(): Promise<void> {}
 
-  /** 加签 secret（子类读取用） */
   protected getSecret(): string | null {
     return this.secret;
   }
 }
 
-/** token 解析：webhookUrl[#secret] → { url, secret } */
 function parseWebhookToken(
   token: string | undefined,
 ): { url: string; secret: string | null } | null {
@@ -150,7 +126,6 @@ function parseWebhookToken(
   return { url, secret };
 }
 
-/** HTTP POST（超时 + 非 2xx 抛错） */
 async function postWebhook(url: string, payload: unknown): Promise<void> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort('timeout'), WEBHOOK_TIMEOUT_MS);
@@ -184,17 +159,10 @@ async function postWebhook(url: string, payload: unknown): Promise<void> {
   }
 }
 
-/** 简单延迟 */
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/**
- * 钉钉加签：timestamp + secret → HMAC-SHA256 → base64 → URL 编码
- *
- * 借鉴声明：算法参考钉钉开放平台机器人安全设置文档（加签流程），
- * 纯逻辑实现无外部依赖。
- */
 export async function dingtalkSign(secret: string, timestamp: number): Promise<string> {
   const signString = `${timestamp}\n${secret}`;
   const key = new TextEncoder().encode(secret);
@@ -202,7 +170,6 @@ export async function dingtalkSign(secret: string, timestamp: number): Promise<s
   return cryptoSign(key, data);
 }
 
-/** HMAC-SHA256 → base64（WebCrypto） */
 async function cryptoSign(key: Uint8Array, data: Uint8Array): Promise<string> {
   const cryptoKey = await crypto.subtle.importKey(
     'raw',

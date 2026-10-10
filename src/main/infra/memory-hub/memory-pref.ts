@@ -1,19 +1,11 @@
 import { logger } from '../../utils/logger';
 import { readSetting } from '../storage/settings-pref';
 
-/** 缓存 TTL（毫秒）：设置变更是低频操作，短缓存足以避免重复查库 */
 const CACHE_TTL_MS = 1_000;
 
 let cachedValue: boolean | null = null;
 let cachedAt = 0;
 
-/**
- * 记忆功能是否启用（默认启用）
- *
- * 默认 true：记忆是产品核心能力之一，且设置页可见可关（用户能明确关闭）。
- * 读取失败（DB 未就绪/条目损坏）时返回默认值并记日志——不因设置读取问题
- * 而彻底禁用记忆功能。
- */
 export function isMemoryEnabled(): boolean {
   const now = Date.now();
   if (cachedValue !== null && now - cachedAt < CACHE_TTL_MS) {
@@ -37,7 +29,6 @@ export function isMemoryEnabled(): boolean {
   return enabled;
 }
 
-/** 清空缓存（设置变更后调用，让下一次读取立即生效） */
 export function resetMemoryEnabledCache(): void {
   cachedValue = null;
   cachedAt = 0;

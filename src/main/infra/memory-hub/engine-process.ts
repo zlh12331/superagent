@@ -4,48 +4,25 @@ import { buildEngineEnv } from './engine-env';
 
 const TAG = '[memory-hub]';
 
-/** stderr 保留末尾长度（诊断启动失败用） */
 const STDERR_TAIL_LIMIT = 2000;
 
-/** 引擎子进程句柄（最小面） */
 export interface EngineProcessHandle {
-  /** 进程 id（undefined = 尚未 spawn 或已退出；**不可据此判存活**，见 hasExited） */
   readonly pid: number | undefined;
-  /**
-   * 是否已收到 exit 事件
-   *
-   * ⚠️ 存活判定必须用本方法，**不能用 `pid === undefined`**：实测 Electron
-   * utilityProcess 在 fork 返回后 pid 仍为 undefined（约 29ms 后 'spawn' 才赋值、
-   * 63ms 才稳定可读），启动期轮询会把「尚未 spawn」误判成「已退出」而立刻失败
-   * （2026-09-14 探针：PID_SYNC=undefined@1ms → spawn@29ms → pid=8832@63ms）。
-   */
   hasExited(): boolean;
-  /** stderr 末尾（启动失败时报出，便于定位） */
   stderrTail(): string;
-  /** 注册退出回调（code 为退出码） */
   onExit(listener: (code: number) => void): void;
-  /** 终止进程（已退出时安全 no-op） */
   kill(): void;
 }
 
-/** 启动参数 */
 export interface LaunchEngineOptions {
-  /** 启动器脚本绝对路径（.mjs，由 service 内联生成） */
   readonly launcherPath: string;
-  /** 工作目录（tsx loader 需从上游 node_modules 解析） */
   readonly cwd: string;
-  /** 子进程环境变量（含上游约定的 TDAI_* 等固定键） */
   readonly env: NodeJS.ProcessEnv;
-  /** 是否经 tsx 运行 TS 源码（打包产物为 JS 时无需） */
   readonly useTsx: boolean;
 }
 
-/** 启动器类型（生产用下方默认实现；测试注入 fake） */
 export type EngineLauncher = (options: LaunchEngineOptions) => EngineProcessHandle;
 
-/**
- * 默认启动器：Electron utilityProcess
- */
 export const launchEngineProcess: EngineLauncher = (options) => {
   const child = utilityProcess.fork(options.launcherPath, [], {
     cwd: options.cwd,

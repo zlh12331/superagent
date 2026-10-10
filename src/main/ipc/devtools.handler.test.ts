@@ -10,7 +10,6 @@ vi.mock('electron', () => ({
 
 import { devtoolsHandlers } from './devtools.handler';
 
-/** 构造 sender 形状的 ctx（BrowserWindow.fromWebContents 需要 sender） */
 function createCtx(win: { webContents: { openDevTools: ReturnType<typeof vi.fn> } } | null) {
   const sender = { id: 1 };
   mockFromWebContents.mockReturnValue(win);

@@ -3,7 +3,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { type AgentHandlerDeps, createAgentHandlers } from './agent.handler';
 
-/** 创建 fake AgentService */
 function createFakeAgentService() {
   return {
     startAgent: vi.fn(async () => 'session-abc'),
@@ -13,7 +12,6 @@ function createFakeAgentService() {
   } as unknown as AgentHandlerDeps['agentService'];
 }
 
-/** 构造 ctx（run 需要 sender；isDestroyed/send 供 emitEvent 守卫与推送用） */
 function createCtx() {
   return {
     sender: { id: 1, isDestroyed: () => false, send: vi.fn() },

@@ -2,7 +2,6 @@ import { spawn } from 'node:child_process';
 import { afterEach, describe, expect, it } from 'vitest';
 import { LspClient, type LspPosition } from './lsp-client';
 
-/** fake 语言服务器脚本（真实 JSON-RPC 2.0 over stdio） */
 const FAKE_SERVER_SCRIPT = `
 let buffer = '';
 let serverState = null;
@@ -56,7 +55,6 @@ process.stdin.on('data', (chunk) => {
 });
 `;
 
-/** 启动 fake 服务器并创建客户端 */
 async function createTestClient(timeoutMs = 3_000): Promise<LspClient> {
   const child = spawn(process.execPath, ['-e', FAKE_SERVER_SCRIPT]);
   const client = new LspClient({

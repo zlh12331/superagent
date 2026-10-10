@@ -60,7 +60,6 @@ describe('MemoryHubService 未配置降级（空实现）', () => {
 });
 
 describe('MemoryHubService 无引擎产物降级（hubRoot 存在但入口缺失）', () => {
-  /** 模拟打包期未捆绑记忆引擎：hubRoot 目录存在，但里面没有上游入口 */
   function createHubless(): MemoryHubService {
     const dir = mkdtempSync(join(tmpdir(), 'memory-hub-hubless-'));
     mkdirSync(join(dir, 'node_modules'), { recursive: true });
@@ -98,7 +97,6 @@ describe('MemoryHubService 生命周期', () => {
 });
 
 describe('MemoryHubService.listL0BySession', () => {
-  /** 构造含 conversations JSONL 的临时数据目录 */
   function createDataDir(linesByFile: Record<string, string>): string {
     const root = mkdtempSync(join(tmpdir(), 'memory-hub-l0-'));
     const convDir = join(root, 'data', 'conversations');
@@ -300,7 +298,6 @@ describe('MemoryHubService 失效域声明（S8）', () => {
     vi.mocked(broadcastInvalidation).mockClear();
   });
 
-  /** EngineProcessHandle 的 fake 形状（kill 触发 exit 监听，模拟真实进程） */
   interface FakeHandle {
     pid: number | undefined;
     hasExited: () => boolean;
@@ -309,7 +306,6 @@ describe('MemoryHubService 失效域声明（S8）', () => {
     kill: () => void;
   }
 
-  /** fake launcher：可编程的 EngineProcessHandle */
   function createLaunchFake(): { launcher: () => FakeHandle; crash: (code?: number) => void } {
     const exitListeners: Array<(code: number) => void> = [];
     let exited = false;
@@ -338,7 +334,6 @@ describe('MemoryHubService 失效域声明（S8）', () => {
     };
   }
 
-  /** 造一个「有上游入口」的 hubRoot（fake launcher + stub fetch，不真拉子进程） */
   function createStartedService(launcher: () => FakeHandle): MemoryHubService {
     const dir = mkdtempSync(join(tmpdir(), 'memory-hub-invalidation-'));
     mkdirSync(join(dir, 'src', 'gateway'), { recursive: true });

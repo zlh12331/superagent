@@ -1,31 +1,16 @@
 import { type ModelMessage, pruneMessages } from 'ai';
 import { encode } from 'gpt-tokenizer';
 
-/** 条数压缩参数：总条数上限 + 保留的最近条数 */
 interface CompressionOptions {
   readonly maxMessages: number;
   readonly recentMessages: number;
 }
 
-/** 条数压缩缺省参数：总条数 > 50 才触发，保留最近 10 条 */
 const DEFAULT_OPTIONS: CompressionOptions = {
   maxMessages: 50,
   recentMessages: 10,
 };
 
-/**
- * 条数压缩：超 maxMessages 时按角色分流重建消息列表，未超限原样返回
- * （返回同一引用）
- *
- * 重建规则：
- * - system 消息全量保留（排在最前）
- * - 工具消息（role==='tool' 或带 toolCalls 的 assistant）整体交
- *   mergeToolMessages 合并，与普通消息的最近窗口彼此独立
- * - 其余消息只保留最近 recentMessages 条（earlyMessages.slice(-recentMessages)）
- *
- * @param messages 完整消息历史
- * @param options 裁剪参数（缺省用 DEFAULT_OPTIONS）
- */
 export function compressContext(
   messages: ModelMessage[],
   options: Partial<CompressionOptions> = {},
@@ -68,37 +53,15 @@ export function compressContext(
   return result;
 }
 
-/**
- * token 计数缓存（2026-09-08 性能修复）
- *
- * BPE encode 约 33 KB/ms：单回合内 estimateMessagesTokens 至少被调 5 次
- * （agent-service 的预算判定 + compressByTokenBudget 内部 3~4 次），
- * 同一批消息文本会被反复全量编码。400 KB 上下文 ≈ 65–80 ms 纯主线程阻塞，
- * 1 MB ≈ 150–180 ms（长会话首 token 延迟肉眼可见）。
- *
- * 缓存键用「长度 + 首尾片段」指纹：避免为每次调用生成完整文本哈希
- * （那本身就是 O(n) 开销）；同长度同首尾而内容不同的概率极低，
- * 且命中错误最多让估算偏差（不是安全边界），可接受。
- *
- * 上限 512 条 LRU：单会话消息数 + 系统提示 + 工具 schema 的合理工作集；
- * 超出按插入顺序淘汰（Map 迭代序 = 插入序，删除最旧）。
- */
 const TOKEN_CACHE_MAX = 512;
 const tokenCountCache = new Map<string, number>();
 
-/** 缓存键：长度 + 首尾 64 字符（低开销指纹） */
 function tokenCacheKey(text: string): string {
   const head = text.slice(0, 64);
   const tail = text.length > 64 ? text.slice(-64) : '';
   return `${text.length}:${head}:${tail}`;
 }
 
-/**
- * 估算文本的 token 数（gpt-tokenizer 精确计数，v4 默认 o200k_base 词表）
- *
- * 用于 token 预算压缩与 UI 展示上下文消耗。结果带 LRU 缓存
- * （见 tokenCountCache 注释：单回合重复编码是长上下文首 token 延迟主因）。
- */
 export function estimateTokenCount(text: string): number {
   if (text.length === 0) {
     return 0;
@@ -121,28 +84,10 @@ export function estimateTokenCount(text: string): number {
   return count;
 }
 
-/**
- * 多模态「资产型」part 的保守 token 折算额度。
- *
- * image / file / reasoning-file 的 base64 负载不能按字符数计 token
- * （一张图会估出几万 token），供应商按固定块计费；取 1000 作为下界代理，
- * 避免「几十张附件仍显示 0 占用」这一方向的系统性低估。
- *
- * 仅对资产型 part 生效（见 isAssetPart）：内联文本型 file 负载
- * 已按文本精确计数，不再叠加本额度。
- */
 export const MULTIMODAL_PART_TOKEN_ALLOWANCE = 1_000;
 
-/** 多模态 content part 类型（provider 侧按固定块计费） */
 const MULTIMODAL_PART_TYPES = new Set(['image', 'file', 'reasoning-file']);
 
-/**
- * 消息 → 计入估算的文本（provider 真实可见部分）
- *
- * 覆盖文本段、推理块、工具入参、工具结果与内联文本型文件负载；
- * 图片/二进制资产不按字符计数，由 MULTIMODAL_PART_TOKEN_ALLOWANCE 折算
- * （见 countMessageTokens）。
- */
 function messageToText(msg: ModelMessage): string {
   const content = msg.content as unknown;
   if (typeof content === 'string') {
@@ -154,12 +99,10 @@ function messageToText(msg: ModelMessage): string {
   return joinTextParts(content.map((part) => partToText(part)));
 }
 
-/** 文本段拼接（丢弃空段，避免空 part 的多余分隔符被计入 token） */
 function joinTextParts(texts: string[]): string {
   return texts.filter((text) => text.length > 0).join('\n');
 }
 
-/** content part 的宽松读取形状（估算器只取需要的字段，其余形状忽略） */
 interface PartShape {
   readonly type?: unknown;
   readonly text?: unknown;
@@ -171,13 +114,11 @@ interface PartShape {
   readonly data?: unknown;
 }
 
-/** 消息的 content part 数组（string content 不含 part → 空数组） */
 function contentParts(msg: ModelMessage): unknown[] {
   const content = msg.content as unknown;
   return Array.isArray(content) ? content : [];
 }
 
-/** content part 的 type 字段（非对象 / 缺失 → 空串） */
 function partType(part: unknown): string {
   if (part === null || typeof part !== 'object') {
     return '';
@@ -186,7 +127,6 @@ function partType(part: unknown): string {
   return typeof kind === 'string' ? kind : '';
 }
 
-/** content part 的 toolCallId（缺失 → 空串；配对时空串视为无调用方可匹配） */
 function toolCallIdOf(part: unknown): string {
   if (part === null || typeof part !== 'object') {
     return '';
@@ -195,7 +135,6 @@ function toolCallIdOf(part: unknown): string {
   return typeof id === 'string' ? id : '';
 }
 
-/** 提取 part 负载中的内联文本（二进制/URL 负载没有文本可计） */
 function inlineTextOf(part: PartShape): string {
   const data = part.data;
   if (data !== null && typeof data === 'object') {
@@ -207,11 +146,6 @@ function inlineTextOf(part: PartShape): string {
   return '';
 }
 
-/**
- * 单个 content part → 文本（无法识别的 part 类型返回空串，不抛错）
- *
- * 各类型处理见分支注释；资产型 part 只取其内联文本（通常为空）。
- */
 function partToText(part: unknown): string {
   if (part === null || typeof part !== 'object') {
     return '';
@@ -233,7 +167,6 @@ function partToText(part: unknown): string {
   return '';
 }
 
-/** tool-result 的 output → 文本（text / json / error-* / content 多段） */
 function toolResultToText(output: unknown): string {
   if (output === null || typeof output !== 'object') {
     return stringifyToText(output);
@@ -248,7 +181,6 @@ function toolResultToText(output: unknown): string {
   return stringifyToText(o);
 }
 
-/** 值 → 文本（字符串原样，其余 JSON 序列化；循环引用等异常吞掉） */
 function stringifyToText(value: unknown): string {
   if (typeof value === 'string') {
     return value;
@@ -260,12 +192,10 @@ function stringifyToText(value: unknown): string {
   }
 }
 
-/** 判断 content part 是否为多模态负载（image / file / reasoning-file） */
 function isMultimodalPart(part: unknown): boolean {
   return MULTIMODAL_PART_TYPES.has(partType(part));
 }
 
-/** 是否为按固定块计费的资产 part（多模态且非内联文本） */
 function isAssetPart(part: unknown): boolean {
   if (!isMultimodalPart(part)) {
     return false;
@@ -273,7 +203,6 @@ function isAssetPart(part: unknown): boolean {
   return inlineTextOf(part as PartShape).length === 0;
 }
 
-/** 消息中资产型 part 数量（含 tool-result 内嵌的 content 段） */
 function countAssetParts(msg: ModelMessage): number {
   let count = 0;
   for (const part of contentParts(msg)) {
@@ -289,16 +218,12 @@ function countAssetParts(msg: ModelMessage): number {
   return count;
 }
 
-/**
- * 单条消息 token 数（文本精确计数 + 资产型负载固定折算）
- */
 function countMessageTokens(msg: ModelMessage): number {
   return (
     estimateTokenCount(messageToText(msg)) + countAssetParts(msg) * MULTIMODAL_PART_TOKEN_ALLOWANCE
   );
 }
 
-/** 判断消息是否携带工具调用（assistant 带 toolCalls 数组且非空） */
 function hasToolCalls(msg: ModelMessage): boolean {
   return (
     msg.role === 'assistant' &&
@@ -308,29 +233,8 @@ function hasToolCalls(msg: ModelMessage): boolean {
   );
 }
 
-/**
- * 工具上下文保留窗口（消息条数）：最近 N 条内的 tool-call / tool-result 不裁剪。
- *
- * 取 20 ≈ 数个 agent 步骤的工作记忆；更早的调用入参与结果已被后续推理消化，
- * 是压缩时最先该回收的低价值 token。
- */
 export const TOOL_CONTEXT_KEEP_MESSAGES = 20;
 
-/**
- * 裁剪低价值上下文（SDK pruneMessages 封装）
- *
- * - 旧推理块：清除最后一条消息之前各 assistant 消息里的 reasoning，
- *   只保留最后一条消息的推理（reasoning: 'before-last-message'，推理不回灌）
- * - 窗口外工具上下文：按 toolCallId 成对删除，不会留下 provider 拒绝的孤儿
- *   tool_use / tool_result（手写按角色丢弃极易踩这个坑）
- * - 裁剪后空消息删除：只剩工具调用的壳消息不占预算
- *
- * system 消息与最后一条消息不受影响（SDK 语义保证）。
- *
- * @param messages 原始消息列表（不被修改）
- * @param keepRecentMessages 工具上下文保留窗口，默认 TOOL_CONTEXT_KEEP_MESSAGES
- * @returns 裁剪后的消息列表
- */
 export function pruneContext(
   messages: ModelMessage[],
   keepRecentMessages: number = TOOL_CONTEXT_KEEP_MESSAGES,
@@ -343,20 +247,6 @@ export function pruneContext(
   });
 }
 
-/**
- * 丢弃「调用已被切掉」的孤儿 tool_result
- *
- * 第二档保留的是消息后缀，切点可能落在 assistant 的 tool-call 与后续
- * tool-result 之间：结果留在切片里、调用却被切掉 → 供应商 400
- * （tool_result 找不到对应 tool_use）。第一档 pruneMessages 按 id
- * 成对删除，没有这个问题，故只需在切片后补这一刀。
- *
- * 反方向（tool_use 无 result）无需处理：结果总在调用之后，后缀切片
- * 不可能只留调用。剥离后 content 清空的消息整条丢弃。
- *
- * @param messages 切片后的消息列表（不被修改）
- * @returns 配对完整的消息列表
- */
 function dropOrphanToolResults(messages: ModelMessage[]): ModelMessage[] {
   const callIds = new Set<string>();
   for (const msg of messages) {
@@ -388,23 +278,6 @@ function dropOrphanToolResults(messages: ModelMessage[]): ModelMessage[] {
   return result;
 }
 
-/**
- * 按 token 预算压缩消息（gpt-tokenizer 精确计数）
- *
- * 策略（两档，先廉价后昂贵）：
- * - maxTokens ≤ 0：返回空数组
- * - 预算内：原样返回（同一引用），不做任何有信息损失的裁剪
- * - 第一档：pruneContext 回收旧推理块 + 窗口外工具上下文；
- *   裁剪结果仍超对话预算时退回未裁剪列表（candidates），保证第一档
- *   绝不比不裁剪更差（避免为腾预算反而丢了配对的工具上下文）
- * - 第二档：仍超预算 → 从后往前整条保留（先丢最早的消息），
- *   再用 dropOrphanToolResults 补上切点破坏的工具配对
- * - system 消息无条件保留，且其占用先从预算扣除
- *
- * @param messages 原始消息列表
- * @param maxTokens token 预算（默认 8000；建议用 getCompactionBudget 按窗口计算）
- * @returns 压缩后的消息列表（不改变原始数组）
- */
 export function compressByTokenBudget(messages: ModelMessage[], maxTokens = 8000): ModelMessage[] {
   if (maxTokens <= 0) {
     return [];
@@ -450,16 +323,6 @@ export function compressByTokenBudget(messages: ModelMessage[], maxTokens = 8000
   return systemMessages.length > 0 ? systemMessages : kept;
 }
 
-/**
- * 合并工具调用消息：把「assistant 调用 + 后续 tool 结果」凑成对，
- * 只在配对完整时输出，末尾只保留最近 20 条（约 10 对）
- *
- * 扫描时用 currentToolCall / currentToolResult 暂存最近一次调用与结果，
- * 遇到下一次调用或普通消息时若两者都已就绪则输出该对；末尾未配对
- * （只有调用没有结果，如被中断）不 flush，故不会输出悬空调用。
- *
- * @param messages 已按工具语义分流出的消息列表
- */
 function mergeToolMessages(messages: ModelMessage[]): ModelMessage[] {
   if (messages.length === 0) return [];
 
@@ -495,49 +358,24 @@ function mergeToolMessages(messages: ModelMessage[]): ModelMessage[] {
   return merged.slice(-20);
 }
 
-/** 压缩触发比例：上下文达到窗口 75% 时触发压缩（对标 qwen auto-compaction threshold） */
 export const COMPACTION_RATIO = 0.75;
 
-/** 压缩输出预留上限：压缩后仍需窗口空间生成摘要/继续输出（对标 qwen SUMMARY_RESERVE 20K） */
 export const COMPACTION_RESERVE_TOKENS = 20_000;
 
-/** 压缩预算下限（小窗口保护，避免预算算成负数） */
 export const MIN_COMPACTION_BUDGET = 8_000;
 
-/**
- * 窗口感知的压缩预算：round(0.75 × window) − 输出预留
- *
- * 输出预留 = min(20K, 5% × window)：随窗口缩水而封顶 20K，
- * 小窗口不会预留过大；结果再与 MIN_COMPACTION_BUDGET 取大值兜底。
- *
- * @param contextWindowSize 模型上下文窗口（token 数）
- * @returns 压缩目标预算（token 数，至少 MIN_COMPACTION_BUDGET）
- */
 export function getCompactionBudget(contextWindowSize: number): number {
   const reserve = Math.min(COMPACTION_RESERVE_TOKENS, Math.round(0.05 * contextWindowSize));
   const budget = Math.round(contextWindowSize * COMPACTION_RATIO) - reserve;
   return Math.max(budget, MIN_COMPACTION_BUDGET);
 }
 
-/**
- * 估算消息列表的总 token 数（逐条 countMessageTokens 求和）
- */
 export function estimateMessagesTokens(messages: ModelMessage[]): number {
   return messages.reduce((sum, msg) => sum + countMessageTokens(msg), 0);
 }
 
-/** 上下文占用等级：ok（安全）/ warn（接近压缩线）/ compact（应压缩） */
 export type CompactionLevel = 'ok' | 'warn' | 'compact';
 
-/**
- * 压缩触发判定（对标 qwen 的 auto/warn 双阈值）
- *
- * - compact 线 = 压缩预算（窗口 75% − 预留，下限 MIN_COMPACTION_BUDGET）
- * - warn 线 = compact 线 − 5% 窗口缓冲（提前几轮提醒）
- *
- * @param contextTokens 当前上下文 token 数（estimateMessagesTokens 的结果）
- * @param contextWindowSize 模型上下文窗口（token 数）
- */
 export function getCompactionDecision(
   contextTokens: number,
   contextWindowSize: number,
@@ -553,42 +391,16 @@ export function getCompactionDecision(
   return 'ok';
 }
 
-/** 回合级 token 预算等级：ok / warn（接近压缩线）/ compact（应压缩）/ over-limit（拒止） */
 export type TokenBudgetLevel = 'ok' | 'warn' | 'compact' | 'over-limit';
 
-/**
- * 回合级 token 预算判定结果
- *
- * level 由 getTokenBudgetDecision 按 contextTokens 与 compactAt / hardLimit
- * 的关系得出；各字段回传给调用方用于日志与遥测。
- */
 export interface TokenBudgetDecision {
   readonly level: TokenBudgetLevel;
-  /** 当前上下文 token 数（estimateMessagesTokens 的结果） */
   readonly contextTokens: number;
-  /** 模型上下文窗口（token 数） */
   readonly contextWindowSize: number;
-  /** 压缩线（窗口 75% − 输出预留，即 getCompactionBudget 的结果） */
   readonly compactAt: number;
-  /** 硬上限（窗口 − 输出预留；超过即拒止，防 400） */
   readonly hardLimit: number;
 }
 
-/**
- * 回合开始时的 token 预算调度（agent/chat 主流程挂载点）
- *
- * 对齐 qwen TokenBudget 调度语义，三档 + 拒止：
- * - ok：上下文安全，直接执行
- * - warn：接近压缩线（提前几轮提醒，日志/遥测）
- * - compact：达到压缩线（压缩消息历史后执行）
- * - over-limit：超出硬上限（拒绝调用，避免供应商 400 错误）
- *
- * over-limit 判定优先于 compact/warn：contextTokens > hardLimit 直接返回
- * over-limit，否则交给 getCompactionDecision 判 ok/warn/compact。
- *
- * @param contextTokens 当前上下文 token 数
- * @param contextWindowSize 模型上下文窗口（token 数）
- */
 export function getTokenBudgetDecision(
   contextTokens: number,
   contextWindowSize: number,

@@ -2,7 +2,6 @@ import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { REMOTE_CLIENT_CSP, REMOTE_CLIENT_HTML } from './remote-web-client';
 
-/** 取内联块字节（`<tag>...</tag>` 之间的原文，含缩进与换行） */
 function inlineBlock(tag: 'script' | 'style'): string {
   const matched = new RegExp(`<${tag}>([\\s\\S]*)</${tag}>`).exec(REMOTE_CLIENT_HTML);
   const body = matched?.[1];

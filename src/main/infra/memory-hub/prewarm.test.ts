@@ -6,14 +6,12 @@ vi.mock('../../utils/logger', () => ({
   logger: { info: mocks.info, warn: mocks.warn, error: mocks.error, debug: mocks.debug },
 }));
 
-/** 读取（重置模块后）的 prewarm 模块 */
 async function loadModule() {
   vi.resetModules();
   return import('./prewarm');
 }
 
 describe('shouldPrewarm（纯决策）', () => {
-  /** 基线决策：已配置 + 已启用 + 非测试 + 无豁免 */
   const base = { configured: true, enabled: true, isTest: false, skipFlag: false } as const;
 
   it('引擎已配置且启用、非测试、无豁免 → 预热', async () => {
@@ -57,7 +55,6 @@ describe('scheduleMemoryPrewarm（调度）', () => {
     process.env = { ...originalEnv };
   });
 
-  /** 构造 fake 服务（只用到 isConfigured 与 ensureStarted） */
   function fakeService(overrides?: { configured?: boolean; reject?: boolean }) {
     const health = vi.fn(async () => true);
     const ensureStarted = vi.fn(async () => {

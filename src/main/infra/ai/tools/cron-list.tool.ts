@@ -3,12 +3,8 @@ import { t } from '../../i18n';
 import { cronService } from '../agent/cron-service';
 import type { Tool, ToolContext, ToolResult } from './tool';
 
-/** cron_list 入参（无字段） */
 const CronListInputSchema = z.object({});
 
-/**
- * 创建 cron_list 工具（依赖模块级 CronService 单例）
- */
 export function createCronListTool(): Tool<Record<string, never>> {
   return {
     name: 'cron_list',

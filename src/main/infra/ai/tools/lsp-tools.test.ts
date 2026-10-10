@@ -15,7 +15,6 @@ const README_MD = join(WORK_DIR, 'README.md');
 writeFileSync(MAIN_TS, 'export const a = 1;\n');
 writeFileSync(README_MD, '# readme\n');
 
-/** fake 语言服务器脚本（真实 JSON-RPC 2.0 over stdio） */
 const FAKE_SERVER_SCRIPT = `
 let buffer = '';
 function send(message) {
@@ -83,7 +82,6 @@ describe('LSP 工具', () => {
     managers.length = 0;
   });
 
-  /** 注入 fake 服务器（typescript 语言 → node 执行脚本） */
   function createManager(): LspServerManager {
     const manager = new LspServerManager({
       serverOverrides: {

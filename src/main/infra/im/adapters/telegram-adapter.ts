@@ -6,7 +6,6 @@ import type { ChannelIncomingMessage, ChannelTarget, IChannelAdapter } from '../
 const API_BASE = 'https://api.telegram.org';
 const POLL_TIMEOUT_MS = 30_000;
 
-/** Telegram 消息原始形状（长轮询响应子集） */
 interface TelegramUpdate {
   readonly update_id: number;
   readonly message?: {
@@ -18,19 +17,12 @@ interface TelegramUpdate {
   };
 }
 
-/**
- * Telegram Bot 渠道适配器
- */
 export class TelegramAdapter implements IChannelAdapter {
   readonly kind = 'telegram' as const;
   readonly displayName = 'Telegram';
   readonly implemented = true;
   readonly configHint: string = 'Bot Token（@BotFather 获取）';
 
-  /**
-   * HTTP 依赖注入点（测试传 fake fetch，生产默认全局 fetch）
-   * 注入而非 mock：网络外部依赖可替换，业务逻辑保持真实实现
-   */
   private readonly fetchFn: typeof fetch;
 
   constructor(options: { fetchFn?: typeof fetch } = {}) {
@@ -116,9 +108,6 @@ export class TelegramAdapter implements IChannelAdapter {
     };
   }
 
-  /**
-   * 长轮询循环：getUpdates（timeout=30s）→ 逐条确认 → offset 推进
-   */
   private async pollLoop(controller: AbortController): Promise<void> {
     let offset = 0;
     while (!controller.signal.aborted) {
@@ -151,9 +140,6 @@ export class TelegramAdapter implements IChannelAdapter {
     }
   }
 
-  /**
-   * 单条 update → 领域消息分发（过滤非文本 / 群聊 @bot 前缀剥离）
-   */
   private dispatchUpdate(update: TelegramUpdate): void {
     const message = update.message;
     if (message === undefined || message.text === undefined) {
@@ -183,9 +169,6 @@ export class TelegramAdapter implements IChannelAdapter {
     }
   }
 
-  /**
-   * Bot API 调用（fetch + 表单编码，兼容 Node/Electron）
-   */
   private async callApi<T>(
     method: string,
     params: Record<string, string | number | readonly string[]> = {},

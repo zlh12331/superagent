@@ -6,16 +6,6 @@ import { emitEvent } from '../../../utils/emit-event';
 import { createTextDeltaBatcher } from '../agent-runtime/text-delta-batcher';
 import { clampToolPartOutput } from '../tools/tool-executor';
 
-/**
- * 推送单个流式 part 到渲染层（2026-09-08 从 streamToWebContents 提取）
- *
- * 含输出闸门（此前只加在 tool-executor 的 tool-result 通道，本通道会原样
- * 透传 tool-output-available 的完整 output，read_file 可带 2MB → 约 50 万
- * token 进渲染层与后续上下文）。
- *
- * webContents 缺失或已销毁时静默短路——无头场景（子代理/IM 桥）不推流，
- * 销毁后推送会抛错，故先行判空。
- */
 export function forwardStreamPart(
   part: unknown,
   sessionId: string,
@@ -32,27 +22,11 @@ export function forwardStreamPart(
   emitEvent(webContents, IPC_DEFINITIONS.agent.subscribeStreamPart, payload);
 }
 
-/** 回合级 part 推送器：push 透传/合帧，flush 落地缓冲（END/ERROR 推送前调用） */
 export interface TurnPartForwarder {
-  /** 推入一个上游 part（text-delta 可能被合帧缓冲，其余立即透出） */
   push(part: unknown): void;
-  /** 立即透出缓冲（幂等；回合收尾必须调用，防丢尾） */
   flush(): void;
 }
 
-/**
- * 装配回合级 part 推送器（P2-31）
- *
- * text-delta 按 sessionId 聚合微批合帧；无 webContents 的无头场景
- * （IM 桥接等）推送恒为 no-op，直接短路不引入缓冲开销。
- *
- * 合帧与保序细节由 createTextDeltaBatcher 承担：同 id 相邻 delta 合并、
- * 非 text-delta 前先落地缓冲、超 4096 字符立即落地、flush 幂等。
- *
- * @param getContextWindowSize 模型窗口的惰性读取（推送发生在回合执行期间，
- *   而 forwarder 在模型解析前装配——值形态会拿到 undefined；传 getter 使
- *   每次推送都读到当下的窗口，供工具输出闸门按比例收紧）
- */
 export function createTurnPartForwarder(
   sessionId: string,
   webContents: WebContents | undefined,

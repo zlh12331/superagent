@@ -15,24 +15,14 @@ import type {
   RemoteCommandResult,
 } from './remote-control';
 
-/**
- * 远程命令 agent 的沙箱工作目录（与 IM 沙箱同级、同策略）
- *
- * 使用点求值（W9 修复）：与 IM 桥同因——模块加载期快照早于 dev 的
- * app.setPath('userData') 重定向，会导致 dev/E2E 数据分叉。
- */
 export function getRemoteDefaultWorkingDir(): string {
   return join(app.getPath('userData'), 'remote-workspace');
 }
 
-/** 单回合最大工具调用轮数（与 IM 桥接一致） */
 const MAX_STEPS = 20;
-/** 回合完成兜底超时（HTTP 长请求不宜像 IM 那样挂 30 分钟） */
 const TURN_TIMEOUT_MS = 10 * 60 * 1000;
-/** 回传文本上限（防单回合超长输出撑爆响应） */
 const MAX_REPLY_CHARS = 20_000;
 
-/** 回合结束原因 → 回传文案 */
 const REASON_LABELS: Record<string, string> = {
   completed: '✅ 完成',
   aborted: '⏹ 已中断',
@@ -41,13 +31,8 @@ const REASON_LABELS: Record<string, string> = {
   timeout: '⏱ 执行超时',
 };
 
-/**
- * 远程命令 → Agent 桥接（由 ServiceContainer 在创建远程控制服务时挂载）
- */
 export class RemoteAgentBridge {
-  /** 会话映射：clientId → sessionId（重启后由新命令重建） */
   private readonly sessionMap = new Map<string, string>();
-  /** 正在执行的 clientId 集合（串行控制） */
   private readonly busyClients = new Set<string>();
   private mounted = false;
   private unsubscribeCommand: (() => void) | null = null;
@@ -59,9 +44,6 @@ export class RemoteAgentBridge {
     private readonly sessionService: ISessionService,
   ) {}
 
-  /**
-   * 挂载到远程控制服务的命令入口（幂等）
-   */
   mount(): void {
     if (this.mounted) {
       return;
@@ -78,9 +60,6 @@ export class RemoteAgentBridge {
     logger.info({}, '远程控制 → Agent 桥接已挂载');
   }
 
-  /**
-   * 解除命令订阅（应用退出 / 测试隔离；幂等）
-   */
   unmount(): void {
     if (!this.mounted) {
       return;
@@ -91,12 +70,6 @@ export class RemoteAgentBridge {
     logger.info({}, '远程控制 → Agent 桥接已解除挂载');
   }
 
-  /**
-   * 处理单条远程命令（串行 + 模式检查 + 回合执行 + 结果回传）
-   *
-   * 始终 accepted=true：命令到达即视为已接管，拒绝原因写在 reply 里
-   * （移动端拿到的是一条可读的助手回复，而不是无解释的 accepted:false）。
-   */
   private async handleCommand(
     command: RemoteCommand,
     emit: RemoteCommandEmitter,
@@ -131,12 +104,6 @@ export class RemoteAgentBridge {
     }
   }
 
-  /**
-   * 建立/复用会话（首条命令落库创建，标题标记远程控制来源）
-   *
-   * 关键：sessionId 取 sessionService.create 的返回值——create 内部自行生成 id，
-   * 传入自定义 id 不会被采用（沿用调用方 id 会导致后续落库 SESSION_NOT_FOUND）。
-   */
   private async ensureSession(clientId: string): Promise<string> {
     const existing = this.sessionMap.get(clientId);
     if (existing !== undefined) {
@@ -156,12 +123,6 @@ export class RemoteAgentBridge {
     }
   }
 
-  /**
-   * 执行单回合：回读历史 + 追加本条命令 → startAgent（无头）→ 等待 TURN_END
-   *
-   * @param emit 增量事件通道（流式请求逐帧回推移动端；非流式为 noop）
-   * @returns 回传给移动端的执行结果文本与回合结束原因
-   */
   private async runTurn(
     sessionId: string,
     userText: string,
@@ -231,11 +192,6 @@ export class RemoteAgentBridge {
     return { reply: buildReply(assistantText, turnEvents, reason), reason };
   }
 
-  /**
-   * 回读会话历史（多轮上下文）
-   *
-   * 读失败降级为空历史（降级为单轮，不因此拒绝执行远程命令）。
-   */
   private async loadHistory(sessionId: string): Promise<ChatMessage[]> {
     try {
       const res = await this.sessionService.get(sessionId);
@@ -247,7 +203,6 @@ export class RemoteAgentBridge {
   }
 }
 
-/** 组装回传文本：正文 + 工具/错误摘要 + 结束状态（超长截断） */
 function buildReply(assistantText: string, turnEvents: readonly string[], reason: string): string {
   const blocks: string[] = [];
   const text = assistantText.trim();

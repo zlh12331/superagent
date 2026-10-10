@@ -17,37 +17,14 @@ import type {
   RegisteredProvider,
 } from './types';
 
-/**
- * 默认 API Key 前缀（与早期版本 keychain key 命名保持一致）
- *
- * keychain key 命名规则：'<provider-kind>-api-key'
- * - deepseek → 'deepseek-api-key'
- * - openai → 'openai-api-key'
- * - anthropic → 'anthropic-api-key'
- * - ollama → 无需 API Key（本地服务）
- */
 export function toKeychainKey(kind: ProviderKind): string {
   return `${kind}-api-key`;
 }
 
-/**
- * 供应商在 AI SDK 中的 provider name（providerOptions 键）
- *
- * 约定收敛点：createOpenAICompatible({ name: 'deepseek' }) / 官方 SDK
- * 默认 name 均与 ProviderKind 同名。LlmClient 构造 providerOptions 时
- * 必须经此函数取键，禁止直接硬编码 kind——未来工厂改名只改这里。
- */
 export function getProviderName(kind: ProviderKind): string {
   return kind;
 }
 
-/**
- * 内置供应商定义表
- *
- * defaultModel / isDefault 均从模型领域层单一真源派生
- * （DEFAULT_MODEL_BY_KIND / DEFAULT_KIND），避免双源维护。
- * 显示名不在 main 维护：渲染层以 kind 经 i18n（providers.*）解析。
- */
 const BUILTIN_DEFINITIONS: readonly ProviderDefinition[] = [
   {
     kind: 'deepseek',
@@ -111,31 +88,8 @@ const BUILTIN_DEFINITIONS: readonly ProviderDefinition[] = [
   },
 ];
 
-/**
- * 端点归一化已收敛至 ./endpoint 单一真源（2026-10-08）
- *
- * 此前本文件私有 trimTrailingSlash / withOpenAiV1，而连通性探测
- * （models.handler.ts 的 buildTestUrl）另有一份不幂等的拼接实现——同一事实
- * 两处各算一遍，用户填 `/v1` 结尾地址时探测 404 拦保存（真实调用反而正确）。
- * 现调用路径与探测路径共用 resolveProviderBaseUrl / resolveProviderRequestUrl。
- */
-
-/**
- * AI SDK fetch 注入（34 号网络代理）
- *
- * 统一传 proxiedFetch：fixed 模式经 ProxyAgent、localhost/bypass 直连、
- * 其余模式零开销直通全局 fetch（proxiedFetch 内部判定）。SDK 在每次请求时
- * 调用该函数——工厂重建（resetAIProvider）+ 此处闭包 = 配置变更免重启生效。
- */
 const sdkFetch = { fetch: proxiedFetch as unknown as typeof fetch };
 
-/**
- * 内置供应商工厂表
- *
- * 每个工厂返回 (modelId) => LanguageModel 的工厂函数。
- * baseURL 单一入口：从 config.providers 读取（config 内部已处理 .env 覆盖），
- * 支持自托管网关 / 代理场景；新增供应商时同步扩展 config 的 ProviderBaseUrlSchema。
- */
 const BUILTIN_FACTORIES: Record<ProviderKind, ProviderFactory> = {
   deepseek: ({ apiKey, baseUrl }) => {
     const resolvedBaseUrl = baseUrl ?? getAppConfig().providers.deepseek;
@@ -268,24 +222,6 @@ const BUILTIN_FACTORIES: Record<ProviderKind, ProviderFactory> = {
   },
 };
 
-/**
- * 按 API 格式创建 LanguageModel 工厂（自定义模型的协议切换入口）
- *
- * 分发规则：
- * - 格式等于该 kind 的原生默认（见 endpoint.ts 的 DEFAULT_API_FORMAT_BY_KIND）
- *   → 走 BUILTIN_FACTORIES（保住各家的深度适配：DeepSeek 的 transformRequestBody
- *     / convertUsage、六家的 includeUsage 等），自定义模型选「默认格式」时与
- *     服务商模式行为完全一致
- * - 用户显式选了非默认格式（如 deepseek kind + openai-responses）→ 用该格式
- *   对应的官方 SDK 接口创建（协议由格式决定，不再套用 kind 的深度适配——
- *     那些适配只对原生协议有意义）
- *
- * 三种格式对应的 SDK 接口（源码实读，勿凭印象改）：
- * - openai-chat → createOpenAICompatible（也可用 createOpenAI().chat；兼容包
- *   对自建网关更宽容，且与六家 kind 的既有路径一致）
- * - openai-responses → createOpenAI().responses
- * - anthropic-messages → createAnthropic
- */
 function createFactoryByFormat(
   kind: ProviderKind,
   apiFormat: ModelApiFormat,
@@ -317,13 +253,6 @@ function createFactoryByFormat(
   ) => LanguageModel;
 }
 
-/**
- * Provider 注册表
- *
- * 无状态：所有供应商定义与工厂均为纯函数/常量。
- * 模块级单例 providerRegistry 在 providers/index.ts 装配（ai-provider /
- * generation-options 导入；不经 ServiceContainer——provider 层无状态可直用）。
- */
 export class ProviderRegistry {
   private readonly providers: Map<ProviderKind, RegisteredProvider>;
 
@@ -338,11 +267,6 @@ export class ProviderRegistry {
     }
   }
 
-  /**
-   * 获取供应商定义
-   *
-   * @throws Error 未知供应商
-   */
   getDefinition(kind: ProviderKind): ProviderDefinition {
     const entry = this.providers.get(kind);
     if (entry === undefined) {
@@ -351,9 +275,6 @@ export class ProviderRegistry {
     return entry.definition;
   }
 
-  /**
-   * 获取默认供应商（isDefault 标记的第一个）
-   */
   getDefaultKind(): ProviderKind {
     for (const entry of this.providers.values()) {
       if (entry.definition.isDefault === true) {
@@ -367,13 +288,6 @@ export class ProviderRegistry {
     return first;
   }
 
-  /**
-   * 创建 LanguageModel 工厂
-   *
-   * @param kind 供应商标识
-   * @param context 创建上下文（apiKey / baseUrl / apiFormat）
-   * @returns (modelId) => LanguageModel 工厂函数
-   */
   createFactory(
     kind: ProviderKind,
     context: {
@@ -391,12 +305,6 @@ export class ProviderRegistry {
       : entry.factory(context);
   }
 
-  /**
-   * 列出所有已注册供应商快照（当前生产零调用、仅单测）
-   *
-   * 显示名不在快照内：渲染层以 kind 经 i18n（providers.* / providerLabel）
-   * 解析，语言包是唯一真源。
-   */
   list(): ProviderInfo[] {
     const defaultKind = this.getDefaultKind();
     const infos: ProviderInfo[] = [];

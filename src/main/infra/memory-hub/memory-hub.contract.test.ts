@@ -99,7 +99,6 @@ describeIf('MemoryHubService 契约（需 MEMORY_HUB_ROOT）', () => {
       assistantContent: 'Noted: package manager is pnpm.',
     });
 
-    /** 短轮询等待 FTS 索引可见 */
     const searchHit = async (query: string): Promise<boolean> => {
       const deadline = Date.now() + 12_000;
       while (Date.now() < deadline) {

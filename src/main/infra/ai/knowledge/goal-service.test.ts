@@ -25,7 +25,6 @@ vi.mock('../../storage/db', async (importOriginal) => {
   };
 });
 
-/** 捕获 mount 注册的回合回调（handleTurnEvent 是私有方法） */
 function captureTurnHandler(agentService: { onTurnEvent: ReturnType<typeof vi.fn> }) {
   return agentService.onTurnEvent.mock.calls[0]?.[0] as (event: TurnEvent) => Promise<void>;
 }

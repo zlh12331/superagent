@@ -4,21 +4,6 @@ import { logger } from '../utils/logger';
 import type { IpcHandlerContext } from '../utils/wrap';
 import { wrap } from '../utils/wrap';
 
-/**
- * 注册全部 IPC handler
- *
- * @param handlers 按域组织的 handler 实现对象
- *                 类型约束：必须覆盖定义表所有 request 方法（缺失编译期报错）
- *
- * @example
- * ```ts
- * registerIpcHandlers({
- *   app: appHandlers,
- *   chat: chatHandlers,
- *   // ... 15 个域
- * });
- * ```
- */
 export function registerIpcHandlers(
   handlers: InferHandlers<typeof IPC_DEFINITIONS, IpcHandlerContext>,
 ): void {

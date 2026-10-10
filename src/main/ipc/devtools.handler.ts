@@ -4,10 +4,8 @@ import { BrowserWindow } from 'electron';
 import { logger } from '../utils/logger';
 import type { IpcHandlerContext } from '../utils/wrap';
 
-/** devtools:open 默认 mode（独立窗口，不占用应用主窗口空间） */
 const DEFAULT_MODE: 'detach' | 'right' | 'bottom' = 'detach';
 
-/** DevTools 域 handler 实现 */
 export const devtoolsHandlers: InferHandlers<
   typeof IPC_DEFINITIONS,
   IpcHandlerContext

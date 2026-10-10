@@ -1,23 +1,9 @@
-// （Copyright 2025 Qwen，SPDX-License-Identifier: Apache-2.0）的
-
-/**
- * 技能定义（纯数据）
- */
 export interface Skill {
-  /** 技能名（snake_case） */
   readonly name: string;
-  /** 一句话描述（load_skill 工具选择依据） */
   readonly description: string;
-  /** 技能提示词（注入上下文的指导内容） */
   readonly prompt: string;
 }
 
-/**
- * 内置技能集（4 个：code_review / refactor / debugging / commit_message）
- *
- * 仅驻注册表内存（skills 表只存 learned 行）；load_skill 工具是模型的
- * 加载入口，描述是工具选择依据。
- */
 const BUILTIN_SKILLS: readonly Skill[] = Object.freeze([
   {
     name: 'code_review',
@@ -67,57 +53,27 @@ const BUILTIN_SKILLS: readonly Skill[] = Object.freeze([
   },
 ]);
 
-/**
- * 技能注册表（模块级单例 skillRegistry 在文件尾装配；SkillRegistry 类
- * 仅单测直接实例化，生产一律用单例）
- */
 export class SkillRegistry {
   private readonly skills = new Map<string, Skill>(BUILTIN_SKILLS.map((s) => [s.name, s]));
 
-  /**
-   * 列出全部技能（按名排序）
-   *
-   * 消费方：load_skill 工具（不存在时返回可用列表）+ learn-skill-agent
-   * （构建现有技能名清单避重名）。
-   */
   list(): Skill[] {
     return [...this.skills.values()].sort((a, b) => a.name.localeCompare(b.name));
   }
 
-  /**
-   * 按名加载技能（不存在返回 undefined）
-   */
   load(name: string): Skill | undefined {
     return this.skills.get(name);
   }
 
-  /**
-   * 注册技能（覆盖同名）
-   *
-   * 生产消费方 = learn-skill-agent.learn（学习技能动态注册，load_skill
-   * 工具立即可用）。
-   */
   register(skill: Skill): void {
     this.skills.set(skill.name, skill);
   }
 
-  /**
-   * 批量加载（learn-skill-agent 产物从 skills 表合并；启动时调用）
-   */
   loadFromRows(rows: readonly Skill[]): void {
     for (const skill of rows) {
       this.skills.set(skill.name, skill);
     }
   }
 
-  /**
-   * 移除技能（若为内置技能则自动回退内置定义）
-   *
-   * 生产消费方 = learn-skill-agent.remove（DB 行删除由调用方负责，本方法
-   * 只管注册表）——内置技能删除后回退内置定义，内置能力不因删除丢失。
-   *
-   * @returns 是否存在该技能
-   */
   remove(name: string): boolean {
     if (!this.skills.has(name)) {
       return false;
@@ -131,5 +87,4 @@ export class SkillRegistry {
   }
 }
 
-/** 模块级单例 */
 export const skillRegistry = new SkillRegistry();

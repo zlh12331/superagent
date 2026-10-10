@@ -3,7 +3,6 @@ import type { IAgentService } from '../ai/agent/agent-service';
 import { isMemoryEnabled } from './memory-pref';
 import type { MemoryPort } from './types';
 
-/** 从渲染层消息线程中提取最后一条用户文本（容错解析，兼容 UIMessage parts 形状） */
 export function extractLastUserText(messages: unknown): string {
   if (!Array.isArray(messages)) return '';
   for (let i = messages.length - 1; i >= 0; i--) {
@@ -27,17 +26,11 @@ export function extractLastUserText(messages: unknown): string {
   return '';
 }
 
-/** 捕获接线实例 */
 export interface MemoryCaptureWire {
-  /** handler 在发起 run 前注入本轮用户输入（供 TURN_END 捕获使用） */
   noteLastUser(sessionId: string, text: string): void;
-  /** 解除回合订阅 */
   unmount(): void;
 }
 
-/**
- * 创建回合捕获接线（幂等挂载一次 onTurnEvent）
- */
 export function createMemoryCaptureWire(deps: {
   agentService: IAgentService;
   port: MemoryPort;

@@ -1,16 +1,12 @@
-// （Copyright 2026 Qwen Team，SPDX-License-Identifier: Apache-2.0）的
-
 import { WSClient } from '@wecom/aibot-node-sdk';
 import { logger } from '../../../utils/logger';
 import type { ChannelIncomingMessage } from '../channel/types';
 
-/** 企业微信长连接配置 */
 export interface WecomStreamConfig {
   readonly botId: string;
   readonly secret: string;
 }
 
-/** 解析结果：null = 无法归一化（缺 sender/chatId 或无文本） */
 export interface ParsedWecomMessage {
   readonly text: string;
   readonly chatId: string;
@@ -19,14 +15,8 @@ export interface ParsedWecomMessage {
   readonly timestamp: number;
 }
 
-/** 宽松记录类型（SDK 解耦） */
 type RecordLike = Record<string, unknown>;
 
-/**
- * 企业微信消息帧解析（纯函数，可测）
- *
- * payload 形状（aibot 协议）：{ body?: { msgid, from:{userid}, chattype, chatid, msgtype, text:{content}, ... } }
- */
 export function parseWecomEvent(payload: unknown): ParsedWecomMessage | null {
   const raw = asRecord(payload);
   if (raw === undefined) {
@@ -60,7 +50,6 @@ export function parseWecomEvent(payload: unknown): ParsedWecomMessage | null {
   };
 }
 
-/** 文本提取（对齐 qwen extractText 语义收敛）：text → voice → mixed 拼接 → 媒体占位 */
 function extractWecomText(body: RecordLike): string {
   const msgType = getString(body, 'msgtype');
   if (msgType === 'mixed') {
@@ -107,7 +96,6 @@ function extractWecomText(body: RecordLike): string {
   return '';
 }
 
-/** 类型安全取值（对齐 qwen getString/getRecord 语义） */
 function getString(value: RecordLike | undefined, key: string): string {
   const raw = value?.[key];
   return typeof raw === 'string' ? raw : '';
@@ -128,9 +116,6 @@ function asRecord(value: unknown): RecordLike | undefined {
     : undefined;
 }
 
-/**
- * 企业微信长连接接收器（SDK WSClient；生命周期 open/close）
- */
 export class WecomStreamReceiver {
   private readonly botId: string;
   private readonly secret: string;
@@ -147,14 +132,10 @@ export class WecomStreamReceiver {
     return this.opened;
   }
 
-  /** 订阅入站消息（单订阅者：适配器转发用） */
   onMessage(handler: (message: ChannelIncomingMessage) => void): void {
     this.messageHandler = handler;
   }
 
-  /**
-   * 打开长连接（SDK 自动认证/心跳/重连）
-   */
   async open(): Promise<void> {
     if (this.opened) {
       return;
@@ -182,7 +163,6 @@ export class WecomStreamReceiver {
     logger.info({}, '企业微信长连接已建立（接收就绪）');
   }
 
-  /** 关闭长连接（幂等） */
   close(): void {
     if (this.client !== null) {
       try {
@@ -193,7 +173,6 @@ export class WecomStreamReceiver {
     this.opened = false;
   }
 
-  /** 帧分发：解析 → 转发入站消息 */
   private dispatchFrame(frame: unknown): void {
     const parsed = parseWecomEvent(frame);
     if (parsed === null) {

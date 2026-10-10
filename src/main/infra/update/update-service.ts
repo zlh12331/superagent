@@ -16,130 +16,49 @@ import { emitEvent } from '../../utils/emit-event';
 import { logger } from '../../utils/logger';
 import { pruneStaleDifferentialBaseline, resolveUpdaterCacheDir } from './update-cache';
 
-/** 启动检查延迟（窗口就绪后再发起，避开启动期资源争抢） */
 const LAUNCH_CHECK_DELAY_MS = 5_000;
 
-/** 启动检查失败退避序列（1 / 5 / 15 分钟；用尽即本会话放弃，只记日志） */
 const LAUNCH_CHECK_RETRY_DELAYS_MS: readonly number[] = [60_000, 5 * 60_000, 15 * 60_000];
 
-/** 长会话兜底间隔（窗口长期不关时补一次检查，不替代启动检查） */
 const LONG_SESSION_CHECK_INTERVAL_MS = 12 * 60 * 60 * 1000;
 
-/**
- * 单次检查的超时上限（看门狗）
- *
- * 库层不可依赖：builder-util-runtime 的 60s 超时挂在 Node http 的 `socket` 事件上
- * （httpExecutor.js 的 addTimeOutHandler），而 electron-updater 走 Electron
- * net.request()——其 ClientRequest 不暴露 socket 事件，该超时不会触发。
- * 没有本看门狗时，一次网络黑洞会让 checkForUpdates 永不 settle：
- * `check()` 的 finally 不执行 → checkInFlight 永久为真 → 此后所有检查（含手动）
- * 都只返回 checking 而不发请求，界面停在"检查中"且按钮禁用，用户只能重启应用。
- */
 const CHECK_TIMEOUT_MS = 45_000;
 
-/**
- * 下载进度（electron-updater ProgressInfo 的子集）
- *
- * 差分下载时 total 是本次需下载的字节数（差分包大小），不是完整安装包体积。
- */
 export interface UpdateProgressInfo {
-  /** 百分比 0-100 */
   readonly percent: number;
-  /** 已下载字节 */
   readonly transferred: number;
-  /** 本次下载总字节 */
   readonly total: number;
-  /** 平均速率（字节/秒） */
   readonly bytesPerSecond: number;
 }
 
-/** 取消令牌的可注入子集（builder-util-runtime 的 CancellationToken） */
 export interface CancellationTokenLike {
-  /** 取消（触发在途下载中止；幂等） */
   cancel(): void;
-  /** 是否已取消 */
   readonly cancelled: boolean;
 }
 
-/** electron-updater 日志出口的可注入子集（接管后更新过程日志进 main.log） */
 export interface UpdaterLoggerLike {
-  /** 普通日志 */
   info(message?: unknown, ...params: unknown[]): void;
-  /** 警告（差分回退等） */
   warn(message?: unknown, ...params: unknown[]): void;
-  /** 错误 */
   error(message?: unknown, ...params: unknown[]): void;
-  /** 调试（库内部细节，仅有实现时调用） */
   debug?(message?: unknown, ...params: unknown[]): void;
 }
 
-/** 检查调度类型（决定成功/失败后如何续排） */
 type CheckTimerKind = 'launch' | 'retry' | 'long-session';
 
-/** 启动自动检查的选项 */
 export interface UpdateStartOptions {
-  /**
-   * 是否启用启动检查（读用户设置；缺省视为启用）
-   *
-   * 关闭时：不调度任何自动检查，且停用"退出时自动安装"
-   * （否则上一次会话残留的已下载包仍会在退出时装上）。
-   */
   readonly autoCheckEnabled?: () => boolean;
-  /**
-   * 是否接收预发布（beta）更新（读用户设置；缺省视为关闭）
-   *
-   * 稳定版用户主动 opt-in prerelease（electron-updater 的 allowPrerelease）：
-   * GitHub 的 /releases/latest 天然跳过 prerelease，不开则稳定版永远只收正式版、
-   * 收不到 beta。开启后 GitHubProvider 会取最新 release（含 prerelease），其
-   * latest.yml 描述 beta 版本，无 beta.yml 时库自动回退读 latest.yml（实测
-   * GitHubProvider.js 138-141 行）。
-   *
-   * **应用点在 check() 入口而非 start()**：每次检查前幂等重读设置——UI 开关打开后
-   * 立即手动"检查更新"即可生效（与 autoCheck 开关"开启即补检"的交互一致），
-   * 无需重启或新增 IPC。装了 beta 版（版本号含 `-`）时恒为接收：按
-   * `app.getVersion()` 直接判定（与库构造器 `semver.prerelease(version)` 的
-   * 判定同语义），不捕获库字段——二次 start / 惰性重建实例都不会污染基线，
-   * 也不会把 beta 用户的默认行为关掉。
-   */
   readonly allowPrereleaseEnabled?: () => boolean;
-  /**
-   * 开发模式更新调试（缺省关闭）
-   *
-   * 开启后置 autoUpdater.forceDevUpdateConfig=true：electron-updater 改为读取
-   * app.getAppPath()/dev-app-update.yml，未打包也能跑通检查/下载链路（用于本地
-   * 验证进度条、取消、就绪等 UI 的端到端行为）。由 index.ts 读环境变量注入，
-   * 默认关闭意味着 dev 不会发起任何更新请求。
-   */
   readonly devUpdateEnabled?: boolean;
 }
 
-/**
- * electron-updater autoUpdater 的可注入子集
- *
- * 只声明 UpdateService 用到的 API，测试可注入 fake 实现
- * （与工具/服务层 DI 注入模式一致，不 mock 模块）。
- */
 export interface AutoUpdaterLike {
-  /** 检查更新（结果经事件下发，返回值不含结果） */
   checkForUpdates(): Promise<unknown>;
-  /**
-   * 手动发起下载（autoDownload=false 时由本服务调用，token 用于取消）
-   *
-   * 参数声明为可选：与 electron-updater 的实际签名一致（可选参数使得真实
-   * AppUpdater 在结构上可赋给本接口，同时本服务总是显式传入自持 token）。
-   */
   downloadUpdate(cancellationToken?: CancellationTokenLike): Promise<unknown>;
-  /** 安装已下载的更新并重启（isSilent=true 为静默安装） */
   quitAndInstall(isSilent?: boolean, isForceRunAfter?: boolean): void;
-  /** 发现新版后是否自动下载（本服务置 false，改由 downloadUpdate 显式发起） */
   autoDownload: boolean;
-  /** 退出时是否自动安装已下载更新（跟随用户开关） */
   autoInstallOnAppQuit: boolean;
-  /** 是否接收预发布更新（GitHubProvider 据 filtering prerelease release；见 UpdateStartOptions 注释） */
   allowPrerelease: boolean;
-  /** 日志出口（本服务接管为项目 logger 适配器） */
   logger: UpdaterLoggerLike | null;
-  /** 开发模式更新调试开关（electron-updater 据此改读 dev-app-update.yml） */
   forceDevUpdateConfig: boolean;
   on(event: 'checking-for-update', listener: () => void): void;
   on(event: 'update-available', listener: (info: UpdateInfoLike) => void): void;
@@ -150,103 +69,52 @@ export interface AutoUpdaterLike {
   on(event: 'error', listener: (error: Error) => void): void;
 }
 
-/** 事件携带的版本信息（releaseNotes 由库按 provider 下发的原文，可能为字符串或分段数组） */
 export interface UpdateInfoLike {
-  /** 版本号 */
   readonly version: string;
-  /** 更新说明（GitHub provider 下为 release body 原文；可能缺失） */
   readonly releaseNotes?: unknown;
 }
 
-/** UpdateService 接口（服务容器注入用） */
 // biome-ignore lint/style/useNamingConvention: I 前缀接口遵循项目惯例（IChatService 等）
 export interface IUpdateService {
-  /** 注册事件监听并按选项调度启动检查（app ready 后调用一次） */
   start(options?: UpdateStartOptions): void;
-  /** 触发更新检查（manual=true 时失败会推送 error 事件，自动检查静默） */
   check(manual: boolean): Promise<UpdateCheckRes>;
-  /** 取消在途下载（无在途下载时为空操作；取消结果经 update-cancelled 推送） */
   cancelDownload(): void;
-  /** 状态快照与上次检查时间（渲染层重载后恢复界面用；从未产生过分别为 null） */
   getStatus(): UpdateGetStatusRes;
-  /** 订阅状态变化（托盘等主进程内消费方；与事件通道同源） */
   onStatus(listener: (payload: UpdateStatusPayload) => void): () => void;
-  /**
-   * 请求安装已下载的更新（Windows 向导式安装）
-   *
-   * Windows 上是"两段式"：本方法只置标记并触发退出（渲染层入口已确认过"重启会
-   * 中断任务"，故同时置关闭协商标志）；真正的安装在退出善后完成、文件锁
-   * 释放之后由 runDeferredInstall 发起——消除「无法关闭」弹窗竞态（见 §14.6）。
-   * 非 Windows 保持库的原生路径。定位不到待装产物时回退为库的立即安装。
-   */
   quitAndInstall(): void;
-  /** 退出链末端调用（index.ts）：此前请求过安装则此刻拉起静默安装器 */
   runDeferredInstall(): void;
-  /**
-   * 按当前设置重算 autoInstallOnAppQuit（退出链调用，index.ts）
-   *
-   * autoCheckEnabled 原本只在 start() 读一次——运行中切换开关只落库，
-   * 内存值直到重启不变，导致"开着启动 → 下载完成 → 运行中关掉 → 退出仍被
-   * 静默安装"（与 27 号 §4「关 = 全停」语义冲突的边界缺口，2026-10-02 修）。
-   * 退出时重读设置，退出那一刻的开关状态说了算；用户主动点「重启并安装」
-   * 的路径（deferredInstallPending 标志）不受本开关门控、不受影响。
-   */
   refreshAutoInstallOnAppQuit(): void;
-  /** 释放资源（清挂起定时器；在途下载留给 pending 缓存续传） */
   dispose(): void;
 }
 
-/**
- * 自动更新服务实现
- *
- * @example
- * ```ts
- * const updateService = new UpdateService(autoUpdater, () => app.isPackaged, () => new CancellationToken());
- * updateService.start({ autoCheckEnabled: () => readSetting('update')?.autoCheck !== false });
- * ```
- */
 export class UpdateService implements IUpdateService {
-  /** 最近一次状态快照（emit 时更新，供 getStatus 读取） */
   private snapshot: UpdateStatusPayload | null = null;
 
-  /** 状态监听器（主进程内消费方，如托盘；emit 时同步通知） */
   private readonly statusListeners = new Set<(payload: UpdateStatusPayload) => void>();
 
-  /** 上次检查发起时间（毫秒时间戳；从未检查过为 null） */
   private lastCheckAt: number | null = null;
 
-  /** 发现新版的版本号（进度事件不带版本，下载中/取消时补进 payload） */
   private pendingVersion: string | null = null;
 
-  /** 发现新版时带下来的更新说明（就绪态继续展示；取消/清理时置空） */
   private pendingReleaseNotes: string | null = null;
 
-  /** 在途下载的取消令牌（null = 无在途下载） */
   private cancelToken: CancellationTokenLike | null = null;
 
-  /** 挂起的检查定时器与其类型 */
   private timer: NodeJS.Timeout | null = null;
   private timerKind: CheckTimerKind | null = null;
 
-  /** 刚结束的检查来自哪种调度（null = 手动检查，用于决定是否续排） */
   private firedKind: CheckTimerKind | null = null;
 
-  /** 启动检查失败次数（成功即清零） */
   private retryIndex = 0;
 
-  /** 是否有检查在途（会话内去重，避免连点/重试叠打） */
   private checkInFlight = false;
 
-  /** start 是否已调用（dispose 后不再调度） */
   private started = false;
 
-  /** 开发模式更新调试是否生效（生效后 isPackaged 不再是硬门槛） */
   private devUpdateForced = false;
 
-  /** 「接收预发布」开关读取器（start 注入；未注入视为关闭） */
   private allowPrereleaseEnabled: (() => boolean) | null = null;
 
-  /** 「自动检查更新」开关读取器（start 注入；未注入视为开启）——退出链 refresh 重读用 */
   private autoCheckEnabled: (() => boolean) | null = null;
 
   constructor(
@@ -255,7 +123,6 @@ export class UpdateService implements IUpdateService {
     private readonly createCancellationToken: () => CancellationTokenLike,
   ) {}
 
-  /** @inheritDoc */
   start(options: UpdateStartOptions = {}): void {
     this.started = true;
     const autoCheckEnabled = (options.autoCheckEnabled ?? ((): boolean => true))();
@@ -282,7 +149,6 @@ export class UpdateService implements IUpdateService {
     this.schedule('launch', LAUNCH_CHECK_DELAY_MS);
   }
 
-  /** @inheritDoc */
   async check(manual: boolean): Promise<UpdateCheckRes> {
     this.updater.allowPrerelease =
       (this.allowPrereleaseEnabled?.() ?? false) || app.getVersion().includes('-');
@@ -319,12 +185,6 @@ export class UpdateService implements IUpdateService {
     }
   }
 
-  /**
-   * 给检查加超时看门狗（超时判定与失败判定分开：调用方据 timedOut 归类为 network）
-   *
-   * 超时后底层请求仍在跑，故额外挂一个空 catch 防"未处理的 Promise 拒绝"冒到全局
-   * 处理器（迟到的好消息仍会经事件正常推送）。
-   */
   private async withCheckTimeout(
     checkPromise: Promise<unknown>,
     onTimeout: () => void,
@@ -349,7 +209,6 @@ export class UpdateService implements IUpdateService {
     }
   }
 
-  /** @inheritDoc */
   cancelDownload(): void {
     const token = this.cancelToken;
     if (token === null || token.cancelled) {
@@ -359,12 +218,10 @@ export class UpdateService implements IUpdateService {
     token.cancel();
   }
 
-  /** @inheritDoc */
   getStatus(): UpdateGetStatusRes {
     return { snapshot: this.snapshot, lastCheckAt: this.lastCheckAt };
   }
 
-  /** @inheritDoc */
   onStatus(listener: (payload: UpdateStatusPayload) => void): () => void {
     this.statusListeners.add(listener);
     return () => {
@@ -372,7 +229,6 @@ export class UpdateService implements IUpdateService {
     };
   }
 
-  /** @inheritDoc */
   quitAndInstall(): void {
     if (process.platform === 'win32') {
       requestDeferredInstall();
@@ -383,7 +239,6 @@ export class UpdateService implements IUpdateService {
     this.updater.quitAndInstall(true, true);
   }
 
-  /** @inheritDoc */
   runDeferredInstall(): void {
     if (!isDeferredInstallPending()) {
       return;
@@ -393,12 +248,10 @@ export class UpdateService implements IUpdateService {
     this.updater.quitAndInstall(false, false);
   }
 
-  /** @inheritDoc */
   refreshAutoInstallOnAppQuit(): void {
     this.updater.autoInstallOnAppQuit = this.autoCheckEnabled?.() ?? true;
   }
 
-  /** @inheritDoc */
   dispose(): void {
     this.started = false;
     this.clearTimer();
@@ -408,7 +261,6 @@ export class UpdateService implements IUpdateService {
     this.statusListeners.clear();
   }
 
-  /** 注册 autoUpdater 事件监听（事件 → payload 推送 + 快照） */
   private registerListeners(): void {
     this.updater.on('checking-for-update', () => {
       this.emit({ phase: 'checking' });
@@ -457,7 +309,6 @@ export class UpdateService implements IUpdateService {
     });
   }
 
-  /** 显式发起下载（自持 token，供 cancelDownload 使用） */
   private beginDownload(): void {
     const token = this.createCancellationToken();
     this.cancelToken = token;
@@ -489,12 +340,6 @@ export class UpdateService implements IUpdateService {
       });
   }
 
-  /**
-   * 差分基线一致性（下载前）
-   *
-   * 解析更新缓存目录（打包版 app-update.yml / 开发版 dev-app-update.yml）并剔除
-   * 与基准安装包不同版本的 current.blockmap。任何异常只记日志，绝不阻塞下载。
-   */
   private async ensureDifferentialBaseline(): Promise<void> {
     try {
       const cacheDir = await this.resolveUpdateCacheDir();
@@ -512,12 +357,6 @@ export class UpdateService implements IUpdateService {
     }
   }
 
-  /**
-   * 解析更新缓存目录
-   *
-   * 打包版读 process.resourcesPath/app-update.yml；开发版（resourcesPath 不存在
-   * 或未命中）读 app.getAppPath()/dev-app-update.yml。均未命中返回 null。
-   */
   private async resolveUpdateCacheDir(): Promise<string | null> {
     const resourcesPath: unknown = process.resourcesPath;
     if (typeof resourcesPath === 'string' && resourcesPath.length > 0) {
@@ -529,7 +368,6 @@ export class UpdateService implements IUpdateService {
     return await resolveUpdaterCacheDir(app.getAppPath(), undefined, 'dev-app-update.yml');
   }
 
-  /** 进度事件 → payload（透传字节与速率；差分下载时 total 为差分包大小） */
   private emitProgress(info: UpdateProgressInfo): void {
     const version = this.pendingVersion;
     const percent = Math.round(info.percent);
@@ -544,11 +382,6 @@ export class UpdateService implements IUpdateService {
     });
   }
 
-  /**
-   * 任务栏进度（Windows/macOS 生效，其他平台 no-op）
-   *
-   * @param percent 0-100；null 表示清除（下载结束/取消/失败）
-   */
   private setTaskbarProgress(percent: number | null): void {
     for (const win of BrowserWindow.getAllWindows()) {
       if (!win.isDestroyed()) {
@@ -557,7 +390,6 @@ export class UpdateService implements IUpdateService {
     }
   }
 
-  /** 推送状态到所有渲染窗口与主进程内监听者，并留快照（无窗口时也留，供后续 getStatus） */
   private emit(payload: UpdateStatusPayload): void {
     this.snapshot = payload;
     for (const listener of this.statusListeners) {
@@ -578,14 +410,6 @@ export class UpdateService implements IUpdateService {
     }
   }
 
-  /**
-   * 检查结束后的调度决策
-   *
-   * - 成功：清零重试计数，清掉挂起的启动/重试定时器，确保 12h 长会话兜底在排
-   * - 长会话兜底失败：保持 12h 节奏（一次网络抖动不该停掉整个会话的兜底）
-   * - 启动检查链失败：按 1/5/15 分钟退避重试，用尽即本会话放弃（只记日志）
-   * - 手动检查失败：不启动重试链（用户可再点）
-   */
   private afterCheck(succeeded: boolean): void {
     const fired = this.firedKind;
     this.firedKind = null;
@@ -617,7 +441,6 @@ export class UpdateService implements IUpdateService {
     this.schedule('retry', delay);
   }
 
-  /** 调度一次定时检查（同刻只允许一个挂起定时器） */
   private schedule(kind: CheckTimerKind, delayMs: number): void {
     this.clearTimer();
     this.timerKind = kind;
@@ -632,7 +455,6 @@ export class UpdateService implements IUpdateService {
     this.timer.unref();
   }
 
-  /** 清除挂起的定时器 */
   private clearTimer(): void {
     if (this.timer !== null) {
       clearTimeout(this.timer);
@@ -642,14 +464,6 @@ export class UpdateService implements IUpdateService {
   }
 }
 
-/**
- * 更新错误分类（按错误特征归类，供渲染层映射本地化文案）
- *
- * 识别依据来自真实错误形状：builder-util-runtime 的 HttpError 带
- * `statusCode` 与 `code = HTTP_ERROR_<status>`；Node 网络错误带 code
- * （ENOTFOUND/ECONNREFUSED…）；Electron net 抛 net::ERR_* 文本；校验失败为
- * sha512/checksum 描述文本。无法归类一律 unknown（保留原始 message 供排查）。
- */
 export function classifyUpdateError(error: unknown): UpdateErrorKind {
   const message = error instanceof Error ? error.message : String(error);
   const code = readErrorField(error, 'code');
@@ -684,15 +498,6 @@ export function classifyUpdateError(error: unknown): UpdateErrorKind {
   return 'unknown';
 }
 
-/**
- * 归一化更新说明
- *
- * electron-updater 的 releaseNotes 按 provider 可能是字符串或分段数组
- * （`{ version, note }[]`，如 latest.yml 的内嵌 notes）。注意 GitHub provider
- * 在 latest.yml 无内嵌 notes 时回退 releases.atom 订阅源——字符串是 GitHub
- * 渲染后的 HTML 而非 Markdown（渲染层 rehype-raw 按结构渲染）。
- * 这里统一成字符串透传；无法识别的形状返回 null（不编造内容）。
- */
 export function toReleaseNotes(value: unknown): string | null {
   if (typeof value === 'string') {
     const trimmed = value.trim();
@@ -713,11 +518,6 @@ export function toReleaseNotes(value: unknown): string | null {
   return null;
 }
 
-/**
- * 检查失败的文案与分类
- *
- * 超时单独归类为 network：用户侧的可操作建议与"网络不可达"一致（检查网络后重试）。
- */
 function describeCheckFailure(
   timedOut: boolean,
   error: unknown,
@@ -734,7 +534,6 @@ function describeCheckFailure(
   };
 }
 
-/** 读取错误对象上的字段（Error 子类运行时携带 code/statusCode，类型上不可见） */
 function readErrorField(error: unknown, field: string): unknown {
   if (typeof error !== 'object' || error === null) {
     return undefined;
@@ -742,7 +541,6 @@ function readErrorField(error: unknown, field: string): unknown {
   return Reflect.get(error, field) as unknown;
 }
 
-/** 把值转为单行日志文本（保留 Error 的堆栈信息，对象走 JSON） */
 function toLogText(value: unknown): string {
   if (typeof value === 'string') {
     return value;
@@ -757,7 +555,6 @@ function toLogText(value: unknown): string {
   }
 }
 
-/** 构造 electron-updater 的日志适配器（转发到项目 logger，scope=auto-updater） */
 function createUpdaterLogger(): UpdaterLoggerLike {
   const forward = (level: 'info' | 'warn' | 'error' | 'debug', args: readonly unknown[]): void => {
     logger[level]({ scope: 'auto-updater' }, args.map((arg) => toLogText(arg)).join(' '));

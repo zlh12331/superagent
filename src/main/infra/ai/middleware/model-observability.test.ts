@@ -16,7 +16,6 @@ vi.mock('../../../utils/logger', () => ({ logger: mocks.mockLogger }));
 
 import { modelObservabilityMiddleware } from './model-observability';
 
-/** 可追踪的 fake v4 model：记录收到的 params，可按需注入生成/流式失败 */
 function createFakeModel(options?: { failGenerate?: boolean; failStream?: boolean }) {
   const receivedGenerateParams: unknown[] = [];
   const receivedStreamParams: unknown[] = [];

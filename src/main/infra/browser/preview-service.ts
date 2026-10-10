@@ -10,49 +10,31 @@ import { BrowserWindow, session, shell, WebContentsView } from 'electron';
 import { emitEvent } from '../../utils/emit-event';
 import { logger } from '../../utils/logger';
 
-/** 预览专用 session 分区（无 persist: 前缀 = 内存态，cookie/缓存不落盘、重启即清） */
 const PREVIEW_PARTITION = 'browser-preview';
 
 const STATE_EVENT = IPC_DEFINITIONS.browser.subscribeState;
 const LOAD_FAILED_EVENT = IPC_DEFINITIONS.browser.subscribeLoadFailed;
 
-/**
- * 浏览器预览服务接口（服务容器注入用）
- */
 // biome-ignore lint/style/useNamingConvention: I 前缀接口遵循项目惯例（IUpdateService 等）
 export interface IBrowserPreviewService {
-  /** 加载 URL（仅 http/https；不 await 页面加载，失败走 loadFailed 事件推送） */
   navigate(input: BrowserNavigateReq): Promise<{ ok: boolean }>;
-  /** 历史后退（无视图时幂等 no-op） */
   back(): { ok: boolean };
-  /** 历史前进（无视图时幂等 no-op） */
   forward(): { ok: boolean };
-  /** 重新加载（无视图时幂等 no-op） */
   reload(): { ok: boolean };
-  /** 同步视口几何（rect=null 或 visible=false 仅隐藏，页面保活） */
   setViewport(input: BrowserSetViewportReq): { ok: boolean };
-  /** 严格模式切换（禁用预览页 JS）；与当前值不同时销毁重建视图并回放当前 URL */
   configure(input: BrowserConfigureReq): { ok: boolean };
-  /** 读取当前预览状态（地址栏/导航按钮的数据源） */
   getState(): BrowserState;
-  /** 销毁视图（退出清理；窗口已销毁时安全跳过） */
   dispose(): void;
 }
 
-/** 依赖注入（测试注入 fake 视图工厂与广播捕获） */
 export interface BrowserPreviewServiceDeps {
-  /** 取当前主窗口（全部已销毁时返回 null） */
   readonly getWindow: () => BrowserWindow | null;
-  /** 视图工厂（默认真实 WebContentsView；测试注入 fake） */
   readonly createView?: (options: { readonly javascript: boolean }) => WebContentsView;
-  /** 事件广播（默认遍历所有窗口 emitEvent；测试注入捕获数组） */
   readonly broadcast?: (channel: string, payload: unknown) => void;
 }
 
-/** 预览分区 session 已配置标记（fromPartition 返回单例，handlers 仅需挂一次） */
 let previewSessionConfigured = false;
 
-/** 配置预览分区 session（幂等） */
 function ensurePreviewSession(): void {
   if (previewSessionConfigured) return;
   const ses = session.fromPartition(PREVIEW_PARTITION);
@@ -63,7 +45,6 @@ function ensurePreviewSession(): void {
   previewSessionConfigured = true;
 }
 
-/** 默认视图工厂：真实 WebContentsView（独立分区 + 沙箱安全基线） */
 function createNativeView(options: { readonly javascript: boolean }): WebContentsView {
   ensurePreviewSession();
   return new WebContentsView({
@@ -77,7 +58,6 @@ function createNativeView(options: { readonly javascript: boolean }): WebContent
   });
 }
 
-/** 默认广播：遍历所有窗口推送（emitEvent 内置 isDestroyed 守卫 + dev 契约校验） */
 function defaultBroadcast(channel: string, payload: unknown): void {
   const def = channel === LOAD_FAILED_EVENT.channel ? LOAD_FAILED_EVENT : STATE_EVENT;
   for (const win of BrowserWindow.getAllWindows()) {
@@ -85,27 +65,15 @@ function defaultBroadcast(channel: string, payload: unknown): void {
   }
 }
 
-/**
- * 浏览器预览服务
- *
- * @example
- * ```ts
- * const svc = new BrowserPreviewService({ getWindow: () => BrowserWindow.getAllWindows()[0] });
- * await svc.navigate({ url: 'https://example.com' });
- * svc.setViewport({ rect: { x: 800, y: 52, width: 400, height: 600 }, visible: true, zoomFactor: 1 });
- * ```
- */
 export class BrowserPreviewService implements IBrowserPreviewService {
   private view: WebContentsView | null = null;
   private strictSandbox = false;
-  /** 最近一次视口几何（configure 重建后回放用） */
   private lastRect: BrowserSetViewportReq['rect'] = null;
   private lastZoomFactor = 1;
   private lastVisible = false;
 
   constructor(private readonly deps: BrowserPreviewServiceDeps) {}
 
-  /** @inheritDoc */
   async navigate(input: BrowserNavigateReq): Promise<{ ok: boolean }> {
     if (!/^https?:\/\//i.test(input.url)) {
       throw new Error(`浏览器预览仅支持 http/https 地址：${input.url}`);
@@ -118,7 +86,6 @@ export class BrowserPreviewService implements IBrowserPreviewService {
     return { ok: true };
   }
 
-  /** @inheritDoc */
   back(): { ok: boolean } {
     if (this.view !== null) {
       this.view.webContents.navigationHistory.goBack();
@@ -126,7 +93,6 @@ export class BrowserPreviewService implements IBrowserPreviewService {
     return { ok: true };
   }
 
-  /** @inheritDoc */
   forward(): { ok: boolean } {
     if (this.view !== null) {
       this.view.webContents.navigationHistory.goForward();
@@ -134,7 +100,6 @@ export class BrowserPreviewService implements IBrowserPreviewService {
     return { ok: true };
   }
 
-  /** @inheritDoc */
   reload(): { ok: boolean } {
     if (this.view !== null) {
       this.view.webContents.reload();
@@ -142,7 +107,6 @@ export class BrowserPreviewService implements IBrowserPreviewService {
     return { ok: true };
   }
 
-  /** @inheritDoc */
   setViewport(input: BrowserSetViewportReq): { ok: boolean } {
     this.lastRect = input.rect;
     this.lastZoomFactor = input.zoomFactor;
@@ -155,7 +119,6 @@ export class BrowserPreviewService implements IBrowserPreviewService {
     return { ok: true };
   }
 
-  /** @inheritDoc */
   configure(input: BrowserConfigureReq): { ok: boolean } {
     if (input.strictSandbox === this.strictSandbox) {
       return { ok: true };
@@ -171,7 +134,6 @@ export class BrowserPreviewService implements IBrowserPreviewService {
     return { ok: true };
   }
 
-  /** @inheritDoc */
   getState(): BrowserState {
     const view = this.view;
     if (view === null) {
@@ -187,12 +149,10 @@ export class BrowserPreviewService implements IBrowserPreviewService {
     };
   }
 
-  /** @inheritDoc */
   dispose(): void {
     this.destroyView();
   }
 
-  /** 懒创建并附着视图；无可用窗口时返回 null（调用方按 no-op 处理） */
   private ensureView(): WebContentsView | null {
     if (this.view !== null) return this.view;
     const win = this.deps.getWindow();
@@ -212,7 +172,6 @@ export class BrowserPreviewService implements IBrowserPreviewService {
     return view;
   }
 
-  /** webContents 事件收敛：导航/加载/标题 → state 广播；主框架失败 → loadFailed 广播 */
   private wireWebContents(wc: WebContents): void {
     wc.setWindowOpenHandler(({ url }) => {
       if (/^https?:\/\//i.test(url)) {
@@ -238,7 +197,6 @@ export class BrowserPreviewService implements IBrowserPreviewService {
     });
   }
 
-  /** 落地最近一次视口几何（bounds/zoom/可见性） */
   private applyViewport(): void {
     const view = this.view;
     if (view === null) return;
@@ -251,7 +209,6 @@ export class BrowserPreviewService implements IBrowserPreviewService {
     view.setVisible(true);
   }
 
-  /** 销毁视图（窗口已销毁时跳过 detach；close 默认不等 beforeunload，立即销毁） */
   private destroyView(): void {
     const view = this.view;
     if (view === null) return;
@@ -265,7 +222,6 @@ export class BrowserPreviewService implements IBrowserPreviewService {
     this.view = null;
   }
 
-  /** 广播出口（测试可注入捕获） */
   private broadcast(channel: string, payload: unknown): void {
     const broadcast = this.deps.broadcast ?? defaultBroadcast;
     broadcast(channel, payload);

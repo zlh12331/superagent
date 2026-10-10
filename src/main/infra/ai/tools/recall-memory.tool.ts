@@ -4,22 +4,13 @@ import { isMemoryEnabled } from '../../memory-hub/memory-pref';
 import type { MemoryPort } from '../../memory-hub/types';
 import type { Tool, ToolContext, ToolResult } from './tool';
 
-/** recall_memory 入参 */
 const RecallMemoryInputSchema = z.object({
-  /** 检索查询（关键词/主题描述） */
   query: z.string().min(1).max(200),
-  /**
-   * 检索模式（W5 接线补全：此前 searchMemories/searchConversations 建成未接线）：
-   * - recall（默认）：引擎预取召回，返回格式化上下文
-   * - memories：L1 结构化记忆检索
-   * - conversations：L0 会话内容检索（跨会话历史对话）
-   */
   mode: z.enum(['recall', 'memories', 'conversations']).optional(),
 });
 
 type RecallMemoryInput = z.infer<typeof RecallMemoryInputSchema>;
 
-/** L1 结构化记忆检索 */
 async function searchL1(memoryPort: MemoryPort, query: string): Promise<ToolResult> {
   const result = await memoryPort.searchMemories(query, 10);
   if (result.content.trim().length === 0) {
@@ -31,7 +22,6 @@ async function searchL1(memoryPort: MemoryPort, query: string): Promise<ToolResu
   };
 }
 
-/** L0 会话内容检索（跨会话历史对话） */
 async function searchL0(memoryPort: MemoryPort, query: string): Promise<ToolResult> {
   const result = await memoryPort.searchConversations(query, 10);
   if (result.content.trim().length === 0) {
@@ -43,12 +33,6 @@ async function searchL0(memoryPort: MemoryPort, query: string): Promise<ToolResu
   };
 }
 
-/**
- * 默认：引擎预取召回
- *
- * 上游 RecallRequest 要求 session_key 必填（缺失/空串 → HTTP 400），故必须传当前
- * 会话 id。此前未传，导致该工具自上线起恒失败并被静默降级为"未找到相关记忆"。
- */
 async function prefetchRecall(
   memoryPort: MemoryPort,
   query: string,
@@ -70,9 +54,6 @@ async function prefetchRecall(
   };
 }
 
-/**
- * 创建 recall_memory 工具（依赖注入 MemoryPort）
- */
 export function createRecallMemoryTool(memoryPort: MemoryPort): Tool<RecallMemoryInput> {
   return {
     name: 'recall_memory',

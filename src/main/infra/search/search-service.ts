@@ -6,66 +6,29 @@ import { rgPath } from '@vscode/ripgrep';
 import { logger } from '../../utils/logger';
 import { terminateChild } from '../../utils/terminate-child';
 
-/**
- * grep 方法入参
- *
- * 与 GrepReqSchema 字段对齐，类型独立定义以便测试 mock。
- */
 export interface GrepOptions {
-  /** 搜索模式（正则或字面量） */
   readonly pattern: string;
-  /** 搜索范围（多个目录或文件，空数组表示当前工作目录） */
   readonly paths: readonly string[];
-  /** 是否大小写敏感（默认 false） */
   readonly caseSensitive: boolean;
-  /** 是否作为正则（默认 true）；false 时作为字面量字符串匹配 */
   readonly isRegex: boolean;
-  /** 文件名 glob 过滤（如 '*.ts'） */
   readonly include: string | undefined;
-  /** 排除的文件名 glob 数组 */
   readonly exclude: readonly string[];
-  /** 最大结果数（达到即停止搜索） */
   readonly maxResults: number;
 }
 
-/** glob 方法入参（与 GlobReqSchema 字段对齐） */
 export interface GlobOptions {
-  /** glob 模式 */
   readonly pattern: string;
-  /** 搜索根目录 */
   readonly path: string;
-  /** 是否包含隐藏文件（默认 false） */
   readonly includeHidden: boolean;
-  /** 最大结果数 */
   readonly maxResults: number;
 }
 
-/**
- * SearchService 接口
- *
- * 解耦 IPC handler 对具体类的依赖，便于：
- * - 单元测试：注入 mock 实现，不依赖真实 ripgrep
- * - 未来扩展：替换为其他搜索引擎（如 codegraph 语义搜索）
- */
 export interface ISearchService {
-  /** 在文件内容中搜索匹配 */
   grep(options: GrepOptions): Promise<GrepRes>;
-  /** 按 glob 模式匹配文件路径 */
   glob(options: GlobOptions): Promise<GlobRes>;
-  /** 优雅关闭：清理子进程句柄 */
   dispose(): Promise<void>;
 }
 
-/**
- * ripgrep --json 输出的 JSON Line 类型
- *
- * 参考 ripgrep 官方文档：https://docs.rs/grep-printer/latest/grep_printer/struct.Standard.html
- * 仅列出本服务关心的 type，其他 type 忽略。
- *
- * 字段名沿用 ripgrep 输出的 snake_case（如 line_number、absolute_offset），
- * 与 JSON.parse 后的对象结构保持一致，避免运行时映射开销。
- * biome.json 已对本文件关闭 useNamingConvention 规则。
- */
 type RipgrepJsonLine =
   | { type: 'begin'; data: { path: { text: string } } }
   | {
@@ -93,25 +56,6 @@ type RipgrepJsonLine =
   | { type: 'summary'; data: unknown }
   | { type: 'end'; data: unknown };
 
-/**
- * SearchService 默认实现
- *
- * 内部不持有长期状态（每次 grep/glob 都启动新的子进程），
- * dispose 仅用于清理可能残留的子进程。
- *
- * 错误分类：
- * - ripgrep 退出码 0 / 1：正常（1 表示无匹配）
- * - ripgrep 退出码 2：参数错误或路径不存在，包装为 INVALID_INPUT
- * - 子进程启动失败：INTERNAL_ERROR
- * - stdout 解析失败：INTERNAL_ERROR
- */
-/**
- * 校验搜索路径不含「以 - 开头」的 token（2026-09-08 参数注入修复）
- *
- * ripgrep 会把位置参数中形如 `--pre=<exe>` 的 token 当选项解析并 spawn 该
- * 程序（已实测）。合法路径不会以 `-` 开头，故直接拒绝；调用方随后用 `--`
- * 终止选项解析做第二道防线。
- */
 function assertSafeSearchPaths(paths: readonly string[]): void {
   const unsafe = paths.find((p) => p.startsWith('-'));
   if (unsafe !== undefined) {
@@ -119,7 +63,6 @@ function assertSafeSearchPaths(paths: readonly string[]): void {
   }
 }
 
-/** 追加搜索路径参数（空数组时 ripgrep 默认搜索当前目录；含注入防护） */
 function appendSearchPaths(args: string[], paths: readonly string[]): void {
   if (paths.length === 0) {
     return;
@@ -128,45 +71,15 @@ function appendSearchPaths(args: string[], paths: readonly string[]): void {
   args.push('--', ...paths);
 }
 
-/**
- * 文件搜索服务（ISearchService 实现）：封装 ripgrep 子进程——
- * 文件名匹配（--files）/ 内容搜索（正则+glob 过滤），注入 spawn 便于测试
- */
 export class SearchService implements ISearchService {
-  /**
-   * 子进程启动函数（DI 注入点：测试传 fake，生产默认 node:child_process spawn）
-   * 注入而非 mock：外部依赖可替换，业务逻辑保持真实实现
-   */
   private readonly spawnFn: typeof spawn;
 
   constructor(options: { spawnFn?: typeof spawn } = {}) {
     this.spawnFn = options.spawnFn ?? spawn;
   }
 
-  /**
-   * 当前活跃的子进程列表（用于 dispose 时统一清理）
-   *
-   * 注意：grep/glob 是短任务，正常完成后会从 Map 移除。
-   * 仅在异常退出 / dispose 调用时仍存活的子进程会在此 Map 中。
-   */
   private readonly activeProcesses = new Set<ChildProcess>();
 
-  /**
-   * 在文件内容中搜索匹配
-   *
-   * 流程：
-   * 1. 构建 ripgrep 参数（--json --line-number --column -A 2 -B 2 ...）
-   * 2. spawn 子进程
-   * 3. 按行读取 stdout，解析 JSON
-   * 4. 收集所有 match 和 context 行，按 line_number 关联 context 到对应 match
-   * 5. 应用 maxResults 截断
-   *
-   * ripgrep --json 的输出顺序（以 -A 2 -B 2 为例）：
-   *   context(B-2) → context(B-1) → match → context(A-1) → context(A-2) → ...
-   * 因此需要先收集所有行，再按 line_number 关联 context。
-   *
-   * @returns { matches, truncated }：matches 最多 maxResults 条，truncated 表示是否被截断
-   */
   async grep(options: GrepOptions): Promise<GrepRes> {
     const { pattern, paths, caseSensitive, isRegex, include, exclude, maxResults } = options;
 
@@ -277,17 +190,6 @@ export class SearchService implements ISearchService {
     return { matches, truncated };
   }
 
-  /**
-   * 按 glob 模式匹配文件路径
-   *
-   * 流程：
-   * 1. 构建 ripgrep 参数（--files -g PATTERN PATH）
-   * 2. spawn 子进程
-   * 3. 按行读取 stdout（每行一个文件路径）
-   * 4. 达到 maxResults 后提前终止
-   *
-   * 注意：ripgrep --files 默认遵守 .gitignore，行为与 VSCode 文件搜索一致。
-   */
   async glob(options: GlobOptions): Promise<GlobRes> {
     const { pattern, path, includeHidden, maxResults } = options;
 
@@ -317,11 +219,6 @@ export class SearchService implements ISearchService {
     return { files, truncated };
   }
 
-  /**
-   * 优雅关闭：清理所有活跃的子进程
-   *
-   * 应用退出时调用，避免子进程句柄泄漏导致进程不退出。
-   */
   async dispose(): Promise<void> {
     if (this.activeProcesses.size === 0) {
       return;
@@ -333,16 +230,6 @@ export class SearchService implements ISearchService {
     logger.info({}, 'SearchService 所有子进程已清理');
   }
 
-  /**
-   * 启动 ripgrep 子进程并按行读取 stdout
-   *
-   * @param args ripgrep 命令行参数
-   * @param onLine 每行 stdout 的回调（同步调用），返回 false 时主动 kill 子进程
-   * @returns 退出码（0 / 1 正常，2 错误）
-   *
-   * 优化：onLine 返回 boolean 表示是否继续，false 时主动 kill 子进程
-   * 避免达到 maxResults 后子进程继续运行消耗 CPU/IO
-   */
   private runRipgrep(args: string[], onLine: (line: string) => boolean): Promise<void> {
     return new Promise((resolve, reject) => {
       const child = this.spawnFn(rgPath, args, {
@@ -419,19 +306,6 @@ export class SearchService implements ISearchService {
     });
   }
 
-  /**
-   * 解析 ripgrep --json 输出的 match 行
-   *
-   * ripgrep match 行结构：
-   * { type: "match", data: { path, line_number, line, submatches: [...] } }
-   *
-   * 当前简化实现：不合并 context 行（-A/-B 上下文通过 separate context 行输出），
-   * 返回的 GrepMatch.beforeContext / afterContext 为空数组。
-   *
-   * 后续优化：累积 context 行，按 line_number 关联到对应 match。
-   *
-   * @returns GrepMatch 或 null（解析失败时返回 null）
-   */
   private parseMatchLine(line: Extract<RipgrepJsonLine, { type: 'match' }>): GrepMatch | null {
     try {
       const { data } = line;
@@ -461,12 +335,6 @@ export class SearchService implements ISearchService {
     }
   }
 
-  /**
-   * 尝试解析 JSON 行，失败时返回 null
-   *
-   * ripgrep --json 输出每行一个 JSON 对象，理论上不会解析失败。
-   * 但在子进程异常退出时可能输出半截 JSON，此时跳过即可。
-   */
   private tryParseJsonLine(line: string): RipgrepJsonLine | null {
     if (line === '') {
       return null;
@@ -479,18 +347,8 @@ export class SearchService implements ISearchService {
   }
 }
 
-/** SearchService 单例（内部按具体实现类持有，外部暴露为 ISearchService 接口） */
 let searchService: SearchService | null = null;
 
-/**
- * 获取 SearchService 单例
- *
- * 整个应用生命周期共享一个实例。
- *
- * 返回类型为 ISearchService 接口而非具体类：
- * - 强制调用方面向接口编程，不依赖 SearchService 内部细节
- * - ServiceContainer 注入到 IPC handler 时类型一致
- */
 export function getSearchService(): ISearchService {
   if (searchService === null) {
     searchService = new SearchService();
@@ -498,11 +356,6 @@ export function getSearchService(): ISearchService {
   return searchService;
 }
 
-/**
- * 重置 SearchService（仅测试用）
- *
- * 调用 dispose 清理所有子进程，并清空单例缓存。
- */
 export async function resetSearchService(): Promise<void> {
   if (searchService !== null) {
     await searchService.dispose();

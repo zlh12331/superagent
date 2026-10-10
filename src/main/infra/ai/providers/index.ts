@@ -19,5 +19,4 @@ export type {
   RegisteredProvider,
 };
 
-/** 内置 Provider 注册表单例（应用全局唯一） */
 export const providerRegistry = new ProviderRegistry();

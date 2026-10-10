@@ -6,7 +6,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createTerminalHandlers, type TerminalHandlerDeps } from './terminal.handler';
 
-/** 创建 fake TerminalService */
 function createFakeTerminalService() {
   return {
     create: vi.fn(async () => ({ terminalId: 't1', ok: true })),

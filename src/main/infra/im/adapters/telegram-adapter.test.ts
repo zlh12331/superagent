@@ -8,12 +8,10 @@ interface FetchResult {
   json: unknown;
 }
 
-/** getUpdates 统一延迟：模拟长轮询节奏，避免忙循环 */
 async function pollDelay(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 5));
 }
 
-/** 按 API method 分发的 fake fetch */
 function makeFetch(
   handlers: Record<string, () => FetchResult | Promise<FetchResult>>,
 ): ReturnType<typeof vi.fn> {
@@ -37,7 +35,6 @@ function makeAdapter(handlers: Record<string, () => FetchResult | Promise<FetchR
   return { adapter, fetchFn };
 }
 
-/** 等待轮询循环跑一轮（getUpdates 被调用） */
 async function waitForPoll(fetchFn: ReturnType<typeof vi.fn>, times = 1): Promise<void> {
   await vi.waitFor(() => {
     const calls = fetchFn.mock.calls.filter((c) => String(c[0]).endsWith('/getUpdates'));
@@ -51,7 +48,6 @@ const okGetMe = (): FetchResult => ({
   json: { ok: true, result: { username: 'MyBot' } },
 });
 
-/** 空 updates（无消息） */
 const emptyUpdates = (): FetchResult => ({
   ok: true,
   status: 200,

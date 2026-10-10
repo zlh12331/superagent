@@ -3,7 +3,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TurnEventEmitter } from './turn-emitter';
 import { TurnRunner } from './turn-runner';
 
-/** 构造同步推送 parts 后关闭的 mock 流 */
 function createMockStream(parts: unknown[]): ReadableStream<unknown> {
   return new ReadableStream<unknown>({
     start(controller) {

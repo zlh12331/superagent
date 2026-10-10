@@ -13,7 +13,6 @@ vi.mock('../invalidation/invalidation', () => ({ broadcastInvalidation: vi.fn() 
 import { broadcastInvalidation } from '../invalidation/invalidation';
 import { getSecret } from '../storage/keychain';
 
-/** fake 渠道适配器（手写最小实现，无 mock 框架） */
 class FakeAdapter implements IChannelAdapter {
   readonly kind: ChannelKind;
   readonly displayName: string;
@@ -56,7 +55,6 @@ class FakeAdapter implements IChannelAdapter {
     };
   }
 
-  /** 测试辅助：模拟入站消息 */
   emit(message: ChannelIncomingMessage): void {
     for (const handler of this.handlers) {
       handler(message);
@@ -64,7 +62,6 @@ class FakeAdapter implements IChannelAdapter {
   }
 }
 
-/** 构造测试服务（fake 适配器注入） */
 function createService(): { service: ImService; adapters: FakeAdapter[] } {
   const telegram = new FakeAdapter('telegram');
   const skeleton = new FakeAdapter('wechat', false);

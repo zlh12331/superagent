@@ -2,12 +2,6 @@ import { reportMessage } from '../../utils/error-report';
 import { logger } from '../../utils/logger';
 import type { EventLoopLagSample } from './event-loop-lag';
 
-/**
- * 上报一次事件循环阻塞告警
- *
- * @param sample 采样结果（lagMs / intervalMs）
- * @param hasActiveTurn 查询是否有活跃 agent 回合（由调用方注入，避免遥测层依赖 agent 层）
- */
 export function reportEventLoopLag(sample: EventLoopLagSample, hasActiveTurn: () => boolean): void {
   const context = {
     lagMs: sample.lagMs,

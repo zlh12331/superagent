@@ -1,22 +1,14 @@
-// （Copyright 2026 Qwen Team，SPDX-License-Identifier: Apache-2.0）的
-
 import { randomUUID } from 'node:crypto';
 import { AppError, ErrorCode } from '@code-agent/shared/main';
 import { logger } from '../../../utils/logger';
 import type { ChannelIncomingMessage } from '../channel/types';
 
-/** iLink 默认网关 */
 export const WEIXIN_DEFAULT_BASE_URL = 'https://ilinkai.weixin.qq.com';
-/** 协议版本（qwen 兼容值） */
 const ILINK_PROTOCOL_VERSION = '2.1.3';
-/** 长轮询超时（毫秒） */
 const POLL_TIMEOUT_MS = 40_000;
-/** 会话过期暂停（毫秒） */
 const SESSION_EXPIRED_PAUSE_MS = 30_000;
-/** 连续错误退避基数（毫秒） */
 const ERROR_BACKOFF_MS = 5_000;
 
-/** iLink 消息形状 */
 export interface WeixinMessage {
   readonly seq?: number;
   readonly message_id?: number;
@@ -32,7 +24,6 @@ export interface WeixinMessage {
   }>;
 }
 
-/** getupdates 响应 */
 export interface WeixinUpdatesResponse {
   readonly ret?: number;
   readonly errcode?: number;
@@ -41,7 +32,6 @@ export interface WeixinUpdatesResponse {
   readonly get_updates_buf?: string;
 }
 
-/** 解析结果：null = 无文本（忽略） */
 export interface ParsedWeixinMessage {
   readonly text: string;
   readonly chatId: string;
@@ -51,13 +41,9 @@ export interface ParsedWeixinMessage {
   readonly contextToken: string | undefined;
 }
 
-/** 文本项类型（iLink 协议） */
 const ITEM_TYPE_TEXT = 1;
 const ITEM_TYPE_VOICE = 3;
 
-/**
- * iLink 消息解析（纯函数，可测）
- */
 export function parseWeixinMessage(msg: WeixinMessage): ParsedWeixinMessage | null {
   const text = extractWeixinText(msg);
   if (text.length === 0) {
@@ -78,7 +64,6 @@ export function parseWeixinMessage(msg: WeixinMessage): ParsedWeixinMessage | nu
   };
 }
 
-/** 文本提取：text_item → voice_item（转文字） */
 function extractWeixinText(msg: WeixinMessage): string {
   const items = msg.item_list ?? [];
   const parts: string[] = [];
@@ -98,26 +83,15 @@ function extractWeixinText(msg: WeixinMessage): string {
   return parts.join('').trim();
 }
 
-/** 轮询接收配置 */
 export interface WeixinStreamConfig {
-  /** iLink 机器人 token */
   readonly token: string;
-  /** 网关基地址（测试注入；缺省 iLink 官方） */
   readonly baseUrl?: string;
 }
 
-/**
- * 微信长轮询接收器（生命周期 open/close）
- */
 export class WeixinStreamReceiver {
   private readonly token: string;
   private readonly baseUrl: string;
 
-  /**
-   * 外部依赖注入点（测试传 fake，生产默认实现）：
-   * - fetchUpdatesFn：getupdates 轮询（网络）
-   * - backoffMs / sessionPauseMs：时间参数（测试缩短验证退避/过期路径）
-   */
   private readonly fetchUpdatesFn: typeof fetchWeixinUpdates;
   private readonly backoffMs: number;
   private readonly sessionPauseMs: number;
@@ -125,7 +99,6 @@ export class WeixinStreamReceiver {
   private cursor = '';
   private messageHandler: ((message: ChannelIncomingMessage) => void) | null = null;
   private abortController: AbortController | null = null;
-  /** from_user_id → context_token（回发携带） */
   private readonly contextTokens = new Map<string, string>();
   private opened = false;
 
@@ -148,14 +121,10 @@ export class WeixinStreamReceiver {
     return this.opened;
   }
 
-  /** 订阅入站消息（单订阅者：适配器转发用） */
   onMessage(handler: (message: ChannelIncomingMessage) => void): void {
     this.messageHandler = handler;
   }
 
-  /**
-   * 打开长轮询（直到 close；getupdates 游标续传）
-   */
   async open(): Promise<void> {
     if (this.opened) {
       return;
@@ -167,19 +136,16 @@ export class WeixinStreamReceiver {
     void this.pollLoop(signal);
   }
 
-  /** 获取会话 context_token（sendmsg 回发携带） */
   getContextToken(chatId: string): string | undefined {
     return this.contextTokens.get(chatId);
   }
 
-  /** 关闭轮询（幂等） */
   close(): void {
     this.abortController?.abort();
     this.abortController = null;
     this.opened = false;
   }
 
-  /** 长轮询主循环（游标续传 + 超时继续 + 错误退避） */
   private async pollLoop(signal: AbortSignal): Promise<void> {
     let consecutiveErrors = 0;
     while (!signal.aborted) {
@@ -214,7 +180,6 @@ export class WeixinStreamReceiver {
     }
   }
 
-  /** 消息分发：解析 → 转发入站消息 */
   private dispatchMessage(msg: WeixinMessage): void {
     const parsed = parseWeixinMessage(msg);
     if (parsed === null) {
@@ -231,9 +196,6 @@ export class WeixinStreamReceiver {
   }
 }
 
-/**
- * getupdates 请求（端点可注入测试）
- */
 export async function fetchWeixinUpdates(options: {
   readonly baseUrl: string;
   readonly token: string;
@@ -261,9 +223,6 @@ export async function fetchWeixinUpdates(options: {
   }
 }
 
-/**
- * 发送文本消息（端点可注入测试）
- */
 export async function sendWeixinText(options: {
   readonly baseUrl: string;
   readonly token: string;
@@ -295,7 +254,6 @@ export async function sendWeixinText(options: {
   }
 }
 
-/** POST JSON（iLink 鉴权头） */
 async function postJson<T>(
   url: string,
   token: string,
@@ -328,7 +286,6 @@ async function postJson<T>(
   }
 }
 
-/** 可中断延迟 */
 function sleep(ms: number, signal: AbortSignal): Promise<void> {
   return new Promise((resolve) => {
     const timer = setTimeout(resolve, ms);

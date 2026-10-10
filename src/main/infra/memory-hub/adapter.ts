@@ -10,21 +10,13 @@ import type {
   MemorySearchResult,
 } from './types';
 
-/** 单次 HTTP 调用超时（毫秒） */
 const REQUEST_TIMEOUT_MS = 8000;
 
-/** HttpMemoryPort 构造选项 */
 export interface HttpMemoryPortOptions {
-  /** gateway 基地址（http://127.0.0.1:<port>） */
   readonly baseUrl: string;
-  /** Bearer apiKey（与 sidecar 启动配置一致） */
   readonly apiKey: string;
 }
 
-/**
- * 记忆引擎 HTTP 适配器（MemoryPort 实现）：对 gateway REST API 的唯一封装点
- * （health / capture / recall / 检索 / 清除），8s 请求超时
- */
 export class HttpMemoryPort implements MemoryPort {
   private readonly baseUrl: string;
   private readonly apiKey: string;
@@ -188,7 +180,6 @@ export class HttpMemoryPort implements MemoryPort {
     }
   }
 
-  /** 发起请求并解析裸 JSON（非 2xx 抛错） */
   private async requestJson(method: string, path: string, body?: unknown): Promise<unknown> {
     const res = await this.request(method, path, body);
     if (!res.ok) {
@@ -197,7 +188,6 @@ export class HttpMemoryPort implements MemoryPort {
     return (await res.json()) as unknown;
   }
 
-  /** 底层 fetch（统一超时与鉴权头） */
   private request(method: string, path: string, body?: unknown): Promise<Response> {
     const headers: Record<string, string> = {
       // biome-ignore lint/style/useNamingConvention: HTTP 标准头名

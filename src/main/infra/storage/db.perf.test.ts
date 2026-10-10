@@ -23,7 +23,6 @@ import { SessionService } from './session-service';
 let tempDir: string;
 let service: SessionService;
 
-/** 生成一条真实结构消息（与 agent 持久化格式一致） */
 function makeMessage(i: number, role: 'user' | 'assistant' = 'user'): ChatMessage {
   return {
     role,
@@ -34,12 +33,10 @@ function makeMessage(i: number, role: 'user' | 'assistant' = 'user'): ChatMessag
   };
 }
 
-/** 批量消息 */
 function makeBatch(count: number): ChatMessage[] {
   return Array.from({ length: count }, (_, i) => makeMessage(i));
 }
 
-/** 多次采样取中位数（抗 GC/系统抖动） */
 async function sampleMedian(run: () => Promise<void>, rounds = 5): Promise<number> {
   const timings: number[] = [];
   for (let round = 0; round < rounds; round += 1) {

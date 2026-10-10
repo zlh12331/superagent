@@ -37,7 +37,6 @@ vi.mock('electron', () => ({
   },
 }));
 
-/** 构造 handler 上下文（sender 为最小 webContents 形状） */
 function createCtx(): IpcHandlerContext {
   return {
     sender: { isDestroyed: () => false, send: () => {} } as never,

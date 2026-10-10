@@ -32,7 +32,6 @@ const EMPTY_CTX = {} as never;
 
 describe('backup.handler（37-B）', () => {
   let handlers: ReturnType<typeof createBackupHandlers>;
-  /** 运行中回合守卫桩：beforeEach 复位 false，守卫用例改写 true */
   const hasRunningAgentTurns = vi.fn(() => false);
 
   beforeEach(() => {

@@ -4,7 +4,6 @@ import type { ChannelIncomingMessage } from '../channel/types';
 import { QqAdapter } from './qq-adapter';
 import type { QqStreamReceiver } from './qq-stream';
 
-/** fake 接收器：捕获 onMessage handler 可手动触发 */
 class FakeQqReceiver {
   handler: ((message: ChannelIncomingMessage) => void) | undefined;
   readonly open = vi.fn(async () => {});
@@ -19,14 +18,11 @@ class FakeQqReceiver {
   }
 }
 
-/** 默认成功响应体（err_code 用索引赋值绕开命名检查） */
 const errOkBody: Record<string, number> = {};
 errOkBody['err_code'] = 0;
 
-/** 当前测试的共享 receiver（SharedQqReceiver 构造返回它，保持 adapter 的 new 语义） */
 let currentReceiver: FakeQqReceiver;
 
-/** 测试桩：new 返回共享 receiver 实例 */
 class SharedQqReceiver {
   constructor() {
     // biome-ignore lint/correctness/noConstructorReturn: 测试桩返回共享实例（保持 new 语义）
@@ -34,7 +30,6 @@ class SharedQqReceiver {
   }
 }
 
-/** fake fetch：可编程响应 */
 function makeFetch(ok = true, body: unknown = errOkBody): ReturnType<typeof vi.fn> {
   return vi.fn(async () => ({
     ok,
@@ -43,7 +38,6 @@ function makeFetch(ok = true, body: unknown = errOkBody): ReturnType<typeof vi.f
   }));
 }
 
-/** 构造注入全部依赖的适配器 */
 function makeAdapter(): {
   adapter: QqAdapter;
   fetchToken: ReturnType<typeof vi.fn>;

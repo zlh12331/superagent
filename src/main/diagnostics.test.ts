@@ -27,7 +27,6 @@ vi.mock('./utils/logger', () => ({
 
 let tempUserData: string;
 
-/** 每个用例前重置临时 userData + 真实 SQLite（纯函数用例也容忍，保持类型收敛简单） */
 function setupTempEnvironment(): void {
   tempUserData = mkdtempSync(join(tmpdir(), 'diag-'));
   mocks.mockGetPath.mockReturnValue(tempUserData);

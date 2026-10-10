@@ -12,12 +12,6 @@ import { loadWindowState, trackWindowState, type WindowState } from './utils/win
 import { markMaximizeOnNextShow } from './window-show';
 import { TITLE_BAR_SYMBOL } from './window-theme';
 
-/**
- * 关窗行为（settings.window.closeAction；缺失/损坏/读取失败 → 默认 minimize）
- *
- * 导出供托盘装配复用（index.ts 注入给 tray 的「关闭时最小化到托盘」勾选项读取同一真源，
- * 不重复实现——spec 28 §6:145-146 明确该勾选项读的就是本设置）。
- */
 export function readCloseAction(): 'minimize' | 'quit' {
   try {
     const value = readSetting('window');
@@ -30,12 +24,6 @@ export function readCloseAction(): 'minimize' | 'quit' {
   }
 }
 
-/**
- * 运行中回合退出确认弹窗（close 协商与 before-quit 协商共用）
- *
- * @returns true = 用户确认退出（中断回合，交由退出善后标记 interrupted）
- *          false = 用户取消（回合继续，应用保持运行）
- */
 export async function confirmInterruptRunningTurns(win: BrowserWindow): Promise<boolean> {
   try {
     const { response } = await dialog.showMessageBox(win, {
@@ -55,12 +43,6 @@ export async function confirmInterruptRunningTurns(win: BrowserWindow): Promise<
   }
 }
 
-/**
- * 创建主窗口
- *
- * 流程：恢复窗口状态 → BrowserWindow（frameless + 安全基线）→
- * 导航/新窗口限制 → 加载渲染层 → 状态跟踪 → dev DevTools 注入。
- */
 export function createWindow(): BrowserWindow {
   const windowState: WindowState = loadWindowState(
     join(app.getPath('userData'), 'window-state.json'),

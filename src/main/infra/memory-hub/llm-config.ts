@@ -7,19 +7,12 @@ import { getSecret } from '../storage/keychain';
 import { readSetting } from '../storage/settings-pref';
 import type { MemoryHubLlmConfig } from './memory-hub-service';
 
-/** 根地址不含协议路径、需补 /v1 的供应商（对齐 BUILTIN_FACTORIES 拼接规则） */
 const V1_SUFFIX_KINDS: ReadonlySet<ProviderKind> = new Set(['deepseek', 'openai', 'ollama']);
 
-/** MemoryCore 蒸馏不支持的协议（非 OpenAI-compatible） */
 const INCOMPATIBLE_KINDS: ReadonlySet<ProviderKind> = new Set(['anthropic']);
 
 const TAG = '[memory-hub]';
 
-/**
- * 解析蒸馏 LLM 配置（用户默认模型 → 供应商 → keychain）
- *
- * @returns 可用配置；不可用（协议不兼容 / 未配置 Key / 设置读取失败）时 undefined
- */
 export async function resolveDistillLlmConfig(): Promise<MemoryHubLlmConfig | undefined> {
   try {
     const aiSettings = readSetting('ai') as { defaultModel?: unknown } | undefined;

@@ -5,22 +5,17 @@ import type { IRemoteControlService } from '../infra/remote/remote-control';
 import { writeRemoteBindScope } from '../infra/storage/remote-pref';
 import type { IpcHandlerContext } from '../utils/wrap';
 
-/** 局域网地址枚举 + 端点组装（注入以便单测覆盖无网卡/多网卡分支） */
 export interface RemoteHandlerNetwork {
   readonly listAddresses: typeof getLanIPv4Addresses;
   readonly buildEndpoints: typeof buildRemoteEndpoints;
 }
 
-/**
- * 远程控制域 handler 工厂（依赖注入：RemoteControlService 由 ServiceContainer 持有）
- */
 export function createRemoteHandlers(params: {
   remoteControl: IRemoteControlService;
   network: RemoteHandlerNetwork;
 }): InferHandlers<typeof IPC_DEFINITIONS, IpcHandlerContext>['remote'] {
   const { remoteControl, network } = params;
 
-  /** 组装状态快照（未运行时端口/令牌/地址一律置空） */
   const snapshot = (): RemoteStatusRes => {
     const running = remoteControl.isRunning();
     const port = remoteControl.getPort();

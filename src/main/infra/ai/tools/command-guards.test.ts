@@ -10,7 +10,6 @@ import {
   matchesWhitelistPattern,
 } from './command-guards';
 
-/** Windows 下 junction 无需管理员权限；POSIX 用 dir 链接 */
 const SYMLINK_TYPE = process.platform === 'win32' ? 'junction' : 'dir';
 
 describe('isUniversalWhitelistPattern（等同放行全部调用的模式：fail closed）', () => {

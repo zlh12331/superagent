@@ -6,7 +6,6 @@ import { ErrorCode } from '@code-agent/shared/main';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { getGitService, type IGitService, resetGitService } from './git-service';
 
-/** 用系统 git CLI 执行命令（测试环境有 git；避免用被测库自证初始化） */
 function spawnGit(args: string[], cwd: string): void {
   const result = spawnSync('git', args, { cwd, encoding: 'utf-8' });
   if (result.status !== 0) {
@@ -14,14 +13,6 @@ function spawnGit(args: string[], cwd: string): void {
   }
 }
 
-/**
- * 真实 git 集成测试的用例注册（R3 修复：显式放宽单测超时）
- *
- * 根因：全量并发跑主进程测试时（111 个测试文件并行），git 子进程 spawn
- * 受 CPU/IO 饱和影响，单用例耗时从隔离跑的 ~1.2s 涨到 5-6s——恰好超过
- * vitest 默认 5s 单测超时被强杀，且每次失败的是不同用例（表现似随机偶发）。
- * 隔离重跑永远通过的原因即在此。真实 git CLI 集成测试放宽到 30s 属合理边界。
- */
 const gitIt = (name: string, fn: () => Promise<void>): void => {
   it(name, fn, 30_000);
 };
@@ -40,7 +31,6 @@ describe('GitService（真实 git 仓库）', () => {
     await rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   });
 
-  /** 初始化 git 仓库 + 提交初始文件 */
   async function initRepo(): Promise<void> {
     spawnGit(['init'], dir);
     spawnGit(['config', 'user.email', 'test@example.com'], dir);

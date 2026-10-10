@@ -8,24 +8,20 @@ import {
   injectDynamicContext,
 } from './dynamic-context';
 
-/** git 提供者 mock：返回 dirty 状态 */
 const dirtyProvider: GitSummaryProvider = async () => ({
   branch: 'feature/agent',
   clean: false,
   changedFiles: 3,
 });
 
-/** git 提供者 mock：clean 状态 */
 const cleanProvider: GitSummaryProvider = async () => ({
   branch: 'main',
   clean: true,
   changedFiles: 0,
 });
 
-/** git 提供者 mock：非 git 仓库（null） */
 const nullProvider: GitSummaryProvider = async () => null;
 
-/** git 提供者 mock：抛错（失败容忍） */
 const throwingProvider: GitSummaryProvider = async () => {
   throw new Error('git not found');
 };

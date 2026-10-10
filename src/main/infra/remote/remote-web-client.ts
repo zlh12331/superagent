@@ -1,6 +1,5 @@
 import { createHash } from 'node:crypto';
 
-/** 页面样式（内联 <style>，CSP 按内容哈希授权） */
 const REMOTE_CLIENT_STYLE = `
 :root {
   color-scheme: dark;
@@ -72,12 +71,6 @@ button.ghost { background: none; color: var(--muted); border: 1px solid var(--li
 .hide { display: none !important; }
 `.trim();
 
-/**
- * 页面脚本（内联 <script>，CSP 按内容哈希授权）
- *
- * 刻意不使用模板字符串：本常量要原样嵌入外层 TS 模板字面量，
- * 反引号与 ${} 都需要转义，直写字符串拼接可避免这类隐性错位。
- */
 const REMOTE_CLIENT_SCRIPT = `
 'use strict';
 var I18N = {
@@ -346,16 +339,10 @@ fetch('/info')
   .catch(function () { setDot('err', L('offline')); });
 `.trim();
 
-/** CSP 哈希授权：`sha256-<base64>` 覆盖内联 script / style 的精确字节 */
 function cspHash(source: string): string {
   return `sha256-${createHash('sha256').update(source, 'utf8').digest('base64')}`;
 }
 
-/**
- * 手机控制页 HTML（含内联样式与脚本，零外部资源）
- *
- * 拼接顺序即最终字节：CSP 头必须由同一批常量计算，故此处不做任何 trim/format 加工。
- */
 export const REMOTE_CLIENT_HTML = `<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -387,12 +374,6 @@ export const REMOTE_CLIENT_HTML = `<!doctype html>
 </body>
 </html>`;
 
-/**
- * 控制页 CSP：白名单极窄——只允许同源 XHR/fetch 与本页哈希过的内联资源。
- *
- * 注意：`frame-ancestors` / `sandbox` 类指令在 <meta> 中无效，必须走响应头，
- * 因此本常量与 REMOTE_CLIENT_HTML 由同一处（remote-control 的 GET /）下发。
- */
 export const REMOTE_CLIENT_CSP = [
   "default-src 'none'",
   `script-src '${cspHash(REMOTE_CLIENT_SCRIPT)}'`,

@@ -5,40 +5,20 @@ import type { L0Record } from '../infra/memory-hub/memory-hub-service';
 import type { MemoryClearResult } from '../infra/memory-hub/types';
 import type { IpcHandlerContext } from '../utils/wrap';
 
-/** 引擎状态查询依赖（由 ServiceContainer 提供） */
 export interface MemoryStatusDeps {
-  /** 用户开关（settings.memory.enabled，默认 true） */
   readonly isEnabled: () => boolean;
-  /** 引擎是否随包提供 */
   readonly isAvailable: () => boolean;
-  /** sidecar 是否已运行（不触发启动） */
   readonly isRunning: () => boolean;
-  /** 已运行时探测 /health（未运行时调用方不应调用；失败返回 false） */
   readonly isHealthy: () => Promise<boolean>;
-  /** 数据量统计（读审计镜像，不触发引擎） */
   readonly countRecords: () => Promise<{ sessionCount: number; recordCount: number }>;
 }
 
-/**
- * 记忆域 handler 工厂（依赖注入：L0 读取器 / 清除器由 ServiceContainer 提供）
- */
 export function createMemoryHandlers(params: {
-  /** 按会话读取 L0 对话记录（读上游数据文件；无则返回空数组） */
   listL0BySession: (sessionKey: string, limit?: number) => Promise<L0Record[]>;
-  /** 按会话删除 L0 对话记录（引擎删除 + JSONL 镜像同步清理；失败返回 ok=false 不抛错） */
   clearBySession: (sessionKey: string) => Promise<MemoryClearResult>;
-  /**
-   * 引擎逐 key 删除（仅 /v2/conversation/delete；ensureStarted 失败/HTTP 异常抛错）
-   *
-   * clearAll 专用：JSONL 清理由 removeL0Jsonl 单遍统一做（P2-26），
-   * 与单 key clearBySession（内联 JSONL 清理）分离。
-   */
   clearEngineBySession: (sessionKey: string) => Promise<MemoryClearResult>;
-  /** JSONL 审计镜像批量清理（单遍扫描统一重写；P2-26：原每 key 一次全扫全量重写） */
   removeL0Jsonl: (sessionKeys: readonly string[]) => Promise<number>;
-  /** 列出审计镜像中的全部会话 key（清空全部时枚举用） */
   listKnownSessionKeys: () => Promise<string[]>;
-  /** 引擎状态依赖 */
   readonly status: MemoryStatusDeps;
 }): InferHandlers<typeof IPC_DEFINITIONS, IpcHandlerContext>['memory'] {
   const {

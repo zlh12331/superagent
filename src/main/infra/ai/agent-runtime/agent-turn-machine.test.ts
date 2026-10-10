@@ -7,7 +7,6 @@ import {
   type TurnDeps,
 } from './agent-turn-machine';
 
-/** 手工控时的 deferred promise */
 function createDeferred<T>(): {
   promise: Promise<T>;
   resolve: (value: T) => void;
@@ -22,7 +21,6 @@ function createDeferred<T>(): {
   return { promise, resolve, reject };
 }
 
-/** 标准 runDone 输出（按需覆盖字段） */
 function runOutput(overrides?: Partial<Parameters<typeof Object.assign>[0]>): {
   reason: 'completed' | 'aborted' | 'timeout';
   durationMs: number;
@@ -40,7 +38,6 @@ function runOutput(overrides?: Partial<Parameters<typeof Object.assign>[0]>): {
   };
 }
 
-/** 测试夹具：deferred deps + 调用日志（可选注入超时短值供 after 测试） */
 function createTurn(approvalTimeoutMs?: number, askTimeoutMs?: number) {
   const resolveModel = createDeferred<string>();
   const acquireGate = createDeferred<void>();
@@ -105,7 +102,6 @@ function createTurn(approvalTimeoutMs?: number, askTimeoutMs?: number) {
   return { actor, state, resolveModel, acquireGate, executeTurn, log, deps };
 }
 
-/** 等待 invoked service 的 onDone/onError 处理（宏任务级：一次 setTimeout 清空全部微任务链） */
 async function settle(_actor: AgentTurnActor): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
 }

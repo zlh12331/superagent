@@ -104,7 +104,6 @@ describe('update-cache', () => {
   });
 
   describe('pruneStaleDifferentialBaseline', () => {
-    /** 写一份块图（gzip(JSON)，结构与 electron-builder 产物一致） */
     async function writeBlockMap(dir: string, sizes: number[]): Promise<void> {
       const blockMap = {
         version: 2,

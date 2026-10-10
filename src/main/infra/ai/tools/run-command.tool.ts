@@ -8,12 +8,6 @@ const MAX_OUTPUT_BYTES = 100 * 1024;
 const DEFAULT_TIMEOUT_MS = 30_000;
 const MAX_TIMEOUT_MS = 300_000;
 
-/**
- * 危险命令扫描前的保守归一化（2026-09-08 安全修复）
- *
- * 让「引号包裹」与「-- 分隔」变体与原形落在同一文本：删引号（shell 展开等价）
- * + 独立 `--` 替换为空格。仅用于拦截判定，执行仍用原始命令。
- */
 function normalizeForDangerScan(command: string): string {
   return command.replace(/['"`]/g, '').replace(/(^|\s)--(?=\s|$)/g, '$1');
 }
@@ -65,13 +59,6 @@ const RunCommandInputSchema = z.object({
 
 type RunCommandInput = z.infer<typeof RunCommandInputSchema>;
 
-/**
- * 进程树终止：shell（cmd.exe / sh）只是包装层，真正的孙进程（npm/ping 等）
- * 持有 stdio 写端句柄——仅 kill shell 本体时 close 事件永不触发（Node 要求
- * 进程退出且 stdio 流关闭才 emit），Promise 悬挂到回合看门狗兜底。
- * - win32：taskkill /T 连同整棵子进程树终止
- * - POSIX：spawn detached 使 shell 为进程组组长，负 pid 信号覆盖全组
- */
 function killTree(child: ChildProcess, force: boolean): void {
   const pid = child.pid;
   if (pid === undefined) {
@@ -99,16 +86,10 @@ interface RunCommandOutput {
   readonly stdout: string;
   readonly stderr: string;
   readonly timedOut: boolean;
-  /** stdout 是否被截断（超 MAX_OUTPUT_BYTES，保留头部） */
   readonly stdoutTruncated: boolean;
-  /** stderr 是否被截断 */
   readonly stderrTruncated: boolean;
 }
 
-/**
- * 创建 run_command 工具（在工作目录内执行 shell 命令：DANGEROUS_PATTERNS 拦截高危命令，
- * 超时默认 30s 上限 5 分钟；ask 级审批）
- */
 export function createRunCommandTool(): Tool<RunCommandInput> {
   return {
     name: 'run_command',

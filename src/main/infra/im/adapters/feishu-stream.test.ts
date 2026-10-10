@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { type FeishuMessageEventV1, parseFeishuEvent } from './feishu-stream';
 
-/** 构造飞书文本消息事件 */
 function textEvent(
   content: string,
   overrides?: Partial<FeishuMessageEventV1['message']>,

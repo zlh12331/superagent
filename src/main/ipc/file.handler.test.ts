@@ -7,7 +7,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearUserReadGrants, grantUserReadPaths } from '../infra/file/user-grants';
 import { confineToWorkspace, createFileHandlers, type FileHandlerDeps } from './file.handler';
 
-/** 创建 fake FileService */
 function createFakeFileService() {
   return {
     read: vi.fn(async () => ({ content: '', size: 0 })),
@@ -24,7 +23,6 @@ function createFakeFileService() {
 
 const EMPTY_CTX = {} as never;
 
-/** 建立真实临时目录（realpath 归一，避免 /var → /private/var 类符号链接干扰） */
 function makeTempDir(prefix: string, sub = ''): string {
   const dir = realpathSync(mkdtempSync(join(tmpdir(), `${prefix}-`)));
   const target = sub === '' ? dir : join(dir, sub);
@@ -32,7 +30,6 @@ function makeTempDir(prefix: string, sub = ''): string {
   return target;
 }
 
-/** 断言抛出越界 AppError */
 async function expectDenied(promise: Promise<unknown>): Promise<void> {
   await expect(promise).rejects.toBeInstanceOf(AppError);
   await expect(promise).rejects.toMatchObject({ code: ErrorCode.UNAUTHORIZED });
@@ -42,7 +39,6 @@ describe('file.handler', () => {
   let fileService: ReturnType<typeof createFakeFileService>;
   const tempDirs: string[] = [];
 
-  /** 创建 handler：roots 即边界集合 */
   function build(roots: readonly string[]) {
     fileService = createFakeFileService();
     return createFileHandlers({ fileService, workspaceRoots: async () => roots });
@@ -281,7 +277,6 @@ describe('file.handler', () => {
   });
 
   describe('用户手势授权（工作区外附件的只读放行通道）', () => {
-    /** 工作区外的真实附件文件 */
     function makeOutsideAttachment(name: string): string {
       const file = join(outside, name);
       writeFileSync(file, 'content', 'utf8');

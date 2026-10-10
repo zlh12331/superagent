@@ -3,17 +3,12 @@ import { t } from '../../i18n';
 import type { SkillRegistry } from '../skills/skill-registry';
 import type { Tool, ToolContext, ToolResult } from './tool';
 
-/** load_skill 入参 */
 const LoadSkillInputSchema = z.object({
-  /** 技能名（skill:list 可查） */
   name: z.string().min(1).max(100),
 });
 
 type LoadSkillInput = z.infer<typeof LoadSkillInputSchema>;
 
-/**
- * 创建 load_skill 工具（依赖 SkillRegistry 注入）
- */
 export function createLoadSkillTool(skills: SkillRegistry): Tool<LoadSkillInput> {
   return {
     name: 'load_skill',

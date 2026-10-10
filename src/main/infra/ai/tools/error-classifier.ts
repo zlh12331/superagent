@@ -1,16 +1,6 @@
 import { AppError, ErrorCode } from '@code-agent/shared/main';
 import { APICallError, LoadAPIKeyError } from 'ai';
 
-/**
- * 判断是否为 AbortError
- *
- * 不同运行时 AbortError 的 name 可能不同：
- * - 浏览器/Electron：AbortError
- * - Node.js fetch：AbortError
- * - 自定义 controller.abort() 触发的：AbortError
- *
- * AbortError 视为用户主动中断，不作为错误处理（不推送 error 事件）。
- */
 export function isAbortError(error: unknown): boolean {
   if (error instanceof Error) {
     return error.name === 'AbortError';
@@ -18,12 +8,6 @@ export function isAbortError(error: unknown): boolean {
   return false;
 }
 
-/**
- * 错误分类：把未知错误转换为 AppError
- *
- * @param error streamText / generateText 抛出的未知错误
- * @returns 对应的 AppError，携带标准错误码与人类可读消息
- */
 export function classifyError(error: unknown): AppError {
   if (error instanceof AppError) {
     return error;
@@ -48,12 +32,6 @@ export function classifyError(error: unknown): AppError {
   return new AppError(ErrorCode.INTERNAL_ERROR, 'AI 调用失败', error);
 }
 
-/**
- * 分类 APICallError：按 HTTP statusCode 精确映射 ErrorCode
- *
- * @param error AI SDK 抛出的 APICallError，含 statusCode / isRetryable / responseBody
- * @returns 对应的 AppError，附带 statusCode 用于渲染层诊断
- */
 function classifyAPICallError(error: APICallError): AppError {
   const { statusCode, isRetryable } = error;
 

@@ -34,7 +34,6 @@ vi.mock('../../../utils/logger', () => ({
   logger: mocks.mockLogger,
 }));
 
-/** 构造 LlmClient（DI fake：createProviderFactory 返回可追踪的工厂） */
 function createClient() {
   const registry = new ModelRegistry({
     entries: BUILTIN_MODELS,
@@ -316,7 +315,6 @@ describe('LlmClient', () => {
   });
 
   describe('generateText（模型级生成参数适配，DeepSeek 思考模式）', () => {
-    /** 获取最近一次 generateText 调用的参数（mock 无参类型需 cast） */
     function getLastGenerateTextArgs(): Record<string, unknown> {
       const calls = mocks.mockGenerateText.mock.calls as unknown[][];
       const args = calls[calls.length - 1]?.[0];
@@ -396,12 +394,10 @@ describe('LlmClient 批次2 缺口补全（降级链/覆盖透传/参数展开/�
     vi.clearAllMocks();
   });
 
-  /** 构造带 code 的网络错误（undici/node 网络层错误码） */
   function networkError(code: string): Error {
     return Object.assign(new Error(`network ${code}`), { code });
   }
 
-  /** 构造指定状态码的 APICallError */
   function apiError(
     statusCode: number | undefined,
     extra?: { isRetryable?: boolean },

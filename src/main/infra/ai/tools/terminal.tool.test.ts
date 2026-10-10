@@ -3,7 +3,6 @@ import { describe, expect, it, vi } from 'vitest';
 import { createTerminalTool } from './terminal.tool';
 import type { ToolContext } from './tool';
 
-/** 真实 stub 的最小 terminalService（业务逻辑不 mock，注入 fake 服务） */
 function createFakeTerminalService() {
   return {
     create: vi.fn(async () => ({ terminalId: 't-1', pid: 42 })),

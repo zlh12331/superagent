@@ -11,7 +11,6 @@ import type {
 import { ImService } from '../infra/im/im-service';
 import { createImHandlers } from './im.handler';
 
-/** 临时 userData 目录（真实文件 IO，符合无 mock 测试原则） */
 const TEMP_DIR = mkdtempSync(join(tmpdir(), 'im-handler-test-'));
 
 vi.mock('electron', () => ({
@@ -26,7 +25,6 @@ vi.mock('electron', () => ({
   },
 }));
 
-/** fake 渠道适配器（手写最小实现，无 mock 框架） */
 class FakeAdapter implements IChannelAdapter {
   readonly kind: ChannelKind;
   readonly displayName: string;
@@ -59,7 +57,6 @@ class FakeAdapter implements IChannelAdapter {
   }
 }
 
-/** 构造 handler（真实 ImService + fake 适配器） */
 function createHandlers(): ReturnType<typeof createImHandlers> {
   const service = new ImService([new FakeAdapter('telegram'), new FakeAdapter('wechat', false)]);
   return createImHandlers({ imService: service });

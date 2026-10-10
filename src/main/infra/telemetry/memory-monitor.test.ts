@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { detectGrowth, MemoryMonitor, type MemorySample } from './memory-monitor';
 
-/** 构造采样序列（rss 按传入值，时间按 60s 递增） */
 function series(rssList: readonly number[], startAt = 1_700_000_000_000): MemorySample[] {
   return rssList.map((rssMb, i) => ({
     rssMb,

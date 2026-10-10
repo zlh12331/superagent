@@ -11,38 +11,18 @@ import type { ISessionService } from '../storage/session-service';
 import type { ChannelIncomingMessage } from './channel/types';
 import type { ImService } from './im-service';
 
-/** 会话映射 key：`${channel}:${chatId}` */
 function sessionKey(channel: string, chatId: string): string {
   return `${channel}:${chatId}`;
 }
 
-/**
- * IM 渠道 agent 的沙箱工作目录
- *
- * 安全修复：禁止以用户主目录作为 IM 无头执行的工作目录（否则群聊第三方
- * 可诱导 agent 读取 ~/.ssh、~/.aws 等任意文件并回发群聊）。
- * 改为应用 userData 下的专用沙箱目录，隔离 IM agent 的读写边界。
- *
- * 使用点求值（W9 修复）：模块加载期 app.getPath('userData') 早于 index.ts
- * 的 dev 重定向（app.setPath），快照常量会把沙箱目录落在重定向目标之外
- * （dev/E2E 隔离失效）。改为函数在使用时求值——mount/首回合均发生在
- * whenReady 之后，此时 setPath 已生效。
- */
 export function getImDefaultWorkingDir(): string {
   return join(app.getPath('userData'), 'im-workspace');
 }
 
-/**
- * IM 消息 → Agent 桥接（模块单例，由 ServiceContainer 初始化挂载）
- */
 export class ImAgentBridge {
-  /** 会话映射：`${channel}:${chatId}` → sessionId（重启后由消息重新建立） */
   private readonly sessionMap = new Map<string, string>();
-  /** 正在执行的 chatId 集合（串行控制） */
   private readonly busyChats = new Set<string>();
-  /** 桥接是否已挂载（防重复 onMessage 订阅） */
   private mounted = false;
-  /** mount 注册的取消订阅函数（unmount 用；未挂载时为 null） */
   private unsubscribeMessage: (() => void) | null = null;
 
   constructor(
@@ -52,9 +32,6 @@ export class ImAgentBridge {
     private readonly sessionService: ISessionService,
   ) {}
 
-  /**
-   * 挂载桥接到 im-service 的消息入口（ServiceContainer 初始化调用，幂等）
-   */
   mount(): void {
     if (this.mounted) {
       return;
@@ -71,9 +48,6 @@ export class ImAgentBridge {
     logger.info({}, 'IM → Agent 桥接已挂载');
   }
 
-  /**
-   * 解除消息订阅（应用退出 / 测试隔离时由 ServiceContainer 调用；幂等）
-   */
   unmount(): void {
     if (!this.mounted) {
       return;
@@ -84,9 +58,6 @@ export class ImAgentBridge {
     logger.info({}, 'IM → Agent 桥接已解除挂载');
   }
 
-  /**
-   * 处理单条入站消息（串行 + 模式检查 + 回合执行）
-   */
   private async handleMessage(message: ChannelIncomingMessage): Promise<void> {
     const key = sessionKey(message.channel, message.chatId);
 
@@ -140,14 +111,6 @@ export class ImAgentBridge {
     }
   }
 
-  /**
-   * 拒绝未授权的群聊（2026-09-08 安全审计修复）
-   *
-   * 背景：此前只检查审批模式、从不校验 senderId，任何能给机器人发消息的人
-   * （群聊任意成员）都能驱动 agent 执行工具；yolo 模式下 decideByMode 无条件
-   * 放行且边界检查只存在于 auto 分支 → 可读本机文件并回发群聊。
-   * 策略（fail closed）：仅私聊放行，群聊必须显式登记 `${channel}:${chatId}`。
-   */
   private async rejectUnauthorizedGroup(message: ChannelIncomingMessage): Promise<void> {
     logger.warn(
       { channel: message.channel, chatId: message.chatId, senderId: message.senderId },
@@ -160,9 +123,6 @@ export class ImAgentBridge {
     );
   }
 
-  /**
-   * 执行单回合：startAgent（无 webContents）→ 回合事件 → 渠道回发
-   */
   private async runTurn(message: ChannelIncomingMessage, sessionId: string): Promise<void> {
     const { channel, chatId } = message;
 

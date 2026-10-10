@@ -1,9 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => {
-  /** 伪通知实例集合（构造即入列，断言 show 与 body） */
   const notifications: { body: string; shown: boolean }[] = [];
-  /** 伪焦点窗口集合（isAppInForeground 的输入；空 = 全部后台） */
   const focusedWindows: boolean[] = [];
   return { notifications, focusedWindows };
 });
@@ -52,7 +50,6 @@ import { mountApprovalNotifications, mountTurnNotifications } from './notificati
 
 type TurnReason = TurnEndEvent['reason'];
 
-/** 组装 TURN_END 事件（订阅回调只消费 type/reason/durationMs） */
 function turnEnd(reason: TurnReason): TurnEvent {
   return {
     type: TurnEventType.TURN_END,
@@ -64,7 +61,6 @@ function turnEnd(reason: TurnReason): TurnEvent {
   };
 }
 
-/** 挂载并捕获回合事件 listener（模拟 AgentService 订阅缝） */
 function mountAndCapture(): (event: TurnEvent) => void {
   let listener: ((event: TurnEvent) => void) | undefined;
   mountTurnNotifications({
@@ -165,13 +161,11 @@ describe('mountTurnNotifications 通知设置门控', () => {
   });
 });
 
-/** 审批生命周期回调集合（mountApprovalNotifications 订阅缝的捕获形状） */
 interface CapturedLifecycle {
   onRequested: (payload: { sessionId: string; approvalId: string; toolName: string }) => void;
   onResolved: (payload: { sessionId: string; approvalId: string }) => void;
 }
 
-/** 挂载并捕获审批生命周期 listener（模拟 PermissionService 订阅缝） */
 function mountApprovalAndCapture(): CapturedLifecycle {
   let listener: CapturedLifecycle | undefined;
   mountApprovalNotifications({

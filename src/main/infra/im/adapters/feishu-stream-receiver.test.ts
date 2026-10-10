@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { FeishuStreamReceiver } from './feishu-stream';
 
-/** fake 事件分发器：register 捕获事件回调 */
 class FakeEventDispatcher {
   handler: ((data: unknown) => void) | undefined;
   register(handlers: Record<string, (data: unknown) => void>): this {
@@ -14,17 +13,14 @@ class FakeEventDispatcher {
   }
 }
 
-/** fake WS 客户端：start 可编程 */
 class FakeWsClient {
   readonly start = vi.fn(async () => {});
   readonly close = vi.fn();
 }
 
-/** 当前测试的共享 fake（构造桩返回） */
 let currentDispatcher: FakeEventDispatcher;
 let currentWsClient: FakeWsClient;
 
-/** 构造桩：返回共享实例（保持 new 语义） */
 class SharedEventDispatcherCtor {
   constructor() {
     // biome-ignore lint/correctness/noConstructorReturn: 测试桩返回共享实例（保持 new 语义）
@@ -58,7 +54,6 @@ function makeReceiver(): {
   return { receiver, dispatcher: currentDispatcher, wsClient: currentWsClient };
 }
 
-/** 合法飞书消息事件（FeishuMessageEventV1 形状：顶层 message/sender） */
 function feishuEvent(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     sender: {

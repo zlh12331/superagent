@@ -263,7 +263,6 @@ describe('db', () => {
 });
 
 describe('领域约束生效', () => {
-  /** 底层 better-sqlite3 连接（错误为原生 SqliteError，message 含约束名） */
   function raw(db: ReturnType<typeof initDb>): Database.Database {
     return (db as unknown as { $client: Database.Database }).$client;
   }
@@ -437,7 +436,6 @@ describe('领域约束生效', () => {
 });
 
 describe('老库升级（增量迁移）', () => {
-  /** 旧手写 schema 的全部建表 + 索引 SQL（对齐已退役的 schema-sql.ts） */
   const LegacySchemaSql = `
     CREATE TABLE sessions (
       id TEXT PRIMARY KEY,
@@ -655,10 +653,8 @@ describe('老库升级（增量迁移）', () => {
 });
 
 describe('空间回收（SQLite 磁盘占用）', () => {
-  /** 制造足量可回收页：4000 行 × 2KB ≈ 8MB ≈ 2000 页，明显高于回收阈值 */
   const BulkRows = 4000;
   const BulkPayload = 'x'.repeat(2000);
-  /** 断言用最小归还页数：远小于实际可回收量，但足以证明回收真的发生了 */
   const MinFreedPages = 1000;
 
   const service = new SessionService();
@@ -671,7 +667,6 @@ describe('空间回收（SQLite 磁盘占用）', () => {
     return Number(sqlite.pragma(statement, { simple: true }));
   }
 
-  /** 把 WAL 落回主库后再测占用：不 checkpoint 时字节数含 WAL，前后不可比 */
   function footprint(sqlite: Database.Database): { pages: number; bytes: number } {
     sqlite.pragma('wal_checkpoint(TRUNCATE)');
     return {
@@ -689,7 +684,6 @@ describe('空间回收（SQLite 磁盘占用）', () => {
       .run(id);
   }
 
-  /** 灌入大消息（事务内批量插入，seq 连续以满足 (session_id, seq) UNIQUE） */
   function seedBulkMessages(sqlite: Database.Database, sessionId: string): void {
     const insert = sqlite.prepare(
       'INSERT INTO messages (session_id, seq, role, content, created_at)' +
@@ -701,7 +695,6 @@ describe('空间回收（SQLite 磁盘占用）', () => {
     insertAll(BulkRows);
   }
 
-  /** token_usage 全是整型列，靠 model_id 撑体积；created_at=1 落在统计窗口外 */
   function seedBulkUsage(sqlite: Database.Database, sessionId: string): void {
     const insert = sqlite.prepare(
       'INSERT INTO token_usage' +
@@ -714,7 +707,6 @@ describe('空间回收（SQLite 磁盘占用）', () => {
     insertAll(BulkRows);
   }
 
-  /** 隔离文件库：重定向 userData，结束后关连接 + 还原 + 清理临时目录 */
   async function withIsolatedDb(
     prefix: string,
     run: (dir: string) => void | Promise<void>,

@@ -6,9 +6,6 @@ import { TelegramAdapter } from './telegram-adapter';
 import { WecomAdapter } from './wecom-adapter';
 import { WeixinAdapter } from './weixin-adapter';
 
-/**
- * 全部渠道适配器实例（设置页列表 + 管理器注册共用）
- */
 export function createAllAdapters(): IChannelAdapter[] {
   return [
     new TelegramAdapter(),

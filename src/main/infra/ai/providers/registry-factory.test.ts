@@ -29,7 +29,6 @@ describe('Provider 工厂真实实例化（AI SDK 消费集成验证）', () => 
     registry = new ProviderRegistry();
   });
 
-  /** 断言 LanguageModel 实例具备 SDK 消费接口（v7 规范：doGenerate/doStream） */
   function expectModelUsable(model: unknown): void {
     expect(model).toBeDefined();
     const lm = model as { doGenerate?: unknown; doStream?: unknown };

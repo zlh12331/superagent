@@ -3,9 +3,6 @@ import type { InferHandlers, IPC_DEFINITIONS } from '@code-agent/shared/main';
 import type { GoalService } from '../infra/ai/knowledge/goal-service';
 import type { IpcHandlerContext } from '../utils/wrap';
 
-/**
- * 目标域 handler 工厂（依赖注入：GoalService 由 ServiceContainer 持有）
- */
 export function createGoalHandlers(params: {
   goalService: GoalService;
 }): InferHandlers<typeof IPC_DEFINITIONS, IpcHandlerContext>['goal'] {

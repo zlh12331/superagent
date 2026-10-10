@@ -4,17 +4,9 @@ import { parseProxyConfig } from '../infra/network/proxy-resolver';
 import { readSetting } from '../infra/storage/settings-pref';
 import type { IpcHandlerContext } from '../utils/wrap';
 
-/** 探测超时（毫秒，D7） */
 const PROBE_TIMEOUT_MS = 3_000;
-/** 中立探测端点（CP2 #12：不锚定 AI 供应商域名；204 端点轻量无副作用） */
 const DEFAULT_PROBE_TARGET = 'https://www.gstatic.com/generate_204';
 
-/**
- * Proxy 域 handler 工厂
- *
- * 探测前把「DB 当前值」重新注入 proxiedFetch——handler 不依赖 applyProxyChange
- * 是否已在别处跑过（幂等，读库即真源）。
- */
 export function createProxyHandlers(): InferHandlers<
   typeof IPC_DEFINITIONS,
   IpcHandlerContext

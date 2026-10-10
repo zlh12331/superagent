@@ -29,7 +29,6 @@ vi.mock('node:fs/promises', async (importOriginal) => {
   };
 });
 
-/** fake SessionService：全部方法可编程 */
 function createFakeSessionService() {
   return {
     list: vi.fn(async () => ({ sessions: [], total: 0 })),
@@ -50,7 +49,6 @@ function createFakeSessionService() {
   } as unknown as SessionHandlerDeps['sessionService'];
 }
 
-/** 压缩器桩：默认恒等（无回收），个别用例覆盖 */
 function createFakeCompactMessages(): SessionHandlerDeps['compactMessages'] {
   return vi.fn((messages) => ({ trimmed: messages, removed: 0, reclaimedTokens: 0 }));
 }
@@ -60,7 +58,6 @@ const EMPTY_CTX = {} as never;
 describe('session.handler 参数转发（三件套）', () => {
   let sessionService: ReturnType<typeof createFakeSessionService>;
   let handlers: ReturnType<typeof createSessionHandlers>;
-  /** 运行中回合守卫桩（36-D）：beforeEach 复位 false，守卫用例改写 true */
   const hasRunningAgentTurns = vi.fn(() => false);
 
   beforeEach(() => {

@@ -1,10 +1,7 @@
-// （Copyright 2026 Qwen Team，SPDX-License-Identifier: Apache-2.0）的
-
 import { AppError, ErrorCode } from '@code-agent/shared/main';
 import { logger } from '../../../utils/logger';
 import type { ChannelIncomingMessage } from '../channel/types';
 
-/** Gateway opcode（官方协议） */
 export const QqOpCode = {
   DISPATCH: 0,
   HEARTBEAT: 1,
@@ -15,18 +12,14 @@ export const QqOpCode = {
   HEARTBEAT_ACK: 11,
 } as const;
 
-/** 事件订阅 intent（官方协议） */
 export const QqIntent = {
   GROUP_AND_C2C_EVENT: 1 << 25,
 } as const;
 
-/** 重连退避上限（毫秒）——超过后固定按此间隔重试（2026-09-08 修复） */
 const RECONNECT_MAX_DELAY_MS = 60_000;
 
-/** 最大连续重连次数（达上限停止，避免 token 永久有效时无限重连刷日志） */
 const RECONNECT_MAX_ATTEMPTS = 10;
 
-/** QQ 消息事件形状 */
 export interface QqMessageEvent {
   readonly id: string;
   readonly author?: {
@@ -38,7 +31,6 @@ export interface QqMessageEvent {
   readonly mentions?: Array<{ readonly id?: string; readonly is_you?: boolean }>;
 }
 
-/** Gateway 帧 */
 export interface QqGatewayFrame {
   readonly op?: number;
   readonly t?: string;
@@ -46,9 +38,7 @@ export interface QqGatewayFrame {
   readonly s?: number;
 }
 
-/** 解析结果：null = 非文本消息事件（忽略） */
 export interface ParsedQqMessage {
-  /** 会话类型（群聊/单聊；回发路由） */
   readonly chatType: 'group' | 'user';
   readonly text: string;
   readonly chatId: string;
@@ -57,9 +47,6 @@ export interface ParsedQqMessage {
   readonly timestamp: number;
 }
 
-/**
- * 获取网关地址（官方：GET /gateway/bot，可注入测试）
- */
 export async function fetchQqGatewayUrl(
   accessToken: string,
   gatewayUrl = 'https://api.sgroup.qq.com/gateway/bot',
@@ -87,13 +74,11 @@ export async function fetchQqGatewayUrl(
   }
 }
 
-/** accessToken 响应 */
 export interface QqTokenResponse {
   readonly accessToken: string;
   readonly expiresIn: number;
 }
 
-/** access_token 获取（端点可注入测试） */
 export async function fetchQqAccessToken(
   appId: string,
   appSecret: string,
@@ -127,13 +112,6 @@ export async function fetchQqAccessToken(
   }
 }
 
-/**
- * Gateway 事件帧解析（纯函数，可测）
- *
- * 支持：GROUP_AT_MESSAGE（群聊 @ 机器人）/ C2C_MESSAGE（单聊）
- * 群聊 chatId = group_openid；单聊 chatId = user_openid
- * 文本：剥离开头的 <@openid> 机器人 mention 标签，保留其余
- */
 export function parseQqEvent(frame: QqGatewayFrame): ParsedQqMessage | null {
   if (frame.op !== QqOpCode.DISPATCH || typeof frame.t !== 'string') {
     return null;
@@ -165,38 +143,25 @@ export function parseQqEvent(frame: QqGatewayFrame): ParsedQqMessage | null {
   };
 }
 
-/** 剥离开头 <@openid> 机器人 mention（群消息 @ 机器人 前缀） */
 function stripBotMention(content: string): string {
   const trimmed = content.trim();
   const match = /^<@!?[a-zA-Z0-9_-]+>\s*/.exec(trimmed);
   return match === null ? trimmed : trimmed.slice(match[0].length).trim();
 }
 
-/** QQ 长连接配置 */
 export interface QqStreamConfig {
   readonly appId: string;
   readonly appSecret: string;
-  /** 网关获取端点（测试注入；缺省官方 /gateway/bot） */
   readonly gatewayUrl?: string;
-  /** accessToken 端点（测试注入） */
   readonly tokenUrl?: string;
 }
 
-/**
- * QQ 长连接接收器（Gateway 协议；生命周期 open/close）
- */
 export class QqStreamReceiver {
   private readonly appId: string;
   private readonly appSecret: string;
   private readonly gatewayUrl: string;
   private readonly tokenUrl: string;
 
-  /**
-   * 外部依赖注入点（测试传 fake，生产默认实现）：
-   * - fetchTokenFn / fetchGatewayFn：HTTP（网络）
-   * - wsCtor：WebSocket 长连接（网络）
-   * - reconnectDelayMs / handshakeTimeoutMs：时间参数（测试缩短）
-   */
   private readonly fetchTokenFn: typeof fetchQqAccessToken;
   private readonly fetchGatewayFn: typeof fetchQqGatewayUrl;
   private readonly wsCtor: typeof WebSocket;
@@ -204,21 +169,13 @@ export class QqStreamReceiver {
 
   private ws: WebSocket | null = null;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
-  /** 最新事件序列号（心跳携带；官方协议要求） */
   private lastSeq: number | null = null;
-  /** HEARTBEAT_ACK 超时监控（僵尸连接检测） */
   private ackTimeoutTimer: ReturnType<typeof setTimeout> | null = null;
-  /** 手动关闭标记（区分主动关闭与意外断线） */
   private manualClose = false;
-  /** 重连退避延迟（毫秒） */
   private reconnectDelayMs = 5_000;
-  /** 重连中（防并发重连） */
   private reconnecting = false;
-  /** 挂起的重连定时器句柄（close 时清除，2026-09-08 修复） */
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-  /** 连续重连次数（成功建连后归零；达上限停止重试） */
   private reconnectAttempts = 0;
-  /** 会话 id（READY 下发；断线 RESUME 恢复用） */
   private sessionId: string | null = null;
   private messageHandler: ((message: ChannelIncomingMessage) => void) | null = null;
   private opened = false;
@@ -248,14 +205,10 @@ export class QqStreamReceiver {
     return this.opened;
   }
 
-  /** 订阅入站消息（单订阅者：适配器转发用） */
   onMessage(handler: (message: ChannelIncomingMessage) => void): void {
     this.messageHandler = handler;
   }
 
-  /**
-   * 打开长连接（token → WS 握手 → 心跳 → 事件监听）
-   */
   async open(): Promise<void> {
     if (this.opened) {
       return;
@@ -283,15 +236,6 @@ export class QqStreamReceiver {
     logger.info({}, 'QQ 长连接已建立（接收就绪）');
   }
 
-  /**
-   * 计划重连（指数退避 + 次数上限；2026-09-08 可靠性修复）
-   *
-   * 修复前：固定 5s、无退避、无次数上限、timer 句柄不保存——
-   * 用户在 5s 窗口内 close() 无法取消挂起的重连，回调仍会 open()（并把
-   * manualClose 重置为 false），导致「用户已关闭渠道 / 应用退出后仍重建长连接」。
-   * 现：退避 5s → 10s → 20s → …（上限 60s），最多 RECONNECT_MAX_ATTEMPTS 次，
-   * 句柄保存并在 close() 中清除。
-   */
   private scheduleReconnect(): void {
     if (this.reconnectAttempts >= RECONNECT_MAX_ATTEMPTS) {
       logger.error(
@@ -321,7 +265,6 @@ export class QqStreamReceiver {
     this.reconnectTimer.unref?.();
   }
 
-  /** 关闭长连接（幂等；手动关闭不触发重连） */
   close(): void {
     this.manualClose = true;
     if (this.reconnectTimer !== null) {
@@ -343,7 +286,6 @@ export class QqStreamReceiver {
     this.opened = false;
   }
 
-  /** Gateway 握手：hello → identify → 心跳 */
   private handshake(ws: WebSocket, accessToken: string): Promise<void> {
     return new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -430,7 +372,6 @@ export class QqStreamReceiver {
     });
   }
 
-  /** 心跳：Gateway 协议（op1 定期发送 + HEARTBEAT_ACK 超时监控） */
   private startHeartbeat(ws: WebSocket, intervalMs: number): void {
     this.heartbeatTimer = setInterval(() => {
       try {
@@ -445,7 +386,6 @@ export class QqStreamReceiver {
     }, intervalMs);
   }
 
-  /** 武装 HEARTBEAT_ACK 超时监控 */
   private armAckTimeout(ws: WebSocket, timeoutMs: number): void {
     if (this.ackTimeoutTimer !== null) {
       return;
@@ -461,7 +401,6 @@ export class QqStreamReceiver {
     }, timeoutMs);
   }
 
-  /** 清除 ack 超时监控 */
   private clearAckTimeout(): void {
     if (this.ackTimeoutTimer !== null) {
       clearTimeout(this.ackTimeoutTimer);
@@ -469,7 +408,6 @@ export class QqStreamReceiver {
     }
   }
 
-  /** 事件分发：记录序列号 + 解析转发 */
   private dispatchFrame(frame: QqGatewayFrame): void {
     if (typeof frame.s === 'number') {
       this.lastSeq = frame.s;
@@ -489,7 +427,6 @@ export class QqStreamReceiver {
   }
 }
 
-/** WS 消息 → Gateway 帧（JSON 解析容错） */
 function parseFrame(event: MessageEvent): QqGatewayFrame | null {
   try {
     const parsed = JSON.parse(event.data as string) as QqGatewayFrame;

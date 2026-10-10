@@ -8,7 +8,6 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../../../utils/logger', () => ({ logger: mocks.mockLogger }));
 
-/** 构造 mock 工具 */
 function createTool(name: string, permission: 'auto' | 'ask' = 'auto'): Tool {
   return {
     name,

@@ -5,17 +5,8 @@ import type { ZodType } from 'zod';
 import { reportError } from './error-report';
 import { logger } from './logger';
 
-/** 外部传入 traceId 的合法形状：8-64 位字母数字/连字符/下划线（UUID 与测试 id 均命中；拒绝换行/引号/空白） */
 const TRACE_ID_PATTERN = /^[\w-]{8,64}$/;
 
-/**
- * P2 加固：sender 来源 URL 白名单
- *
- * - prod：仅应用自身入口页（file://…/renderer/index.html）
- * - dev：electron-vite dev server 同源（ELECTRON_RENDERER_URL，如 http://localhost:5173）
- *
- * 防止同进程内其他 BrowserWindow / webview 借道调用 IPC。
- */
 function isAllowedSenderUrl(rawUrl: string): boolean {
   try {
     const parsed = new URL(rawUrl);
@@ -32,30 +23,11 @@ function isAllowedSenderUrl(rawUrl: string): boolean {
   }
 }
 
-/**
- * IPC handler 上下文（main 进程专用）
- *
- * 注意：与 @code-agent/shared 的 IpcContext 不同
- * - shared.IpcContext.sender 是 unknown（preload 注入用，渲染层访问）
- * - IpcHandlerContext.sender 是 WebContents（main 进程专用，可调用 webContents API）
- *
- * traceId 贯穿渲染层 → IPC → 主进程日志 → Sentry
- */
 export interface IpcHandlerContext {
-  /** 请求追踪 ID（贯穿链路） */
   readonly traceId: string;
-  /** 发送方 WebContents（用于回推事件） */
   readonly sender: WebContents;
 }
 
-/**
- * 注册 IPC handler（带统一包装）
- *
- * @param channel IPC channel 名（从 IPC_CHANNELS 常量获取）
- * @param schema 入参的 zod schema（null 表示无入参）
- * @param handler 业务处理函数
- * @param resSchema 响应契约 schema（可选；存在时校验 handler 返回，防手写 Res 接口漂移）
- */
 // biome-ignore lint/style/useNamingConvention: TInput/TOutput 为 TS 泛型惯例，描述入参/出参类型
 export function wrap<TInput, TOutput>(
   channel: string,
@@ -132,12 +104,6 @@ export function wrap<TInput, TOutput>(
   });
 }
 
-/**
- * 将任意错误转换为 IpcError
- *
- * - AppError：直接调用 toIpcError()
- * - 其他 Error：包装为 INTERNAL_ERROR
- */
 function toIpcError(error: unknown): IpcError {
   if (error instanceof AppError) {
     return error.toIpcError();

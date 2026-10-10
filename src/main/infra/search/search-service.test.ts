@@ -11,10 +11,6 @@ import {
   SearchService,
 } from './search-service';
 
-/**
- * 可编程子进程模拟：EventEmitter + PassThrough stdout + kill spy。
- * close/fail/stdoutFail 手动触发对应事件模拟 ripgrep 生命周期。
- */
 class FakeChild extends EventEmitter {
   readonly stdout: PassThrough | null;
   readonly kill = vi.fn();
@@ -24,17 +20,14 @@ class FakeChild extends EventEmitter {
     this.stdout = stdout;
   }
 
-  /** 触发 close(code, signal) */
   close(code: number | null, signal: string | null = null): void {
     this.emit('close', code, signal);
   }
 
-  /** 触发 spawn error */
   fail(err: Error): void {
     this.emit('error', err);
   }
 
-  /** 触发 stdout 流 error */
   stdoutFail(err: Error): void {
     if (this.stdout !== null) {
       this.stdout.emit('error', err);
@@ -42,7 +35,6 @@ class FakeChild extends EventEmitter {
   }
 }
 
-/** 构造注入 fake spawnFn 的服务 + 捕获的子进程实例 */
 function makeService(): {
   svc: SearchService;
   spawnFn: ReturnType<typeof vi.fn>;
@@ -58,7 +50,6 @@ function makeService(): {
   return { svc, spawnFn, children };
 }
 
-/** 写入 JSON 行并正常退出（等流处理后触发 close） */
 async function emitLines(child: FakeChild, lines: readonly string[], code = 0): Promise<void> {
   if (child.stdout === null) throw new Error('stdout is null');
   for (const line of lines) {
@@ -68,7 +59,6 @@ async function emitLines(child: FakeChild, lines: readonly string[], code = 0): 
   child.close(code);
 }
 
-/** grep 入参构造器 */
 function grepOptions(overrides: Partial<GrepOptions> = {}): GrepOptions {
   return {
     pattern: 'foo',
@@ -82,7 +72,6 @@ function grepOptions(overrides: Partial<GrepOptions> = {}): GrepOptions {
   };
 }
 
-/** glob 入参构造器 */
 function globOptions(overrides: Partial<GlobOptions> = {}): GlobOptions {
   return {
     pattern: '**/*.ts',
@@ -93,7 +82,6 @@ function globOptions(overrides: Partial<GlobOptions> = {}): GlobOptions {
   };
 }
 
-/** 构造一条 ripgrep match JSON 行 */
 function matchLine(file: string, line: number, text: string, column = 0): string {
   return JSON.stringify({
     type: 'match',
@@ -107,7 +95,6 @@ function matchLine(file: string, line: number, text: string, column = 0): string
   });
 }
 
-/** 构造一条 ripgrep context JSON 行 */
 function contextLine(file: string, line: number, text: string): string {
   return JSON.stringify({
     type: 'context',

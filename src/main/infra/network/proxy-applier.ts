@@ -9,16 +9,9 @@ import {
   parseProxyConfig,
 } from './proxy-resolver';
 
-/** electron-updater 专用分区（ElectronHttpExecutor.NET_SESSION_NAME 实测同名） */
 const UPDATER_PARTITION = 'electron-updater';
-/** 浏览器预览内存分区（preview-service.ts PREVIEW_PARTITION 同值） */
 const PREVIEW_PARTITION = 'browser-preview';
 
-/**
- * 应用代理配置变更（四路径统一出口）
- *
- * @param raw settings.proxy 的原始值（undefined = 键已删/resetAll → 回 system）
- */
 export async function applyProxyChange(raw: unknown): Promise<void> {
   const cfg = parseProxyConfig(raw);
   setProxyFetchConfig(cfg);
@@ -31,7 +24,6 @@ export async function applyProxyChange(raw: unknown): Promise<void> {
   );
 }
 
-/** Chromium 三分区 setProxy（反例 7：固定顺序 default → updater → preview） */
 async function applyChromiumSessions(cfg: ReturnType<typeof parseProxyConfig>): Promise<void> {
   const proxyConfig = buildChromiumProxyConfig(cfg);
   const targets: readonly [string, ReturnType<typeof session.fromPartition>][] = [
@@ -48,13 +40,6 @@ async function applyChromiumSessions(cfg: ReturnType<typeof parseProxyConfig>): 
   }
 }
 
-/**
- * env 侧门（axios 栈：飞书 SDK 原生读 http_proxy/https_proxy）
- *
- * 全局副作用收敛于此单处：仅 fixed 写（大小写双写，axios 两读都有），
- * 其它模式清空全部六键（含小写，防残留）。NO_PROXY 固定 localhost 家族
- * （与 shouldBypass 硬规则同语义，axios 栈的本地调用兜底）。
- */
 function applyEnvSideChannel(cfg: ReturnType<typeof parseProxyConfig>): void {
   const keys = [
     'HTTP_PROXY',

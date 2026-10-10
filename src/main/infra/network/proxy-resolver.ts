@@ -2,19 +2,14 @@ import { z } from 'zod';
 
 import { logger } from '../../utils/logger';
 
-/** 代理模式（D4：system=默认不改变现状 / direct=强制直连 / fixed=自定义代理） */
 export type ProxyMode = 'system' | 'direct' | 'fixed';
 
-/** 归一化后的代理配置（解析成功的产品形态） */
 export interface ProxyConfig {
   readonly mode: ProxyMode;
-  /** 代理地址（http(s) URL，可含 user:pass@；仅 mode=fixed 时有效） */
   readonly url?: string;
-  /** 不走代理的主机后缀列表（localhost 家族恒绕过，无需配置） */
   readonly bypass?: readonly string[];
 }
 
-/** settings.proxy 值 schema（与 SettingsSetReqSchema superRefine 门禁同构的运行时侧） */
 const ProxyConfigSchema = z.object({
   mode: z.enum(['system', 'direct', 'fixed']),
   url: z
@@ -31,15 +26,8 @@ const ProxyConfigSchema = z.object({
   bypass: z.array(z.string().min(1).max(253)).max(64).optional(),
 });
 
-/** 缺省配置（mode=system：全栈走 Chromium/Node 默认行为，V1 不变量） */
 const SYSTEM_DEFAULT: ProxyConfig = { mode: 'system' };
 
-/**
- * 解析 settings.proxy 原始值 → 归一化配置
- *
- * DB 值不可信：缺失/损坏/字段级非法逐级回落（整体损坏 → system；字段非法 →
- * 该字段剔除后仍可用则保留，否则整配置回 system）。失败 warn 留诊断痕迹。
- */
 export function parseProxyConfig(raw: unknown): ProxyConfig {
   if (raw === undefined || raw === null) {
     return { ...SYSTEM_DEFAULT };
@@ -61,13 +49,6 @@ export function parseProxyConfig(raw: unknown): ProxyConfig {
   return { ...SYSTEM_DEFAULT };
 }
 
-/**
- * Chromium ProxyConfig 形态（session.setProxy 直接入参）
- *
- * fixed 拆 http/https 两条 rules（Chromium 语法不支持裸 URL 整体注入）；
- * proxyBypassRules 强制前置 <local>——localhost 家族直连是硬规则（反例 2：
- * 记忆引擎 healthcheck / ollama 本地模型经代理必挂）。
- */
 export function buildChromiumProxyConfig(cfg: ProxyConfig): {
   mode: 'system' | 'direct' | 'fixed_servers';
   proxyRules?: string;
@@ -91,22 +72,10 @@ export function buildChromiumProxyConfig(cfg: ProxyConfig): {
   };
 }
 
-/**
- * undici ProxyAgent / env 侧门共用的代理 URL（D5：Node 栈原生支持 user:pass@）
- *
- * 非 fixed 返回 undefined（调用方据此走直连 dispatcher / 清空 env）。
- */
 export function buildProxyUrl(cfg: ProxyConfig): string | undefined {
   return cfg.mode === 'fixed' ? cfg.url : undefined;
 }
 
-/**
- * 是否绕过代理（proxiedFetch 前置判断；Chromium 侧由 proxyBypassRules 承担同语义）
- *
- * localhost/127.0.0.1/[::1] 恒绕过（硬规则）+ 用户 bypass 主机后缀匹配
- * （hostname === 后缀 或以 .后缀 结尾——`api.corp.example` 命中 `corp.example`，
- * `evil-corp.example.com` 不命中）。
- */
 export function shouldBypass(cfg: ProxyConfig, requestUrl: string): boolean {
   if (cfg.mode !== 'fixed') {
     return false;
@@ -135,17 +104,10 @@ export function shouldBypass(cfg: ProxyConfig, requestUrl: string): boolean {
   return false;
 }
 
-/**
- * 日志脱敏：URL 内嵌凭据（user:pass@）→ ***（安全边界：凭据不落日志）
- *
- * 用正则保形替换而非 URL 重写——URL.toString() 会补尾斜杠/默认端口，
- * 脱敏输出应与输入同形，便于日志比对。
- */
 export function maskProxyUrl(url: string): string {
   return url.replace(/\/\/[^/@]+@/, '//***@');
 }
 
-/** 从代理 URL 提取 host:port（Chromium proxyRules 语法；默认端口 80/443 显式补全） */
 function proxyHostPort(proxyUrl: string): string {
   const parsed = new URL(proxyUrl);
   const port = parsed.port !== '' ? parsed.port : parsed.protocol === 'https:' ? '443' : '80';

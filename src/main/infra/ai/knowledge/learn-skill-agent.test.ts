@@ -26,7 +26,6 @@ vi.mock('../../storage/db', async (importOriginal) => {
   };
 });
 
-/** fake LlmClient */
 function createFakeLlm(output?: unknown, throwError = false): LlmClient {
   return {
     generateJson: vi.fn(async () => {

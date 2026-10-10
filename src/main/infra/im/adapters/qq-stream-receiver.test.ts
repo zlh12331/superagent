@@ -2,7 +2,6 @@ import { ErrorCode } from '@code-agent/shared/main';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fetchQqGatewayUrl, QqStreamReceiver } from './qq-stream';
 
-/** 可编程 WebSocket 桩：捕获事件监听，测试手动触发 */
 class FakeWebSocket {
   readonly url: string;
   readonly send = vi.fn();
@@ -31,7 +30,6 @@ class FakeWebSocket {
   }
 }
 
-/** 当前测试的共享 WS 实例（构造桩返回，open 的异步链中构造） */
 let currentWs: FakeWebSocket;
 
 class SharedWebSocketCtor {
@@ -42,7 +40,6 @@ class SharedWebSocketCtor {
   }
 }
 
-/** 协议帧构造 */
 const frames = {
   hello: (interval = 20): string => JSON.stringify({ op: 10, d: { heartbeat_interval: interval } }),
   helloAck: (): string => JSON.stringify({ op: 11 }),
@@ -101,12 +98,10 @@ function makeReceiver(
   return { receiver, fetchTokenFn, fetchGatewayFn, ws: currentWs };
 }
 
-/** 等待 WS 监听注册（open 的 fetch 异步链后才构造） */
 async function waitWs(ws: FakeWebSocket, type = 'message'): Promise<void> {
   await vi.waitFor(() => expect(ws.hasListener(type)).toBe(true));
 }
 
-/** 完成一次完整握手（open → HELLO → identify → READY） */
 async function completeHandshake(receiver: QqStreamReceiver, ws: FakeWebSocket): Promise<void> {
   const p = receiver.open();
   await waitWs(ws);

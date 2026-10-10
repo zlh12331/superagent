@@ -30,10 +30,8 @@ vi.mock('./db', async (importOriginal) => {
   };
 });
 
-/** 用量/回合时间戳基准（当下：getUsageSummary 有 90 天窗口） */
 const NOW = Date.now();
 
-/** 构造合法的 version=1 导出文件（默认单会话；overrides 供构造非法变体） */
 function buildExportFile(overrides?: {
   readonly version?: number;
   readonly sessions?: SessionExportFile['sessions'];

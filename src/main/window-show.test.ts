@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => {
-  /** 伪窗口：记录调用顺序，isVisible 在 show()/maximize() 后变 true（对齐 Electron 语义） */
   const makeWin = (opts: { minimized?: boolean; destroyed?: boolean } = {}) => {
     const calls: string[] = [];
     const win = {

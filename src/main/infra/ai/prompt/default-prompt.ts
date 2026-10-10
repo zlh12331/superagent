@@ -1,18 +1,3 @@
-/**
- * 默认 Code Agent System Prompt 模板
- *
- * 设计原则：
- * 1. 身份明确：告诉模型它是 Code Agent，核心职责是理解/编写/修改/调试代码
- * 2. 工具使用规范：明确每个工具的使用时机与约束，避免 LLM 乱调工具
- * 3. 安全规范：工作目录约束、危险操作禁止、TOCTOU 防护
- * 4. 输出格式：代码块语法、错误报告格式、diff 格式
- * 5. 动态上下文：运行时注入环境信息，让 Agent 感知当前环境
- *
- * 与参考项目的区别：
- * - qwen-code 的 prompt 深度耦合 Ink UI + Google GenAI 类型，这里重写为 Electron + Vercel AI SDK 版本
- * - codex 的 prompt 面向 Rust 后端，这里适配 TS 项目
- * - opencode/MiMo-Code 用 .txt 文件，本项目用数据库存储 + 模板变量
- */
 export const DEFAULT_CODE_AGENT_PROMPT = `你是 Code Agent，一个专业的代码智能助手。你的核心职责是帮助用户理解、编写、修改和调试代码。
 
 # 工作环境

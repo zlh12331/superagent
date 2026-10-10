@@ -3,7 +3,6 @@ import { t } from '../../i18n';
 import type { AgentAskService } from '../agent/agent-ask-service';
 import type { Tool, ToolContext, ToolResult } from './tool';
 
-/** 工具入参（与 shared AgentQuestion 对齐；本地 z 校验 LLM 生成） */
 const AskUserQuestionInputSchema = z.object({
   questions: z
     .array(
@@ -26,14 +25,8 @@ const AskUserQuestionInputSchema = z.object({
     .describe('问题列表（一次可多问）'),
 });
 
-/** 工具描述（提示 LLM 何时使用） */
 const toolDescription = `在执行过程中需要向用户提问时使用（收集偏好、确认方向、让用户在选项间选择等）。支持一次问多个问题，每个问题可带预置选项（单选/多选），用户也可以自由输入文本回答。请优先提供选项以降低用户输入成本。`;
 
-/**
- * 创建 ask_user_question 工具
- *
- * @param askService Agent 提问服务（pending 闭环）
- */
 export function createAskUserQuestionTool(askService: AgentAskService): Tool {
   return {
     name: 'ask_user_question',

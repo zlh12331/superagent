@@ -12,7 +12,6 @@ vi.mock('../infra/storage/remote-pref', () => ({
   writeRemoteBindScope: mocks.writeRemoteBindScope,
 }));
 
-/** 构造可控状态的假传输服务 */
 function fakeService(state: {
   running: boolean;
   port: number | null;
@@ -56,7 +55,6 @@ function fakeService(state: {
   return { service, start, stop, setBindScope };
 }
 
-/** 地址枚举桩（固定网卡，避免测试依赖真实网络环境） */
 const network = {
   listAddresses: () => ['192.168.1.10', '10.0.0.5'],
   buildEndpoints: (addresses: readonly string[], port: number) =>

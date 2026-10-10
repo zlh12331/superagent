@@ -9,7 +9,6 @@ import {
   type WindowState,
 } from './window-state';
 
-/** 单显示器 1920×1080 工作区（任务栏 40px） */
 const WORK_AREAS = [{ x: 0, y: 0, width: 1920, height: 1040 }];
 
 describe('isBoundsVisible', () => {

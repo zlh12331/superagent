@@ -6,7 +6,6 @@ const mocks = vi.hoisted(() => ({
   fetch: vi.fn(),
 }));
 
-/** 构造 fetch 响应 fake */
 function respond(status: number, body?: unknown): Response {
   return {
     ok: status >= 200 && status < 300,

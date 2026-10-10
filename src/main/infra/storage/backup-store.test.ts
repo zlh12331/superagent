@@ -22,7 +22,6 @@ import {
 let tempDir: string;
 let dbPath: string;
 
-/** 建一个真实 SQLite 库文件（可选写入一行以区分内容） */
 function makeDbFile(path: string, marker?: string): Database.Database {
   const db = new Database(path);
   db.exec('CREATE TABLE IF NOT EXISTS t (v TEXT)');
@@ -32,7 +31,6 @@ function makeDbFile(path: string, marker?: string): Database.Database {
   return db;
 }
 
-/** 读库内的 marker（验证恢复点内容确实生效） */
 function readMarker(path: string): string | null {
   const db = new Database(path, { readonly: true });
   try {

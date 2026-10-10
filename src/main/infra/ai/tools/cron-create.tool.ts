@@ -3,19 +3,13 @@ import { t } from '../../i18n';
 import { cronService } from '../agent/cron-service';
 import type { Tool, ToolContext, ToolResult } from './tool';
 
-/** cron_create 入参 */
 const CronCreateInputSchema = z.object({
-  /** cron 表达式（5 字段：分 时 日 月 周；支持 *、步进、范围、列表） */
   expression: z.string().min(5).max(50),
-  /** 任务描述 */
   description: z.string().min(1).max(200),
 });
 
 type CronCreateInput = z.infer<typeof CronCreateInputSchema>;
 
-/**
- * 创建 cron_create 工具（依赖模块级 CronService 单例）
- */
 export function createCronCreateTool(): Tool<CronCreateInput> {
   return {
     name: 'cron_create',

@@ -3,7 +3,6 @@ import { APICallError, LoadAPIKeyError } from 'ai';
 import { describe, expect, it } from 'vitest';
 import { classifyError, isAbortError } from './error-classifier';
 
-/** 构造 APICallError（AI SDK 类型，仅需 statusCode/isRetryable 字段） */
 function createApiError(statusCode: number | undefined, isRetryable: boolean): APICallError {
   return new APICallError({
     url: 'https://api.example.com/v1/chat/completions',

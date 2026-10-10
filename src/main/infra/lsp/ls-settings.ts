@@ -2,9 +2,6 @@ import { logger } from '../../utils/logger';
 import { readAllSettings } from '../storage/settings-pref';
 import { type LsServerSpec, parseServerCommand, SUPPORTED_LS_LANGUAGES } from './ls-config';
 
-/**
- * 读取按语言的 LSP 服务器覆盖（无配置/异常时返回空对象 = 全部走内置默认）
- */
 export function readLsServerOverrides(): Record<string, LsServerSpec> {
   const overrides: Record<string, LsServerSpec> = {};
   try {

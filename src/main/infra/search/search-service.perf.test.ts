@@ -5,10 +5,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { getSearchService } from './search-service';
 
 let tempDir: string;
-/** 全量文件路径（供 glob 基准用） */
 const files: string[] = [];
 
-/** 生成 500 文件 × 50 行（25000 行，中大型仓库单目录规模） */
 function seedWorkspace(): void {
   for (let dir = 0; dir < 5; dir += 1) {
     const dirPath = join(tempDir, `module-${dir}`);
@@ -29,7 +27,6 @@ function seedWorkspace(): void {
   }
 }
 
-/** 多次采样取中位数 */
 async function sampleMedian(run: () => Promise<void>, rounds = 5): Promise<number> {
   const timings: number[] = [];
   for (let round = 0; round < rounds; round += 1) {

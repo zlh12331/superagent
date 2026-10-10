@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from 'vitest';
 import type { LlmClient } from '../llm-client';
 import { GoalJudge } from './goal-judge';
 
-/** fake LlmClient：generateJson 可配置输出或抛错 */
 function createFakeLlm(output?: unknown, throwError = false): LlmClient {
   return {
     generateJson: vi.fn(async () => {

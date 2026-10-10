@@ -5,7 +5,6 @@ import {
   createAgentApprovalHandlers,
 } from './agent-approval.handler';
 
-/** 创建 fake PermissionService */
 function createFakePermissionService() {
   return {
     handleApprovalResponse: vi.fn(),

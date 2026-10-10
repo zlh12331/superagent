@@ -5,7 +5,6 @@ import electronUpdater from 'electron-updater';
 
 const { autoUpdater, CancellationToken } = electronUpdater;
 
-/** 取消令牌工厂（UpdateService 自持 token 以支持"取消下载"） */
 const createUpdateToken = (): InstanceType<typeof CancellationToken> => new CancellationToken();
 
 import { resetConfigCache } from './config';
@@ -66,13 +65,6 @@ import { getTerminalService, resetTerminalService } from './infra/terminal/termi
 import { type IUpdateService, UpdateService } from './infra/update/update-service';
 import { clearCrashMarker, hasCrashMarker, logger } from './utils/logger';
 
-/**
- * 解析记忆引擎（上游 TencentDB-Agent-Memory · MemoryCore）根目录：
- * - 打包环境：process.resourcesPath/memory-hub（prepare-memory-hub.mjs 生成的运行目录）
- * - dev 环境：项目内的 resources/memory-hub（`pnpm prepare:memory-hub` 产出，与生产同源）；
- *   未生成时回退到环境变量 MEMORY_HUB_ROOT
- * 均不可用时返回 undefined，由 MemoryHubService 内部降级为空实现。
- */
 function resolveMemoryHubRoot(): string | undefined {
   if (app.isPackaged) {
     return join(process.resourcesPath, 'memory-hub');
@@ -84,75 +76,40 @@ function resolveMemoryHubRoot(): string | undefined {
   return process.env['MEMORY_HUB_ROOT'];
 }
 
-/**
- * 服务容器：持有应用核心服务实例
- *
- * - 集中管理生命周期（dispose 时统一中断/重置）
- * - 未来扩展支持服务替换（如多 LLM provider 路由）
- */
 class ServiceContainer {
-  /**
-   * 并发公平调度门（多会话共享执行槽位）
-   *
-   * 全局唯一实例：agent 回合共用同一上限，FIFO 先来先得（平均分配）。
-   * 会话并发超过上限时排队等待，避免打满供应商 API 触发 429。
-   */
   private readonly concurrencyGate: ConcurrencyGate = createConcurrencyGate(
     DEFAULT_MAX_CONCURRENT_TURNS,
   );
 
-  /** cron 触发订阅取消函数（initCronScheduler 注册，dispose 释放） */
   private cronUnsubscribe: (() => void) | null = null;
-  /** cron 调度是否已初始化（幂等标记） */
   private cronInitialized = false;
 
-  /** FileService（生产 get 单例；测试 set 注入 mock） */
   private fileService: IFileService | null = null;
-  /** SearchService（生产 get 单例；测试 set 注入 mock） */
   private searchService: ISearchService | null = null;
-  /** SessionService（内部不持有 DB 连接，getDb() 动态获取） */
   private sessionService: ISessionService | null = null;
   private gitService: IGitService | null = null;
   private codebaseService: ICodebaseService | null = null;
   private terminalService: ITerminalService | null = null;
 
-  /** ToolRegistry：容器直接 new（非模块单例），首次访问时注册全部内置工具 */
   private toolRegistry: IToolRegistry | null = null;
-  /** PermissionService：dispose 时 rejectAllPendingApprovals 防内存泄漏 */
   private permissionService: IPermissionService | null = null;
-  /** ToolExecutor：依赖 ToolRegistry + PermissionService，无外部资源 */
   private toolExecutor: IToolExecutor | null = null;
-  /** MCPService：依赖 ToolRegistry（register/unregister 管理 MCP 工具） */
   private mcpService: IMCPService | null = null;
   private promptService: IPromptService | null = null;
-  /** AgentService：依赖 ToolRegistry/ToolExecutor/Prompt/Session/Llm/ConcurrencyGate/Permission */
   private agentService: IAgentService | null = null;
-  /** GoalService：挂载回合监听（mount），dispose/reset 时 unmount */
   private goalService: GoalService | null = null;
-  /** MemoryHub sidecar（上游记忆引擎） */
   private memoryHub: MemoryHubService | null = null;
   private lspManager: LspServerManager | null = null;
 
   private imService: ImService | null = null;
-  /** IM → Agent 桥接（挂载后订阅渠道消息） */
   private imBridge: ImAgentBridge | null = null;
-  /** 远程控制（LAN HTTP 入口 + UDP 发现广播） */
   private remoteControlService: IRemoteControlService | null = null;
-  /** 远程命令 → Agent 桥接（无头执行） */
   private remoteAgentBridge: RemoteAgentBridge | null = null;
 
-  /** 子代理管理器已初始化标记（initSubagents 幂等） */
   private subagentsInitialized = false;
   private updateService: IUpdateService | null = null;
-  /** 浏览器预览（WebContentsView 进程外预览，独立 session 分区） */
   private browserPreviewService: IBrowserPreviewService | null = null;
 
-  /**
-   * 获取 FileService 实例
-   *
-   * 首次调用延迟初始化为默认 FileService 实现（与 getFileService() 单例一致）。
-   * 测试可通过 setFileService() 注入 mock 实例覆盖。
-   */
   getFileService(): IFileService {
     if (this.fileService === null) {
       this.fileService = getFileService();
@@ -160,22 +117,10 @@ class ServiceContainer {
     return this.fileService;
   }
 
-  /**
-   * 注入 FileService 实例（仅测试用）
-   *
-   * 用于测试用例隔离：注入 mock 实现，避免依赖真实文件系统。
-   * 传 null 清空缓存，下次 getFileService() 会重新拿默认实现。
-   */
   setFileService(service: IFileService | null): void {
     this.fileService = service;
   }
 
-  /**
-   * 获取 SearchService 实例
-   *
-   * 首次调用延迟初始化为默认 SearchService 实现（与 getSearchService() 单例一致）。
-   * 测试可通过 setSearchService() 注入 mock 实例覆盖。
-   */
   getSearchService(): ISearchService {
     if (this.searchService === null) {
       this.searchService = getSearchService();
@@ -183,25 +128,10 @@ class ServiceContainer {
     return this.searchService;
   }
 
-  /**
-   * 注入 SearchService 实例（仅测试用）
-   *
-   * 用于测试用例隔离：注入 mock 实现，避免依赖真实 ripgrep 子进程。
-   * 传 null 清空缓存，下次 getSearchService() 会重新拿默认实现。
-   */
   setSearchService(service: ISearchService | null): void {
     this.searchService = service;
   }
 
-  /**
-   * 获取 ToolRegistry 实例
-   *
-   * 首次调用延迟初始化：
-   * 1. new ToolRegistry() 创建空注册表
-   * 2. 调用 registerBuiltinTools(registry, fileService, searchService) 注册全部内置工具
-   *
-   * 依赖 FileService + SearchService 实例：先确保已初始化。
-   */
   getToolRegistry(): IToolRegistry {
     if (this.toolRegistry === null) {
       const registry = new ToolRegistry();
@@ -222,20 +152,10 @@ class ServiceContainer {
     return this.toolRegistry;
   }
 
-  /**
-   * 注入 ToolRegistry 实例（仅测试用）
-   *
-   * 传 null 清空缓存，下次 getToolRegistry() 会重新创建并注册内置工具。
-   */
   setToolRegistry(registry: IToolRegistry | null): void {
     this.toolRegistry = registry;
   }
 
-  /**
-   * 获取 PermissionService 实例
-   *
-   * 首次调用延迟初始化为默认 PermissionService 实现。
-   */
   getPermissionService(): IPermissionService {
     if (this.permissionService === null) {
       this.permissionService = new PermissionService(new CommandClassifier(this.getLlmClient()));
@@ -244,20 +164,10 @@ class ServiceContainer {
     return this.permissionService;
   }
 
-  /**
-   * 注入 PermissionService 实例（仅测试用）
-   *
-   * 传 null 清空缓存，下次 getPermissionService() 会重新创建默认实现。
-   */
   setPermissionService(service: IPermissionService | null): void {
     this.permissionService = service;
   }
 
-  /**
-   * 获取 ToolExecutor 实例
-   *
-   * 首次调用延迟初始化，注入 ToolRegistry + PermissionService 实例。
-   */
   getToolExecutor(): IToolExecutor {
     if (this.toolExecutor === null) {
       this.toolExecutor = new ToolExecutor(this.getToolRegistry(), this.getPermissionService());
@@ -265,21 +175,10 @@ class ServiceContainer {
     return this.toolExecutor;
   }
 
-  /**
-   * 注入 ToolExecutor 实例（仅测试用）
-   *
-   * 传 null 清空缓存，下次 getToolExecutor() 会重新创建并注入当前 registry + permissionService。
-   */
   setToolExecutor(executor: IToolExecutor | null): void {
     this.toolExecutor = executor;
   }
 
-  /**
-   * 获取 MCPService 实例
-   *
-   * 首次调用延迟初始化，注入当前 ToolRegistry 实例。
-   * MCPService 通过 ToolRegistry.register / unregister 管理 MCP 工具。
-   */
   getMcpService(): IMCPService {
     if (this.mcpService === null) {
       this.mcpService = new MCPService(this.getToolRegistry());
@@ -287,11 +186,6 @@ class ServiceContainer {
     return this.mcpService;
   }
 
-  /**
-   * 注入 MCPService 实例（仅测试用）
-   *
-   * 传 null 清空缓存，下次 getMcpService() 会重新创建并注入当前 ToolRegistry。
-   */
   setMcpService(service: IMCPService | null): void {
     this.mcpService = service;
   }
@@ -311,13 +205,6 @@ class ServiceContainer {
     this.promptService = service;
   }
 
-  /**
-   * 获取 AgentService 实例
-   *
-   * 首次调用延迟初始化，注入当前 ToolRegistry + ToolExecutor 实例。
-   * AgentService 内部通过 ToolRegistry.toAISDKTools(ctx, executeHook) 转换工具，
-   * executeHook 注入 ToolExecutor.execute 作为权限检查 + 审批 + IPC 推送层。
-   */
   getAgentService(): IAgentService {
     if (this.agentService === null) {
       this.agentService = new AgentService(
@@ -334,9 +221,6 @@ class ServiceContainer {
     return this.agentService;
   }
 
-  /**
-   * 初始化子代理管理器（run_subagent 工具依赖；幂等）
-   */
   initSubagents(): void {
     if (!this.subagentsInitialized) {
       initSubagentManager(this.getAgentService());
@@ -344,22 +228,10 @@ class ServiceContainer {
     }
   }
 
-  /**
-   * 获取记忆引擎端口（注册期同步可用；首次调用懒启动 sidecar）
-   */
   getMemoryPort(): MemoryPort {
     return createDeferredMemoryPort(() => this.getMemoryHubService());
   }
 
-  /**
-   * 获取 MemoryHub sidecar 服务（上游 TencentDB-Agent-Memory 记忆引擎，懒启动）
-   *
-   * hubRoot 来源：
-   * - 打包环境（app.isPackaged）：resources/memory-hub（prepare-memory-hub.mjs 生成的
-   *   MemoryCore 运行目录，经 electron-builder extraResources 部署到 process.resourcesPath）
-   * - dev 环境：环境变量 MEMORY_HUB_ROOT 指向上游源码目录
-   * 未配置时服务内部降级为空实现（记忆功能静默不可用，不阻断应用）。
-   */
   getMemoryHubService(): MemoryHubService {
     if (this.memoryHub === null) {
       this.memoryHub = new MemoryHubService({
@@ -370,12 +242,6 @@ class ServiceContainer {
     }
     return this.memoryHub;
   }
-  /**
-   * 获取 LSP 服务器管理器（懒加载：首次工具调用才创建）
-   *
-   * 用户覆盖来源：SQLite app_settings 的 `lsp.serverCommands`（按语言命令行，
-   * 渲染层设置页写穿透；构造时读取一次，修改后重启应用生效）。
-   */
   getLspManager(): LspServerManager {
     if (this.lspManager === null) {
       this.lspManager = new LspServerManager({ serverOverrides: readLsServerOverrides() });
@@ -383,9 +249,6 @@ class ServiceContainer {
     return this.lspManager;
   }
 
-  /**
-   * 获取会话目标服务（延迟初始化 + 挂载回合监听）
-   */
   getGoalService(): GoalService {
     if (this.goalService === null) {
       this.goalService = new GoalService(
@@ -397,9 +260,6 @@ class ServiceContainer {
     return this.goalService;
   }
 
-  /**
-   * 获取 IM 渠道服务（延迟初始化）
-   */
   getImService(): ImService {
     if (this.imService === null) {
       this.imService = new ImService();
@@ -414,22 +274,10 @@ class ServiceContainer {
     return this.imService;
   }
 
-  /**
-   * 初始化 IM 渠道（应用启动时调用）：已配置渠道自动连接
-   */
   async initImChannels(): Promise<void> {
     await this.getImService().restore();
   }
 
-  /**
-   * 初始化定时任务调度（应用启动时调用；幂等；必须在 initDb 之后）
-   *
-   * 接线 cron-service 的三条生产链路（此前建成未接线，任务「能建不会跑」）：
-   * - 触发动作：fire → 取会话 workingDir → 落触发 prompt 为用户消息 →
-   *   startAgent 无头执行（无 webContents，推送跳过）
-   * - 启动恢复：start() 从 sqlite 恢复全部启用任务
-   * - 退出清理：dispose() 中 cronService.stop()（先于 AgentService 收尾）
-   */
   initCronScheduler(): void {
     if (this.cronInitialized) {
       return;
@@ -439,7 +287,6 @@ class ServiceContainer {
     cronService.start();
   }
 
-  /** cron 触发 → 无头 agent 回合（会话已删除时仅告警，由用户手动清理任务） */
   private async runCronTurn(task: {
     readonly id: string;
     readonly sessionId: string;
@@ -468,14 +315,6 @@ class ServiceContainer {
     }
   }
 
-  /**
-   * 释放 IM 渠道（应用退出）
-   *
-   * P1 修复：仅收尾已存在的实例——此前经 getImService() 懒初始化，IM 从未启用时
-   * 退出反而会在 teardown 路径凭空构建并挂载（mount 含 mkdirSync + onMessage 订阅）
-   * 整套 IM 服务再立刻销毁；且 imBridge 置空前未 unmount（回合事件订阅残留）。
-   * 顺序对齐 dispose() 主链：先停桥接订阅，再停渠道长连接。
-   */
   async disposeImChannels(): Promise<void> {
     this.imBridge?.unmount();
     this.imBridge = null;
@@ -485,11 +324,6 @@ class ServiceContainer {
     }
   }
 
-  /**
-   * 获取远程控制服务（延迟初始化）：LAN 直连 HTTP 命令入口 + UDP 发现广播。
-   * 命令执行由 RemoteAgentBridge 订阅 onCommand 挂载（与 IM 桥接同款无头执行路径），
-   * 本容器只管生命周期。
-   */
   getRemoteControlService(): IRemoteControlService {
     if (this.remoteControlService === null) {
       this.remoteControlService = new RemoteControlService({
@@ -506,13 +340,6 @@ class ServiceContainer {
     return this.remoteControlService;
   }
 
-  /**
-   * 收尾远程控制（应用退出 / 测试隔离）
-   *
-   * 只在实例已存在时收尾：经 getter 懒初始化会在 teardown 路径凭空构造
-   * 服务 + 桥接（mount 含 mkdirSync + 订阅）再立刻销毁——对齐 IM 的 P1 教训。
-   * 顺序：先解除桥接订阅（不再接管新命令），再关闭 HTTP 监听与发现广播。
-   */
   async releaseRemoteControl(): Promise<void> {
     this.remoteAgentBridge?.unmount();
     this.remoteAgentBridge = null;
@@ -522,43 +349,23 @@ class ServiceContainer {
     }
   }
 
-  /**
-   * 统计数据保留：删除用量统计窗口外的 token_usage 行（启动时调用一次）
-   */
   pruneExpiredUsage(): number {
     return this.getSessionService().pruneExpiredUsage();
   }
 
-  /**
-   * 重置 IM 渠道（仅测试用）
-   */
   resetImChannels(): void {
     this.imService = null;
     this.imBridge = null;
   }
 
-  /**
-   * LLM 客户端（标题生成 / 结构化输出等 side query）
-   */
   private getLlmClient(): LlmClient {
     return llmClient;
   }
 
-  /**
-   * 注入 AgentService 实例（仅测试用）
-   *
-   * 传 null 清空缓存，下次 getAgentService() 会重新创建并注入当前 registry + executor。
-   */
   setAgentService(service: IAgentService | null): void {
     this.agentService = service;
   }
 
-  /**
-   * 获取 TerminalService 实例
-   *
-   * 首次调用延迟初始化为默认 TerminalService 实现（与 getTerminalService() 单例一致）。
-   * 测试可通过 setTerminalService() 注入 mock 实例覆盖。
-   */
   getTerminalService(): ITerminalService {
     if (this.terminalService === null) {
       this.terminalService = getTerminalService();
@@ -566,22 +373,10 @@ class ServiceContainer {
     return this.terminalService;
   }
 
-  /**
-   * 注入 TerminalService 实例（仅测试用）
-   *
-   * 用于测试用例隔离：注入 mock 实现，避免依赖真实 PTY 子进程。
-   * 传 null 清空缓存，下次 getTerminalService() 会重新拿默认实现。
-   */
   setTerminalService(service: ITerminalService | null): void {
     this.terminalService = service;
   }
 
-  /**
-   * 获取 GitService 实例
-   *
-   * 首次调用延迟初始化为默认 GitService 实现（与 getGitService() 单例一致）。
-   * 测试可通过 setGitService() 注入 mock 实例覆盖。
-   */
   getGitService(): IGitService {
     if (this.gitService === null) {
       this.gitService = getGitService();
@@ -589,22 +384,10 @@ class ServiceContainer {
     return this.gitService;
   }
 
-  /**
-   * 注入 GitService 实例（仅测试用）
-   *
-   * 用于测试用例隔离：注入 mock 实现，避免依赖真实 git CLI。
-   * 传 null 清空缓存，下次 getGitService() 会重新拿默认实现。
-   */
   setGitService(service: IGitService | null): void {
     this.gitService = service;
   }
 
-  /**
-   * 获取 CodebaseService 实例
-   *
-   * 首次调用延迟初始化为默认 CodebaseService 实现（与 getCodebaseService() 单例一致）。
-   * 测试可通过 setCodebaseService() 注入 mock 实例覆盖。
-   */
   getCodebaseService(): ICodebaseService {
     if (this.codebaseService === null) {
       this.codebaseService = getCodebaseService();
@@ -612,22 +395,10 @@ class ServiceContainer {
     return this.codebaseService;
   }
 
-  /**
-   * 注入 CodebaseService 实例（仅测试用）
-   *
-   * 用于测试用例隔离：注入 mock 实现，避免依赖真实 codegraph CLI。
-   * 传 null 清空缓存，下次 getCodebaseService() 会重新拿默认实现。
-   */
   setCodebaseService(service: ICodebaseService | null): void {
     this.codebaseService = service;
   }
 
-  /**
-   * 获取 SessionService 实例
-   *
-   * 首次调用延迟初始化为默认 SessionService 实现（与 getSessionService() 单例一致）。
-   * 测试可通过 setSessionService() 注入 mock 实例覆盖。
-   */
   getSessionService(): ISessionService {
     if (this.sessionService === null) {
       this.sessionService = getSessionService();
@@ -635,42 +406,10 @@ class ServiceContainer {
     return this.sessionService;
   }
 
-  /**
-   * 注入 SessionService 实例（仅测试用）
-   *
-   * 用于测试用例隔离：注入 mock 实现，避免依赖真实 SQLite。
-   * 传 null 清空缓存，下次 getSessionService() 会重新拿默认实现。
-   */
   setSessionService(service: ISessionService | null): void {
     this.sessionService = service;
   }
 
-  /**
-   * 应用退出时统一清理所有服务
-   *
-   * 顺序按反向依赖（先停依赖方再停被依赖方）：
-   * 1. ChatService   中断活跃对话（P3-10：等待 stream 真正完成，避免 IPC send 丢失）
-   * 2. FileService   关闭所有 chokidar watcher（释放 fs 监听句柄，避免进程不退出）
-   * 3. SearchService 终止活跃的 ripgrep 子进程（释放 spawn 句柄）
-   * 4. AI Provider   清空引用（无连接池，仅让 GC 回收）
-   *
-   * P3-10 改造：
-   * - 旧实现调用 abortAll() 仅同步触发 abort 信号，streamText 协程可能仍在 reader.read() 等待
-   * - 新实现调用 dispose() 等待所有活跃 stream 真正进入 finally 块（带 3s 超时兜底）
-   * - 避免进程退出时正在进行的 IPC send 丢失 / 渲染层 loading 状态卡死
-   *
-   * 幂等：多次调用安全（各模块内部已处理 null 检查）。
-   *
-   * @example
-   * ```ts
-   * // main/index.ts before-quit 事件
-   * app.on('before-quit', async (event) => {
-   *   event.preventDefault();
-   *   await disposeServices();
-   *   app.exit(0);
-   * });
-   * ```
-   */
   async dispose(): Promise<void> {
     logger.info({}, '开始清理应用服务');
 
@@ -828,13 +567,6 @@ class ServiceContainer {
     }
   }
 
-  /**
-   * 获取 UpdateService 实例
-   *
-   * 首次调用延迟初始化：注入 electron-updater 的 autoUpdater、打包状态判断与取消
-   * 令牌工厂（electron-updater 未暴露取消 API，下载由 UpdateService 自持 token
-   * 才能取消）。打包环境（app.isPackaged）才有 app-update.yml 更新源。
-   */
   getUpdateService(): IUpdateService {
     if (this.updateService === null) {
       this.updateService = new UpdateService(autoUpdater, () => app.isPackaged, createUpdateToken);
@@ -842,13 +574,6 @@ class ServiceContainer {
     return this.updateService;
   }
 
-  /**
-   * 获取浏览器预览服务实例
-   *
-   * 首次调用延迟初始化：视图在渲染层推送视口/导航时才真正创建（懒加载）。
-   * 窗口来源走 BrowserWindow.getAllWindows（单窗口应用取首个存活窗口），
-   * 与 UpdateService 的事件广播模式一致，避免容器持有窗口引用。
-   */
   getBrowserPreviewService(): IBrowserPreviewService {
     if (this.browserPreviewService === null) {
       this.browserPreviewService = new BrowserPreviewService({
@@ -858,26 +583,10 @@ class ServiceContainer {
     return this.browserPreviewService;
   }
 
-  /**
-   * 是否有 Agent 回合正在运行（关窗协商用）
-   *
-   * 窗口 close 事件的"运行中回合确认弹窗"判定依据：
-   * - AgentService 未初始化（从未跑过回合）→ false，不打扰正常关闭
-   * - 不触发懒初始化，只查询现有实例
-   */
   hasRunningAgentTurns(): boolean {
     return this.agentService?.hasActiveSessions() ?? false;
   }
 
-  /**
-   * 重置所有服务缓存（仅测试用）
-   *
-   * 用于测试用例隔离：重置所有模块级单例缓存，让下一个测试用例重新初始化。
-   *
-   * 注意：
-   * - 不调用 dispose（不停止外部服务），仅清空缓存引用
-   * - 调用此函数前应确保已停止相关外部服务
-   */
   reset(): void {
     this.agentService = null;
     this.permissionService = null;
@@ -921,14 +630,8 @@ class ServiceContainer {
   }
 }
 
-/** 应用级单例 ServiceContainer */
 export const serviceContainer = new ServiceContainer();
 
-/**
- * 构造 dispose 步骤执行器（独立异常隔离：单服务清理失败不阻断后续清理）
- *
- * 失败步骤名记录进 failures（dispose 末尾统一汇报），错误经 logger 落盘。
- */
 function createDisposeStep(
   failures: string[],
 ): (name: string, fn: () => Promise<void> | void) => Promise<void> {
@@ -948,22 +651,10 @@ function createDisposeStep(
   };
 }
 
-/**
- * 启动时加载运行时模型（自定义模型注册到 ModelRegistry）
- *
- * 在 LLM 首次调用前调用（index.ts 启动流程中，与 recoverFromCrash 同阶段）。
- */
 export async function initRuntimeModels(): Promise<void> {
   await runtimeModelStore.loadAll();
 }
 
-/**
- * 崩溃恢复（启动时调用）
- *
- * - 检测上次是否异常退出（userData/.crash-marker，uncaughtException 时写入）
- * - 把所有 running 残留会话标记为 interrupted（渲染层据此提示"上次回合已中断"）
- * - 清除崩溃标记
- */
 export async function recoverFromCrash(): Promise<void> {
   const wasCrash = hasCrashMarker();
   if (wasCrash) {
@@ -983,22 +674,10 @@ export async function recoverFromCrash(): Promise<void> {
   }
 }
 
-/**
- * 应用退出时统一清理所有服务（兼容旧 API）
- *
- * 内部委托给 serviceContainer.dispose()，保留旧导出避免上层大改。
- */
 export async function disposeServices(): Promise<void> {
   await serviceContainer.dispose();
 }
 
-/**
- * 是否有 Agent 回合正在运行（关窗协商用）
- *
- * 窗口 close 事件的"运行中回合确认弹窗"判定依据：
- * - 未初始化 AgentService（从未跑过回合）→ false，不打扰正常关闭
- * - E2E / 特殊场景可用环境变量 CODE_AGENT_SKIP_CLOSE_GUARD=1 豁免协商
- */
 export function hasRunningAgentTurns(): boolean {
   return serviceContainer.hasRunningAgentTurns();
 }

@@ -5,16 +5,6 @@ import { join } from 'node:path';
 import { logger } from '../../utils/logger';
 import { conversationsDir } from './l0-inspect';
 
-/**
- * 单遍扫描移除 JSONL 中命中任一会话 key 的行（原子写：临时文件 + rename）
- *
- * 单 key 清除（memory:clear）与批量清除（memory:clearAll）共用本实现：
- * 批量传入全部 key，目录只扫描一次、每个文件至多重写一次。
- *
- * @param dataDir 引擎数据目录
- * @param sessionKeys 待移除的会话 key（空白 key 忽略）
- * @returns 移除的行数
- */
 export async function removeSessionLinesFromJsonl(
   dataDir: string,
   sessionKeys: readonly string[],
@@ -37,7 +27,6 @@ export async function removeSessionLinesFromJsonl(
   return removed;
 }
 
-/** 移除单个 JSONL 文件中命中会话 key 的行（读取失败跳过；写回失败保留原文件） */
 async function removeSessionLinesInFile(
   filePath: string,
   file: string,

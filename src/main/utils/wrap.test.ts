@@ -34,23 +34,12 @@ import { AppError, ErrorCode } from '@code-agent/shared/main';
 import { ipcMain } from 'electron';
 import { wrap } from './wrap';
 
-/**
- * 内部 handler 类型：放宽 event 类型以方便测试构造 mockEvent
- *
- * 真实类型为 (event: IpcMainInvokeEvent, ...args: any[]) => any
- * 测试只需 event.sender 字段，故放宽为 { sender: unknown }
- */
 type InternalHandler = (
   event: { sender: unknown },
   input: unknown,
   traceId?: string,
 ) => Promise<unknown>;
 
-/**
- * 从 ipcMain.handle 调用记录中取出注册的 handler
- *
- * noUncheckedIndexedAccess: true 下 calls[0] 可能为 undefined，需显式守卫
- */
 function getRegisteredHandler(): InternalHandler {
   const firstCall = vi.mocked(ipcMain.handle).mock.calls[0];
   if (!firstCall) {
@@ -59,10 +48,6 @@ function getRegisteredHandler(): InternalHandler {
   return firstCall[1] as unknown as InternalHandler;
 }
 
-/**
- * 合法来源 sender mock：prod 入口页 URL 命中 isAllowedSenderUrl 白名单
- * （P2 加固后 wrap 会校验 evt.sender.url()）
- */
 const allowedSender = {
   getURL: () => 'file:///C:/app/out/renderer/index.html',
 };

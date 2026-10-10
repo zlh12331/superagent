@@ -429,11 +429,6 @@ app.on('before-quit', async (event) => {
   app.exit(0);
 });
 
-/**
- * 读取 `window` 设置域的完整值（托盘写关窗行为时用于"读改写"，避免覆盖同域其它字段）
- *
- * 结构损坏/读取异常一律回退空对象——后续写入会补上 closeAction，不影响其它字段的存留。
- */
 function readWindowSettings(): Record<string, unknown> {
   try {
     const value = readSetting('window');
@@ -446,12 +441,6 @@ function readWindowSettings(): Record<string, unknown> {
   }
 }
 
-/**
- * 读取"自动检查更新"开关（app_settings 的 update 域，见设计文档 §4）
- *
- * 缺失、结构损坏或读取异常（如 db 未就绪）一律视为开启——与设置默认值一致，
- * 且不阻断启动流程。
- */
 function isAutoCheckEnabled(): boolean {
   try {
     const value = readSetting('update');
@@ -464,13 +453,6 @@ function isAutoCheckEnabled(): boolean {
   }
 }
 
-/**
- * 读取"接收预发布更新"开关（app_settings 的 update 域）
- *
- * 缺失、结构损坏或读取异常（如 db 未就绪）一律视为关闭——与设置默认值一致，
- * 且不阻断启动流程。装了 beta 版（版本号含 `-`）的用户不受本开关影响：
- * 库构造器按版本判定的 allowPrerelease 初值恒为 true（见 update-service）。
- */
 function isAllowPrereleaseEnabled(): boolean {
   try {
     const value = readSetting('update');

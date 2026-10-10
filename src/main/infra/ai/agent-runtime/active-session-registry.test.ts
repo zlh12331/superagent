@@ -6,7 +6,6 @@ vi.mock('electron', () => ({
 
 import { ActiveSessionRegistry } from './active-session-registry';
 
-/** 造一个恒 pending 的 stream Promise（模拟活跃 stream，dispose 需超时兜底） */
 function pendingStream(): Promise<void> {
   return new Promise<void>(() => {});
 }

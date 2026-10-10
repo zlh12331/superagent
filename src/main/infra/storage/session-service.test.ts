@@ -26,7 +26,6 @@ vi.mock('electron', () => ({
   },
 }));
 
-/** 最近一次失效广播的 payload（broadcastInvalidation 每次调用恰好 send 一窗） */
 function lastInvalidationPayload(): { domains: string[]; sessionId?: string } | undefined {
   const last = mockInvalidationSends.at(-1);
   return last?.[1] as { domains: string[]; sessionId?: string } | undefined;
@@ -38,7 +37,6 @@ import { resetDb } from './db';
 import { SessionService } from './session-service';
 import { createTestDb } from './test-utils';
 
-/** 创建内存数据库 + drizzle 实例（绕过 app.getPath） */
 function createInMemoryDb() {
   return createTestDb();
 }

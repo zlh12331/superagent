@@ -9,19 +9,6 @@ import { getFileService, type IFileService } from './file-service';
 
 process.env['FILE_WATCH_USE_POLLING'] = '1';
 
-/**
- * 本运行环境是否**无法**派发文件监听事件
- *
- * 2026-09-21 六平台 CI 首跑实证：`windows-11-arm` runner 上 chokidar 的 watcher
- * 能注册并触发 ready，但**创建文件后 8 秒内收不到任何事件**（native 与 polling
- * 两种模式皆然；同批次 windows-latest 与 ubuntu/macOS 全绿，本机 Windows x64
- * 实测轮询模式可正常派发）。故这是该 runner 环境的限制，不是产品缺陷——
- * 受影响的仅是「等文件系统事件」的用例，同文件其余 39 个用例（真实读写/编码/
- * 目录遍历）在 ARM 上全部通过。
- *
- * 处理：这 3 个用例在该平台标记 skip（vitest 会在结果里报告 skipped 数，不静默）。
- * 应用侧的 watch 行为仍由 windows-latest / ubuntu / macos 三个平台覆盖。
- */
 const CANNOT_EMIT_FS_EVENTS = process.platform === 'win32' && process.arch === 'arm64';
 const itWatch = CANNOT_EMIT_FS_EVENTS ? it.skip : it;
 
@@ -422,7 +409,6 @@ describe('FileService.watch/unwatch/dispose（监听生命周期）', () => {
     await rm(dir, { recursive: true, force: true });
   });
 
-  /** fake webContents：计数事件推送（基础设施 stub，非业务 mock） */
   function fakeWebContents(destroyed = false) {
     const events: unknown[] = [];
     return {

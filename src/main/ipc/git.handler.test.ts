@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createGitHandlers, type GitHandlerDeps } from './git.handler';
 
-/** 创建 fake GitService */
 function createFakeGitService() {
   return {
     status: vi.fn(async () => ({ branch: 'main', ahead: 0, behind: 0, files: [], clean: true })),

@@ -15,7 +15,6 @@ vi.mock('../../utils/logger', () => ({
   logger: mocks.mockLogger,
 }));
 
-/** 简易 fake 语言服务器（支持 initialize/hover/stall/通知/错误响应） */
 const FAKE_SERVER_SCRIPT = `
 let buffer = '';
 function send(message) {
@@ -62,7 +61,6 @@ process.stdin.on('data', (chunk) => {
 });
 `;
 
-/** 启动 fake 服务器并创建客户端 */
 async function createTestClient(
   config?: Partial<ConstructorParameters<typeof LspClient>[0]>,
 ): Promise<LspClient> {

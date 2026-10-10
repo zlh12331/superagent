@@ -5,15 +5,11 @@ import { AppError, ErrorCode } from '@code-agent/shared/main';
 import { describe, expect, it, vi } from 'vitest';
 import { CodebaseService } from './codebase-service';
 
-/** 可编程 fake 子进程（模拟 spawn 返回值） */
 interface FakeChildBehavior {
   readonly stdoutText?: string;
   readonly stderrText?: string;
-  /** close 退出码；undefined = 永不 close（测超时） */
   readonly exitCode?: number;
-  /** 触发 error 事件 */
   readonly spawnError?: Error;
-  /** kill 抛错（dispose 容错用例） */
   readonly killThrows?: boolean;
 }
 
@@ -48,7 +44,6 @@ function createFakeChild(behavior: FakeChildBehavior = {}): ChildProcess {
   return child;
 }
 
-/** 创建被测服务（注入 fake spawn + 短超时） */
 function createService(behavior: FakeChildBehavior = {}): {
   service: CodebaseService;
   spawnMock: ReturnType<typeof vi.fn> & typeof spawn;
@@ -63,7 +58,6 @@ function createService(behavior: FakeChildBehavior = {}): {
   return { service, spawnMock };
 }
 
-/** 取最近一次 spawn 调用的 args */
 function lastArgs(spawnMock: ReturnType<typeof vi.fn>): string[] {
   const call = spawnMock.mock.calls.at(-1);
   return (call?.[1] as string[]) ?? [];

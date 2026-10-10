@@ -57,7 +57,6 @@ describe('加密不可用降级', () => {
   });
 });
 
-/** 明文字符串 → keychain.dat 中存储的密文数组（与 encryptString 桩一致） */
 function cipherBytes(plaintext: string): number[] {
   return Array.from(Buffer.from(`enc:${plaintext}`));
 }

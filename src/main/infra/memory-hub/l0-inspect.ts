@@ -2,17 +2,10 @@ import { existsSync } from 'node:fs';
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-/** L0 审计镜像目录（相对 dataDir） */
 export function conversationsDir(dataDir: string): string {
   return join(dataDir, 'data', 'conversations');
 }
 
-/**
- * 并发读取审计镜像的全部 JSONL 文本
- *
- * 性能说明：此前用 readdirSync + readFileSync 全目录全文件同步读，期间事件循环
- *   完全停摆（10MB JSONL ≈ 30–60ms 阻塞）；改为 fs.promises 并发读，只让 IO 等待。
- */
 async function readAllJsonl(dir: string): Promise<(string | null)[]> {
   if (!existsSync(dir)) {
     return [];
@@ -34,7 +27,6 @@ async function readAllJsonl(dir: string): Promise<(string | null)[]> {
   );
 }
 
-/** 遍历全部 JSONL 行，对每个成功解析的行调用 visit（损坏行跳过） */
 function forEachRecord(
   texts: readonly (string | null)[],
   visit: (rec: Record<string, unknown>) => void,
@@ -50,13 +42,11 @@ function forEachRecord(
   }
 }
 
-/** 从一条记录提取非空 sessionKey（无则 null） */
 function sessionKeyOf(rec: Record<string, unknown>): string | null {
   const key = rec['sessionKey'];
   return typeof key === 'string' && key.length > 0 ? key : null;
 }
 
-/** 从全部 JSONL 文本中提取出现的会话 key（去重） */
 function collectSessionKeys(texts: readonly (string | null)[]): Set<string> {
   const keys = new Set<string>();
   forEachRecord(texts, (rec) => {
@@ -66,14 +56,12 @@ function collectSessionKeys(texts: readonly (string | null)[]): Set<string> {
   return keys;
 }
 
-/** 按会话读取 L0 记录（只读审计镜像；不触发引擎启动） */
 export interface L0Line {
   readonly role: string;
   readonly content: string;
   readonly timestamp: number;
 }
 
-/** 某会话的全部 L0 记录（按时间升序） */
 export async function readSessionRecords(
   dataDir: string,
   sessionKey: string,
@@ -93,7 +81,6 @@ export async function readSessionRecords(
   return records.slice(-limit);
 }
 
-/** 统计既有记忆数据（会话数 + 记录数；只读审计镜像） */
 export async function countL0Records(
   dataDir: string,
 ): Promise<{ sessionCount: number; recordCount: number }> {
@@ -105,7 +92,6 @@ export async function countL0Records(
   return { sessionCount: collectSessionKeys(texts).size, recordCount };
 }
 
-/** 列出审计镜像中的全部会话 key（"清空全部"枚举用） */
 export async function listL0SessionKeys(dataDir: string): Promise<string[]> {
   return [...collectSessionKeys(await readAllJsonl(conversationsDir(dataDir)))];
 }

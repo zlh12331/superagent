@@ -7,7 +7,6 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { resolveWithinWorkspace } from './path-guard';
 
 const SYMLINK_TYPE = process.platform === 'win32' ? 'junction' : 'dir';
-/** 跨平台用例用平台分隔符 `sep` 构造路径；Windows 专属语义用例按平台门控 */
 const IS_WIN = process.platform === 'win32';
 
 describe('resolveWithinWorkspace', () => {

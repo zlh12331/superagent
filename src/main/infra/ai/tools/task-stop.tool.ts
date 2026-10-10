@@ -3,19 +3,13 @@ import { t } from '../../i18n';
 import { TaskStatus, taskService } from '../agent/task-service';
 import type { Tool, ToolContext, ToolResult } from './tool';
 
-/** task_stop 入参 */
 const TaskStopInputSchema = z.object({
-  /** 任务 id（task_create 返回） */
   taskId: z.string().min(1).max(64),
-  /** 中止原因（记录用） */
   reason: z.string().max(200).optional(),
 });
 
 type TaskStopInput = z.infer<typeof TaskStopInputSchema>;
 
-/**
- * 创建 task_stop 工具
- */
 export function createTaskStopTool(): Tool {
   return {
     name: 'task_stop',

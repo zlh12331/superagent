@@ -3,34 +3,25 @@ import { t } from '../../i18n';
 import type { Tool, ToolContext, ToolResult } from './tool';
 import { checkUrlAllowed } from './url-guard';
 
-/** 抓取超时（毫秒） */
 const FETCH_TIMEOUT_MS = 15_000;
-/** 正文最大字符数（防单次响应膨胀） */
 const MAX_CONTENT_CHARS = 4_000;
-/** 重定向跳数上限（每一跳都重新做 SSRF 判定） */
 const MAX_REDIRECTS = 5;
 
-/** web_fetch 入参 */
 const WebFetchInputSchema = z.object({
-  /** 目标 URL（仅 http/https，且不得指向本机/内网/保留地址） */
   url: z.string().url().max(500),
-  /** 正文截断上限（缺省 4000） */
   maxChars: z.number().int().min(100).max(20_000).optional(),
 });
 
 type WebFetchInput = z.infer<typeof WebFetchInputSchema>;
 
-/** 统一失败结果（不抛异常，交回模型可读原因） */
 function failure(message: string): ToolResult {
   return { title: t('tools.webFetch.failed'), output: message };
 }
 
-/** 3xx 重定向状态码 */
 function isRedirectStatus(status: number): boolean {
   return status === 301 || status === 302 || status === 303 || status === 307 || status === 308;
 }
 
-/** 解析 URL 并做首次 SSRF 判定 */
 async function resolveAllowedUrl(raw: string): Promise<{ url: URL } | { error: string }> {
   let url: URL;
   try {
@@ -45,12 +36,6 @@ async function resolveAllowedUrl(raw: string): Promise<{ url: URL } | { error: s
   return { url };
 }
 
-/**
- * 逐跳跟随重定向，每一跳重新做 SSRF 判定
- *
- * fetch 的 redirect:'manual' 会原样返回 3xx 响应（含 location 头，undici 实测），
- * 因此可以在这里拦截"公网地址 302 到内网地址"的绕过路径。
- */
 async function fetchWithSafeRedirects(
   startUrl: URL,
 ): Promise<{ response: Response; finalUrl: URL }> {
@@ -80,9 +65,6 @@ async function fetchWithSafeRedirects(
   throw new Error(`重定向次数超过 ${MAX_REDIRECTS} 次`);
 }
 
-/**
- * 创建 web_fetch 工具（无依赖注入：使用全局 fetch）
- */
 export function createWebFetchTool(): Tool<WebFetchInput> {
   return {
     name: 'web_fetch',
@@ -122,7 +104,6 @@ export function createWebFetchTool(): Tool<WebFetchInput> {
   };
 }
 
-/** 带超时的 fetch（AbortController 取消） */
 async function fetchWithTimeout(url: URL, timeoutMs: number): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort('timeout'), timeoutMs);
@@ -133,14 +114,6 @@ async function fetchWithTimeout(url: URL, timeoutMs: number): Promise<Response> 
   }
 }
 
-/**
- * HTML → 正文文本：去 script/style/标签/实体（弱耦合纯函数）
- *
- * 实体解码是**单遍**替换（正则 + 查表一次扫过），不是链式 .replace——
- * 链式写法会让 `&amp;lt;` 先被 `&amp;` 规则解成 `&lt;`，再被 `&lt;` 规则解成 `<`，
- * 于是「本应展示为文本的转义标签」变成真标签形态（CodeQL js/double-escaping 指出的
- * 双重解码）。单遍扫描保证每个实体只解码一次。
- */
 function stripHtml(html: string): string {
   return html
     .replace(/<script[\s\S]*?<\/script\s*[^>]*>/gi, ' ')
@@ -150,13 +123,6 @@ function stripHtml(html: string): string {
     .replace(/\s+/g, ' ');
 }
 
-/**
- * 解码单个 HTML 实体（未收录的具名实体原样返回）
- *
- * 数字实体（`&#39;` / `&#x27;`）按码点解码；超范围码点（如 `&#1114112;`）会让
- * String.fromCodePoint 抛 RangeError，故先校验范围——页面内容不可信，不能让一个
- * 畸形实体把整次抓取变成失败。
- */
 function decodeEntity(entity: string): string {
   const lower = entity.slice(1, -1).toLowerCase();
   if (lower.startsWith('#')) {
@@ -168,7 +134,6 @@ function decodeEntity(entity: string): string {
   return HTML_ENTITIES[lower] ?? entity;
 }
 
-/** HTML 常用具名实体 → 字符（单遍解码用；未收录原样保留） */
 const HTML_ENTITIES: Readonly<Record<string, string>> = {
   amp: '&',
   lt: '<',

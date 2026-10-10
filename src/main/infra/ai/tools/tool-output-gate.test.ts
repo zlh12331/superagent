@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { clampToolOutput, clampToolPartOutput, toolOutputLimitFor } from './tool-executor';
 
-/** 生成指定字节数的 ASCII 字符串（1 字符 = 1 字节，便于精确构造） */
 function textOfBytes(bytes: number): string {
   return 'a'.repeat(bytes);
 }

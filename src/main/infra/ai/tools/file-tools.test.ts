@@ -12,7 +12,6 @@ import { createWriteFileTool } from './write-file.tool';
 
 let workDir: string;
 
-/** 构造工具执行上下文 */
 function createCtx(): ToolContext {
   return {
     workingDir: workDir,

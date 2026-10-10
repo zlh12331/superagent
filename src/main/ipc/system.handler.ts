@@ -6,12 +6,9 @@ import { app } from 'electron';
 import { logger } from '../utils/logger';
 import type { IpcHandlerContext } from '../utils/wrap';
 
-/** logs:read 入参默认行数 */
 const DEFAULT_LINES = 200;
-/** logs:read 入参最大行数（防止大文件拖慢渲染层，与 schemas/system.ts 一致） */
 const MAX_LINES = 2000;
 
-/** System 域 handler 实现（system:getStatus） */
 export const systemHandlers: InferHandlers<typeof IPC_DEFINITIONS, IpcHandlerContext>['system'] = {
   getStatus: async () => {
     const mem = process.memoryUsage();
@@ -41,7 +38,6 @@ export const systemHandlers: InferHandlers<typeof IPC_DEFINITIONS, IpcHandlerCon
   },
 };
 
-/** Logs 域 handler 实现（logs:read） */
 export const logsHandlers: InferHandlers<typeof IPC_DEFINITIONS, IpcHandlerContext>['logs'] = {
   read: async (input) => {
     const requestedLines = input?.lines ?? DEFAULT_LINES;
@@ -72,16 +68,6 @@ export const logsHandlers: InferHandlers<typeof IPC_DEFINITIONS, IpcHandlerConte
   },
 };
 
-/**
- * 从文件尾部读取最近 N 行（高效版，不全量加载）
- *
- * 策略：
- * - 从文件末尾向前按 4KB 块倒读
- * - 累积到足够行数后停止
- * - 返回按时间正序的行数组
- *
- * 性能：100MB 日志文件读取 200 行约 <10ms，避免全量 readFile 拖慢 IPC。
- */
 async function readTailLines(filePath: string, lines: number): Promise<string[]> {
   const file = await open(filePath, 'r');
   try {

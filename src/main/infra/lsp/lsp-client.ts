@@ -1,52 +1,38 @@
-// （Copyright 2026 Qwen Team，SPDX-License-Identifier: Apache-2.0）的
-
 import { type ChildProcessWithoutNullStreams, spawn } from 'node:child_process';
 import { logger } from '../../utils/logger';
 import { terminateChild } from '../../utils/terminate-child';
 
-/** LSP 位置（行/列均 0 基） */
 export interface LspPosition {
   readonly line: number;
   readonly character: number;
 }
 
-/** LSP 范围 */
 export interface LspRange {
   readonly start: LspPosition;
   readonly end: LspPosition;
 }
 
-/** LSP 位置引用（定义/引用统一收敛） */
 export interface LspLocation {
   readonly uri: string;
   readonly range: LspRange;
 }
 
-/** 定义结果 */
 export interface LspDefinition extends LspLocation {}
 
-/** 引用结果 */
 export interface LspReference extends LspLocation {}
 
-/** 悬停结果 */
 export interface LspHoverResult {
   readonly contents: string;
   readonly range?: LspRange;
 }
 
-/** LSP 服务器配置 */
 export interface LspServerConfig {
-  /** 启动命令（如 typescript-language-server） */
   readonly command: string;
-  /** 启动参数（如 ['--stdio']） */
   readonly args?: readonly string[];
-  /** 初始化根目录（file:// URI） */
   readonly rootUri: string;
-  /** 请求超时（毫秒，默认 15s） */
   readonly timeoutMs?: number;
 }
 
-/** 响应消息 */
 interface ResponseMessage {
   readonly jsonrpc: '2.0';
   readonly id: number;
@@ -54,11 +40,6 @@ interface ResponseMessage {
   readonly error?: { readonly code: number; readonly message: string };
 }
 
-/**
- * LSP 客户端（单语言服务器；调用方负责生命周期）
- *
- * 用法：new LspClient(config) → initialize() → definition/references/hover → dispose()
- */
 export class LspClient {
   private readonly command: string;
   private readonly args: readonly string[];
@@ -84,11 +65,6 @@ export class LspClient {
     this.loggerTag = `lsp:${this.command}`;
   }
 
-  /**
-   * 启动服务器并完成 initialize 握手
-   *
-   * @throws 启动失败/握手超时/服务器退出
-   */
   async initialize(): Promise<void> {
     if (this.disposed) {
       throw new Error(`${this.loggerTag} 已释放`);
@@ -129,7 +105,6 @@ export class LspClient {
     logger.info({ tag: this.loggerTag }, 'LSP 服务器初始化完成');
   }
 
-  /** 文本定义（跳转声明位置） */
   async definition(uri: string, position: LspPosition): Promise<LspDefinition[]> {
     this.ensureReady();
     const result = await this.request('textDocument/definition', {
@@ -139,7 +114,6 @@ export class LspClient {
     return normalizeLocations(result);
   }
 
-  /** 文本引用（查找所有引用位置） */
   async references(uri: string, position: LspPosition): Promise<LspReference[]> {
     this.ensureReady();
     const result = await this.request('textDocument/references', {
@@ -150,7 +124,6 @@ export class LspClient {
     return normalizeLocations(result);
   }
 
-  /** 悬停信息 */
   async hover(uri: string, position: LspPosition): Promise<LspHoverResult | null> {
     this.ensureReady();
     const result = await this.request('textDocument/hover', {
@@ -171,17 +144,11 @@ export class LspClient {
     };
   }
 
-  /**
-   * 原始 JSON-RPC 请求（扩展方法用；返回服务器原始 result）
-   *
-   * 用于未封装的方法（如 textDocument/documentSymbol、workspace/symbol）。
-   */
   async requestRaw(method: string, params: unknown): Promise<unknown> {
     this.ensureReady();
     return this.request(method, params);
   }
 
-  /** 关闭服务器（shutdown + exit 通知） */
   async dispose(): Promise<void> {
     if (this.disposed) {
       return;
@@ -207,7 +174,6 @@ export class LspClient {
     }
   }
 
-  /** 请求-响应（带超时；未决表 id 匹配） */
   private request(method: string, params: unknown): Promise<unknown> {
     if (this.child === null) {
       return Promise.reject(new Error(`${this.loggerTag} 服务器未启动`));
@@ -238,7 +204,6 @@ export class LspClient {
     });
   }
 
-  /** 通知（无响应） */
   private notify(method: string, params: unknown): void {
     this.writeFrame({
       jsonrpc: '2.0',
@@ -247,7 +212,6 @@ export class LspClient {
     });
   }
 
-  /** Content-Length 帧写入 */
   private writeFrame(message: object): void {
     if (this.child === null) {
       return;
@@ -256,7 +220,6 @@ export class LspClient {
     this.child.stdin.write(`Content-Length: ${Buffer.byteLength(body, 'utf8')}\r\n\r\n${body}`);
   }
 
-  /** 缓冲解析：按 Content-Length 切帧并分派响应 */
   private drainFrames(): void {
     for (;;) {
       const headerEnd = this.readBuffer.indexOf('\r\n\r\n');
@@ -280,7 +243,6 @@ export class LspClient {
     }
   }
 
-  /** 帧分派：响应匹配未决表；服务器通知记录 */
   private dispatchFrame(body: string): void {
     let message: ResponseMessage;
     try {
@@ -316,7 +278,6 @@ export class LspClient {
     }
   }
 
-  /** 服务器退出：拒绝全部未决请求 */
   private failAllPending(error: Error): void {
     for (const entry of this.pending.values()) {
       entry.reject(error);
@@ -325,7 +286,6 @@ export class LspClient {
   }
 }
 
-/** LSP 位置结果归一化：单对象或数组 → 数组 */
 function normalizeLocations(result: unknown): LspLocation[] {
   if (result === null || result === undefined) {
     return [];
@@ -341,7 +301,6 @@ function normalizeLocations(result: unknown): LspLocation[] {
   return [];
 }
 
-/** 悬停内容归一化：string | MarkedString | MarkedString[] → string */
 function hoverString(contents: unknown): string | null {
   if (typeof contents === 'string') {
     return contents;
@@ -375,7 +334,6 @@ function hoverString(contents: unknown): string | null {
   return null;
 }
 
-/** Location 形状判定（弱耦合纯函数） */
 function isLocation(value: unknown): value is LspLocation {
   return (
     typeof value === 'object' &&

@@ -16,20 +16,14 @@ vi.mock('../storage/settings-pref', () => ({
   readSetting: vi.fn(),
 }));
 
-/** 输出缓冲上限（与实现 MAX_BUFFER_BYTES 对齐，测环形截断用） */
 const MAX_BUFFER_BYTES = 100 * 1024;
 
-/**
- * 可编程 PTY 模拟：继承 EventEmitter 提供 onData/onExit 事件，
- * write/resize/kill 为 vi.fn 便于断言调用。
- */
 class FakePty extends EventEmitter {
   readonly pid = 4242;
   readonly write = vi.fn();
   readonly resize = vi.fn();
   readonly kill = vi.fn();
 
-  /** 与 node-pty IPty 事件 API 对齐 */
   onData(listener: (data: string) => void): void {
     this.on('data', listener);
   }
@@ -38,18 +32,15 @@ class FakePty extends EventEmitter {
     this.on('exit', listener);
   }
 
-  /** 模拟终端输出 */
   emitData(data: string): void {
     this.emit('data', data);
   }
 
-  /** 模拟进程退出 */
   emitExit(exitCode: number, signal?: number): void {
     this.emit('exit', { exitCode, signal });
   }
 }
 
-/** fake webContents：计数事件推送（基础设施 stub，非业务 mock） */
 function fakeWebContents(destroyed = false): { wc: WebContents; events: unknown[] } {
   const events: unknown[] = [];
   const wc = {
@@ -63,7 +54,6 @@ function fakeWebContents(destroyed = false): { wc: WebContents; events: unknown[
   return { wc, events };
 }
 
-/** 构造注入 fake spawnFn 的服务 + 捕获的 PTY 实例 */
 function makeService(): {
   svc: TerminalService;
   spawnFn: ReturnType<typeof vi.fn>;
@@ -81,7 +71,6 @@ function makeService(): {
   return { svc, spawnFn, ptys };
 }
 
-/** create 入参构造器（webContents 默认可用） */
 function makeOptions(overrides: Partial<TerminalCreateOptions> = {}): TerminalCreateOptions {
   const { wc } = fakeWebContents();
   return {
@@ -95,7 +84,6 @@ function makeOptions(overrides: Partial<TerminalCreateOptions> = {}): TerminalCr
   };
 }
 
-/** 默认 shell 预期（与实现 defaultShell 逻辑一致，跨平台兼容） */
 function expectedDefaultShell(): { file: string } {
   if (process.platform === 'win32') {
     return { file: 'powershell.exe' };

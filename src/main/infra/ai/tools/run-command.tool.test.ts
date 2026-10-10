@@ -9,7 +9,6 @@ const mocks = vi.hoisted(() => {
 
 vi.mock('node:child_process', () => ({ spawn: mocks.mockSpawn }));
 
-/** 创建基础 ToolContext（build 模式） */
 function createCtx(): ToolContext {
   return {
     workingDir: 'C:\\projects\\my-app',
@@ -22,7 +21,6 @@ function createCtx(): ToolContext {
   };
 }
 
-/** 构造可解析的 spawn mock：返回可 close 的 EventEmitter 风格子进程对象 */
 function mockSpawnSuccess(stdout: string) {
   const child = {
     stdout: {

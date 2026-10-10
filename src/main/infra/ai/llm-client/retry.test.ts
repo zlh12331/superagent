@@ -2,7 +2,6 @@ import { APICallError } from 'ai';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getErrorStatus, getRetryAfterDelayMs, isRetryableError, retryWithBackoff } from './retry';
 
-/** 构造 APICallError（AI SDK 标准 API 调用错误） */
 function createApiError(
   statusCode: number | undefined,
   opts: { isRetryable?: boolean; responseHeaders?: Record<string, string> } = {},

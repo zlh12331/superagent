@@ -15,39 +15,19 @@ import { app } from 'electron';
 import { logger } from '../../utils/logger';
 import { terminateChild } from '../../utils/terminate-child';
 
-/** 超时后 SIGTERM 子进程并 reject（explore/impact 可能较慢） */
 const CODEGRAPH_COMMAND_TIMEOUT_MS = 60_000;
 
-/** 平台包启动命令（command + 前置 args） */
 export interface CodegraphBundle {
-  /** 可执行文件路径（Windows = 捆绑 node.exe；其他 = bin/codegraph 启动器） */
   readonly command: string;
-  /** 前置参数（Windows liftoff 标志 + 入口，非 Windows 为空） */
   readonly args: readonly string[];
 }
 
-/**
- * 进程内 memo（P2-37）：dev 每次 resolveCodegraphBundle 都 readdirSync 扫
- * .pnpm 布局 → 首次解析后常驻复用。平台包在进程生命周期内不会变化；
- * 解析失败不缓存（下次调用重试）。
- */
 let bundleMemo: CodegraphBundle | undefined;
 
-/** 清空 bundle memo（测试用） */
 export function resetCodegraphBundleMemo(): void {
   bundleMemo = undefined;
 }
 
-/**
- * 解析 codegraph 平台包启动命令（生产 process.resourcesPath / dev pnpm .pnpm）
- *
- * @colbymchenry/codegraph 以 optionalDependencies 分发各平台捆绑包
- * （vendored Node 24 + app，esbuild 同款模式）。Windows 包内含 node.exe 与
- * lib/dist/bin/codegraph.js 入口（npm-shim 同款：--liftoff-only 规避
- * tree-sitter WASM 在 Node≥22 的 Zone OOM）；其他平台为 bin/codegraph 启动器。
- *
- * P2-37：结果进程内 memo——此前 dev 每条 codegraph 命令都 readdirSync 一次。
- */
 export function resolveCodegraphBundle(): CodegraphBundle {
   if (bundleMemo !== undefined) {
     return bundleMemo;
@@ -57,7 +37,6 @@ export function resolveCodegraphBundle(): CodegraphBundle {
   return bundle;
 }
 
-/** memo 未命中时的实际解析（失败抛错不写入 memo） */
 function resolveCodegraphBundleOnce(): CodegraphBundle {
   const target = `${process.platform}-${process.arch}`;
   let dir: string;
@@ -92,132 +71,54 @@ function resolveCodegraphBundleOnce(): CodegraphBundle {
   return { command: join(dir, 'bin', 'codegraph'), args: [] };
 }
 
-/**
- * query 方法入参
- *
- * 与 CodebaseQueryReqSchema 字段对齐，类型独立定义以便测试 mock。
- */
 export interface CodebaseQueryOptions {
-  /** 项目根路径（绝对路径，codegraph 索引所在目录） */
   readonly path: string;
-  /** 搜索关键词 */
   readonly search: string;
-  /** 最大返回结果数 */
   readonly limit: number;
-  /** 按符号种类过滤（可选） */
   readonly kind: string | undefined;
 }
 
-/**
- * explore 方法入参
- */
 export interface CodebaseExploreOptions {
   readonly path: string;
-  /** 自然语言查询（数组形式对齐 CLI variadic 参数） */
   readonly query: readonly string[];
-  /** 包含源码的最大文件数 */
   readonly maxFiles: number;
 }
 
-/**
- * node 方法入参
- *
- * 支持两种模式：
- * - 符号模式：传入 name，返回符号源码 + 调用链
- * - 文件模式：传入 file，返回文件内容 + 依赖分析
- */
 export interface CodebaseNodeOptions {
   readonly path: string;
-  /** 符号名（可选，省略时返回项目概览） */
   readonly name: string | undefined;
-  /** 文件模式：文件路径 */
   readonly file: string | undefined;
-  /** 文件模式：起始行（1-based） */
   readonly offset: number | undefined;
-  /** 文件模式：最大行数 */
   readonly limit: number | undefined;
-  /** 文件模式：仅返回符号映射 + 依赖 */
   readonly symbolsOnly: boolean | undefined;
 }
 
-/**
- * callers / callees 方法入参
- */
 export interface CodebaseCallOptions {
   readonly path: string;
-  /** 目标符号名 */
   readonly symbol: string;
-  /** 最大返回结果数 */
   readonly limit: number;
 }
 
-/**
- * impact 方法入参
- */
 export interface CodebaseImpactOptions {
   readonly path: string;
   readonly symbol: string;
-  /** 遍历深度 */
   readonly depth: number;
 }
 
-/**
- * CodebaseService 接口
- *
- * 解耦 IPC handler 对具体类的依赖，便于：
- * - 单元测试：注入 mock 实现，不依赖真实 codegraph CLI
- * - 未来扩展：替换为其他代码智能工具（如 ctags / LSIF）
- */
 export interface ICodebaseService {
-  /** 结构化符号搜索 */
   query(options: CodebaseQueryOptions): Promise<CodebaseQueryRes>;
-  /** 区域探索（自然语言查询） */
   explore(options: CodebaseExploreOptions): Promise<CodebaseExploreRes>;
-  /** 符号详情或文件内容 */
   node(options: CodebaseNodeOptions): Promise<CodebaseNodeRes>;
-  /** 调用方查询 */
   callers(options: CodebaseCallOptions): Promise<CodebaseCallersRes>;
-  /** 被调用方查询 */
   callees(options: CodebaseCallOptions): Promise<CodebaseCalleesRes>;
-  /** 影响分析 */
   impact(options: CodebaseImpactOptions): Promise<CodebaseImpactRes>;
-  /**
-   * 确保目标目录已建立 codegraph 索引（懒索引：未索引时执行 init，首次较慢）
-   */
   ensureIndexed(path: string): Promise<void>;
-  /**
-   * 优雅关闭：kill 所有活跃子进程
-   *
-   * 应用退出时调用，避免 spawn 出去的 codegraph 子进程未结束导致进程退出延迟。
-   * 正常完成的子进程会从 activeProcesses 自动移除，dispose 仅清理异常残留的子进程。
-   */
   dispose(): Promise<void>;
 }
 
-/**
- * CodebaseService 默认实现
- *
- * 内部通过 activeProcesses 追踪所有活跃子进程：
- * - runCodegraph 启动子进程时加入 Set，close/error 时移除
- * - dispose 时统一 SIGTERM 残留子进程（应用退出兜底）
- *
- * 每条 codegraph 命令强制超时（CODEGRAPH_COMMAND_TIMEOUT_MS），避免：
- * - codegraph 索引大项目时遍历挂死
- * - 子进程异常不退出导致 Promise 永久 pending
- *
- * 错误分类：
- * - codegraph 命令执行失败：INTERNAL_ERROR
- * - stdout JSON 解析失败：INTERNAL_ERROR
- */
 export class CodebaseService implements ICodebaseService {
-  /**
-   * 子进程启动函数（DI 注入点：测试传 fake，生产默认 node:child_process）
-   * 注入而非 mock：外部依赖可替换，业务逻辑保持真实实现
-   */
   private readonly spawnFn: typeof spawn;
-  /** 单条命令超时（DI 注入点：测试可缩短验证超时路径） */
   private readonly commandTimeoutMs: number;
-  /** 平台包定位（DI 注入点：测试传 fake 保持断言稳定；生产默认 resolveCodegraphBundle） */
   private readonly resolveBundle: () => CodegraphBundle;
 
   constructor(
@@ -232,26 +133,8 @@ export class CodebaseService implements ICodebaseService {
     this.resolveBundle = options.resolveBundle ?? resolveCodegraphBundle;
   }
 
-  /**
-   * 活跃子进程集合：用于 dispose 时统一清理
-   *
-   * 正常完成的子进程会从 Set 自动移除（close 事件触发），
-   * 仅在异常退出 / dispose 调用时仍存活的子进程会留在 Set 中。
-   */
   private readonly activeProcesses = new Set<ChildProcess>();
-  /**
-   * 索引中路径 → in-flight Promise（2026-09-08 修复）
-   *
-   * 并发 ensureIndexed 合并到同一 Promise，避免多个 codegraph init
-   * 同时写同一 .codegraph 目录。
-   */
   private readonly indexingInFlight = new Map<string, Promise<void>>();
-  /**
-   * 结构化符号搜索
-   *
-   * 调用 `codegraph query <search> -p <path> -l <limit> -k <kind> -j`
-   * -j 启用 JSON 输出，解析为 CodebaseQueryResult[]。
-   */
   async query(options: CodebaseQueryOptions): Promise<CodebaseQueryRes> {
     const { path, search, limit, kind } = options;
 
@@ -269,12 +152,6 @@ export class CodebaseService implements ICodebaseService {
     return { results };
   }
 
-  /**
-   * 区域探索
-   *
-   * 调用 `codegraph explore <query...> -p <path> --max-files <n>`
-   * 输出 markdown 文本（含相关符号源码 + 调用路径）。
-   */
   async explore(options: CodebaseExploreOptions): Promise<CodebaseExploreRes> {
     const { path, query, maxFiles } = options;
     const args = ['explore', ...query, '-p', path];
@@ -285,12 +162,6 @@ export class CodebaseService implements ICodebaseService {
     return { markdown: stdout };
   }
 
-  /**
-   * 符号详情或文件内容
-   *
-   * 符号模式：`codegraph node <name> -p <path>`
-   * 文件模式：`codegraph node -p <path> -f <file> [--offset <n>] [--limit <n>] [--symbols-only]`
-   */
   async node(options: CodebaseNodeOptions): Promise<CodebaseNodeRes> {
     const { path, name, file, offset, limit, symbolsOnly } = options;
 
@@ -317,12 +188,6 @@ export class CodebaseService implements ICodebaseService {
     return { markdown: stdout };
   }
 
-  /**
-   * 调用方查询
-   *
-   * 调用 `codegraph callers <symbol> -p <path> -l <limit>`
-   * 输出 markdown 文本（调用方列表 + 调用位置）。
-   */
   async callers(options: CodebaseCallOptions): Promise<CodebaseCallersRes> {
     const { path, symbol, limit } = options;
     const args = ['callers', symbol, '-p', path, '-l', String(limit)];
@@ -330,12 +195,6 @@ export class CodebaseService implements ICodebaseService {
     return { markdown: stdout };
   }
 
-  /**
-   * 被调用方查询
-   *
-   * 调用 `codegraph callees <symbol> -p <path> -l <limit>`
-   * 输出 markdown 文本（被调用方列表 + 调用位置）。
-   */
   async callees(options: CodebaseCallOptions): Promise<CodebaseCalleesRes> {
     const { path, symbol, limit } = options;
     const args = ['callees', symbol, '-p', path, '-l', String(limit)];
@@ -343,12 +202,6 @@ export class CodebaseService implements ICodebaseService {
     return { markdown: stdout };
   }
 
-  /**
-   * 影响分析
-   *
-   * 调用 `codegraph impact <symbol> -p <path> -d <depth>`
-   * 输出 markdown 文本（影响范围分析）。
-   */
   async impact(options: CodebaseImpactOptions): Promise<CodebaseImpactRes> {
     const { path, symbol, depth } = options;
     const args = ['impact', symbol, '-p', path, '-d', String(depth)];
@@ -356,14 +209,6 @@ export class CodebaseService implements ICodebaseService {
     return { markdown: stdout };
   }
 
-  /**
-   * 优雅关闭：kill 所有活跃子进程
-   *
-   * 应用退出时调用，避免异常残留的 codegraph 子进程句柄泄漏导致进程退出延迟。
-   * 正常完成的子进程会从 activeProcesses 自动移除，dispose 仅清理异常残留。
-   *
-   * 幂等：多次调用安全（Set 已清空时为 no-op）。
-   */
   async dispose(): Promise<void> {
     if (this.activeProcesses.size === 0) {
       return;
@@ -374,18 +219,6 @@ export class CodebaseService implements ICodebaseService {
     logger.info({}, 'CodebaseService 所有子进程已清理');
   }
 
-  /**
-   * 确保目标目录已建立 codegraph 索引（懒索引，方案 A）
-   *
-   * 检查 <path>/.codegraph 目录是否存在：
-   * - 存在：直接返回（已索引）
-   * - 不存在：执行 `codegraph init <path>` 建初始索引——大项目首次较慢，
-   *   由 runCodegraph 的 60s 超时兜底（超时抛 AppError，工具层向 LLM 返回提示）
-   *
-   * 并发去重（2026-09-08 修复）：同一路径的并发调用合并为同一个 in-flight
-   * Promise——此前多会话/子代理并行调用会对同一目录同时跑 `codegraph init`，
-   * 多个进程并发写同一 .codegraph 索引可能产出损坏/半写索引。
-   */
   async ensureIndexed(path: string): Promise<void> {
     if (existsSync(join(path, '.codegraph'))) {
       return;
@@ -403,14 +236,6 @@ export class CodebaseService implements ICodebaseService {
     return task;
   }
 
-  /**
-   * 执行 codegraph 命令并返回 stdout
-   *
-   * @param args codegraph 命令参数（如 ['query', 'AgentService', '-j']）
-   * @param cwd 工作目录（同时作为 -p 参数已传入 args）
-   * @returns stdout 输出（字符串）
-   * @throws AppError(INTERNAL_ERROR) codegraph 命令执行失败
-   */
   private runCodegraph(args: string[], cwd: string): Promise<{ stdout: string; stderr: string }> {
     return new Promise((resolve, reject) => {
       const bundle = this.resolveBundle();
@@ -481,14 +306,6 @@ export class CodebaseService implements ICodebaseService {
     });
   }
 
-  /**
-   * 解析 codegraph query --json 输出
-   *
-   * 输出格式：CodebaseQueryResult[] 的 JSON 字符串
-   * 空结果时 codegraph 可能输出 '[]' 或空字符串，统一兜底为空数组。
-   *
-   * @throws AppError(INTERNAL_ERROR) JSON 解析失败
-   */
   private parseQueryResults(stdout: string): CodebaseQueryResult[] {
     const trimmed = stdout.trim();
     if (trimmed.length === 0) {
@@ -508,18 +325,8 @@ export class CodebaseService implements ICodebaseService {
   }
 }
 
-/** CodebaseService 单例（内部按具体实现类持有，外部暴露为 ICodebaseService 接口） */
 let codebaseService: CodebaseService | null = null;
 
-/**
- * 获取 CodebaseService 单例
- *
- * 整个应用生命周期共享一个实例。
- *
- * 返回类型为 ICodebaseService 接口而非具体类：
- * - 强制调用方面向接口编程，不依赖 CodebaseService 内部细节
- * - ServiceContainer 注入到 IPC handler 时类型一致
- */
 export function getCodebaseService(): ICodebaseService {
   if (codebaseService === null) {
     codebaseService = new CodebaseService();
@@ -527,12 +334,6 @@ export function getCodebaseService(): ICodebaseService {
   return codebaseService;
 }
 
-/**
- * 重置 CodebaseService（仅测试用）
- *
- * 仅清空单例缓存。dispose 由 ServiceContainer 单独 await 调用
- * （与 resetGitService 风格一致）。
- */
 export function resetCodebaseService(): void {
   codebaseService = null;
 }

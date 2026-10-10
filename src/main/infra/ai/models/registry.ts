@@ -7,18 +7,6 @@ import type {
   RuntimeModelSnapshot,
 } from './types';
 
-/**
- * 合并运行时快照与同名内置条目的生成参数
- *
- * 快照只暴露一个生成参数旋钮（timeoutMs），其余默认值属模型固有属性：
- * 服务商模式下快照的 modelId 就是内置 id（仅覆盖 apiKey/baseUrl），
- * 若整组丢弃内置 generationConfig，reasoningEffort 等项目级偏好会静默回退到
- * 供应商默认。自定义模式（modelId 非内置）回落 undefined，保持既有语义。
- *
- * @param builtin 同名内置条目的 generationConfig（无则 undefined）
- * @param snapshot 运行时快照（仅 timeoutMs 参与合并）
- * @returns 合并结果；两者皆无 → undefined
- */
 function mergeSnapshotGenerationConfig(
   builtin: ModelGenerationConfig | undefined,
   snapshot: RuntimeModelSnapshot,
@@ -29,32 +17,17 @@ function mergeSnapshotGenerationConfig(
   return { ...builtin, timeoutMs: snapshot.timeoutMs };
 }
 
-/**
- * ModelRegistry 构造参数
- */
 export interface ModelRegistryOptions {
-  /** 内置模型条目表 */
   readonly entries: readonly ModelEntry[];
-  /** 各供应商默认模型 id（未指定模型时解析目标） */
   readonly defaultModelByKind: Record<ProviderKind, string>;
-  /** 全局默认供应商（未指定模型时的最终兜底） */
   readonly defaultKind: ProviderKind;
 }
 
-/**
- * 模型注册表
- *
- * 无状态（除运行时快照/停用 Map 外）：内置模型为常量表。
- * 模块级单例 modelRegistry 在 models/index.ts 装配（ai-provider / llm-client /
- * agent-service 导入）。
- */
 export class ModelRegistry {
   private readonly modelIndex: Map<string, ModelEntry>;
   private readonly defaultModelByKind: Record<ProviderKind, string>;
   private readonly defaultKind: ProviderKind;
-  /** 运行时快照：快照 id → 快照（用户手动配置的模型） */
   private readonly runtimeSnapshots = new Map<string, RuntimeModelSnapshot>();
-  /** 已停用模型 id 集合（用户关闭；resolve 返回 available=false，LLM 层拦截） */
   private readonly disabledModels = new Set<string>();
 
   constructor(options: ModelRegistryOptions) {
@@ -66,47 +39,22 @@ export class ModelRegistry {
     }
   }
 
-  /**
-   * 按模型 id 查找内置条目（不含运行时快照）
-   */
   findBuiltin(modelId: string): ModelEntry | undefined {
     return this.modelIndex.get(modelId);
   }
 
-  /**
-   * 标记模型停用（关闭开关；启动时从 DB 恢复）
-   *
-   * 停用模型不注册运行时快照，但保留禁用身份供 resolve 拦截。
-   */
   registerDisabledModel(modelId: string): void {
     this.disabledModels.add(modelId);
   }
 
-  /** 取消停用标记（重新启用） */
   unregisterDisabledModel(modelId: string): void {
     this.disabledModels.delete(modelId);
   }
 
-  /** 模型当前是否处于停用状态（当前无生产调用方，仅单测——LLM 层拦截走
-   * resolve 的 available 字段，本方法供未来消费方与调试） */
   isModelDisabled(modelId: string): boolean {
     return this.disabledModels.has(modelId);
   }
 
-  /**
-   * 解析模型 id → 完整解析结果
-   *
-   * 优先级：
-   * 0. modelId 已停用 → 返回 available=false（不可路由；区别于任意 id 的透传兜底）
-   * 1. modelId 显式提供且已注册（运行时快照优先 / 内置条目）→ 该模型条目
-   * 2. modelId 显式提供但未注册 → 默认供应商默认模型 + 原始 id 透传
-   *    （配置错误的防御性降级：llm-client 侧打 warn 定位，生产多为拼错模型名
-   *    或引用已删除的运行时模型）
-   * 3. modelId 未提供 → 默认供应商默认模型
-   *
-   * @param modelId 目标模型 id（省略 = 默认模型）
-   * @returns 解析结果（永不抛错）
-   */
   resolve(modelId: string | undefined): ResolvedModel {
     const target = modelId ?? this.defaultModelByKind[this.defaultKind];
     if (this.disabledModels.has(target)) {
@@ -144,37 +92,22 @@ export class ModelRegistry {
     };
   }
 
-  /**
-   * 注册运行时模型快照（幂等：同 id 覆盖）
-   */
   registerRuntimeModel(snapshot: RuntimeModelSnapshot): void {
     this.runtimeSnapshots.set(snapshot.id, snapshot);
   }
 
-  /**
-   * 注销运行时模型快照（幂等）
-   */
   unregisterRuntimeModel(snapshotId: string): void {
     this.runtimeSnapshots.delete(snapshotId);
   }
 
-  /** 当前运行时快照数量（测试断言用） */
   getRuntimeSnapshotCount(): number {
     return this.runtimeSnapshots.size;
   }
 
-  /**
-   * 清空全部运行时快照（测试重置 / 应用级清理场景）
-   */
   clearRuntimeModels(): void {
     this.runtimeSnapshots.clear();
   }
 
-  /**
-   * 列出全部可用模型（设置 UI 下拉）
-   *
-   * 内置模型 + 运行时快照模型。
-   */
   listModels(): AvailableModelInfo[] {
     const builtins: AvailableModelInfo[] = [];
     for (const entry of this.modelIndex.values()) {
@@ -199,9 +132,6 @@ export class ModelRegistry {
     return [...builtins, ...runtimes];
   }
 
-  /**
-   * 解析显式模型 id（已注册的模型条目或运行时快照）
-   */
   private resolveExplicit(modelId: string): ResolvedModel | undefined {
     const snapshot = this.findRuntimeSnapshot(modelId);
     if (snapshot !== undefined) {
@@ -236,7 +166,6 @@ export class ModelRegistry {
     };
   }
 
-  /** 按模型 id 查找运行时快照（遍历快照值） */
   private findRuntimeSnapshot(modelId: string): RuntimeModelSnapshot | undefined {
     for (const snapshot of this.runtimeSnapshots.values()) {
       if (snapshot.modelId === modelId) {

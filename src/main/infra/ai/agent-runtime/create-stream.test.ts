@@ -3,12 +3,10 @@ import { APICallError, RetryError } from 'ai';
 import { describe, expect, it } from 'vitest';
 import { createStreamWithRetry, type MessageStreamSource } from './create-stream';
 
-/** fake UiStreamable：可配置首读失败次数与失败错误 */
 function createFakeStream(options: {
   firstReadFailures?: number;
   parts?: unknown[];
   error?: Error;
-  /** 首包永不到达（触发读流空闲超时） */
   neverEmit?: boolean;
 }): { streamable: MessageStreamSource; createdCount: () => number } {
   let created = 0;

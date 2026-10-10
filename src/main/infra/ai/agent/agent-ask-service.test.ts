@@ -3,9 +3,6 @@ import type { WebContents } from 'electron';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AgentAskService } from './agent-ask-service';
 
-/**
- * webContents 替身：send 记录推送（emitEvent 真实调用，边界替身对齐测试原则）
- */
 function makeWebContents(destroyed = false): WebContents & { send: ReturnType<typeof vi.fn> } {
   return {
     isDestroyed: () => destroyed,

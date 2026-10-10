@@ -3,7 +3,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createSearchHandlers, type SearchHandlerDeps } from './search.handler';
 
-/** 创建 fake SearchService */
 function createFakeSearchService() {
   return {
     grep: vi.fn(async () => ({ matches: [], truncated: false })),

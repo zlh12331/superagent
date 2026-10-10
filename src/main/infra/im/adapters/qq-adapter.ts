@@ -4,26 +4,15 @@ import { proxiedFetch } from '../../network/proxied-fetch';
 import type { ChannelIncomingMessage, ChannelTarget, IChannelAdapter } from '../channel/types';
 import { fetchQqAccessToken, QqStreamReceiver } from './qq-stream';
 
-/** API 基地址（沙箱可注入） */
 const API_HOST = 'https://api.sgroup.qq.com';
-/** 发送超时 */
 const SEND_TIMEOUT_MS = 10_000;
 
-/**
- * QQ 渠道适配器（官方 API 发送 + Gateway 长连接接收）
- */
 export class QqAdapter implements IChannelAdapter {
   readonly kind = 'qq';
   readonly displayName = 'QQ';
   readonly implemented = true;
   readonly configHint = 'appId:appSecret（官方机器人凭证）';
 
-  /**
-   * 外部依赖注入点（测试传 fake，生产默认实现）：
-   * - fetchTokenFn：access_token 获取（网络）
-   * - Receiver：Gateway 长连接接收器（WS）
-   * - fetchFn：发送消息 HTTP（网络）
-   */
   private readonly fetchTokenFn: typeof fetchQqAccessToken;
   private readonly receiverCtor: typeof QqStreamReceiver;
   private readonly fetchFn: typeof fetch;
@@ -45,13 +34,9 @@ export class QqAdapter implements IChannelAdapter {
   private appSecretValue: string | null = null;
   private accessToken: string | null = null;
   private accessTokenExpiresAt = 0;
-  /** openid → 会话类型（入站事件学习：群/单聊路由） */
   private readonly chatTypeMap = new Map<string, 'group' | 'user'>();
   private receiver: QqStreamReceiver | null = null;
 
-  /**
-   * 连接（token 格式 appId:appSecret）
-   */
   async connect(token: string | undefined): Promise<void> {
     if (token === undefined || token.length === 0) {
       throw new AppError(ErrorCode.IM_CHANNEL_INVALID_TOKEN, 'QQ：缺少 appId:appSecret');
@@ -91,16 +76,12 @@ export class QqAdapter implements IChannelAdapter {
     logger.info({ kind: this.kind }, 'QQ 渠道已连接');
   }
 
-  /** 断开连接 */
   async disconnect(): Promise<void> {
     this.receiver?.close();
     this.receiver = null;
     this.isConnected = false;
   }
 
-  /**
-   * 回发消息（chatId 即 openid；群/单聊按入站学习路由）
-   */
   async sendMessage(target: ChannelTarget, text: string): Promise<void> {
     const chatType = this.chatTypeMap.get(target.chatId) ?? 'user';
     const endpoint =
@@ -141,19 +122,16 @@ export class QqAdapter implements IChannelAdapter {
     }
   }
 
-  /** 是否接近过期（剩余 <60s 视为过期窗口；官方：过期前 60s 内获取新 token） */
   private isTokenExpiring(): boolean {
     return Date.now() >= this.accessTokenExpiresAt - 60_000;
   }
 
-  /** 获取/刷新 access_token（记录过期时间） */
   private async refreshAccessToken(appId: string, appSecret: string): Promise<void> {
     const { accessToken, expiresIn } = await this.fetchTokenFn(appId, appSecret);
     this.accessToken = accessToken;
     this.accessTokenExpiresAt = Date.now() + expiresIn * 1000;
   }
 
-  /** 订阅入站消息（多订阅者：与 im-service 兼容） */
   onMessage(handler: (message: ChannelIncomingMessage) => void): () => void {
     this.messageHandlers.add(handler);
     return () => {

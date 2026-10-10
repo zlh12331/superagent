@@ -1,21 +1,9 @@
 import type { TurnEvent, TurnEventMap, TurnEventType } from '@code-agent/shared/main';
 
-/**
- * 回合事件发射器（回合级：每次 runTurnStream 新建一个实例，与 turnId
- * 生命周期一致；不跨回合复用）
- */
 export class TurnEventEmitter {
   private readonly listeners = new Map<TurnEventType, Set<(event: TurnEvent) => void>>();
-  /** 全类型监听器（onAny 注册） */
   private readonly anyListeners = new Set<(event: TurnEvent) => void>();
 
-  /**
-   * 订阅指定类型的事件
-   *
-   * @param type 事件类型（TurnEventType）
-   * @param listener 监听器（payload 已按类型收窄）
-   * @returns unsubscribe 函数（会话结束时必须调用，防内存泄漏）
-   */
   on<E extends TurnEventType>(type: E, listener: (event: TurnEventMap[E]) => void): () => void {
     const bucket = this.listeners.get(type) ?? new Set<(event: TurnEvent) => void>();
     const wrapped = listener as (event: TurnEvent) => void;
@@ -29,12 +17,6 @@ export class TurnEventEmitter {
     };
   }
 
-  /**
-   * 发布事件（同步通知该类型的所有监听器）
-   *
-   * 监听器抛错不阻断其他监听器：本层 try/catch 静默吞异常、不记日志
-   * （日志在宿主转发层记——agent-service forwardTurnEvents 捕获后 error 日志）。
-   */
   emit(event: TurnEvent): void {
     for (const anyListener of this.anyListeners) {
       try {
@@ -52,15 +34,6 @@ export class TurnEventEmitter {
     }
   }
 
-  /**
-   * 订阅全部类型事件（类级转发：跨会话监听方）
-   *
-   * 生产下游 = agent-service 的 forwardTurnEvents（onAny → 类级 turnListeners，
-   * 经 onTurnEvent 暴露给 notification 的 TURN_END 通知 / subagent-manager 的
-   * 子代理事件过滤等类级监听方）。
-   *
-   * @returns unsubscribe 函数
-   */
   onAny(listener: (event: TurnEvent) => void): () => void {
     this.anyListeners.add(listener);
     return () => {
@@ -68,7 +41,6 @@ export class TurnEventEmitter {
     };
   }
 
-  /** 当前订阅总数（测试断言用） */
   getListenerCount(): number {
     let count = 0;
     for (const bucket of this.listeners.values()) {

@@ -19,7 +19,6 @@ vi.mock('electron', () => ({
   },
 }));
 
-/** 桥接监听器签名（阶段 3 起带增量事件通道） */
 type CommandHandler = (
   command: RemoteCommand,
   emit: RemoteCommandEmitter,
@@ -27,7 +26,6 @@ type CommandHandler = (
 
 const NOOP_EMIT: RemoteCommandEmitter = () => {};
 
-/** startAgent 入参形状（测试断言子集） */
 interface StartAgentCall {
   readonly messages: ReadonlyArray<{ role: string; content: unknown }>;
   readonly sessionId: string;
@@ -36,7 +34,6 @@ interface StartAgentCall {
   readonly webContents?: unknown;
 }
 
-/** 回合事件形状（测试构造用） */
 interface EmitEvent {
   readonly type: string;
   readonly sessionId?: string;
@@ -47,7 +44,6 @@ interface EmitEvent {
   readonly reason?: string;
 }
 
-/** 桥接依赖的轻量 stub（手写最小实现，不引 mock 框架） */
 function createStubs(options: { history?: readonly unknown[] } = {}) {
   const commandHandlers: CommandHandler[] = [];
   const turnListeners: Array<(event: EmitEvent) => void> = [];
@@ -124,14 +120,12 @@ function command(overrides: Partial<RemoteCommand> = {}): RemoteCommand {
   return { sessionToken: 'token', text: '跑测试', clientId: 'mobile-1', ...overrides };
 }
 
-/** 发射回合事件（桥接按 sessionId 过滤） */
 function emitTurn(stubs: Stubs, event: EmitEvent): void {
   for (const listener of [...stubs.turnListeners]) {
     listener(event);
   }
 }
 
-/** 调用桥接处理器（可注入 emitter 断言增量帧；缺省 noop） */
 function callHandler(
   stubs: Stubs,
   cmd: RemoteCommand,
@@ -142,7 +136,6 @@ function callHandler(
   return handler(cmd, emitEvents ?? NOOP_EMIT);
 }
 
-/** 驱动一条命令直到拿到回传结果（自动补完 START/END 事件） */
 async function runCommand(
   stubs: Stubs,
   text: string,

@@ -20,56 +20,29 @@ import type { MemoryPort } from './types';
 
 const TAG = '[memory-hub]';
 
-/**
- * 就绪等待超时（毫秒）
- *
- * ⚠️ 60s 的依据（2026-10-05 beta.2 真机实证）：安装后**首次**冷启动要加载 dist 模块图
- * + node_modules 7000+ 小文件，HDD + Windows Defender 实时扫描下 20s 不够（stderr 空、
- * 进程存活、/health 未通——纯慢，不是崩）；OS 缓存暖后秒级就绪。放宽只影响冷启动
- * 那一次，热启动仍由实际就绪时间决定（轮询到即返回，不会等满）。
- */
 const START_TIMEOUT_MS = 60_000;
-/** 健康轮询间隔（毫秒） */
 const HEALTH_POLL_MS = 300;
-/** 单请求超时（健康探测） */
 const HEALTH_TIMEOUT_MS = 1500;
 
-/** 蒸馏 LLM 配置（L0→L1 提取由引擎异步调用；缺失时 capture 仍可用，提取降级失败） */
 export interface MemoryHubLlmConfig {
   readonly baseUrl: string;
   readonly apiKey: string;
   readonly model: string;
 }
 
-/** L0 对话记录（上游 conversations JSONL 只读行；供设置页按会话列出） */
 export interface L0Record {
   readonly role: 'user' | 'assistant' | string;
   readonly content: string;
   readonly timestamp: number;
 }
 
-/** MemoryHubService 构造选项 */
 export interface MemoryHubServiceOptions {
-  /**
-   * 上游根目录：
-   * - dev：解压源码目录（含 node_modules，tsx 可解析）
-   * - prod：resources 下打包的产物目录
-   */
   readonly hubRoot: string | undefined;
-  /** 数据目录（userData/memory-hub）：yaml 配置、launcher、SQLite 全部落这里 */
   readonly dataDir: string;
-  /**
-   * 蒸馏 LLM 配置（静态值或异步解析器；未提供/解析失败时用占位值，
-   * 仅影响 L1/L2 提取质量，L0 记录不受影响）
-   */
   readonly llm?: MemoryHubLlmConfig | (() => Promise<MemoryHubLlmConfig | undefined>) | undefined;
-  /**
-   * 子进程启动器（默认 utilityProcess 实现；测试注入 fake 以免真拉进程）
-   */
   readonly launcher?: EngineLauncher | undefined;
 }
 
-/** 未配置 hubRoot 时返回的空实现（保证上层零分支：调用即安全降级） */
 class UnavailableMemoryPort implements MemoryPort {
   async health(): Promise<boolean> {
     return false;
@@ -91,9 +64,6 @@ class UnavailableMemoryPort implements MemoryPort {
   }
 }
 
-/**
- * 延迟解析的 MemoryPort：注册期同步可用，首次调用时才触发 sidecar 启动
- */
 export function createDeferredMemoryPort(getService: () => MemoryHubService): MemoryPort {
   const via = async <T>(fn: (p: MemoryPort) => Promise<T>): Promise<T> =>
     fn(await getService().ensureStarted());
@@ -108,10 +78,6 @@ export function createDeferredMemoryPort(getService: () => MemoryHubService): Me
   };
 }
 
-/**
- * 记忆中枢服务：管理记忆引擎 sidecar（utilityProcess）生命周期——
- * 启动/健康检查/停止，启动成功后经 HttpMemoryPort 代理 MemoryPort 调用
- */
 export class MemoryHubService {
   private child: EngineProcessHandle | null = null;
   private port: MemoryPort | null = null;
@@ -124,21 +90,14 @@ export class MemoryHubService {
 
   constructor(private readonly options: MemoryHubServiceOptions) {}
 
-  /** 是否已配置上游根目录 */
   isConfigured(): boolean {
     return this.options.hubRoot !== undefined && this.options.hubRoot.length > 0;
   }
 
-  /** sidecar 是否正在运行（不触发启动；依 exit 事件而非 pid，pid 在 spawn 前为空） */
   isRunning(): boolean {
     return this.child !== null && !this.child.hasExited();
   }
 
-  /**
-   * 探测已启动 sidecar 的健康状态（不触发启动）
-   *
-   * 未运行时返回 false（调用方应先查 isRunning 以区分"未运行"与"运行不健康"）。
-   */
   async probeHealth(): Promise<boolean> {
     if (!this.isRunning()) {
       return false;
@@ -150,70 +109,26 @@ export class MemoryHubService {
     }
   }
 
-  /**
-   * 统计既有记忆数据（读审计镜像，不触发引擎启动）
-   *
-   * 用于设置页展示"已记录多少"——打开设置页不应有启动引擎的副作用。
-   * 实现见 l0-inspect（纯数据检查，与 sidecar 生命周期无关）。
-   */
   async countRecords(): Promise<{ sessionCount: number; recordCount: number }> {
     return countL0Records(this.options.dataDir);
   }
 
-  /**
-   * 列出审计镜像中出现的全部会话 key（用于"清空全部记忆"枚举）
-   *
-   * 上游 /v2/conversation/delete 需要显式 session_ids（单次上限 100），无全清接口。
-   */
   async listKnownSessionKeys(): Promise<string[]> {
     return listL0SessionKeys(this.options.dataDir);
   }
 
-  /**
-   * 按会话读取 L0 对话记录（读上游落盘的 conversations JSONL，只读展示）。
-   *
-   * 不触发 sidecar 启动：直接读数据文件，即使记忆引擎未配置/未运行也可列出
-   * 既有记录（此前走 gateway /search/conversations 需语义 query，无法"列出"某会话）。
-   */
   async listL0BySession(sessionKey: string, limit = 20): Promise<L0Record[]> {
     return readSessionRecords(this.options.dataDir, sessionKey, limit);
   }
 
-  /**
-   * 从 JSONL 审计镜像中移除指定会话的行（与引擎 SQLite 删除保持同步）。
-   *
-   * 背景：上游 standalone 模式下 L0 同时落两份——
-   * - SQLite l0_conversations（引擎权威，/v2/conversation/delete 可删）
-   * - <dataDir>/conversations/<date>.jsonl（可 grep 的审计日志，append-only）
-   * memory:list 面板读 JSONL 展示，若只删 SQLite，UI 会残留旧条目造成"假清空"。
-   * 本方法配合 clear 让 UI 列表与引擎存储一致（原子写：临时文件 + rename）。
-   *
-   * P2-26：原 readdirSync/readFileSync 全目录同步扫描 + writeFileSync 全量重写
-   * 会停摆事件循环，改为 fs.promises 异步形态（实现见 l0-rewrite.ts）。
-   *
-   * @returns 移除的行数
-   */
   async removeL0JsonlBySession(sessionKey: string): Promise<number> {
     return removeSessionLinesFromJsonl(this.options.dataDir, [sessionKey]);
   }
 
-  /**
-   * 批量移除多个会话的 JSONL 行（clearAll 用：单遍扫描统一重写）
-   *
-   * P2-26：原 clearAll 每 key 调一次 removeL0 = N 次全目录扫描 + N 次全量重写；
-   * 批量入口把 N 个 key 合并为一次扫描一次重写，语义不变（移除行集合的并集）。
-   *
-   * @returns 移除的行数
-   */
   async removeL0JsonlBySessions(sessionKeys: readonly string[]): Promise<number> {
     return removeSessionLinesFromJsonl(this.options.dataDir, sessionKeys);
   }
 
-  /**
-   * 确保 sidecar 已启动并返回记忆端口（幂等；并发调用合并为一次启动）
-   *
-   * @throws 启动超时 / 子进程早退时抛错（调用方决定是否容错）
-   */
   async ensureStarted(): Promise<MemoryPort> {
     if (this.port !== null) {
       return this.port;
@@ -232,7 +147,6 @@ export class MemoryHubService {
     return this.starting;
   }
 
-  /** 停止 sidecar（幂等；dispose 链调用） */
   async stop(): Promise<void> {
     const child = this.child;
     this.child = null;
@@ -319,17 +233,11 @@ export class MemoryHubService {
     return new HttpMemoryPort({ baseUrl, apiKey });
   }
 
-  /**
-   * 拉起引擎子进程（默认为 utilityProcess 实现；见 engine-process.ts 契约）
-   *
-   * 独立方法便于测试替换（`options.launcher` 注入 fake，无需真启动子进程）。
-   */
   private launchEngine(options: LaunchEngineOptions): EngineProcessHandle {
     const launcher = this.options.launcher ?? launchEngineProcess;
     return launcher(options);
   }
 
-  /** 解析上游入口：优先 dist 构建产物，回退 TS 源码（需 tsx） */
   private resolveEntry(hubRoot: string): { path: string; isDist: boolean } | null {
     const distEntry = join(hubRoot, 'dist', 'gateway', 'server.js');
     if (existsSync(distEntry)) {
@@ -342,7 +250,6 @@ export class MemoryHubService {
     return null;
   }
 
-  /** 生成 gateway.yaml（全部配置单点生成，便于审计与排障） */
   private async writeGatewayConfig(dataDir: string, port: number, apiKey: string): Promise<string> {
     const llmOption = this.options.llm;
     const resolvedLlm =
@@ -372,7 +279,6 @@ export class MemoryHubService {
     return configPath;
   }
 
-  /** 写出子进程启动器（内容内联于此，避免打包器遗漏非引用文件） */
   private writeLauncher(dataDir: string): string {
     const launcherPath = join(dataDir, 'launcher.mjs');
     const script = [
@@ -386,7 +292,6 @@ export class MemoryHubService {
     return launcherPath;
   }
 
-  /** 轮询 /health 直到就绪或超时（子进程早退立即失败并带 stderr 尾巴） */
   private async waitUntilHealthy(
     baseUrl: string,
     apiKey: string,
@@ -418,7 +323,6 @@ export class MemoryHubService {
     throw new Error(`${TAG} sidecar 就绪超时（${START_TIMEOUT_MS}ms）\n${stderrTail()}`);
   }
 
-  /** 选取空闲回环端口（listen(0) 后释放；存在极小竞态，健康检查兜底） */
   private pickFreePort(): Promise<number> {
     return new Promise((resolve, reject) => {
       const server = net.createServer();
@@ -438,20 +342,6 @@ export class MemoryHubService {
   }
 }
 
-/**
- * 迁移早期版本遗留在用户主目录的引擎数据（→ userData）
- *
- * 背景：早期未设 `MEMORY_TENCENTDB_ROOT`，上游默认把主库放在
- *   `~/.memory-tencentdb/memory-tdai/`。现在显式指向 userData（备份/卸载/
- *   多用户隔离都更正确），但需把既有数据搬过来，否则用户记忆"消失"。
- *
- * 策略（保守、幂等、可重入）：
- * - 仅当旧目录有数据、且新目录尚无对应文件时，逐项复制（不覆盖已有数据）
- * - 复制成功后**不删除**旧目录（保留一份以防迁移出错；用户可自行清理）
- * - 任何异常都静默（迁移失败不应阻断引擎启动）
- *
- * @returns 迁移的文件项数（0 = 无需迁移）
- */
 export function migrateLegacyDataDir(newRoot: string, homeDir?: string): number {
   try {
     const home = homeDir ?? homedir();

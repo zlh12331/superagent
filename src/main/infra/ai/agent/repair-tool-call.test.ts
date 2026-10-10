@@ -4,7 +4,6 @@ import { describe, expect, it, vi } from 'vitest';
 import type { LlmClient } from '../llm-client/llm-client';
 import { createRepairToolCall, extractRepairedToolCallJson } from './repair-tool-call';
 
-/** 最小 toolCall 结构（与实现侧 ToolCallLike 对齐） */
 interface ToolCallLike {
   readonly type: 'tool-call';
   readonly toolCallId: string;
@@ -12,13 +11,11 @@ interface ToolCallLike {
   readonly input: string;
 }
 
-/** 构造 mock LlmClient（generateText 可控） */
 function createMockLlmClient(text?: string): LlmClient {
   const generateText = vi.fn(async () => ({ text: text ?? '{}', usage: undefined }));
   return { generateText } as unknown as LlmClient;
 }
 
-/** 基础 toolCall 夹具 */
 function baseToolCall(overrides: Partial<{ name: string; input: string }> = {}): ToolCallLike {
   return {
     type: 'tool-call',

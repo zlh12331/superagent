@@ -28,7 +28,6 @@ import {
 
 const EXEC_PATH = 'E:\\apps\\Code Agent Desktop\\Code Agent Desktop.exe';
 
-/** 记录调用并可编程返回的 fake 适配器 */
 function createFakeAdapter(raw?: {
   executableWillLaunchAtLogin?: boolean;
   openAtLogin?: boolean;

@@ -8,7 +8,6 @@ import {
   QqOpCode,
 } from './qq-stream';
 
-/** 构造 Gateway 帧 */
 function frame(t: string, d: unknown): QqGatewayFrame {
   return { op: QqOpCode.DISPATCH, t, d, s: 1 };
 }

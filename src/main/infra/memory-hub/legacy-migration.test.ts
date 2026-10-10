@@ -18,7 +18,6 @@ describe('migrateLegacyDataDir', () => {
     rmSync(newRoot, { recursive: true, force: true });
   });
 
-  /** 在旧路径写入一个数据文件 */
   function seedLegacy(name: string, content: string): void {
     const dir = join(home, '.memory-tencentdb', 'memory-tdai');
     mkdirSync(dir, { recursive: true });

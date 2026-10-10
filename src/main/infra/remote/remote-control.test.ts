@@ -6,7 +6,6 @@ import {
   RemoteControlService,
 } from './remote-control';
 
-/** 本用例启动的服务（afterEach 统一 stop，防端口/定时器残留） */
 const activeServices: RemoteControlService[] = [];
 
 async function startService(options?: ConstructorParameters<typeof RemoteControlService>[0]) {
@@ -368,7 +367,6 @@ describe('RemoteControlService（局域网发现广播）', () => {
 });
 
 describe('RemoteControlService（绑定范围）', () => {
-  /** 绑定回环随机端口的公告接收端（单播注入，跨平台稳定） */
   async function bindReceiver(): Promise<UdpSocket> {
     const receiver = createSocket({ type: 'udp4' });
     await new Promise<void>((resolve, reject) => {
@@ -378,7 +376,6 @@ describe('RemoteControlService（绑定范围）', () => {
     return receiver;
   }
 
-  /** 等待首个公告包（超时未收到即失败） */
   function firstPacket(receiver: UdpSocket, timeoutMs: number): Promise<void> {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(
@@ -392,7 +389,6 @@ describe('RemoteControlService（绑定范围）', () => {
     });
   }
 
-  /** 断言窗口内静默（无任何公告到达；收到即失败） */
   function expectSilent(receiver: UdpSocket, windowMs: number): Promise<void> {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {

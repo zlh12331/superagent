@@ -3,17 +3,12 @@ import { t } from '../../i18n';
 import { cronService } from '../agent/cron-service';
 import type { Tool, ToolContext, ToolResult } from './tool';
 
-/** cron_delete 入参 */
 const CronDeleteInputSchema = z.object({
-  /** 任务 id（cron_list 可查） */
   taskId: z.string().min(1).max(64),
 });
 
 type CronDeleteInput = z.infer<typeof CronDeleteInputSchema>;
 
-/**
- * 创建 cron_delete 工具（依赖模块级 CronService 单例）
- */
 export function createCronDeleteTool(): Tool<CronDeleteInput> {
   return {
     name: 'cron_delete',

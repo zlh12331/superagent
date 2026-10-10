@@ -38,7 +38,6 @@ export type {
   RuntimeModelSnapshot,
 };
 
-/** 模块级模型注册表单例（应用全局唯一） */
 export const modelRegistry = new ModelRegistry({
   entries: BUILTIN_MODELS,
   defaultModelByKind: DEFAULT_MODEL_BY_KIND,

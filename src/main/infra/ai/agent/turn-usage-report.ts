@@ -2,11 +2,6 @@ import type { TurnUsage } from '@code-agent/shared/main';
 import { logger } from '../../../utils/logger';
 import type { ISessionService } from '../../storage/session-service';
 
-/**
- * AI SDK totalUsage 的最小结构投影（与 SDK 精确类型解耦，同 StreamPart 哲学）。
- * 可选字段显式 `| undefined`（SDK 源类型即此形态，exactOptionalPropertyTypes
- * 下 `?: number` 与其不兼容）。
- */
 export interface SdkTotalUsageLike {
   readonly inputTokens: number | undefined;
   readonly outputTokens: number | undefined;
@@ -15,7 +10,6 @@ export interface SdkTotalUsageLike {
   readonly outputTokenDetails?: { readonly reasoningTokens: number | undefined } | undefined;
 }
 
-/** 上报依赖（注入便于测试）；span 用结构最小类型，避免耦合 otel 具体 API */
 export interface TurnUsageReportDeps {
   readonly recordUsage: (
     input: Parameters<ISessionService['recordUsage']>[0],
@@ -25,13 +19,6 @@ export interface TurnUsageReportDeps {
     | undefined;
 }
 
-/**
- * SDK usage → 领域 TurnUsage 投影（可选字段条件展开；undefined 透传）
- *
- * usage 为 null/undefined 时返回 undefined（该回合无用量信息，不构造空对象）。
- * 每个字段仅在源值非 undefined 时才写入，保持与 TurnUsage 可选字段语义一致；
- * 因此返回对象可能只有部分字段甚至为空对象。
- */
 export function projectTurnUsage(
   usage: SdkTotalUsageLike | null | undefined,
 ): TurnUsage | undefined {
@@ -51,14 +38,6 @@ export function projectTurnUsage(
   };
 }
 
-/**
- * 回合 usage 遥测：日志 + 用量持久化（设置页统计）+ span 打点。
- * 持久化失败不阻断主流程；span 打点前逐字段守卫（setAttribute 不接受 undefined）。
- *
- * usage 缺失时整体短路（无用量即无需上报）。recordUsage 传参时把缺省字段
- * 归零（?? 0），但 cacheReadTokens / reasoningTokens 保持可选透传（undefined
- * 表示"未提供"而非 0，避免把缓存命中/思维链计入零值污染统计）。
- */
 export function reportTurnUsage(
   deps: TurnUsageReportDeps,
   args: {

@@ -17,32 +17,10 @@ import {
 import { restrictFileAccessWin32 } from './keychain';
 import { schema } from './schema';
 
-/**
- * 数据库文件名
- *
- * 存放在 userData 目录下，与 keychain.dat / logs/ 同级。
- */
 const DB_FILENAME = 'sessions.db';
-/** PRAGMA auto_vacuum 的 INCREMENTAL 取值（0=NONE 默认 / 1=FULL / 2=INCREMENTAL） */
 const AUTO_VACUUM_INCREMENTAL = 2;
-/**
- * freelist 达到该页数才做增量回收（默认页 4KB ⇒ 约 4MB）
- *
- * 阈值而非"每次删除后都跑"：incremental_vacuum 要遍历 freelist 并截断文件，
- * 放在每条删除路径上会让主进程为小改动反复付截断代价。
- */
 const FREELIST_RECLAIM_PAGES = 1024;
 
-/**
- * 限制敏感数据文件权限为仅属主可读写
- *
- * 安全修复：SQLite 含完整对话历史（工具参数/文件内容/命令输出），
- * 默认 umask（Linux 常为 644）下同机其他进程可读。
- * - POSIX：chmod 0600
- * - Windows：icacls 剥继承 + 仅当前用户（2026-09-28 深读收口——此前完全跳过、
- *   只依赖 %APPDATA% 默认 ACL，与 keychain.dat 的纵深标准不一致；实现复用
- *   keychain 的 whoami/icacls 机制，含「解析失败保持继承 ACL 不锁死属主」教训）
- */
 function restrictFilePermissions(filePath: string): void {
   if (process.platform === 'win32') {
     restrictFileAccessWin32(filePath);
@@ -53,13 +31,6 @@ function restrictFilePermissions(filePath: string): void {
   } catch {}
 }
 
-/**
- * 备份调度入口（唯一写路径）
- *
- * 备份文件操作已抽到 backup-store（37 号 B）；本函数保留「原子落盘后轮转」
- * 失败收尾的语义边界：失败时清 .db.tmp 残片、记日志、不阻断启动。
- * pendingBackup 赋值使 closeDb 可等待在途备份落地。
- */
 function runBackup(sqlite: Database.Database, dbPath: string): Promise<void> {
   const run = (): Promise<void> =>
     createBackupFile(sqlite, dbPath)
@@ -76,16 +47,6 @@ function runBackup(sqlite: Database.Database, dbPath: string): Promise<void> {
   return task;
 }
 
-/**
- * 手动立即备份（37 号 B：设置页「立即备份」入口）
- *
- * 与启动备份共用同一路径与轮转环；经 pendingBackup 串行化——在途启动备份
- * 未落地时手动备份排队等待（两次 backup() 并发会在同一轮转环内竞态计数）。
- *
- * @returns 新备份文件名（裸名）
- * @throws Error 备份失败（磁盘满/权限等，备份目录未就绪时也在此抛出——
- *   手动入口与启动入口的失败语义不同：前者要用户可见，后者只记日志）
- */
 export async function createManualBackup(): Promise<{ readonly name: string }> {
   if (pendingBackup !== null) {
     await pendingBackup;
@@ -98,16 +59,6 @@ export async function createManualBackup(): Promise<{ readonly name: string }> {
   return { name };
 }
 
-/**
- * 调度启动热备份（异步发起，不阻塞启动）
- *
- * 调用时机与条件（2026-09-06 审计修复）：
- * - **必须在 migrate 成功之后**：迁移前调度会让在途备份与迁移写在同一帧交错，
- *   快照一致性无保证
- * - **仅在库健康时**：备份按时间戳进入轮转环，BACKUP_KEEP 次重启后即把唯一
- *   健康的恢复点全部覆盖为损坏/空副本
- * - 完整性结论复用 restoreCorruptDatabase 的 quick_check（此前每启跑两遍全库扫描）
- */
 function scheduleStartupBackup(
   sqlite: Database.Database,
   dbPath: string,
@@ -120,16 +71,6 @@ function scheduleStartupBackup(
   void runBackup(sqlite, dbPath);
 }
 
-/**
- * 从最近健康备份恢复数据库文件（2026-09-04 新增：损坏自愈）
- *
- * 策略：从新到旧遍历 backups/ 轮转环，逐份 quick_check 验证，
- * 取第一份健康备份覆盖主库文件（并清理可能不匹配的 WAL/SHM 残件）。
- * 若轮转环全部损坏（极端情况）返回 false。
- *
- * 37 号 B：轮转环遍历与健康判据复用 backup-store（备份文件操作单点）——
- * 本函数只保留「覆盖主库 + 权限 + 日志」的自愈专有部分。
- */
 function tryRestoreFromBackup(dbPath: string): boolean {
   const backupDir = backupDirPath(dbPath);
   const backups = listBackupNames(dbPath);
@@ -162,35 +103,13 @@ function tryRestoreFromBackup(dbPath: string): boolean {
   return false;
 }
 
-/** 损坏自愈结论：healthy=原库健康；restored=已从备份恢复；rebuilt=已重建空库 */
 type RecoveryStatus = 'healthy' | 'restored' | 'rebuilt';
 
-/** 自愈结论 + 可用连接（调用方据 status 决定是否调度启动备份） */
 interface RecoveryOutcome {
   readonly sqlite: Database.Database;
   readonly status: RecoveryStatus;
 }
 
-/**
- * 数据库损坏自愈（quick_check 失败 → 恢复/重建）
- *
- * @param sqlite 当前（已打开但可能损坏的）连接；打开阶段即失败时传 null
- * @param dbPath 数据库文件路径
- * @returns 可用连接 + 结论状态（healthy 时原样返回入参连接）
- *
- * 策略：
- * 1. quick_check 通过 → 返回 healthy（健康，不动作）
- * 2. 损坏 → 从最近健康备份恢复并重开连接（返回新连接，走默认 pragma）
- * 3. 无健康备份 → 将损坏文件归档为 *.corrupt-<ts>（保留诊断），重建空库保启动
- *    （对齐 VS Code 设置损坏重建语义：丢数据但应用可继续用）
- *
- * 2026-09-08 安全/可靠性修复（P0）：入参允许 null。
- * 此前 initDb 先 `applyDefaultPragmas`（内含 `journal_mode = WAL`）再调本函数，
- * 而文件头损坏/截断/非 SQLite 文件时 `new Database` 能成功打开、`journal_mode`
- * 却直接抛 `file is not a database`——initDb 在 pragma 处就抛出，
- * 永远走不到自愈分支，三份备份形同虚设（用户表现为「应用打不开」）。
- * 现在打开/pragma 阶段的失败会被捕获并转入本函数（sqlite=null 表示连接不可用）。
- */
 function restoreCorruptDatabase(sqlite: Database.Database | null, dbPath: string): RecoveryOutcome {
   if (sqlite !== null) {
     let integrity: unknown;
@@ -240,12 +159,6 @@ function restoreCorruptDatabase(sqlite: Database.Database | null, dbPath: string
   return { sqlite: fresh, status: 'rebuilt' };
 }
 
-/**
- * 应用默认 pragma（打开连接后统一调用）
- *
- * 集中化：initDb 与损坏恢复（restoreCorruptDatabase 重开连接）共用，
- * 避免两处 pragma 漂移。
- */
 function applyDefaultPragmas(sqlite: Database.Database, dbPath: string): void {
   sqlite.pragma('journal_mode = WAL');
   restrictFilePermissions(`${dbPath}-wal`);
@@ -255,52 +168,19 @@ function applyDefaultPragmas(sqlite: Database.Database, dbPath: string): void {
   sqlite.pragma('synchronous = NORMAL');
 }
 
-/**
- * 获取数据库文件路径
- *
- * 路径：%APPDATA%/<AppName>/sessions.db
- * - dev 环境：项目内 .electron-user-data/sessions.db（index.ts 在 !isPackaged 时重定向；
- *   E2E 可用 CODE_AGENT_USER_DATA 环境变量覆盖，仅未打包时生效）
- * - prod 环境：%APPDATA%/Code Agent Desktop/sessions.db（目录名取 electron-builder 的
- *   productName，**含空格**——拼接命令行引用此路径时必须加引号，先例见 autostart
- *   的 quoteForCommandLine）
- *
- * 外部导出供测试使用（注入临时路径）。
- */
 export function getDbPath(): string {
   const userDataPath = app.getPath('userData');
   return join(userDataPath, DB_FILENAME);
 }
 
-/** drizzle 实例类型（基于 schema 推导） */
 type DrizzleDB = BetterSQLite3Database<typeof schema>;
 
-/** 数据库实例缓存（单例，首次调用 initDb 创建） */
 let dbInstance: DrizzleDB | null = null;
 
-/** better-sqlite3 原始实例缓存（用于关闭连接） */
 let sqliteInstance: Database.Database | null = null;
 
-/**
- * 在途备份串行链尾（无则 idle）
- *
- * runBackup 把新任务排队挂链（.then 串行）而非覆盖赋值——单槽会让前序
- * 备份的 Promise 从槽位脱落，drain/closeDb 只等到最后一个，前序备份仍在
- * 线程池写 .tmp 时断言/关连接即踩竞态（macOS runner 实证 2026-10-08）。
- * 等到链尾即等到全部在途备份。
- */
 let pendingBackup: Promise<void> | null = null;
 
-/**
- * 极老库兼容补丁：迁移前为 runtime_models 补齐缺失列（幂等）
- *
- * 背景（2026-08-27 生产库实测暴露）：手写 schema-sql.ts 时代早期创建的库，
- * runtime_models 只有 model_id/provider_kind/base_url/created_at 4 列——
- * 后来新增的 display_name/is_enabled 只随 CREATE TABLE IF NOT EXISTS 落在
- * 新库，老库从未 ALTER。迁移 0001 的 INSERT...SELECT 显式列举全列 →
- * 极老库报 "no such column: display_name"，整批迁移回滚，应用启动失败。
- * 此处按 pragma table_info 探测缺列并 ALTER 补齐，使 0001 可正常执行。
- */
 function normalizeLegacyRuntimeModels(sqlite: Database.Database): void {
   const table = sqlite
     .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'runtime_models'")
@@ -322,14 +202,6 @@ function normalizeLegacyRuntimeModels(sqlite: Database.Database): void {
   }
 }
 
-/**
- * 解析 drizzle 迁移目录
- *
- * - dev / 测试：仓库根 drizzle/（drizzle-kit generate 的产物，入仓管理）；
- *   启动方式导致 getAppPath() 非仓库根时（如 electron 直接执行入口文件），
- *   按候选路径探测回退（见实现）
- * - 打包环境：resources/drizzle（electron-builder extraResources 复制）
- */
 function resolveMigrationsDir(): string {
   if (app.isPackaged) {
     return join(process.resourcesPath, 'drizzle');
@@ -347,17 +219,6 @@ function resolveMigrationsDir(): string {
   return candidates[0] as string;
 }
 
-/**
- * 打开连接并应用默认 pragma（2026-09-08 提取）
- *
- * 从 initDb 抽出，一是让 initDb 保持可读（函数体门禁 ≤40 行），
- * 二是把「打开阶段可能失败」这一事实封装在单点：
- * 文件头损坏/截断/非 SQLite 文件时 `new Database` 能成功打开，但
- * `journal_mode = WAL` 会抛 `file is not a database`。返回 null 表示
- * 连接不可用，由调用方交给 restoreCorruptDatabase 自愈。
- *
- * @returns 可用连接；打开或 pragma 阶段失败返回 null
- */
 function openWithDefaultPragmas(dbPath: string): Database.Database | null {
   let sqlite: Database.Database | null = null;
   try {
@@ -377,29 +238,6 @@ function openWithDefaultPragmas(dbPath: string): Database.Database | null {
   }
 }
 
-/**
- * 初始化数据库
- *
- * 流程：
- * 1. 确保 userData 目录存在（mkdirSync recursive）
- * 2. **消费待应用恢复（37 号 B）**：备份恢复暂存存在时替换主库文件——
- *    必须在任何连接打开之前（WAL 句柄冲突）
- * 3. 打开 better-sqlite3 连接（同步）
- * 4. 配置 WAL 模式（提升并发读性能）
- * 5. 创建 drizzle 实例
- * 6. 执行 drizzle-kit 生成的迁移（schema.ts 单一真源自动派生，幂等）
- *
- * 启动顺序（2026-09-06 审计修复，2026-09-08 加固，37 号 B 扩展）：
- * - **先消费恢复暂存再打开连接**：暂存替换只有放在连接打开前才无句柄冲突
- * - **先损坏自愈再 VACUUM**：损坏库上任何写操作（含 VACUUM）都会先抛
- *   SQLITE_CORRUPT，把 auto_vacuum 转换放在前面会让自愈永远走不到
- *   （auto_vacuum=NONE 的老库一旦损坏 = 每次启动即死，健康备份形同虚设）
- * - **打开/pragma 失败也转入自愈**：文件头损坏时 `journal_mode = WAL` 会抛
- *   `file is not a database`，若不让该异常进入自愈流程，备份将永远用不上
- * - **迁移成功后才调度备份**：空库被备份会按时间戳挤掉轮转环里唯一健康的恢复点
- *
- * @returns drizzle 实例（后续 SessionService 使用）
- */
 export function initDb(): DrizzleDB {
   if (dbInstance !== null) {
     return dbInstance;
@@ -451,14 +289,6 @@ export function initDb(): DrizzleDB {
   return db;
 }
 
-/**
- * 获取 drizzle 实例
- *
- * 必须在 initDb 之后调用，否则抛错。
- * SessionService 通过此函数获取 db 实例。
- *
- * @throws Error 如果未初始化
- */
 export function getDb(): DrizzleDB {
   if (dbInstance === null) {
     throw new Error('数据库未初始化，请先调用 initDb()');
@@ -466,17 +296,6 @@ export function getDb(): DrizzleDB {
   return dbInstance;
 }
 
-/**
- * 确保库处于 auto_vacuum=INCREMENTAL（幂等，仅首次需要一次 VACUUM）
- *
- * 缺陷背景：SQLite 默认 auto_vacuum=NONE，DELETE 释放的页只进 freelist，
- * 文件永不缩小——实测 20000 行消息删掉 90% 后文件仍为 82.47MB
- * （freelist 9016 / page_count 10025）。且 NONE 模式下 `PRAGMA incremental_vacuum`
- * 是空操作（实测 freed_pages=0），所以光加回收调用并不能修复，必须先转换模式。
- *
- * 已有表的库仅改 pragma 不生效，必须跟随一次 VACUUM 重写页布局
- * （实测 82MB 库 35ms，之后 auto_vacuum 持久记在文件头，只付一次）。
- */
 function ensureIncrementalAutoVacuum(sqlite: Database.Database): void {
   const current = Number(sqlite.pragma('auto_vacuum', { simple: true }));
   if (current === AUTO_VACUUM_INCREMENTAL) {
@@ -491,18 +310,6 @@ function ensureIncrementalAutoVacuum(sqlite: Database.Database): void {
   );
 }
 
-/**
- * 把 freelist 空闲页归还给磁盘
- *
- * 由删除路径在批量删除后调用（会话级联删除、统计窗口清理）。未达
- * {@link FREELIST_RECLAIM_PAGES} 阈值时直接返回 0，避免小改动反复截断。
- *
- * WAL 模式下必须跟一次 checkpoint：incremental_vacuum 只更新主库页布局，
- * 被释放的字节仍留在 -wal 中，不做 checkpoint 磁盘占用不会下降。
- *
- * @returns 归还给磁盘的页数
- * @throws Error 数据库未初始化
- */
 export function reclaimFreePages(): number {
   if (sqliteInstance === null) {
     throw new Error('数据库未初始化，请先调用 initDb()');
@@ -521,16 +328,6 @@ export function reclaimFreePages(): number {
   return freed;
 }
 
-/**
- * 等待在途备份全部落地（不关闭连接）
- *
- * 备份以 void 异步发起（copyFileSync 到 .tmp → renameSync 原子落位），
- * 本函数等待备份串行链尾——链尾完成即链上全部备份落地（单槽时代只等
- * 最后一个、前序仍在写 .tmp 的竞态已由 runBackup 挂链根治）。调用后
- * 备份目录处于稳定态，可对「无 .tmp 残留」做确定性断言。
- *
- * 幂等：多次调用安全。
- */
 export async function drainPendingBackups(): Promise<void> {
   const tail = pendingBackup;
   if (tail !== null) {
@@ -541,17 +338,6 @@ export async function drainPendingBackups(): Promise<void> {
   }
 }
 
-/**
- * 关闭数据库连接
- *
- * 应用退出时调用，释放 SQLite 文件句柄。
- * WAL 模式下关闭会自动 checkpoint（合并 WAL 到主数据库）。
- *
- * 关闭前先等待在途启动备份落地（drainPendingBackups）：备份若继续跑在已关闭的
- * 连接上会产出截断副本，而轮转按 *.db 计数——假恢复点比没有备份更危险。
- *
- * 幂等：多次调用安全。
- */
 export async function closeDb(): Promise<void> {
   await drainPendingBackups();
   if (sqliteInstance !== null) {
@@ -562,12 +348,6 @@ export async function closeDb(): Promise<void> {
   }
 }
 
-/**
- * 重置数据库实例（仅测试用）
- *
- * 测试场景：每个测试用例独立数据库，需要重置单例缓存。
- * 不调用 closeDb（不关闭真实连接），仅清空缓存引用。
- */
 export function resetDb(): void {
   dbInstance = null;
   sqliteInstance = null;

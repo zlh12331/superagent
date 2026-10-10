@@ -5,17 +5,13 @@ import type { WebContents } from 'electron';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { getTerminalService } from './terminal-service';
 
-/** 输出行数（2000 行 ≈ 40KB，低于 100KB 环形截断阈值） */
 const OUTPUT_LINES = 2000;
-/** 等待超时（ms） */
 const TIMEOUT_MS = 15_000;
-/** 回显偏移：PTY 输入行回显包含 1 次字面 perf-line-（cmd 命令行），故目标计数 = 输出行数 + 1 */
 const ECHO_OFFSET = 1;
 
 let tempDir: string;
 let sendCount = 0;
 
-/** fake webContents：只计数事件推送，不真正发送 */
 function createFakeWebContents(): WebContents {
   return {
     isDestroyed: () => false,
@@ -25,8 +21,6 @@ function createFakeWebContents(): WebContents {
   } as unknown as WebContents;
 }
 
-/** 等待输出缓冲中 perf-line- 计数达到目标（轮询，超时抛错）
- * 注意：PTY 输入回显也含 1 次字面匹配，目标 = 输出行数 + 回显偏移 */
 async function waitForLineCount(
   getOutput: () => string,
   minCount: number,

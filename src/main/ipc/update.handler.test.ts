@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createUpdateHandlers, type UpdateHandlerDeps } from './update.handler';
 
-/** 创建 fake UpdateService */
 function createFakeUpdateService() {
   return {
     start: vi.fn(),

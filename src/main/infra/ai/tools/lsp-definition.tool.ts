@@ -5,21 +5,14 @@ import type { LspServerManager } from '../../lsp/lsp-server-manager';
 import { resolveWithinWorkspace } from './path-guard';
 import type { Tool, ToolContext, ToolResult } from './tool';
 
-/** lsp_definition 入参 */
 const LspDefinitionInputSchema = z.object({
-  /** 目标文件绝对路径 */
   filePath: z.string().min(1).max(500),
-  /** 行号（0 基） */
   line: z.number().int().min(0),
-  /** 列号（0 基） */
   character: z.number().int().min(0),
 });
 
 type LspDefinitionInput = z.infer<typeof LspDefinitionInputSchema>;
 
-/**
- * 创建 lsp_definition 工具（依赖注入 LspServerManager）
- */
 export function createLspDefinitionTool(manager: LspServerManager): Tool<LspDefinitionInput> {
   return {
     name: 'lsp_definition',

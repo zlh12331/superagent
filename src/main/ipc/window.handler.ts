@@ -3,10 +3,6 @@ import { BrowserWindow } from 'electron';
 
 import { logger } from '../utils/logger';
 
-/**
- * Window 域 handler 工厂（无外部依赖；zoom 值经 clampZoom 兜底归一——
- * 渲染层已 clamp，此处防御 handler 直调方）
- */
 export function createWindowHandlers(): {
   applyZoom: (input: { zoom: number }) => Promise<{ ok: boolean }>;
 } {
@@ -28,12 +24,6 @@ export function createWindowHandlers(): {
   };
 }
 
-/**
- * Windows titleBarOverlay.height 随缩放联动（win32 专属）
- *
- * 52 DIP 是控件区基准（window.ts 创建参数）；CSS 顶栏随 zoomFactor 缩放而
- * overlay.height 固定，不联动则非 100% 档位窗口控件区与自绘顶栏错位。
- */
 function applyTitleBarOverlayHeight(zoom: number): void {
   if (process.platform !== 'win32') {
     return;

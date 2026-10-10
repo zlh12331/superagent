@@ -4,7 +4,6 @@ import { llmClient } from '../infra/ai/llm-client/ai-provider';
 import { skillRegistry } from '../infra/ai/skills/skill-registry';
 import type { IpcHandlerContext } from '../utils/wrap';
 
-/** 技能域 handler 实现（依赖模块级 skillRegistry 单例 + LearnSkillService） */
 export const skillHandlers: InferHandlers<typeof IPC_DEFINITIONS, IpcHandlerContext>['skill'] = {
   list: async () => {
     const skills = skillRegistry.list();

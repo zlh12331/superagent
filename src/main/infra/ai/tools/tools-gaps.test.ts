@@ -15,7 +15,6 @@ import { createWriteFileTool } from './write-file.tool';
 let workDir: string;
 let sessionCounter = 0;
 
-/** 每次用例独立 sessionId（readTracker 按 session 隔离，避免跨用例污染） */
 function createCtx(): ToolContext {
   sessionCounter += 1;
   return {
@@ -80,7 +79,6 @@ describe('工具域 7a 缺口补全', () => {
   });
 
   describe('edit_file 边界', () => {
-    /** 创建文件并先 read（满足 priorReadEnforcement；read/edit 共享同一 sessionId） */
     async function readThenEdit(file: string): Promise<{
       tool: ReturnType<typeof createEditFileTool>;
       ctx: ToolContext;

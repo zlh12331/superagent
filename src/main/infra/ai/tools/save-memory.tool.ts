@@ -4,19 +4,13 @@ import { isMemoryEnabled } from '../../memory-hub/memory-pref';
 import type { MemoryPort } from '../../memory-hub/types';
 import type { Tool, ToolContext, ToolResult } from './tool';
 
-/** save_memory 入参 */
 const SaveMemoryInputSchema = z.object({
-  /** 记忆内容（跨会话保留的事实/偏好） */
   content: z.string().min(1).max(500),
-  /** 记忆类别（缺省 fact；作为蒸馏提示保留入参兼容） */
   kind: z.enum(['fact', 'preference']).optional(),
 });
 
 type SaveMemoryInput = z.infer<typeof SaveMemoryInputSchema>;
 
-/**
- * 创建 save_memory 工具（依赖注入 MemoryPort）
- */
 export function createSaveMemoryTool(memoryPort: MemoryPort): Tool<SaveMemoryInput> {
   return {
     name: 'save_memory',

@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => {
-  /** 伪窗口集合：每项含 setZoomFactor/setTitleBarOverlay 的 spy */
   const windows: {
     destroyed: boolean;
     setZoomFactor: ReturnType<typeof vi.fn>;
@@ -10,7 +9,6 @@ const mocks = vi.hoisted(() => {
   return { windows };
 });
 
-/** process.platform stub（handler 读真实 process.platform，不可用内部变量） */
 function setPlatform(p: string): void {
   Object.defineProperty(process, 'platform', { value: p, configurable: true });
 }

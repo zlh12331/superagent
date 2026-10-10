@@ -5,7 +5,6 @@ import { resolveProviderRequestUrl } from './endpoint';
 import { ProviderRegistry } from './registry';
 import type { ProviderKind } from './types';
 
-/** 测试用占位凭据（非真实密钥；SDK 需非空 key 才会构造授权头） */
 const PLACEHOLDER_CREDENTIAL = 'placeholder-not-real';
 
 const mocks = vi.hoisted(() => ({
@@ -19,15 +18,8 @@ const mocks = vi.hoisted(() => ({
 vi.mock('electron', () => ({ app: mocks.mockApp }));
 vi.mock('../../utils/logger', () => ({ logger: mocks.mockLogger }));
 
-/** 捕获到的请求 URL（每次 stub 重置） */
 let capturedUrls: string[] = [];
 
-/**
- * stub 全局 fetch：记录 URL 后抛错
- *
- * 工厂链路是 provider → proxiedFetch → 全局 fetch（非 fixed 代理模式直通），
- * stub 全局 fetch 即覆盖全部供应商（含官方 SDK anthropic/openai）。
- */
 function stubUrlCapturingFetch(): void {
   capturedUrls = [];
   vi.stubGlobal('fetch', async (url: unknown): Promise<never> => {
@@ -36,14 +28,6 @@ function stubUrlCapturingFetch(): void {
   });
 }
 
-/**
- * 触发一次模型调用并取回 SDK 构造的 URL
- *
- * doStream/doGenerate 任一试通即可（不同 provider 实现路径不同）；调用参数
- * 故意最小——SDK 在构造 URL 后才校验请求体，URL 捕获先于任何语义校验。
- * 类型经结构断言放宽（`LanguageModel` 为联合类型，v4 接口在运行期同为
- * doGenerate/doStream，与 registry-factory.test 的既有写法一致）。
- */
 async function captureRequestUrl(model: LanguageModel): Promise<string> {
   const callable = model as unknown as {
     doStream: (options: unknown) => Promise<unknown>;
@@ -64,7 +48,6 @@ async function captureRequestUrl(model: LanguageModel): Promise<string> {
   throw new Error('未能捕获任何请求 URL（SDK 未发起 fetch？）');
 }
 
-/** 用例矩阵：kind + 用户可能填写的 baseUrl 形态 */
 const CASES: ReadonlyArray<{ kind: ProviderKind; baseUrl: string }> = [
   { kind: 'deepseek', baseUrl: 'http://127.0.0.1:9527/v1' },
   { kind: 'deepseek', baseUrl: 'http://127.0.0.1:9527' },
@@ -81,12 +64,6 @@ const CASES: ReadonlyArray<{ kind: ProviderKind; baseUrl: string }> = [
   { kind: 'anthropic', baseUrl: 'https://my-gw.example.com/v1' },
 ];
 
-/**
- * 显式 API 格式用例矩阵（自定义模型三格式切换）
- *
- * 锁定「用户选的格式 = SDK 实际请求的协议」——格式选错（如选 responses 却
- * 仍打 chat/completions）会让真实调用与探测/UI 三方分裂。
- */
 const FORMAT_CASES: ReadonlyArray<{
   kind: ProviderKind;
   baseUrl: string;

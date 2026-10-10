@@ -4,7 +4,6 @@ import { EventLoopLagMonitor, type LagHistogram } from './event-loop-lag';
 
 const monitors: EventLoopLagMonitor[] = [];
 
-/** 直方图 fake：percentile 返回可编程纳秒值 */
 function createFakeHistogram(initialNs = 0) {
   const calls = { enable: 0, disable: 0, reset: 0 };
   let valueNs = initialNs;
@@ -26,7 +25,6 @@ function createFakeHistogram(initialNs = 0) {
   return {
     histogram,
     calls,
-    /** 设置下一采样将读到的分位值（纳秒） */
     setNs: (v: number) => {
       valueNs = v;
     },

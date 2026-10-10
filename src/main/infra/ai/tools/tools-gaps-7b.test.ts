@@ -33,7 +33,6 @@ function createCtx(overrides?: { aborted?: boolean }): ToolContext {
   };
 }
 
-/** 构造可解析的 spawn mock（stdout/stderr/close/error 可控） */
 function mockSpawnChild(options: {
   stdout?: string;
   stderr?: string;

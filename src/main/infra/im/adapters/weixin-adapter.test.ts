@@ -3,7 +3,6 @@ import type { ChannelIncomingMessage } from '../channel/types';
 import { WeixinAdapter } from './weixin-adapter';
 import type { WeixinStreamReceiver } from './weixin-stream';
 
-/** fake 接收器：捕获 onMessage handler 可手动触发 */
 class FakeWeixinReceiver {
   handler: ((message: ChannelIncomingMessage) => void) | undefined;
   readonly open = vi.fn(async () => {});
@@ -19,10 +18,8 @@ class FakeWeixinReceiver {
   }
 }
 
-/** 当前测试的共享 receiver（SharedWeixinReceiver 构造返回它，保持 adapter 的 new 语义） */
 let currentReceiver: FakeWeixinReceiver;
 
-/** 测试桩：new 返回共享 receiver 实例 */
 class SharedWeixinReceiver {
   constructor() {
     // biome-ignore lint/correctness/noConstructorReturn: 测试桩返回共享实例（保持 new 语义）

@@ -21,7 +21,6 @@ import {
   UpdateService,
 } from './update-service';
 
-/** fake updater 形状（含测试控制字段） */
 type FakeUpdater = AutoUpdaterLike & {
   listeners: Map<string, (arg?: unknown) => void>;
   checkForUpdates: ReturnType<typeof vi.fn>;
@@ -30,7 +29,6 @@ type FakeUpdater = AutoUpdaterLike & {
   on: ReturnType<typeof vi.fn>;
 };
 
-/** 创建 fake autoUpdater（记录事件监听，测试可手动触发） */
 function createFakeUpdater(): FakeUpdater {
   const listeners = new Map<string, (arg?: unknown) => void>();
   const updater = {
@@ -50,7 +48,6 @@ function createFakeUpdater(): FakeUpdater {
   return updater as unknown as FakeUpdater;
 }
 
-/** 创建 fake 取消令牌（cancel 后 cancelled 置真） */
 function createFakeToken(): CancellationTokenLike & { cancel: ReturnType<typeof vi.fn> } {
   let cancelled = false;
   return {
@@ -63,7 +60,6 @@ function createFakeToken(): CancellationTokenLike & { cancel: ReturnType<typeof 
   };
 }
 
-/** 触发 autoUpdater 事件 */
 function fire(updater: FakeUpdater, event: string, arg?: unknown): void {
   const listener = updater.listeners.get(event);
   if (listener !== undefined) {
@@ -71,7 +67,6 @@ function fire(updater: FakeUpdater, event: string, arg?: unknown): void {
   }
 }
 
-/** 创建 fake 窗口（记录 webContents.send / setProgressBar；R2：emitEvent 需要 webContents.isDestroyed） */
 function createFakeWindow() {
   const send = vi.fn();
   const setProgressBar = vi.fn();
@@ -82,7 +77,6 @@ function createFakeWindow() {
   };
 }
 
-/** 取窗口上收到的最后一个 payload */
 function lastPayload(win: ReturnType<typeof createFakeWindow>): unknown {
   const calls = win.webContents.send.mock.calls;
   const last = calls[calls.length - 1];

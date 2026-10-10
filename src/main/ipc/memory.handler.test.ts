@@ -6,7 +6,6 @@ import { createMemoryHandlers, type MemoryStatusDeps } from './memory.handler';
 
 vi.mock('../infra/invalidation/invalidation', () => ({ broadcastInvalidation: vi.fn() }));
 
-/** 创建 fake 状态依赖（各方法可被用例覆盖） */
 function createStatusDeps(overrides: Partial<MemoryStatusDeps> = {}): MemoryStatusDeps {
   return {
     isEnabled: () => true,

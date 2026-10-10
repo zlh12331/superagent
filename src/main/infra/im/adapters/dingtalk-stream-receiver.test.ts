@@ -2,7 +2,6 @@ import { ErrorCode } from '@code-agent/shared/main';
 import { describe, expect, it, vi } from 'vitest';
 import { DingTalkStreamReceiver } from './dingtalk-stream';
 
-/** 可编程 WebSocket 桩：捕获事件监听，测试手动触发 */
 class FakeWebSocket {
   readonly url: string;
   readonly send = vi.fn();
@@ -31,10 +30,8 @@ class FakeWebSocket {
   }
 }
 
-/** 当前测试的共享 WS 实例（SharedWebSocketCtor 构造返回它） */
 let currentWs: FakeWebSocket;
 
-/** 测试桩：new 返回共享 WS 实例（open 的异步链中构造，需保持同一对象） */
 class SharedWebSocketCtor {
   constructor(url: string) {
     (currentWs as unknown as { url: string }).url = url;
@@ -43,7 +40,6 @@ class SharedWebSocketCtor {
   }
 }
 
-/** 按 URL 分发的 fake fetch（POST accessToken / GET gateway） */
 function makeFetch(): ReturnType<typeof vi.fn> {
   return vi.fn(async (url: string) => {
     if (url.includes('/accessToken')) {
@@ -80,7 +76,6 @@ function makeReceiver(
   return { receiver, fetchFn, ws };
 }
 
-/** 构造合法 ChatbotMessage data 帧 */
 function chatbotFrame(overrides: Record<string, unknown> = {}): unknown {
   return {
     type: 'data',

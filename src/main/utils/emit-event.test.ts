@@ -22,7 +22,6 @@ vi.mock('./logger', () => ({
 
 import { emitEvent, resetStreamSampleCounts } from './emit-event';
 
-/** 构造最小 webContents mock（R2：emitEvent 内置 isDestroyed 防御，mock 需暴露该方法） */
 function createWebContents() {
   return { send: mockSend, isDestroyed: () => false } as never;
 }

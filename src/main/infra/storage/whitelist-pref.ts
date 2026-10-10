@@ -5,14 +5,10 @@ import type { WhitelistEntry } from '@code-agent/shared/main';
 import { app } from 'electron';
 import { logger } from '../../utils/logger';
 
-/** 偏好文件路径（userData 目录） */
 function whitelistPrefPath(): string {
   return join(app.getPath('userData'), 'whitelist.json');
 }
 
-/**
- * 同步读取白名单（启动时用；文件缺失/损坏回退空列表）
- */
 export function readWhitelistSync(): WhitelistEntry[] {
   try {
     const raw = readFileSync(whitelistPrefPath(), 'utf8');
@@ -30,9 +26,6 @@ export function readWhitelistSync(): WhitelistEntry[] {
   return [];
 }
 
-/**
- * 异步写入白名单（增删时调用，整表覆写）
- */
 export async function writeWhitelist(entries: readonly WhitelistEntry[]): Promise<void> {
   const filePath = whitelistPrefPath();
   mkdirSync(join(filePath, '..'), { recursive: true });

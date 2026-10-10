@@ -3,7 +3,6 @@ import { DEFAULT_MODEL, DEFAULT_PROVIDER } from '@code-agent/shared/main';
 import type { ProviderKind } from '../providers/types';
 import type { ModelEntry } from './types';
 
-/** 内置模型条目表 */
 export const BUILTIN_MODELS: readonly ModelEntry[] = [
   {
     id: 'deepseek-v4-flash',
@@ -145,13 +144,6 @@ export const BUILTIN_MODELS: readonly ModelEntry[] = [
   },
 ];
 
-/**
- * 各供应商默认模型 id（未指定模型时的解析目标）
- *
- * - deepseek 默认 v4-flash（2026 官方主力模型，1M 上下文 + 思考模式）
- * - 单一真源：providers/registry.ts 的 BUILTIN_DEFINITIONS.defaultModel 从此处派生
- *   （避免双源维护导致 getModel 与 getAIProvider 路由分裂）
- */
 export const DEFAULT_MODEL_BY_KIND: Record<ProviderKind, string> = {
   deepseek: DEFAULT_MODEL,
   openai: 'gpt-4o',
@@ -165,9 +157,4 @@ export const DEFAULT_MODEL_BY_KIND: Record<ProviderKind, string> = {
   openrouter: 'deepseek/deepseek-chat',
 };
 
-/**
- * 全局默认供应商（未指定模型时的最终兜底）
- *
- * 单一真源：providers/registry.ts 的 isDefault 标记从此处派生。
- */
 export const DEFAULT_KIND: ProviderKind = DEFAULT_PROVIDER;

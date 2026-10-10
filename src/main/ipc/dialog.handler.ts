@@ -4,7 +4,6 @@ import { dialog } from 'electron';
 import { grantUserReadPaths } from '../infra/file/user-grants';
 import type { IpcHandlerContext } from '../utils/wrap';
 
-/** Dialog 域 handler 实现 */
 export const dialogHandlers: InferHandlers<typeof IPC_DEFINITIONS, IpcHandlerContext>['dialog'] = {
   pickDirectory: async () => {
     const result = await dialog.showOpenDialog({

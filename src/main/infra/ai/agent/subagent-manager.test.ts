@@ -37,16 +37,12 @@ vi.mock('./task-service', async (importOriginal) => {
 
 import { TaskKind, TaskStatus } from './task-service';
 
-/** 单例访问（模块级 manager 初始为 null；本 describe 必须是文件首个用例块） */
 describe('getSubagentManager 单例访问', () => {
   it('未初始化：抛错提示先调用 initSubagentManager', () => {
     expect(() => getSubagentManager()).toThrow('SubagentManager 未初始化');
   });
 });
 
-/**
- * 创建 fake agentService：捕获 onTurnEvent 注册的监听器，测试手动驱动回合事件
- */
 function createFakeAgentService() {
   let listener: ((event: TurnEvent) => void) | undefined;
   const agentService = {
@@ -63,7 +59,6 @@ function createFakeAgentService() {
     abortAll: vi.fn(),
     dispose: vi.fn(async () => {}),
   };
-  /** 向当前监听器推送一个回合事件 */
   const emit = (event: TurnEvent): void => {
     listener?.(event);
   };

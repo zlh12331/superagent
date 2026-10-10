@@ -1,12 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import { WeixinStreamReceiver } from './weixin-stream';
 
-/** 轮询延迟：模拟网络往返，避免忙循环 */
 async function pollDelay(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 5));
 }
 
-/** 有状态 fetchUpdates mock：首轮返回消息 + 新游标，后续空 */
 function makeFetchUpdates(msgs: unknown[] = []): ReturnType<typeof vi.fn> {
   let first = true;
   return vi.fn(async () => {
@@ -19,7 +17,6 @@ function makeFetchUpdates(msgs: unknown[] = []): ReturnType<typeof vi.fn> {
   });
 }
 
-/** 合法 iLink 消息（item_list 文本项结构） */
 function weixinMsg(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     from_user_id: 'user-1',
@@ -53,7 +50,6 @@ function makeReceiver(
   return { receiver, fetchUpdatesFn };
 }
 
-/** 等待轮询跑一轮 */
 async function waitForPoll(fetchFn: ReturnType<typeof vi.fn>, times = 1): Promise<void> {
   await vi.waitFor(() => expect(fetchFn.mock.calls.length).toBeGreaterThanOrEqual(times));
 }

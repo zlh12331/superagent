@@ -3,19 +3,13 @@ import { t } from '../../i18n';
 import { getSubagentManager } from '../agent/subagent-manager';
 import type { Tool, ToolContext, ToolResult } from './tool';
 
-/** run_subagent 入参 */
 const RunSubagentInputSchema = z.object({
-  /** 子代理名（general / code_review / plan 等） */
   agent: z.string().min(1).max(100),
-  /** 委派任务描述 */
   task: z.string().min(1).max(2000),
 });
 
 type RunSubagentInput = z.infer<typeof RunSubagentInputSchema>;
 
-/**
- * 创建 run_subagent 工具（依赖模块级 SubagentManager 单例）
- */
 export function createRunSubagentTool(): Tool<RunSubagentInput> {
   return {
     name: 'run_subagent',

@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LspClient } from './lsp-client';
 import { LspServerManager } from './lsp-server-manager';
 
-/** fake LspClient：initialize/dispose 可编程 */
 class FakeLspClient {
   readonly rootUri: string;
   readonly initialize = vi.fn(async () => {});
@@ -23,7 +22,6 @@ class FakeLspClient {
   static instances: FakeLspClient[] = [];
 }
 
-/** 构造桩：new 返回共享实例（每个 rootUri 一个） */
 class SharedlspClientCtor {
   constructor(options: {
     command: string;
@@ -206,7 +204,6 @@ describe('LspServerManager.disposeAll', () => {
   });
 });
 
-/** 取第 i 个 fake 实例的启动命令（断言辅助） */
 function FakeLpCommand(index: number): string {
   return FakeLspClient.instances[index]?.options.command ?? '';
 }

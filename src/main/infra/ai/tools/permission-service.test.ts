@@ -22,7 +22,6 @@ vi.mock('../../storage/whitelist-pref', () => ({
   writeWhitelist: whitelistMocks.writeWhitelist,
 }));
 
-/** 创建 mock 工具 */
 function createMockTool(
   permission: 'auto' | 'ask' = 'ask',
   category: 'read' | 'control' | 'edit' | 'exec' = 'edit',
@@ -37,7 +36,6 @@ function createMockTool(
   } as unknown as Tool;
 }
 
-/** 创建 mock WebContents */
 function createMockWebContents(): WebContents {
   return {
     isDestroyed: vi.fn(() => false),
@@ -45,7 +43,6 @@ function createMockWebContents(): WebContents {
   } as unknown as WebContents;
 }
 
-/** 创建审批请求 payload */
 function createApprovalPayload(
   overrides: Partial<Parameters<PermissionService['requestApproval']>[0]> = {},
 ) {

@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  /** 当前 getAllWindows 返回的窗口清单（用例改写） */
   windows: [] as Array<{
     isDestroyed: () => boolean;
     webContents: { isDestroyed: () => boolean; send: (channel: string, payload: unknown) => void };
@@ -17,7 +16,6 @@ vi.mock('electron', () => ({
 
 import { broadcastInvalidation } from './invalidation';
 
-/** 造一个窗口（各自独立 send spy，便于逐窗断言） */
 function makeWindow(overrides?: { destroyed?: boolean; webContentsDestroyed?: boolean }): {
   isDestroyed: () => boolean;
   webContents: { isDestroyed: () => boolean; send: (channel: string, payload: unknown) => void };

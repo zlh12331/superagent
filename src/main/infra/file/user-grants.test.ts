@@ -10,7 +10,6 @@ import {
   userReadGrantCount,
 } from './user-grants';
 
-/** 授权表容量上限（与被测模块保持一致：淘汰行为依赖此常量） */
 const MAX_GRANTS = 200;
 
 describe('user-grants（用户手势授权路径登记表）', () => {

@@ -32,7 +32,6 @@ vi.mock('../../utils/logger', () => ({
   logger: mocks.mockLogger,
 }));
 
-/** 获取 deepseek 工厂的 createOpenAICompatible 配置 */
 function getDeepSeekOptions(): Record<string, unknown> {
   const registry = new ProviderRegistry();
   registry.createFactory('deepseek', { apiKey: 'sk-test' });
@@ -44,7 +43,6 @@ function getDeepSeekOptions(): Record<string, unknown> {
   return options as Record<string, unknown>;
 }
 
-/** 获取 transformRequestBody 函数 */
 function getTransform(): (args: Record<string, unknown>) => Record<string, unknown> {
   const transform = getDeepSeekOptions()['transformRequestBody'] as
     | ((args: Record<string, unknown>) => Record<string, unknown>)
@@ -55,7 +53,6 @@ function getTransform(): (args: Record<string, unknown>) => Record<string, unkno
   return transform;
 }
 
-/** 获取 convertUsage 函数 */
 function getConvertUsage(): (usage: Record<string, unknown>) => {
   inputTokens: Record<string, unknown>;
   outputTokens: Record<string, unknown>;

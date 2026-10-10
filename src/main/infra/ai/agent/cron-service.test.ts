@@ -27,10 +27,8 @@ vi.mock('../../storage/db', async (importOriginal) => {
 
 import { getDb, resetDb } from '../../storage/db';
 
-/** 秒级表达式（croner 6 字段：秒/分/时/日/月/周）——单测触发不等待分钟级 */
 const EVERY_SECOND = '* * * * * *';
 
-/** 等待条件成立（真实 croner 调度触发用） */
 async function waitFor(condition: () => boolean, timeoutMs = 3_000): Promise<void> {
   const start = Date.now();
   while (!condition()) {

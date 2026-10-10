@@ -10,9 +10,6 @@ const CodeSymbolsInputSchema = z.object({
 
 type CodeSymbolsInput = z.infer<typeof CodeSymbolsInputSchema>;
 
-/**
- * 创建 code_symbols 工具（CodeAnalyzer 模块单例内部懒加载 WASM）
- */
 export function createCodeSymbolsTool(): Tool<CodeSymbolsInput> {
   return {
     name: 'code_symbols',

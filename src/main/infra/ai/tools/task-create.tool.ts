@@ -3,17 +3,12 @@ import { t } from '../../i18n';
 import { TaskKind, taskService } from '../agent/task-service';
 import type { Tool, ToolContext, ToolResult } from './tool';
 
-/** task_create 入参 */
 const TaskCreateInputSchema = z.object({
-  /** 任务描述（任务面板展示） */
   description: z.string().min(1).max(200),
 });
 
 type TaskCreateInput = z.infer<typeof TaskCreateInputSchema>;
 
-/**
- * 创建 task_create 工具（依赖模块级 TaskService 单例）
- */
 export function createTaskCreateTool(): Tool<TaskCreateInput> {
   return {
     name: 'task_create',

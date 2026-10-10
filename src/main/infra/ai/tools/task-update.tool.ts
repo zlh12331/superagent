@@ -3,11 +3,8 @@ import { t } from '../../i18n';
 import { TaskStatus, taskService } from '../agent/task-service';
 import type { Tool, ToolContext, ToolResult } from './tool';
 
-/** task_update 入参 */
 const TaskUpdateInputSchema = z.object({
-  /** 任务 id（task_create 返回） */
   taskId: z.string().min(1).max(64),
-  /** 目标状态 */
   status: z.enum([
     TaskStatus.PENDING,
     TaskStatus.RUNNING,
@@ -19,9 +16,6 @@ const TaskUpdateInputSchema = z.object({
 
 type TaskUpdateInput = z.infer<typeof TaskUpdateInputSchema>;
 
-/**
- * 创建 task_update 工具（依赖模块级 TaskService 单例）
- */
 export function createTaskUpdateTool(): Tool<TaskUpdateInput> {
   return {
     name: 'task_update',

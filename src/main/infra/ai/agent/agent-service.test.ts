@@ -69,7 +69,6 @@ vi.mock('ai', async (importOriginal) => {
 
 const invalidationMocks = vi.hoisted(() => {
   const sends: Array<[string, unknown]> = [];
-  /** 广播 + options.webContents 推送的统一时间线（channel 顺序） */
   const order: string[] = [];
   const win = {
     isDestroyed: vi.fn(() => false),
@@ -109,9 +108,6 @@ vi.mock('../../telemetry/otel', () => ({
 import { TurnRunner } from '../agent-runtime/turn-runner';
 import { AgentService } from './agent-service';
 
-/**
- * 创建 mock ReadableStream：按顺序推送 parts 后 close
- */
 function createMockReadableStream(parts: unknown[]): ReadableStream {
   return new ReadableStream({
     start(controller) {
@@ -123,18 +119,12 @@ function createMockReadableStream(parts: unknown[]): ReadableStream {
   });
 }
 
-/**
- * 创建 mock streamText 返回值
- */
 function createMockStreamResult(parts: unknown[]): { toUIMessageStream: () => ReadableStream } {
   return {
     toUIMessageStream: () => createMockReadableStream(parts),
   };
 }
 
-/**
- * Mock WebContents 类型
- */
 type MockedWebContents = WebContents & {
   send: Mock;
   isDestroyed: Mock<() => boolean>;
@@ -147,17 +137,8 @@ function createMockWebContents(overrides?: { isDestroyed?: boolean }): MockedWeb
   } as unknown as MockedWebContents;
 }
 
-/**
- * 等待所有微任务/异步任务完成
- *
- * 迭代次数需覆盖 TurnRunner 的完整链路（每次 read 含 Promise.race + finally，
- * 3 次 read + completeTurn 约需 20+ 个微任务 tick）。
- * 38 号：回合控制流经 XState actor 信箱调度（fromPromise invoked service），
- * 装配段跨宏任务边界——微任务刷新后补一拍宏任务，保证 actor 回调跑完。
- */
 async function flushAsync(): Promise<void> {
   for (let i = 0; i < 30; i++) {
-    // eslint-disable-next-line no-await-in-loop -- 测试需要顺序刷新微任务队列
     await Promise.resolve();
   }
   if (!vi.isFakeTimers()) {
@@ -165,25 +146,10 @@ async function flushAsync(): Promise<void> {
   }
 }
 
-/**
- * webContents.send 调用（agent:turn:event 通道已移除，全部调用均为流/工具/审批通道）
- */
 function getNonTurnCalls(wc: MockedWebContents): unknown[][] {
   return wc.send.mock.calls;
 }
 
-/**
- * 创建 mock ToolRegistry
- *
- * 补全 IToolRegistry 全部方法（register/unregister/get/list 为 stub），
- * 使 mock 对象结构兼容 AgentService 构造函数的入参类型。
- * 测试仅关心 toAISDKTools，其他方法返回空值即可。
- *
- * 注意：mock 的 toAISDKTools 返回值不满足完整的 Tool 类型（缺 inputSchema 等字段），
- * 但测试只验证 executeHook 是否被正确注入，AI SDK 在 streamText 调用时会消费 tools 对象。
- * 因此在传给 AgentService 时用 `as unknown as IToolRegistry` 断言绕过严格类型检查。
- * mock 对象本身的 toAISDKTools 保留 Mock 类型，供测试通过 .mock 访问调用记录。
- */
 function createMockToolRegistry() {
   return {
     register: vi.fn(),
@@ -197,9 +163,6 @@ function createMockToolRegistry() {
   };
 }
 
-/**
- * 创建 mock ToolExecutor
- */
 function createMockToolExecutor() {
   return {
     execute: vi.fn(async () => ({
@@ -212,9 +175,6 @@ function createMockToolExecutor() {
   };
 }
 
-/**
- * 创建 mock PromptService
- */
 function createMockPromptService() {
   return {
     initialize: vi.fn(),
@@ -1139,7 +1099,6 @@ describe('agent-service 批次1 缺口补全（生命周期边界/事件/压缩/
     vi.restoreAllMocks();
   });
 
-  /** 基础启动参数（messages 显式 as const 保证与 ChatMessage 字面量类型兼容） */
   function baseOptions(overrides: Partial<StartAgentOptions> = {}): StartAgentOptions {
     return {
       messages: [{ role: 'user' as const, content: '帮我读文件' }],

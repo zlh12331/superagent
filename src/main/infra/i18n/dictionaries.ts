@@ -1,7 +1,5 @@
-/** 主进程支持的语言（与渲染层 AppLanguage 对齐） */
 export type MainLanguage = 'zh-CN' | 'en';
 
-/** 中文词典（默认语言；值 = 迁移前工具文件内的原始文案） */
 export const ZH_CN: Readonly<Record<string, string>> = {
   'tools.askUser.failed': '提问失败',
   'tools.askUser.noResponse': '用户未响应',
@@ -80,7 +78,6 @@ export const ZH_CN: Readonly<Record<string, string>> = {
   'tools.planMode.exited': '已退出计划模式',
 };
 
-/** 英文词典 */
 export const EN: Readonly<Record<string, string>> = {
   'tools.askUser.failed': 'Ask failed',
   'tools.askUser.noResponse': 'No user response',
@@ -159,7 +156,6 @@ export const EN: Readonly<Record<string, string>> = {
   'tools.planMode.exited': 'Exited plan mode',
 };
 
-/** 全部词典（语言 → key → 文案） */
 export const MAIN_DICTIONARIES: Readonly<Record<MainLanguage, Readonly<Record<string, string>>>> = {
   'zh-CN': ZH_CN,
   en: EN,

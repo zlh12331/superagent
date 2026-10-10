@@ -24,12 +24,6 @@ import { logger } from '../utils/logger';
 import type { IpcHandlerContext } from '../utils/wrap';
 import { syncTitleBarOverlayFromTheme } from '../window-theme';
 
-/**
- * Settings 域 handler 工厂
- *
- * 依赖注入：
- * - permissionService：审批模式设置（运行时决策更新）
- */
 export function createSettingsHandlers(params: {
   permissionService: IPermissionService;
 }): InferHandlers<typeof IPC_DEFINITIONS, IpcHandlerContext>['settings'] {

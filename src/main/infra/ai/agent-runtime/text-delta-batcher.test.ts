@@ -6,13 +6,11 @@ import {
   type TextDeltaBatcherOptions,
 } from './text-delta-batcher';
 
-/** 收集 emit 产物 */
 function collect() {
   const emitted: unknown[] = [];
   return { emitted, emit: (part: unknown) => void emitted.push(part) };
 }
 
-/** 立即触发的假定时器（记录回调，flush 断言用） */
 function makeManualScheduler() {
   const pending: Array<() => void> = [];
   const schedule: TextDeltaBatcherOptions['schedule'] = (callback) => {
@@ -25,7 +23,6 @@ function makeManualScheduler() {
   return { schedule, pending };
 }
 
-/** 创建注入假定时器的批处理器 */
 function createWithManualTimer(options: Partial<TextDeltaBatcherOptions> = {}): {
   batcher: TextDeltaBatcher;
   emitted: unknown[];

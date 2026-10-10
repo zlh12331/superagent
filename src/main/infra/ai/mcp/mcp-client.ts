@@ -11,21 +11,6 @@ import type { McpCallToolFn, McpToolCallResult, McpToolDescriptor } from './mcp-
 import type { McpServerConfig } from './mcp-types';
 import { resolveMcpTransport } from './mcp-types';
 
-/**
- * 按配置创建传输层实例
- *
- * - stdio：StdioClientTransport（启动本地子进程；stderr pipe 到日志由调用方处理）
- * - sse：SSEClientTransport（HTTP 轮询降级通道）
- * - streamable-http：StreamableHTTPClientTransport（现代远程传输）
- *
- * 远程传输通过 requestInit.headers 注入授权头（如 Authorization）。
- *
- * 返回具体类联合而非 SDK Transport 接口：SDK 的 StreamableHTTPClientTransport
- * 在 exactOptionalPropertyTypes 下与自身 Transport 接口不结构兼容（sessionId 可选性），
- * 具体联合可保留类型信息，connect 处按需断言。
- *
- * @param config MCP server 配置（transport 缺省 stdio）
- */
 export function createMcpTransport(config: McpServerConfig): McpTransportInstance {
   const transport = resolveMcpTransport(config);
   if (transport === 'stdio') {
@@ -51,75 +36,21 @@ export function createMcpTransport(config: McpServerConfig): McpTransportInstanc
   return new StreamableHTTPClientTransport(url, remoteOptions);
 }
 
-/** MCPClient 支持的传输实例联合 */
 export type McpTransportInstance =
   | StdioClientTransport
   | SSEClientTransport
   | StreamableHTTPClientTransport;
 
-/**
- * MCPClient：管理与单个 MCP server 的连接
- *
- * 生产创建方唯一 = mcp-service.startServer（每个 server 一个实例）；
- * 生命周期由 MCPService 层驱动（本类不感知注册表/其他 server）。
- *
- * 生命周期：
- * 1. new MCPClient(config)：创建实例（未连接）
- * 2. connect()：启动子进程 + 完成 MCP 握手 + 缓存工具列表
- * 3. listTools()：返回缓存的工具描述（不重复请求 server）
- * 4. callTool(toolName, input)：转发工具调用
- * 5. close()：关闭连接 + 终止子进程
- *
- * 错误处理：
- * - connect 失败：抛 AppError(INTERNAL_ERROR)，调用方负责状态更新
- * - callTool 失败：抛 AppError(TOOL_EXECUTION_FAILED)，由 ToolExecutor 捕获
- * - close 失败：仅 log warn，不抛错（避免 dispose 路径中断）
- *
- * @example
- * ```ts
- * const client = new MCPClient({
- *   name: 'filesystem',
- *   command: 'npx',
- *   args: ['-y', '@modelcontextprotocol/server-filesystem', '/path'],
- * });
- * await client.connect();
- * const tools = client.listTools();
- * const result = await client.callTool('read_file', { path: '/tmp/test.txt' });
- * await client.close();
- * ```
- */
 export class MCPClient {
-  /** MCP SDK Client 实例（connect 后创建） */
   private client: Client | null = null;
-  /** 传输实例（connect 后创建；stdio=StdioClientTransport / 远程=SSE/StreamableHTTP） */
   private transport: McpTransportInstance | null = null;
-  /** 缓存的工具描述（connect 时一次性拉取，避免每次 listTools 都请求 server） */
   private cachedTools: readonly McpToolDescriptor[] = [];
-  /** server 报告的名称（capabilities 协商时获得） */
   private serverName: string | undefined;
-  /** server 报告的版本 */
   private serverVersion: string | undefined;
-  /** 是否已连接（避免重复 connect / close） */
   private connected = false;
 
-  /**
-   * @param config MCP server 配置
-   */
   constructor(private readonly config: McpServerConfig) {}
 
-  /**
-   * 启动 MCP server 子进程并完成协议握手
-   *
-   * 步骤：
-   * 1. createMcpTransport：按 transport 三态创建（stdio=启动子进程 / 远程=HTTP）
-   * 2. 创建 Client + 调用 connect() 完成 MCP 握手
-   * 3. 缓存 server 元数据（serverName/serverVersion）
-   * 4. 调用 listTools 缓存工具列表
-   *
-   * 幂等性：已连接时直接返回，不重复启动
-   *
-   * @throws AppError(INTERNAL_ERROR) 当启动或握手失败时
-   */
   async connect(): Promise<void> {
     if (this.connected) {
       return;
@@ -200,16 +131,6 @@ export class MCPClient {
     }
   }
 
-  /**
-   * 返回缓存的工具描述列表
-   *
-   * 不再请求 server（connect 时已缓存），避免每次对话都拉取。
-   * 若 server 工具列表变化，需经 MCPService 层 stopServer + startServer
-   * 重建实例（本类无 reconnect 方法——工具列表缓存的刷新只能靠重建）。
-   *
-   * @returns 工具描述数组（不可变）
-   * @throws AppError(INTERNAL_ERROR) 当未连接时
-   */
   listTools(): readonly McpToolDescriptor[] {
     if (!this.connected) {
       throw new AppError(
@@ -220,25 +141,6 @@ export class MCPClient {
     return this.cachedTools;
   }
 
-  /**
-   * 转发工具调用到 MCP server
-   *
-   * 实现 McpCallToolFn 接口，供 adaptMcpTool 注入。
-   * 内部调用 MCP SDK 的 client.callTool，把结果转换为 McpToolCallResult。
-   *
-   * abortSignal 支持（M1 修复）：把 ctx.abortSignal 透传到 MCP SDK 的 RequestOptions.signal，
-   * SDK 在 abort 触发时会向 server 发送 cancellation notification 并抛出 AbortError。
-   * 这样用户中断对话时，长时间运行的 MCP 工具能及时被取消。
-   *
-   * @param toolName 工具名（不含命名空间前缀）
-   * @param input 工具入参
-   * @param ctx 工具执行上下文（提供 abortSignal，用于中断长时间运行的 MCP 工具）
-   * @returns MCP server 返回的工具结果
-   *
-   * @throws AppError(TOOL_EXECUTION_FAILED) 当调用失败时
-   * @throws AppError(TOOL_ABORTED) 当用户中断时
-   * @throws AppError(INTERNAL_ERROR) 当未连接时
-   */
   callTool: McpCallToolFn = async (
     toolName: string,
     input: unknown,
@@ -288,12 +190,6 @@ export class MCPClient {
     }
   };
 
-  /**
-   * 关闭连接并终止子进程
-   *
-   * 内部调用 transport.close()，会 kill MCP server 子进程。
-   * 幂等：已关闭时直接返回。
-   */
   async close(): Promise<void> {
     if (!this.connected) {
       return;
@@ -301,16 +197,6 @@ export class MCPClient {
     await this.closeQuietly();
   }
 
-  /**
-   * 静默关闭（不抛错，仅 log）
-   *
-   * 用于 connect 失败时的资源清理，以及 dispose 路径。
-   *
-   * 关闭顺序（L7 修复）：
-   * 1. client.close()：先关闭 MCP 协议层（发送 close 通知给 server）
-   * 2. transport.close()：再关闭 stdio 传输（kill 子进程）
-   * 顺序错误会导致 server 收不到 close 通知就被 SIGKILL，无法优雅退出。
-   */
   private async closeQuietly(): Promise<void> {
     if (this.client !== null) {
       try {
@@ -337,22 +223,18 @@ export class MCPClient {
     }
   }
 
-  /** 是否已连接 */
   isConnected(): boolean {
     return this.connected;
   }
 
-  /** server 配置 */
   getConfig(): McpServerConfig {
     return this.config;
   }
 
-  /** server 报告的名称（未连接时 undefined） */
   getServerName(): string | undefined {
     return this.serverName;
   }
 
-  /** server 报告的版本（未连接时 undefined） */
   getServerVersion(): string | undefined {
     return this.serverVersion;
   }

@@ -7,7 +7,6 @@ import { resolveWithinWorkspace } from './path-guard';
 import { readTracker } from './read-tracker';
 import type { Tool, ToolContext, ToolResult } from './tool';
 
-/** 目标文件是否存在（写入前校验用） */
 async function fileExists(targetPath: string): Promise<boolean> {
   try {
     await fs.access(targetPath);
@@ -26,11 +25,6 @@ const WriteFileInputSchema = z.object({
 
 type WriteFileInput = z.infer<typeof WriteFileInputSchema>;
 
-/**
- * 创建 write_file 工具（写入 UTF-8 文本：默认覆盖，append=true 追加；ask 级审批）
- *
- * @param fileService 文件服务（执行实际写入）
- */
 export function createWriteFileTool(fileService: IFileService): Tool<WriteFileInput> {
   return {
     name: 'write_file',

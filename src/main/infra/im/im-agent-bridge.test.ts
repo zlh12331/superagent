@@ -23,7 +23,6 @@ vi.mock('../storage/im-allowlist-pref', () => ({
   },
 }));
 
-/** 桥接依赖的轻量 stub（无 mock 框架：手写最小实现） */
 function createStubs() {
   const sent: Array<{ kind: string; chatId: string; text: string }> = [];
   const messageHandlers: Array<(msg: unknown) => void> = [];
@@ -70,7 +69,6 @@ function createStubs() {
   return stubs;
 }
 
-/** 模拟渠道入站消息 */
 function incoming(
   overrides: Partial<{
     text: string;

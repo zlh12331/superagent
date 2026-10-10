@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createToolHandlers, type ToolHandlerDeps } from './tool.handler';
 
-/** 创建 fake ToolRegistry（DI 注入，符合 handler 依赖注入设计） */
 function createFakeRegistry(list: ReturnType<typeof vi.fn>) {
   return {
     list,
@@ -13,7 +12,6 @@ function createFakeRegistry(list: ReturnType<typeof vi.fn>) {
   } as unknown as ToolHandlerDeps['toolRegistry'];
 }
 
-/** 空 ctx（tool 域不使用 ctx） */
 const EMPTY_CTX = {} as never;
 
 describe('tool.handler', () => {

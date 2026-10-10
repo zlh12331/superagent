@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { modelsHandlers } from './models.handler';
 
-/** 测试用占位凭据（非真实密钥，仅用于触发「显式 baseUrl 需同时传 key」分支） */
 const PLACEHOLDER_CREDENTIAL = 'placeholder-not-real';
 
 const mocks = vi.hoisted(() => ({
@@ -48,7 +47,6 @@ vi.mock('../config', () => ({
   getAppConfig: () => ({ providers: mocks.getProviders() }),
 }));
 
-/** 构造 fetch 响应 fake */
 function respond(status: number, body?: unknown): Response {
   return {
     ok: status >= 200 && status < 300,
@@ -109,7 +107,6 @@ describe('models:listBuiltin（配置页厂商下拉数据源）', () => {
   });
 });
 
-/** 构造运行时模型记录（list 数据源形状） */
 function runtimeModel(overrides: Partial<Record<string, unknown>> = {}): Record<string, unknown> {
   return {
     modelId: 'my-model',

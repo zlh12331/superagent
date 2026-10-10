@@ -17,7 +17,6 @@ vi.mock('electron', () => ({
 import { clearUserReadGrants, matchUserGrantedReadPath } from '../infra/file/user-grants';
 import { dialogHandlers } from './dialog.handler';
 
-/** 空 ctx（两个方法都不使用 ctx） */
 const EMPTY_CTX = {} as never;
 
 describe('dialog.handler', () => {

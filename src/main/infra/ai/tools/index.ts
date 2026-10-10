@@ -57,25 +57,6 @@ export { createRunCommandTool } from './run-command.tool';
 export { createTerminalTool } from './terminal.tool';
 export { createWriteFileTool } from './write-file.tool';
 
-/**
- * 注册所有内置工具到 ToolRegistry
- *
- * ServiceContainer 在初始化时调用一次，把全部内置工具注册：
- * - 文件/搜索/终端/命令/Git 基础工具（依赖注入对应服务）
- * - 交互与模式工具（ask_user_question / plan_mode，注入 askService / permissionService）
- * - 编排工具（run_subagent / run_team / run_workflow / task×4，模块级单例）
- * - 扩展工具（load_skill / web_fetch / save_memory / cron×3 / lsp×2）
- *
- * @param registry 工具注册表
- * @param fileService 文件服务实例
- * @param searchService 搜索服务实例
- * @param terminalService 终端服务实例
- * @param gitService Git 服务实例
- * @param memoryPort 记忆引擎端口（MemoryHub）
- * @param lspManager LSP 服务器管理器
- * @param askService Agent 提问服务
- * @param permissionService 权限服务（plan 模式拦截）
- */
 export function registerBuiltinTools(
   registry: IToolRegistry,
   fileService: IFileService,

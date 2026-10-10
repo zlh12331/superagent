@@ -17,10 +17,6 @@ import {
 import { logger } from '../utils/logger';
 import type { IpcHandlerContext } from '../utils/wrap';
 
-/**
- * 构建信息（由 scripts/generate-build-info.mjs 在发布构建时写入 resources/build-info.json；
- * dev 直跑不生成 → channel 兜底 'dev'）
- */
 interface BuildInfo {
   readonly version?: string;
   readonly channel?: string;
@@ -28,7 +24,6 @@ interface BuildInfo {
   readonly buildTime?: string;
 }
 
-/** 读取构建信息：优先打包资源（process.resourcesPath），dev 回退项目根 resources */
 function readBuildInfo(): BuildInfo {
   try {
     const candidates = app.isPackaged
@@ -45,7 +40,6 @@ function readBuildInfo(): BuildInfo {
   return { channel: 'dev' };
 }
 
-/** 应用级 handler 实现（app 域） */
 export const appHandlers: InferHandlers<typeof IPC_DEFINITIONS, IpcHandlerContext>['app'] = {
   getStatus: async () => {
     return { ready: true, protocolVersion: IPC_PROTOCOL_VERSION };

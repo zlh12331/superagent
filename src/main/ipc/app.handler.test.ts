@@ -18,10 +18,8 @@ import { AppError, ErrorCode, IPC_PROTOCOL_VERSION } from '@code-agent/shared/ma
 import { exportDiagnosticsPackage } from '../diagnostics';
 import { appHandlers } from './app.handler';
 
-/** 空 ctx（app 域不使用 ctx） */
 const EMPTY_CTX = {} as never;
 
-/** mock 的导出函数（类型收窄用） */
 const mockExport = vi.mocked(exportDiagnosticsPackage);
 
 describe('app.handler', () => {
