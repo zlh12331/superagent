@@ -1,3 +1,6 @@
+// permission-service.ts：权限审批服务——四态模式（plan/ask/auto/yolo）分流、命令白名单/黑名单、
+// 审批生命周期（弹窗 + 记住决定 TTL + 拒绝计数降级）、plan 模式只读闸
+// 审批等待 = Promise pending（agent-turn-machine 的 approval 嵌套态感知这个生命周期）
 import { createHash, randomUUID } from 'node:crypto';
 import type {
   AgentApprovalRequestPayload,
@@ -61,11 +64,16 @@ interface PendingApproval {
   readonly cleanupAbort?: () => void;
 }
 
+/** 「记住决定」条目（同输入哈希直接复用，REMEMBER_TTL_MS 到期失效） */
 interface RememberedDecision {
   readonly approved: boolean;
   readonly expireAt: number;
 }
 
+/**
+ * 权限服务：构造期同步读白名单（DB 未就绪时的 JSON 文件真源），通用 pattern 条目剔除；
+ * approve/deny 经 handleApprovalResponse 从渲染层回传
+ */
 export class PermissionService implements IPermissionService {
   constructor(classifier?: CommandClassifier) {
     this.classifier = classifier;

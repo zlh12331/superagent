@@ -1,3 +1,5 @@
+// im-service.ts：IM 渠道服务——7 渠道适配器编排（启停/状态/token 持久化到 keychain）+ 消息分发
+// 边界：适配器只管协议连接，命令执行在 ImAgentBridge；准入白名单见 im-allowlist-pref
 import type { ChannelKind, IChannelInfo } from '@code-agent/shared/main';
 import { INVALIDATION_DOMAINS } from '@code-agent/shared/main';
 import { logger } from '../../utils/logger';
@@ -6,10 +8,12 @@ import { getSecret, setSecret } from '../storage/keychain';
 import { createAllAdapters } from './adapters';
 import type { ChannelIncomingMessage, IChannelAdapter } from './channel/types';
 
+/** 渠道 token 的 keychain 键（im:<kind>） */
 export function channelKeychainKey(kind: ChannelKind): string {
   return `im:${kind}`;
 }
 
+/** IM 渠道服务：适配器列表可注入（测试）；启停广播 im 失效域刷新渲染层列表 */
 export class ImService {
   private readonly adapters: IChannelAdapter[];
   private readonly messageListeners = new Set<(message: ChannelIncomingMessage) => void>();
@@ -19,6 +23,9 @@ export class ImService {
     this.adapters = adapters !== undefined ? [...adapters] : createAllAdapters();
   }
 
+  /**
+   * 启动渠道：token 显式传入时同步落 keychain（持久化），否则读存量 token 重连
+   */
   async start(kind: ChannelKind, token?: string): Promise<void> {
     const adapter = this.getAdapter(kind);
     if (token !== undefined && token.length > 0) {

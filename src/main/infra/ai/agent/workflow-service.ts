@@ -1,7 +1,9 @@
+// workflow-service.ts：多步工作流——按计划驱动子代理逐步执行（journal 记录、步数预算、可取消）
 import { randomUUID } from 'node:crypto';
 import { logger } from '../../../utils/logger';
 import { getSubagentManager, type SubagentManager } from './subagent-manager';
 
+// 状态常量对象（值即类型——shared 里同形约定的本地版；workflow 未入 IPC schema，仅 UI 展示态）
 export const WorkflowStatus = {
   IDLE: 'idle',
   RUNNING: 'running',
@@ -21,6 +23,7 @@ export const WorkflowStepStatus = {
 
 export type WorkflowStepStatus = (typeof WorkflowStepStatus)[keyof typeof WorkflowStepStatus];
 
+/** 工作流单步（状态机四态；output 为子代理产出文本） */
 export interface WorkflowStep {
   readonly id: string;
   readonly name: string;
@@ -30,6 +33,7 @@ export interface WorkflowStep {
   readonly output: string | null;
 }
 
+/** 一次工作流运行（goal + 步骤序列 + 步数预算 + journal 日志） */
 export interface WorkflowRun {
   readonly id: string;
   readonly goal: string;

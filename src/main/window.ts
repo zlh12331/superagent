@@ -1,3 +1,5 @@
+// window.ts：主窗口创建与关窗协商——BrowserWindow 安全基线、导航/新窗限制、关窗行为（最小化到托盘 or 退出）、
+// 渲染进程崩溃自愈。边界：窗口唤起在 window-show，标题栏配色在 window-theme
 import { join } from 'node:path';
 import { app, BrowserWindow, dialog, screen, shell } from 'electron';
 import { installExtension, REACT_DEVELOPER_TOOLS } from 'electron-devtools-installer';
@@ -12,6 +14,11 @@ import { loadWindowState, trackWindowState, type WindowState } from './utils/win
 import { markMaximizeOnNextShow } from './window-show';
 import { TITLE_BAR_SYMBOL } from './window-theme';
 
+/**
+ * 读关窗行为设置（settings.window.closeAction）
+ *
+ * 损坏/缺失回落 'minimize'；导出供托盘「关闭时最小化到托盘」勾选项读同一真源（28 号 spec §6）
+ */
 export function readCloseAction(): 'minimize' | 'quit' {
   try {
     const value = readSetting('window');
@@ -24,6 +31,11 @@ export function readCloseAction(): 'minimize' | 'quit' {
   }
 }
 
+/**
+ * 运行中回合退出确认弹窗（close 协商与 before-quit 协商共用）
+ *
+ * @returns true = 用户确认退出（回合将被中断标记）；false = 用户取消（应用保持运行）
+ */
 export async function confirmInterruptRunningTurns(win: BrowserWindow): Promise<boolean> {
   try {
     const { response } = await dialog.showMessageBox(win, {
@@ -43,6 +55,10 @@ export async function confirmInterruptRunningTurns(win: BrowserWindow): Promise<
   }
 }
 
+/**
+ * 创建主窗口：恢复上次窗口状态 → frameless + 安全基线 → 导航/新窗限制 → 加载渲染层 →
+ * 隐藏启动判定 → 关窗协商 → 崩溃自愈 → 状态跟踪 → dev DevTools
+ */
 export function createWindow(): BrowserWindow {
   const windowState: WindowState = loadWindowState(
     join(app.getPath('userData'), 'window-state.json'),
@@ -50,13 +66,14 @@ export function createWindow(): BrowserWindow {
     screen.getAllDisplays().map((d) => d.workArea),
   );
   const win = new BrowserWindow({
+    // 坐标条件展开：无保存值时交给 Electron 默认居中（exactOptionalPropertyTypes 要求）
     ...(windowState.x !== undefined ? { x: windowState.x } : {}),
     ...(windowState.y !== undefined ? { y: windowState.y } : {}),
     width: windowState.width,
     height: windowState.height,
     minWidth: 960,
     minHeight: 640,
-    show: false,
+    show: false, // 等 ready-to-show 再显示，避免白屏闪
     autoHideMenuBar: true,
     titleBarStyle: 'hidden',
     ...(process.platform !== 'darwin'
@@ -70,6 +87,7 @@ export function createWindow(): BrowserWindow {
       : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.cjs'),
+      // 安全基线：上下文隔离 + 关 Node 注入 + 沙箱 + webSecurity（preload 走 contextBridge）
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
@@ -77,6 +95,8 @@ export function createWindow(): BrowserWindow {
     },
   });
 
+  // 导航白名单：只允许 dev server origin 或打包产物的 index.html，其余一律拦下
+  // （配合主进程对 defaultSession 的 CSP/XFO 注入，构成三层外站拦截的第一层）
   const navRendererUrl = process.env['ELECTRON_RENDERER_URL'];
   win.webContents.on('will-navigate', (event, url) => {
     let allowed = false;
@@ -95,6 +115,7 @@ export function createWindow(): BrowserWindow {
     }
   });
 
+  // window.open 一律拒绝：外链交系统浏览器打开，绝不在应用内开新 webContents
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith('http')) {
       shell.openExternal(url);
@@ -124,6 +145,8 @@ export function createWindow(): BrowserWindow {
   });
 
   win.on('close', (event) => {
+    // 关窗协商：已确认退出 / 善后中 / E2E 豁免 → 放行；macOS 关窗语义是只关窗口（应用留存）
+    // 非 macOS 按 closeAction 分流：minimize → 隐藏到托盘；quit → 运行中回合弹确认
     if (isQuitting() || isCloseConfirmed() || process.env['CODE_AGENT_SKIP_CLOSE_GUARD'] === '1') {
       return;
     }
@@ -155,6 +178,7 @@ export function createWindow(): BrowserWindow {
     markMaximizeOnNextShow();
   }
 
+  // 渲染进程崩溃自愈：60 秒窗口内最多自动 reload 2 次，反复崩溃停止（防 reload 风暴）
   let crashRecoveryCount = 0;
   let crashWindowStart = 0;
   win.webContents.on('render-process-gone', (_event, details) => {

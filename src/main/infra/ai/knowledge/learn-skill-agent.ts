@@ -1,3 +1,5 @@
+// learn-skill-agent.ts：技能学习代理——用户喂知识源，LLM 提炼为可复用技能（name/description/prompt）
+// 落 skills 表并注册进 skillRegistry；<user_data> 标签隔离用户内容防指令注入
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { logger } from '../../../utils/logger';

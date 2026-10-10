@@ -1,3 +1,5 @@
+// session-service.ts：会话服务——CRUD/置顶/清空/消息追加与替换/运行状态标记/导入导出
+// 约定：每次写操作后广播对应失效域（渲染层 TanStack Query 依赖此刷新）；批量写走事务保序
 import { randomUUID } from 'node:crypto';
 import type {
   ChatMessage,
@@ -53,6 +55,7 @@ export {
 } from './session-types';
 
 export class SessionService {
+  /** 会话分页列表：置顶优先，其余按更新时间倒序 */
   async list(limit: number, offset: number): Promise<SessionListRes> {
     const db = getDb();
 
@@ -73,6 +76,7 @@ export class SessionService {
     };
   }
 
+  /** 会话详情：includeMessages=false 时省消息体查询（列表态只关心元数据） */
   async get(id: string, options?: { includeMessages?: boolean }): Promise<SessionGetRes> {
     const db = getDb();
 
@@ -110,6 +114,7 @@ export class SessionService {
     };
   }
 
+  /** 删除会话（messages/goals/turns 级联）；删后归还空闲页——删除是碎片主来源 */
   async delete(id: string): Promise<SessionDeleteRes> {
     const db = getDb();
     db.delete(sessions).where(eq(sessions.id, id)).run();
@@ -205,6 +210,7 @@ export class SessionService {
     return sessionId;
   }
 
+  /** 追加消息（事务内重读行锁保 seq 连续——防并发追加跳号）；空消息仅刷新 updatedAt */
   async appendMessage(options: SessionAppendMessageOptions): Promise<number> {
     const db = getDb();
     const { sessionId, messages: newMessages } = options;
@@ -268,6 +274,7 @@ export class SessionService {
     return startSeq + newMessages.length;
   }
 
+  /** 整体替换消息（上下文压缩写回路径）：事务内删旧插新，seq 从 0 重排 */
   async replaceMessages(sessionId: string, newMessages: readonly ChatMessage[]): Promise<number> {
     const db = getDb();
     const sessionRow = db.select().from(sessions).where(eq(sessions.id, sessionId)).get();
@@ -337,6 +344,7 @@ export class SessionService {
     db.update(sessions).set({ lastRunStatus: 'idle' }).where(eq(sessions.id, id)).run();
   }
 
+  /** 崩溃善后：全部 running 会话标 interrupted（启动 recoverFromCrash 与退出 dispose 共用） */
   async markAllInterrupted(): Promise<number> {
     const db = getDb();
     const result = db

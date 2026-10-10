@@ -1,3 +1,5 @@
+// registry.ts：模型注册表——内置清单 + 运行时快照（用户自定义模型）合并解析，
+// 支持 resolve(id?) → ResolvedModel 单一出口
 import type { ProviderKind } from '../providers/types';
 import type {
   AvailableModelInfo,
@@ -17,12 +19,14 @@ function mergeSnapshotGenerationConfig(
   return { ...builtin, timeoutMs: snapshot.timeoutMs };
 }
 
+/** 注册表选项：内置条目 + 各供应商默认模型 + 全局默认供应商 */
 export interface ModelRegistryOptions {
   readonly entries: readonly ModelEntry[];
   readonly defaultModelByKind: Record<ProviderKind, string>;
   readonly defaultKind: ProviderKind;
 }
 
+/** 模型注册表：内置索引 + 运行时快照/停用集（settings 侧写入后同步进来） */
 export class ModelRegistry {
   private readonly modelIndex: Map<string, ModelEntry>;
   private readonly defaultModelByKind: Record<ProviderKind, string>;

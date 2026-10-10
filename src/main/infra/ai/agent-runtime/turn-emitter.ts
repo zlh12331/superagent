@@ -1,5 +1,7 @@
+// turn-emitter.ts：回合事件发布器——按事件类型分桶订阅 + onAny 全量订阅（记忆捕获/遥测走 here）
 import type { TurnEvent, TurnEventMap, TurnEventType } from '@code-agent/shared/main';
 
+/** 回合事件发布器：listener 异常吞掉（一个坏订阅者不能炸掉回合流） */
 export class TurnEventEmitter {
   private readonly listeners = new Map<TurnEventType, Set<(event: TurnEvent) => void>>();
   private readonly anyListeners = new Set<(event: TurnEvent) => void>();

@@ -1,3 +1,5 @@
+// remote-control.ts：远程控制服务——HTTP 命令入口（token 鉴权 + SSE 事件流）+ UDP 局域网发现广播
+// 边界：命令的业务执行在 RemoteAgentBridge（挂桥），本服务只管网络面/鉴权/频控
 import { randomUUID } from 'node:crypto';
 import { createSocket, type Socket as UdpSocket } from 'node:dgram';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
@@ -8,8 +10,10 @@ import { logger } from '../../utils/logger';
 import { resolveBindAddress } from '../storage/remote-pref';
 import { REMOTE_CLIENT_CSP, REMOTE_CLIENT_HTML } from './remote-web-client';
 
+// 发现广播：UDP 45918 每 3s 一次全网段（仅 lan 范围），协议版本号防新旧客户端误配对
 const DISCOVERY_SERVICE_TYPE = 'code-agent-remote';
 const DISCOVERY_PROTOCOL_VERSION = 1;
+// 命令体 64KB 上限（SSE 之外的另一面是防超大请求体占内存）
 const MAX_COMMAND_BODY_BYTES = 64 * 1024;
 const SSE_HEARTBEAT_MS = 15_000;
 
@@ -17,9 +21,11 @@ const DEFAULT_DISCOVERY_PORT = 45918;
 const DEFAULT_BROADCAST_INTERVAL_MS = 3000;
 const DEFAULT_BROADCAST_ADDRESS = '255.255.255.255';
 
+// 鉴权频控：启动后 60s 窗口内失败 ≥10 次即封禁到重启（防在线爆破 session token）
 const AUTH_WINDOW_MS = 60_000;
 const AUTH_FAIL_LIMIT = 10;
 
+/** 远程命令（渲染桥/移动端 web 客户端经 HTTP POST 提交） */
 export interface RemoteCommand {
   readonly sessionToken: string;
   readonly text: string;
@@ -50,6 +56,7 @@ export interface RemoteControlOptions {
   readonly instanceName?: string;
 }
 
+/** 远程控制服务契约（IPC handler 与 agent 桥共同消费） */
 export interface IRemoteControlService {
   start(): Promise<string>;
   stop(): Promise<void>;
@@ -70,6 +77,7 @@ export interface IRemoteControlService {
   ): Promise<RemoteCommandResult>;
 }
 
+/** 远程控制服务：HTTP 命令入口 + UDP 发现广播的生命周期持有者 */
 export class RemoteControlService implements IRemoteControlService {
   private running = false;
   private sessionToken: string | null = null;
@@ -103,6 +111,11 @@ export class RemoteControlService implements IRemoteControlService {
     this.instanceName = options.instanceName ?? hostname();
   }
 
+  /**
+   * 启动服务：生成会话 token → HTTP 监听 → lan 范围加发发现广播
+   *
+   * @returns 会话 token（客户端配对凭证；重复 start 幂等返回现有 token）
+   */
   async start(): Promise<string> {
     if (this.running) {
       return this.sessionToken ?? '';

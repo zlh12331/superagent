@@ -1,3 +1,4 @@
+// hook-registry.ts：工具生命周期钩子注册表——pre/post-tool-use，拒绝型钩子可阻断工具调用
 import { logger } from '../../../utils/logger';
 
 export const HookEventName = {

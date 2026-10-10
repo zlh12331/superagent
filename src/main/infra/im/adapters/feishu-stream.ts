@@ -1,3 +1,4 @@
+// feishu-stream.ts：飞书长连接接收——官方 node-sdk WSClient 封装为消息流（SDK 承担重连/心跳）
 import * as lark from '@larksuiteoapi/node-sdk';
 import { logger } from '../../../utils/logger';
 import type { ChannelIncomingMessage } from '../channel/types';

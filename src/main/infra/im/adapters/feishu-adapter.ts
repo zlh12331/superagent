@@ -1,3 +1,5 @@
+// feishu-adapter.ts：飞书渠道——webhook 回发（基类）+ 可选 Stream 模式收消息
+//（appId:appSecret:webhookUrl 三段 token 时启用长连接接收）
 import { logger } from '../../../utils/logger';
 import type { ChannelIncomingMessage } from '../channel/types';
 import { FeishuStreamReceiver } from './feishu-stream';
@@ -5,8 +7,10 @@ import { WebhookChannelAdapter } from './webhook-channel';
 
 const STREAM_SEPARATOR = ':';
 
+// 飞书消息体 8000 字符上限（超长回复直接截断——渠道侧会拒收）
 const FEISHU_MAX_CONTENT = 8000;
 
+/** 飞书渠道适配器（webhook 基类扩展：Stream 接收） */
 export class FeishuAdapter extends WebhookChannelAdapter {
   readonly kind = 'feishu';
   readonly displayName = '飞书';

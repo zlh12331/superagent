@@ -1,3 +1,5 @@
+// keychain.ts：API Key 等敏感凭据存储——safeStorage（DPAPI/Keychain/libsecret）加密后落
+// keychain.dat JSON（值为字节数组）；损坏按条目抢救 + .corrupt 留档，绝不静默清空
 import { execFileSync } from 'node:child_process';
 import { chmodSync, promises as fs } from 'node:fs';
 import { join } from 'node:path';
@@ -6,14 +8,17 @@ import { safeStorage } from 'electron';
 import { logger } from '../../utils/logger';
 import { getKeychainPath } from './app-data';
 
+// 全局写锁串行化 read-modify-write（readStore 与 writeStore 之间不能被并发插入，否则丢更新）
 let lock: Promise<void> = Promise.resolve();
 
 let warnedEncryptionUnavailable = false;
 
+/** safeStorage 是否可用（Linux 无 libsecret 时为 false，届时密钥全部不可读） */
 export function isEncryptionAvailable(): boolean {
   return safeStorage.isEncryptionAvailable();
 }
 
+// 简易互斥队列：新请求排在既有锁链尾部，返回的 release 释放自己的槽位
 function acquireLock(): Promise<() => void> {
   const waiting = lock;
   let release: () => void = () => {};
@@ -26,6 +31,7 @@ function acquireLock(): Promise<() => void> {
 
 type KeychainStore = Record<string, number[]>;
 
+/** 最近一次完整性事件（损坏抢救结果；渲染层可展示「抢救 N 条 / 丢失 M 条」） */
 export interface KeychainIntegrity {
   readonly corrupted: boolean;
   readonly recoverable: boolean;
@@ -35,6 +41,7 @@ export interface KeychainIntegrity {
 
 let lastIntegrity: KeychainIntegrity | null = null;
 
+/** 查询最近一次完整性事件（null = 从未损坏） */
 export function getKeychainIntegrity(): KeychainIntegrity | null {
   return lastIntegrity;
 }
@@ -55,6 +62,8 @@ function isKeychainStore(value: unknown): value is KeychainStore {
 
 const ENTRY_FRAGMENT_PATTERN = /"((?:[^"\\]|\\.)+)"\s*:\s*(\[[^\][]*\])/g;
 
+// 结构级抢救：整体 JSON 解析失败后按「"键": [字节数组]」碎片正则逐条提取，
+// 能解密通过的收编——文件部分损坏时尽量少丢密钥
 function salvageEntries(raw: string): { store: KeychainStore; candidates: number } {
   const store: KeychainStore = {};
   let candidates = 0;
@@ -76,6 +85,7 @@ function salvageEntries(raw: string): { store: KeychainStore; candidates: number
   return { store, candidates };
 }
 
+// 读取失败绝不降级为空库继续——后续写会把既有密钥整体覆盖掉，宁可炸掉本次操作
 function throwKeychainReadError(error: unknown, filePath: string): never {
   const message = error instanceof Error ? error.message : String(error);
   logger.error(
@@ -129,6 +139,7 @@ async function readStore(): Promise<KeychainStore> {
   }
 }
 
+// 写入三防：0600 创建 + fsync 落盘 + tmp/rename 原子替换；失败清 tmp 不留半截文件
 async function writeStore(store: KeychainStore): Promise<void> {
   const filePath = getKeychainPath();
   const content = JSON.stringify(store, null, 2);
@@ -149,6 +160,7 @@ async function writeStore(store: KeychainStore): Promise<void> {
   restrictKeychainPermissions(filePath);
 }
 
+// whoami 解析当前账户供 icacls 授权（失败返回空串——ACL 收紧跳过而非炸掉写入）
 function resolveWindowsAccount(): string {
   const systemRoot = process.env['SystemRoot'];
   const whoamiExe =
@@ -160,6 +172,8 @@ function resolveWindowsAccount(): string {
   }
 }
 
+// 文件 ACL 收紧：unix 0600；win32 用 icacls 断继承 + 仅授予当前用户（DPAPI 才是主防线，
+// ACL 是纵深防御；失败只告警不阻塞）
 function restrictKeychainPermissions(filePath: string): void {
   if (process.platform !== 'win32') {
     try {
@@ -187,6 +201,7 @@ function restrictKeychainPermissions(filePath: string): void {
 
 export { restrictKeychainPermissions as restrictFileAccessWin32 };
 
+/** 写入密钥（加密不可用直接抛——明文落盘不可接受） */
 export async function setSecret(key: string, value: string): Promise<void> {
   if (!safeStorage.isEncryptionAvailable()) {
     throw new Error('safeStorage 加密不可用，无法存储敏感数据');
@@ -203,6 +218,9 @@ export async function setSecret(key: string, value: string): Promise<void> {
   }
 }
 
+/**
+ * 读取密钥；加密不可用时返回 null 并只告警一次（不炸调用方——上游按「未配置 Key」处理）
+ */
 export async function getSecret(key: string): Promise<string | null> {
   if (!safeStorage.isEncryptionAvailable()) {
     if (!warnedEncryptionUnavailable) {

@@ -1,7 +1,10 @@
+// ls-settings.ts：LSP 用户覆盖读取（settings 表 lsp.serverCommands 键）——
+// 每语言一条命令行字符串；损坏整体回退内置默认
 import { logger } from '../../utils/logger';
 import { readAllSettings } from '../storage/settings-pref';
 import { type LsServerSpec, parseServerCommand, SUPPORTED_LS_LANGUAGES } from './ls-config';
 
+/** 读各语言服务器覆盖（仅认可语言键；值非法跳过该语言） */
 export function readLsServerOverrides(): Record<string, LsServerSpec> {
   const overrides: Record<string, LsServerSpec> = {};
   try {

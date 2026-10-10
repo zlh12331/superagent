@@ -1,9 +1,11 @@
+// prewarm.ts：记忆引擎启动预热——启动 3s 后后台拉起引擎（首条消息即可用，不用现场等 60s）
 import { logger } from '../../utils/logger';
 import type { MemoryHubService } from './memory-hub-service';
 import { isMemoryEnabled } from './memory-pref';
 
 export const PREWARM_DELAY_MS = 3_000;
 
+/** 预热四条件（纯函数化供测试）：已配置 + 已启用 + 非测试 + 无豁免环境变量 */
 export interface PrewarmDecision {
   readonly configured: boolean;
   readonly enabled: boolean;
@@ -26,6 +28,7 @@ export interface SchedulePrewarmParams {
   readonly delayMs?: number;
 }
 
+/** 启动序列调用（幂等）：判定通过则延迟预热；失败只告警——首次真实调用时引擎会重试启动 */
 export function scheduleMemoryPrewarm(params: SchedulePrewarmParams): void {
   if (scheduled) return;
 

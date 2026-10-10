@@ -1,3 +1,4 @@
+// list-directory.tool.ts：list_directory 工具——目录树列举（file-service 承载）
 import type { FileListRes } from '@code-agent/shared/main';
 import { z } from 'zod';
 import type { IFileService } from '../../file/file-service';

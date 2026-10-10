@@ -1,3 +1,4 @@
+// lsp-hover.tool.ts：lsp_hover 工具——悬停文档（lsp-server-manager 承载）
 import { pathToFileURL } from 'node:url';
 import { z } from 'zod';
 import { t } from '../../i18n';

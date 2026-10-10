@@ -1,3 +1,5 @@
+// turn-assembly.ts：单回合执行拼装——模型解析 → 流创建（重试+首 part 预读）→ TurnRunner 消费 →
+// 工具调用修复接线 → TurnDeps.executeTurn 的真身（机器编排的是它）
 import type { ChatMessage } from '@code-agent/shared/main';
 import { isStepCount, streamText } from 'ai';
 import { createSdkTelemetryIntegration } from '../../telemetry/sdk-telemetry';

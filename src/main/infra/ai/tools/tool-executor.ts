@@ -1,3 +1,5 @@
+// tool-executor.ts：工具执行器——钩子（pre/post）→ 权限审批 → 执行 → 输出夹紧 → 事件推送全链
+// 输出限制按上下文窗口动态算（小窗口小输出），截断保 UTF-8 完整字符
 import type { AgentToolCallPayload, AgentToolResultPayload } from '@code-agent/shared/main';
 import { AppError, ErrorCode, IPC_DEFINITIONS } from '@code-agent/shared/main';
 import type { WebContents } from 'electron';
@@ -10,6 +12,7 @@ import { generateApprovalId } from './permission-service';
 import type { Tool, ToolContext, ToolResult } from './tool';
 import type { IToolRegistry } from './tool-registry';
 
+/** 工具执行器契约（turn-assembly 与 MCP 共用） */
 export interface IToolExecutor {
   execute(
     toolName: string,
@@ -20,11 +23,13 @@ export interface IToolExecutor {
   ): Promise<AgentToolResultPayload>;
 }
 
+// 输出上限档：硬顶 200KB；按上下文窗口 25% 预算动态算（3 字节/token 估算），下限 8KB
 const MAX_TOOL_OUTPUT_BYTES = 200 * 1024;
 const MIN_TOOL_OUTPUT_BYTES = 8 * 1024;
 const OUTPUT_WINDOW_RATIO = 0.25;
 const BYTES_PER_TOKEN = 3;
 
+/** 给定上下文窗口时的单工具输出字节上限 */
 export function toolOutputLimitFor(contextWindowSize: number | undefined): number {
   if (contextWindowSize === undefined || contextWindowSize <= 0) {
     return MAX_TOOL_OUTPUT_BYTES;

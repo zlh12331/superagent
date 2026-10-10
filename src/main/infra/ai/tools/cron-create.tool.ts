@@ -1,3 +1,4 @@
+// cron-create.tool.ts：cron_create 工具——创建定时任务（cron-service 承载）
 import { z } from 'zod';
 import { t } from '../../i18n';
 import { cronService } from '../agent/cron-service';

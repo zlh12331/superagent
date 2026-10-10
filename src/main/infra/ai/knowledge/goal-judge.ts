@@ -1,7 +1,9 @@
+// goal-judge.ts：目标达成判定器——LLM 按对话转录判 met/impossible，JSON 输出 zod 校验
 import { z } from 'zod';
 import { logger } from '../../../utils/logger';
 import type { LlmClient } from '../llm-client';
 
+/** 判定结果：met=达成 / impossible=不可能达成（自相矛盾或资源不可用——阻止无意义重试） */
 export interface GoalJudgement {
   readonly met: boolean;
   readonly reason: string;

@@ -1,9 +1,11 @@
+// repair-tool-call.ts：坏工具调用修复——参数校验失败时请 LLM 修复一次（仅一轮，防修复循环）
 import { InvalidToolInputError, type NoSuchToolError } from 'ai';
 import { z } from 'zod';
 
 import { logger } from '../../../utils/logger';
 import type { LlmClient } from '../llm-client/llm-client';
 
+// 只修一轮：修复本身也可能失败，再循环没有意义
 const REPAIR_MAX_ATTEMPTS = 1;
 
 interface ToolCallLike {

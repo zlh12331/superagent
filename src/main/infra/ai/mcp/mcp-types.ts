@@ -1,5 +1,8 @@
+// mcp-types.ts：MCP 配置/状态类型与工具命名规则（前缀 mcp__ 防与内置工具撞名）
+/** MCP 传输三型：stdio=子进程 / sse、streamable-http=远端 HTTP */
 export type McpTransportType = 'stdio' | 'sse' | 'streamable-http';
 
+/** server 配置（stdio 走 command/args/env，远端走 url/headers；permissionOverride 覆盖默认审批） */
 export interface McpServerConfig {
   readonly name: string;
   readonly transport?: McpTransportType;

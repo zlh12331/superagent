@@ -1,3 +1,4 @@
+// task-service.ts：后台任务跟踪（tasks 表）——agent 子回合与 shell 作业的生命周期记录
 import { randomUUID } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { logger } from '../../../utils/logger';
@@ -5,6 +6,7 @@ import { getDb } from '../../storage/db';
 import type { TaskRow } from '../../storage/schema';
 import { tasks } from '../../storage/schema';
 
+// 状态/类型常量对象（值即类型；崩溃恢复 markAllRunningFailed 依赖 RUNNING 值）
 export const TaskStatus = {
   PENDING: 'pending',
   RUNNING: 'running',
@@ -22,6 +24,7 @@ export const TaskKind = {
 
 export type TaskKind = (typeof TaskKind)[keyof typeof TaskKind];
 
+/** 任务记录 */
 export interface Task {
   readonly id: string;
   readonly sessionId: string;
@@ -38,6 +41,7 @@ const TERMINAL_STATUSES: readonly TaskStatus[] = [
   TaskStatus.CANCELLED,
 ];
 
+/** 任务表 CRUD 服务（模块级单例导出；崩溃恢复由容器 recoverFromCrash 调用） */
 export class TaskService {
   create(sessionId: string, kind: TaskKind, description: string): string {
     const id = randomUUID();

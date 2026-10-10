@@ -1,3 +1,4 @@
+// memory-pref.ts：记忆功能总开关（settings 表 memory.enabled 键）——1s TTL 缓存降 DB 读频
 import { logger } from '../../utils/logger';
 import { readSetting } from '../storage/settings-pref';
 
@@ -6,6 +7,7 @@ const CACHE_TTL_MS = 1_000;
 let cachedValue: boolean | null = null;
 let cachedAt = 0;
 
+/** 记忆是否启用（读取失败按启用兜底——记忆是旁路，多记无害少记有害） */
 export function isMemoryEnabled(): boolean {
   const now = Date.now();
   if (cachedValue !== null && now - cachedAt < CACHE_TTL_MS) {
@@ -29,6 +31,7 @@ export function isMemoryEnabled(): boolean {
   return enabled;
 }
 
+/** 清空开关缓存（测试隔离用） */
 export function resetMemoryEnabledCache(): void {
   cachedValue = null;
   cachedAt = 0;

@@ -1,3 +1,4 @@
+// glob.tool.ts：glob 工具——模式匹配列文件（search-service 承载）
 import type { GlobRes } from '@code-agent/shared/main';
 import { z } from 'zod';
 import { t } from '../../i18n';

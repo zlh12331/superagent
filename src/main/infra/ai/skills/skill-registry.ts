@@ -1,3 +1,5 @@
+// skill-registry.ts：技能注册表——内置四技能（code_review/refactor/debugging/commit_message）
+// + 学习沉淀注册；remove 内置技能时恢复内置版本（不可真删）
 export interface Skill {
   readonly name: string;
   readonly description: string;
@@ -53,6 +55,7 @@ const BUILTIN_SKILLS: readonly Skill[] = Object.freeze([
   },
 ]);
 
+/** 技能注册表（模块级单例 skillRegistry；loadFromRows 启动时灌 DB 已学技能） */
 export class SkillRegistry {
   private readonly skills = new Map<string, Skill>(BUILTIN_SKILLS.map((s) => [s.name, s]));
 

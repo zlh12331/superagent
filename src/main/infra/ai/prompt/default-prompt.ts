@@ -1,3 +1,4 @@
+// default-prompt.ts：内置系统提示词模板（{{占位}}由 dynamic-context 注入——workingDir/平台/git/AGENTS.md）
 export const DEFAULT_CODE_AGENT_PROMPT = `你是 Code Agent，一个专业的代码智能助手。你的核心职责是帮助用户理解、编写、修改和调试代码。
 
 # 工作环境

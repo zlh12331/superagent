@@ -1,3 +1,4 @@
+// stable-stringify.ts：确定性 JSON 序列化——对象键排序输出（审批输入哈希一致性依赖它）
 export function stableStringify(value: unknown): string {
   return stableStringifyInternal(value, new WeakSet());
 }

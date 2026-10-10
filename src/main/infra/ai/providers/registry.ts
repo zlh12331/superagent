@@ -1,3 +1,5 @@
+// registry.ts：供应商注册表——10 家供应商定义（默认模型/API Key 要求）+ SDK 工厂构建
+//（openai-compatible 系走 createOpenAICompatible + proxiedFetch，anthropic 用官方 SDK）
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
@@ -17,14 +19,17 @@ import type {
   RegisteredProvider,
 } from './types';
 
+/** 供应商 keychain 键（<kind>-api-key） */
 export function toKeychainKey(kind: ProviderKind): string {
   return `${kind}-api-key`;
 }
 
+/** 供应商显示名（当前与 kind 同值；展示层再本地化） */
 export function getProviderName(kind: ProviderKind): string {
   return kind;
 }
 
+// 内置定义：defaultModel 与 requiresApiKey 是设置面表单依据；isDefault 标记全局默认供应商
 const BUILTIN_DEFINITIONS: readonly ProviderDefinition[] = [
   {
     kind: 'deepseek',

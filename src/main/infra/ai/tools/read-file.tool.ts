@@ -1,3 +1,5 @@
+// read-file.tool.ts：read_file 工具——分页读文件，路径过工作区守卫，读取计入 read-tracker
+//（loop-detector 的同文件连读检测数据源）
 import type { FileReadRes } from '@code-agent/shared/main';
 import { z } from 'zod';
 import type { IFileService } from '../../file/file-service';

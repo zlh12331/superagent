@@ -1,3 +1,4 @@
+// system.handler.ts：system 域（进程状态快照）+ logs 域（日志尾部读取，日志面板消费）
 import { open } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { InferHandlers, IPC_DEFINITIONS } from '@code-agent/shared/main';
@@ -6,9 +7,11 @@ import { app } from 'electron';
 import { logger } from '../utils/logger';
 import type { IpcHandlerContext } from '../utils/wrap';
 
+// 日志尾部默认 200 行，硬上限 2000（主进程日志面板拉全量会把日志文件整个读进内存）
 const DEFAULT_LINES = 200;
 const MAX_LINES = 2000;
 
+/** 进程状态快照：版本/平台/运行时长/内存/CPU（诊断与设置关于页消费） */
 export const systemHandlers: InferHandlers<typeof IPC_DEFINITIONS, IpcHandlerContext>['system'] = {
   getStatus: async () => {
     const mem = process.memoryUsage();
@@ -38,6 +41,7 @@ export const systemHandlers: InferHandlers<typeof IPC_DEFINITIONS, IpcHandlerCon
   },
 };
 
+/** 日志尾部读取：可按级别过滤；文件缺失/读取失败返回空集不抛（日志面板不允许炸） */
 export const logsHandlers: InferHandlers<typeof IPC_DEFINITIONS, IpcHandlerContext>['logs'] = {
   read: async (input) => {
     const requestedLines = input?.lines ?? DEFAULT_LINES;
@@ -68,6 +72,8 @@ export const logsHandlers: InferHandlers<typeof IPC_DEFINITIONS, IpcHandlerConte
   },
 };
 
+// 尾部读取从文件末尾按 4KB 块倒着找换行符，凑够行数即止——日志文件可能数十 MB，
+// 全量读再 slice 会白读一大截
 async function readTailLines(filePath: string, lines: number): Promise<string[]> {
   const file = await open(filePath, 'r');
   try {

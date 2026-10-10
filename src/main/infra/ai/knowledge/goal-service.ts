@@ -1,3 +1,5 @@
+// goal-service.ts：目标服务——按会话维护目标（goals 表），订阅回合事件攒转录，
+// 回合结束调 GoalJudge 判定达成/放弃
 import type { GoalInfo, GoalStatus, TurnEvent } from '@code-agent/shared/main';
 import { TurnEventType } from '@code-agent/shared/main';
 import { desc, eq } from 'drizzle-orm';
@@ -9,6 +11,7 @@ import type { GoalJudge } from './goal-judge';
 
 type GoalStatusInternal = 'active' | 'completed' | 'aborted';
 
+/** 目标服务：mount 订阅回合事件（构造即挂），转录按会话内存暂存 */
 export class GoalService {
   private readonly transcripts = new Map<string, string>();
   private mounted = false;

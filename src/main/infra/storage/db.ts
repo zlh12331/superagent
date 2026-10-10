@@ -1,3 +1,6 @@
+// db.ts：SQLite 连接初始化 + 启动备份 + 损坏自愈——better-sqlite3 承载 Drizzle ORM
+// 启动序：应用暂存恢复 → 打开/自愈（quick_check → 备份回滚 → 归档重建）→ pragma → 迁移 → 调度启动备份
+// 边界：schema 真源在 schema.ts，迁移文件由 drizzle-kit 从其派生，本文件不写任何建表 SQL
 import { chmodSync, copyFileSync, existsSync, mkdirSync, renameSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
@@ -18,9 +21,12 @@ import { restrictFileAccessWin32 } from './keychain';
 import { schema } from './schema';
 
 const DB_FILENAME = 'sessions.db';
+// SQLite pragma 值：2 = INCREMENTAL（自动空间回收不开全库 VACUUM）
 const AUTO_VACUUM_INCREMENTAL = 2;
+// 空闲页低于此数不做 incremental_vacuum：VACUUM 有 IO 代价，零头不值得
 const FREELIST_RECLAIM_PAGES = 1024;
 
+// 文件权限收紧：win32 走 ACL（restrictFileAccessWin32），unix 0600（失败静默——只影响本用户文件）
 function restrictFilePermissions(filePath: string): void {
   if (process.platform === 'win32') {
     restrictFileAccessWin32(filePath);
@@ -31,6 +37,8 @@ function restrictFilePermissions(filePath: string): void {
   } catch {}
 }
 
+// 备份串行化：better-sqlite3 的 backup() 是异步 API，并发备份会互相踩——
+// 已有 pending 时链在其后执行，全程只保留一条备份链尾
 function runBackup(sqlite: Database.Database, dbPath: string): Promise<void> {
   const run = (): Promise<void> =>
     createBackupFile(sqlite, dbPath)
@@ -47,6 +55,7 @@ function runBackup(sqlite: Database.Database, dbPath: string): Promise<void> {
   return task;
 }
 
+/** 手动备份（设置面触发）：先排干挂起备份再执行，防并发 */
 export async function createManualBackup(): Promise<{ readonly name: string }> {
   if (pendingBackup !== null) {
     await pendingBackup;
@@ -59,6 +68,7 @@ export async function createManualBackup(): Promise<{ readonly name: string }> {
   return { name };
 }
 
+// 重建分支跳过启动备份：空库若进备份轮转，会把仅有的健康备份挤掉——保留它们等下次真实数据
 function scheduleStartupBackup(
   sqlite: Database.Database,
   dbPath: string,
@@ -71,6 +81,8 @@ function scheduleStartupBackup(
   void runBackup(sqlite, dbPath);
 }
 
+// 从最新到最旧逐个尝试恢复：候选须过完整性校验；替换前先清 db/-wal/-shm 三件套
+//（旧 wal 与恢复后的主库不匹配会再次损坏）
 function tryRestoreFromBackup(dbPath: string): boolean {
   const backupDir = backupDirPath(dbPath);
   const backups = listBackupNames(dbPath);
@@ -103,6 +115,7 @@ function tryRestoreFromBackup(dbPath: string): boolean {
   return false;
 }
 
+/** 自愈结局：healthy=原库无恙 / restored=备份恢复 / rebuilt=归档后重建空库（迁移随后建表） */
 type RecoveryStatus = 'healthy' | 'restored' | 'rebuilt';
 
 interface RecoveryOutcome {
@@ -110,6 +123,8 @@ interface RecoveryOutcome {
   readonly status: RecoveryStatus;
 }
 
+// 损坏自愈三级：quick_check 健康即用 → 从备份恢复 → 无备份则归档损坏文件（.corrupt-时间戳）
+// 后重建空库（数据不静默丢弃，归档可人工找回）
 function restoreCorruptDatabase(sqlite: Database.Database | null, dbPath: string): RecoveryOutcome {
   if (sqlite !== null) {
     let integrity: unknown;
@@ -159,6 +174,8 @@ function restoreCorruptDatabase(sqlite: Database.Database | null, dbPath: string
   return { sqlite: fresh, status: 'rebuilt' };
 }
 
+// 标准档 pragma：WAL（读写并发）+ 外键强制 + 3s busy 等待（并发写偶发锁）+ NORMAL 同步
+//（WAL 下 NORMAL 已足够安全且快）；wal/shm 文件权限同步收紧
 function applyDefaultPragmas(sqlite: Database.Database, dbPath: string): void {
   sqlite.pragma('journal_mode = WAL');
   restrictFilePermissions(`${dbPath}-wal`);
@@ -181,6 +198,8 @@ let sqliteInstance: Database.Database | null = null;
 
 let pendingBackup: Promise<void> | null = null;
 
+// 极老库形态补丁：display_name/is_enabled 列诞生于 drizzle 迁移链基线之前，
+// 迁移文件覆盖不到，只能在迁移执行前手动 ALTER（存在性探测后才补，幂等）
 function normalizeLegacyRuntimeModels(sqlite: Database.Database): void {
   const table = sqlite
     .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'runtime_models'")
@@ -202,6 +221,8 @@ function normalizeLegacyRuntimeModels(sqlite: Database.Database): void {
   }
 }
 
+// 迁移目录三候选：打包态在 resources（extraResources）；dev 因 pnpm 启动 cwd 不定，
+// 依次试 appPath/cwd/上两级，以 meta/_journal.json 存在为准
 function resolveMigrationsDir(): string {
   if (app.isPackaged) {
     return join(process.resourcesPath, 'drizzle');
@@ -219,6 +240,7 @@ function resolveMigrationsDir(): string {
   return candidates[0] as string;
 }
 
+// 打开即配好 pragma 并收紧权限；打开阶段失败返回 null 交给自愈流程（而非直接炸启动）
 function openWithDefaultPragmas(dbPath: string): Database.Database | null {
   let sqlite: Database.Database | null = null;
   try {
@@ -238,6 +260,10 @@ function openWithDefaultPragmas(dbPath: string): Database.Database | null {
   }
 }
 
+/**
+ * 初始化数据库（应用级单例，whenReady 启动序列调用）：
+ * 暂存恢复 → 损坏自愈 → auto_vacuum 对齐 → 极老库补丁 → 迁移 → 调度启动备份
+ */
 export function initDb(): DrizzleDB {
   if (dbInstance !== null) {
     return dbInstance;
@@ -289,6 +315,7 @@ export function initDb(): DrizzleDB {
   return db;
 }
 
+/** 取 Drizzle 实例（未初始化即抛——调用时序错误要炸得早） */
 export function getDb(): DrizzleDB {
   if (dbInstance === null) {
     throw new Error('数据库未初始化，请先调用 initDb()');
@@ -296,6 +323,7 @@ export function getDb(): DrizzleDB {
   return dbInstance;
 }
 
+// auto_vacuum 模式切换必须伴一次全量 VACUUM 才生效（SQLite 限制）——旧库首次升级时一次性执行
 function ensureIncrementalAutoVacuum(sqlite: Database.Database): void {
   const current = Number(sqlite.pragma('auto_vacuum', { simple: true }));
   if (current === AUTO_VACUUM_INCREMENTAL) {
@@ -310,6 +338,7 @@ function ensureIncrementalAutoVacuum(sqlite: Database.Database): void {
   );
 }
 
+/** 归还空闲页磁盘空间（freelist 过阈值才动手）；@returns 释放的页数 */
 export function reclaimFreePages(): number {
   if (sqliteInstance === null) {
     throw new Error('数据库未初始化，请先调用 initDb()');
@@ -328,6 +357,7 @@ export function reclaimFreePages(): number {
   return freed;
 }
 
+/** 等待挂起的启动备份完成（退出链 closeDb 前调用，防备份写一半进程就没了） */
 export async function drainPendingBackups(): Promise<void> {
   const tail = pendingBackup;
   if (tail !== null) {
@@ -338,6 +368,7 @@ export async function drainPendingBackups(): Promise<void> {
   }
 }
 
+/** 优雅关闭：排干备份 → 关连接（dispose 链最后一步，DB 必须最后关） */
 export async function closeDb(): Promise<void> {
   await drainPendingBackups();
   if (sqliteInstance !== null) {
@@ -348,6 +379,7 @@ export async function closeDb(): Promise<void> {
   }
 }
 
+/** 仅清单例引用不关连接（测试重置用；生产关闭走 closeDb） */
 export function resetDb(): void {
   dbInstance = null;
   sqliteInstance = null;

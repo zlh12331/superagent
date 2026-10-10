@@ -1,3 +1,4 @@
+// git-commit.tool.ts：git_commit 工具——提交（git-service 承载）
 import { z } from 'zod';
 import type { IGitService } from '../../git/git-service';
 import type { Tool, ToolContext, ToolResult } from './tool';

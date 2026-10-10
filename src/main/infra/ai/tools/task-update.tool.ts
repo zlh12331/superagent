@@ -1,3 +1,4 @@
+// task-update.tool.ts：task_update 工具——更新任务状态
 import { z } from 'zod';
 import { t } from '../../i18n';
 import { TaskStatus, taskService } from '../agent/task-service';

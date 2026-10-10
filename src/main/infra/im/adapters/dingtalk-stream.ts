@@ -1,3 +1,4 @@
+// dingtalk-stream.ts：钉钉 Stream 模式——官方 openconnection 换 WebSocket 端点 + 事件解析接收
 import { AppError, type ChannelKind, ErrorCode } from '@code-agent/shared/main';
 import { logger } from '../../../utils/logger';
 import { proxiedFetch } from '../../network/proxied-fetch';

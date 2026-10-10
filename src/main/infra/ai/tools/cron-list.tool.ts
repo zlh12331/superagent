@@ -1,3 +1,4 @@
+// cron-list.tool.ts：cron_list 工具——列定时任务
 import { z } from 'zod';
 import { t } from '../../i18n';
 import { cronService } from '../agent/cron-service';

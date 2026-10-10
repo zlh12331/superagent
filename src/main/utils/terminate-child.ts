@@ -1,8 +1,15 @@
+// terminate-child.ts：子进程优雅终止——先 SIGTERM 给清理窗口，超时升级 SIGKILL（防孤儿进程）
 import type { ChildProcess } from 'node:child_process';
 import { logger } from './logger';
 
+// SIGTERM→SIGKILL 升级宽限：3 秒足够大多数子进程收尾，又不至于让退出链久等
 export const SIGKILL_ESCALATION_MS = 3_000;
 
+/**
+ * 终止子进程：已退出直接返回；SIGTERM 后 timeoutMs 内未退则升级 SIGKILL
+ *
+ * SIGKILL 后不等待真正退出（kill 是异步信号）——调用方需要强保证时自行再等 exit 事件
+ */
 export async function terminateChild(
   child: ChildProcess | null | undefined,
   label: string,
@@ -42,6 +49,6 @@ export async function terminateChild(
       }
       finish();
     }, timeoutMs);
-    timer.unref?.();
+    timer.unref?.(); // 计时器不阻止主进程退出（退出链中杀子进程不该反过来拖住退出）
   });
 }

@@ -1,3 +1,4 @@
+// ask-user-question.tool.ts：ask_user_question 工具——向用户提选择题（agent-ask-service 承载）
 import { z } from 'zod';
 import { t } from '../../i18n';
 import type { AgentAskService } from '../agent/agent-ask-service';

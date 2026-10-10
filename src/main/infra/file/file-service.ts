@@ -1,3 +1,5 @@
+// file-service.ts：文件服务——读/写/列举/chokidar 监听/建删改名，渲染层文件树与编辑器后端
+// 边界：工作区路径校验不在这里（ipc 层守卫后传入）；编码自动探测 + 超限截断在本层做
 import { randomUUID } from 'node:crypto';
 import { promises as fs, type Stats } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -23,9 +25,11 @@ import { DEFAULT_TREE_IGNORE_PATTERNS, matchIgnorePattern } from './tree-ignore'
 
 const UTF8_LIKE_ENCODINGS = new Set(['UTF-8', 'ASCII']);
 
+// 单次读取上限 2MB（防超大文件打爆 IPC 通道）；编码探测只采样头部 64KB 足够判 BOM/字符分布
 const MAX_READ_BYTES = 2 * 1024 * 1024;
 const CHARDET_SAMPLE_BYTES = 64 * 1024;
 
+// 监听噪音过滤：node_modules 与点开头条目不推事件（文件树也不展示，推了也没人消费）
 function shouldIgnoreWatchPath(testPath: string, stats?: Stats): boolean {
   if (stats?.isDirectory()) {
     return false;
@@ -103,6 +107,7 @@ export interface FileRenameOptions {
   readonly overwrite: boolean;
 }
 
+/** 文件服务接口（IPC handler 消费；watch 返回句柄 id，unwatch 凭 id 解绑） */
 export interface IFileService {
   read(options: FileReadOptions): Promise<FileReadRes>;
   write(options: FileWriteOptions): Promise<FileWriteRes>;

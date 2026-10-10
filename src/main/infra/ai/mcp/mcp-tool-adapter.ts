@@ -1,9 +1,12 @@
+// mcp-tool-adapter.ts：MCP 工具描述符 → 本仓 Tool 适配（inputSchema 转 AI SDK jsonSchema，
+// 内容块数组拍平为文本；isError 结果抛错让模型感知）
 import { AppError, ErrorCode } from '@code-agent/shared/main';
 import { jsonSchema } from 'ai';
 import type { Tool, ToolContext, ToolResult } from '../tools/tool';
 import type { McpServerConfig } from './mcp-types';
 import { buildMcpToolName } from './mcp-types';
 
+/** MCP 工具描述符（listTools 返回形状；annotations 提示只读/破坏性等语义） */
 export interface McpToolDescriptor {
   readonly name: string;
   readonly description?: string;

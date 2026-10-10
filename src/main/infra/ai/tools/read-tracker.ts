@@ -1,3 +1,4 @@
+// read-tracker.ts：会话级文件读取登记表——read_file 计数（loop-detector 判同文件连读的数据源）
 class ReadTracker {
   private readonly bySession = new Map<string, Set<string>>();
 

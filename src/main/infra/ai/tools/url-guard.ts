@@ -1,10 +1,14 @@
+// url-guard.ts：URL SSRF 防线——主机名黑名单（云元数据端点/本地域）+ 解析后 IP 黑名单
+//（私网/环回/链路本地），DNS rebinding 经「先解析再判 IP」防住
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 
+/** URL 守卫结论：allowed=false 时 reason 说明命中哪类受限地址 */
 export type UrlGuardResult =
   | { readonly allowed: true }
   | { readonly allowed: false; readonly reason: string };
 
+// 主机名黑名单：云厂商元数据端点（GCP/AWS）+ 本地域后缀——Agent 不该探测这些
 const BLOCKED_HOSTNAMES = new Set([
   'localhost',
   'metadata.google.internal',

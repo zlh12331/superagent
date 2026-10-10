@@ -1,3 +1,5 @@
+// usage-turn-store.ts：用量与回合的存储层（session-service 委托到这里，文件级拆分控体量）
+// 写入路径 token_usage 按统计窗口滚动清理，表不会无限膨胀
 import type {
   SessionGetTurnsRes,
   SessionRecentTurnsRes,
@@ -9,8 +11,10 @@ import { logger } from '../../utils/logger';
 import { getDb, reclaimFreePages } from './db';
 import { tokenUsage, turns } from './schema';
 
+// 统计窗口 90 天：summary/清理共用同一窗口（超出即清，图表最多也只画 90 天）
 const USAGE_SUMMARY_WINDOW_MS = 90 * 24 * 60 * 60 * 1000;
 
+/** 清理窗口外的 token_usage 行；@returns 清理行数 */
 export function pruneExpiredUsage(): number {
   const db = getDb();
   const cutoff = Date.now() - USAGE_SUMMARY_WINDOW_MS;
@@ -22,6 +26,7 @@ export function pruneExpiredUsage(): number {
   return result.changes;
 }
 
+/** 追加一条用量流水（每模型请求一条；缓存读/推理 token 可缺省） */
 export async function recordUsage(usage: {
   readonly sessionId: string;
   readonly modelId: string;
@@ -46,6 +51,7 @@ export async function recordUsage(usage: {
     .run();
 }
 
+/** 用量汇总：总量 + 按模型 + 按日（本地时区）三视图，全部限统计窗口 */
 export async function getUsageSummary(): Promise<UsageSummaryRes> {
   const db = getDb();
   const windowStart = Date.now() - USAGE_SUMMARY_WINDOW_MS;
@@ -102,6 +108,7 @@ export async function getUsageSummary(): Promise<UsageSummaryRes> {
   };
 }
 
+/** 回合落库：seq 取会话内当前 MAX+1（服务层保证回合不并发，此处不再加锁） */
 export async function recordTurn(turn: {
   readonly turnId: string;
   readonly sessionId: string;

@@ -1,3 +1,4 @@
+// denial-tracking.ts：审批拒绝计数——连续 3 次/累计 20 次拒绝即降级为手动模式（防 Agent 刷审批）
 export interface DenialState {
   consecutiveDenials: number;
   totalDenials: number;

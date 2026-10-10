@@ -1,3 +1,5 @@
+// ai-provider.ts：AI 供应商装配口——llmClient 单例（依赖 modelRegistry/供应商工厂/模型超时）+
+// 供应商工厂缓存 + 运行时模型存储；settings 改 API Key 后 resetAIProvider 重建
 import { AppError, ErrorCode } from '@code-agent/shared/main';
 import type { LanguageModel } from 'ai';
 import { getAppConfig } from '../../../config';
@@ -14,8 +16,10 @@ interface AiProviderFactoryOptions {
   readonly kind?: ProviderKind;
 }
 
+// 工厂按 providerKind 缓存（同一供应商多个模型复用同一份客户端配置）
 const providerCache = new Map<string, (modelId: string) => LanguageModel>();
 
+/** 取（或构建）供应商模型工厂；显式 apiKey 直建不缓存（测试/临时探测） */
 export async function getAIProvider(
   options?: AiProviderFactoryOptions,
 ): Promise<(modelId: string) => LanguageModel> {

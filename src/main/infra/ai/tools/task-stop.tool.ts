@@ -1,3 +1,4 @@
+// task-stop.tool.ts：task_stop 工具——停止后台任务
 import { z } from 'zod';
 import { t } from '../../i18n';
 import { TaskStatus, taskService } from '../agent/task-service';

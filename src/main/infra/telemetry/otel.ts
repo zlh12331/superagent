@@ -1,3 +1,5 @@
+// otel.ts：OpenTelemetry 单通道初始化——OTEL_EXPORTER_OTLP_ENDPOINT 未配置即不外发
+//（dev 无端点走 Console exporter 便于本地观察）；Sentry 已移除，遥测是唯一出网点
 import type { Tracer } from '@opentelemetry/api';
 import { trace } from '@opentelemetry/api';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
@@ -14,6 +16,10 @@ let initialized = false;
 
 let tracerProvider: NodeTracerProvider | null = null;
 
+/**
+ * 初始化遥测（启动序列调用，须在遥测级别判定之后）：级别 off / 打包版无端点 → 不初始化；
+ * 初始化失败退化为 no-op（遥测绝不能影响主流程）
+ */
 export function initTelemetry(): void {
   if (initialized) {
     return;
@@ -71,10 +77,15 @@ export function initTelemetry(): void {
   }
 }
 
+/** 取全局 tracer（未初始化为 null——调用方判空跳过） */
 export function getTracer(): Tracer | null {
   return tracer;
 }
 
+/**
+ * 包一段 span 执行异步操作：成功 code=1，失败 code=2 + recordException 后原样抛出；
+ * 未初始化时直接执行 fn（span 为 null 由调用方容忍）
+ */
 export async function withSpan<T>(
   name: string,
   attributes: Record<string, string | number | boolean>,
@@ -100,6 +111,7 @@ export async function withSpan<T>(
   });
 }
 
+/** 退出善后：forceFlush 冲掉未发送 span 再 shutdown（flush 失败只告警不阻塞退出） */
 export async function shutdownTelemetry(): Promise<void> {
   if (!initialized) {
     return;

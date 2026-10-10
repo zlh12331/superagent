@@ -1,3 +1,5 @@
+// im-agent-bridge.ts：IM 消息 → Agent 回合的桥——白名单准入、会话级互斥、回合回复回发到聊天
+// 安全边界：IM 回合工作目录锁定在 userData/im-workspace（绝不碰用户任意路径）
 import { randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -11,14 +13,17 @@ import type { ISessionService } from '../storage/session-service';
 import type { ChannelIncomingMessage } from './channel/types';
 import type { ImService } from './im-service';
 
+// 会话键 = 渠道:聊天 id（与准入白名单同一命名）
 function sessionKey(channel: string, chatId: string): string {
   return `${channel}:${chatId}`;
 }
 
+/** IM 工作区根（固定 userData 下，IM 侧不允许指定任意目录） */
 export function getImDefaultWorkingDir(): string {
   return join(app.getPath('userData'), 'im-workspace');
 }
 
+/** IM → Agent 桥：聊天级互斥（同聊天串行）+ 审批模式前置检查（无头须 auto/yolo） */
 export class ImAgentBridge {
   private readonly sessionMap = new Map<string, string>();
   private readonly busyChats = new Set<string>();

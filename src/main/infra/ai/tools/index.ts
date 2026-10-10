@@ -1,3 +1,5 @@
+// index.ts：内置工具注册入口——registerBuiltinTools 把全部工具装进注册表
+//（容器构造 ToolRegistry 时调用；新增工具：写 *.tool.ts + 此处 import + register）
 import type { ICodebaseService } from '../../codebase/codebase-service';
 import type { IFileService } from '../../file/file-service';
 import type { IGitService } from '../../git/git-service';

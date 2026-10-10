@@ -1,3 +1,5 @@
+// turn-runner.ts：回合流消费器——读模型流逐 part 翻译为事件（过循环检测），产出结束原因与耗时
+// 38 号拆分：本类只管「读流→翻译→发事件」，决策/审批在 agent-turn-machine
 import type { TurnToolCallEvent } from '@code-agent/shared/main';
 import { TurnEventType } from '@code-agent/shared/main';
 import { isAbortError } from '../tools/error-classifier';
@@ -8,6 +10,7 @@ import type { TurnEventEmitter } from './turn-emitter';
 import type { StreamPart } from './turn-translator';
 import { translatePart } from './turn-translator';
 
+/** 回合流参数：firstPart 为调用方已抢读的首 part（38 号时序坑——流已被读一格） */
 export interface TurnRunnerOptions {
   readonly sessionId: string;
   readonly turnId: string;
@@ -25,6 +28,10 @@ export interface TurnRunResult {
   readonly durationMs: number;
 }
 
+/**
+ * 回合执行器：逐 part 读取（带空闲超时）→ 翻译 → 发事件；tool_call 过循环检测；
+ * AbortError 按 isTimeout 判据分流 timeout/aborted；finally 清会话读计数器
+ */
 export class TurnRunner {
   private readonly options: TurnRunnerOptions;
   private readonly startTime: number;
@@ -68,6 +75,7 @@ export class TurnRunner {
         }
       }
       while (true) {
+        // 空闲超时兜底：模型流挂着不出数据时从这里脱身（10 分钟默认）
         const { done, value } = await readWithIdleTimeout(
           activeReader,
           this.options.controller,

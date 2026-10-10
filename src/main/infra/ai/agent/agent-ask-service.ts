@@ -1,3 +1,5 @@
+// agent-ask-service.ts：Agent 主动提问服务——turn 内 ask-user-question 工具的应答中枢
+//（渲染层弹卡片，respondAsk IPC 回传答案）；模块级单例（不经容器，AgentService 直引）
 import { randomUUID } from 'node:crypto';
 import type { AgentAnswer, AgentQuestion, AskResolvedPayload } from '@code-agent/shared/main';
 import { IPC_DEFINITIONS } from '@code-agent/shared/main';
@@ -12,8 +14,10 @@ interface PendingAsk {
   readonly webContents: WebContents;
 }
 
+/** 应答裁决：answered=用户答了 / timed-out=60s 超时 / aborted=回合中止 */
 export type AskDecisionOutcome = 'answered' | 'timed-out' | 'aborted';
 
+/** ask 生命周期监听（回合机器据此感知超时；UI 记账用） */
 export interface AskLifecycleListener {
   onRequested(payload: { readonly sessionId: string; readonly askId: string }): void;
   onResolved(payload: {
@@ -23,6 +27,7 @@ export interface AskLifecycleListener {
   }): void;
 }
 
+/** 提问服务：pending 表按 askId 存挂起 Promise，respond 唤醒；超时/中止时 resolve null */
 export class AgentAskService {
   private readonly pending = new Map<string, PendingAsk>();
   private readonly lifecycleListeners = new Set<AskLifecycleListener>();

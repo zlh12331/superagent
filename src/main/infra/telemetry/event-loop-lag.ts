@@ -1,5 +1,8 @@
+// event-loop-lag.ts：主进程事件循环延迟监控——monitorEventLoopDelay 直方图按间隔采样 p99
+// 基准按期望间隔推进，空闲不误报（有活跃回合才值得告警，判定在 lag-alert 侧）
 import { monitorEventLoopDelay } from 'node:perf_hooks';
 
+// 采样 5s 一档；p99 超 1s 判为「阻塞」；1e6 纳秒/毫秒换算
 const DEFAULT_INTERVAL_MS = 5_000;
 
 const DEFAULT_WARN_THRESHOLD_MS = 1_000;
@@ -17,6 +20,7 @@ export interface EventLoopLagSample {
 
 export type LagHandler = (sample: EventLoopLagSample) => void;
 
+/** 直方图最小接口（createHistogram 注入缝：测试用 fake 替换 monitorEventLoopDelay） */
 export interface LagHistogram {
   enable(): boolean;
   disable(): boolean;
@@ -36,6 +40,11 @@ export interface EventLoopLagMonitorOptions {
   readonly createHistogram?: () => LagHistogram;
 }
 
+/**
+ * 事件循环延迟监控器：enable 直方图 → 定时取 p99 并 reset → 超阈值回调全部 handler
+ *
+ * timer unref：监控不阻止进程退出
+ */
 export class EventLoopLagMonitor {
   private readonly intervalMs: number;
   private readonly warnThresholdMs: number;

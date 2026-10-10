@@ -1,12 +1,16 @@
+// webhook-channel.ts：webhook 型渠道基类（钉钉/企微机器人）——出站回发 + 重试 + 签名装饰，
+// 入站靠各渠道的 stream 长连接（本基类 onMessage 恒为空操作）
 import { AppError, type ChannelKind, ErrorCode } from '@code-agent/shared/main';
 import { logger } from '../../../utils/logger';
 import { proxiedFetch } from '../../network/proxied-fetch';
 import type { ChannelIncomingMessage, ChannelTarget, IChannelAdapter } from '../channel/types';
 
+// 回发 10s 超时 + 3 次重试（0.5s×attempt 退避）——IM 回发丢了用户无感，值得重试
 const WEBHOOK_TIMEOUT_MS = 10_000;
 const SEND_RETRY_COUNT = 2;
 const RETRY_BASE_MS = 500;
 
+// 渠道响应错误码两种命名（errcode/errmsg 与 code/msg），兼容读
 interface WebhookErrorResponse {
   readonly errcode?: number;
   readonly errmsg?: string;
@@ -14,6 +18,10 @@ interface WebhookErrorResponse {
   readonly msg?: string;
 }
 
+/**
+ * webhook 型渠道抽象基类：子类实现 buildPayload（渠道报文格式），可选装饰 URL（加签）/
+ * 解析 token（url#secret 形态）
+ */
 export abstract class WebhookChannelAdapter implements IChannelAdapter {
   abstract readonly kind: ChannelKind;
   abstract readonly displayName: string;
@@ -100,6 +108,7 @@ export abstract class WebhookChannelAdapter implements IChannelAdapter {
   }
 }
 
+// token 形态：纯 URL 或 "URL#加签密钥"（钉钉安全设置）；协议限 http/https
 function parseWebhookToken(
   token: string | undefined,
 ): { url: string; secret: string | null } | null {
@@ -163,6 +172,7 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/** 钉钉加签：HMAC-SHA256(timestamp\nsecret) → base64（钉钉机器人安全设置） */
 export async function dingtalkSign(secret: string, timestamp: number): Promise<string> {
   const signString = `${timestamp}\n${secret}`;
   const key = new TextEncoder().encode(secret);

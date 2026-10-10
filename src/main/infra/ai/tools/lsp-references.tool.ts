@@ -1,3 +1,4 @@
+// lsp-references.tool.ts：lsp_references 工具——找引用（lsp-server-manager 承载）
 import { pathToFileURL } from 'node:url';
 import { z } from 'zod';
 import { t } from '../../i18n';

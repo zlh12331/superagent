@@ -1,3 +1,4 @@
+// dialog.handler.ts：dialog 域 IPC——目录/文件选择对话框；选中的路径即视为用户授权（入读白名单）
 import type { InferHandlers, IPC_DEFINITIONS } from '@code-agent/shared/main';
 import { dialog } from 'electron';
 
@@ -31,6 +32,8 @@ export const dialogHandlers: InferHandlers<typeof IPC_DEFINITIONS, IpcHandlerCon
       return { canceled: true };
     }
 
+    // 用户经系统对话框主动选中的文件自动加入读白名单（path-guard 的 user-grants 机制：
+    // 用户亲自选择 = 授权，Agent 后续可直接读，不再重复弹审批）
     grantUserReadPaths(result.filePaths);
 
     return { canceled: false, paths: result.filePaths };

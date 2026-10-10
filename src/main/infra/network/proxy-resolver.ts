@@ -1,7 +1,10 @@
+// proxy-resolver.ts：代理配置解析与派生——设置值 zod 校验、Chromium 分区规则、绕过判定、URL 脱敏
+// 34 号：本文件是纯函数层（无副作用），应用/取 URL 的副作用在 proxy-applier / proxied-fetch
 import { z } from 'zod';
 
 import { logger } from '../../utils/logger';
 
+/** 代理模式：system=随系统 / direct=直连 / fixed=用户指定 URL */
 export type ProxyMode = 'system' | 'direct' | 'fixed';
 
 export interface ProxyConfig {
@@ -28,6 +31,7 @@ const ProxyConfigSchema = z.object({
 
 const SYSTEM_DEFAULT: ProxyConfig = { mode: 'system' };
 
+/** 解析设置原始值（用户可控面）：损坏/fixed 缺 url 一律回落 system 兜底并告警 */
 export function parseProxyConfig(raw: unknown): ProxyConfig {
   if (raw === undefined || raw === null) {
     return { ...SYSTEM_DEFAULT };
@@ -49,6 +53,7 @@ export function parseProxyConfig(raw: unknown): ProxyConfig {
   return { ...SYSTEM_DEFAULT };
 }
 
+/** 派生 Chromium session.setProxy 参数（default/updater/preview 三分区共用一档） */
 export function buildChromiumProxyConfig(cfg: ProxyConfig): {
   mode: 'system' | 'direct' | 'fixed_servers';
   proxyRules?: string;
@@ -72,10 +77,15 @@ export function buildChromiumProxyConfig(cfg: ProxyConfig): {
   };
 }
 
+/** fixed 模式返回代理 URL（env 侧通道用），其余模式 undefined */
 export function buildProxyUrl(cfg: ProxyConfig): string | undefined {
   return cfg.mode === 'fixed' ? cfg.url : undefined;
 }
 
+/**
+ * 请求是否绕过代理：环回地址（各写法）永远绕过；bypass 列表按后缀匹配
+ *（仅 fixed 模式有意义——system/direct 本就不走代理）
+ */
 export function shouldBypass(cfg: ProxyConfig, requestUrl: string): boolean {
   if (cfg.mode !== 'fixed') {
     return false;
@@ -104,10 +114,12 @@ export function shouldBypass(cfg: ProxyConfig, requestUrl: string): boolean {
   return false;
 }
 
+/** 日志用脱敏：代理 URL 可能带 `user:pass@` 认证段，替换为 *** */
 export function maskProxyUrl(url: string): string {
   return url.replace(/\/\/[^/@]+@/, '//***@');
 }
 
+// 端口缺省按协议补齐（Chromium proxyRules 要求 host:port 形态）
 function proxyHostPort(proxyUrl: string): string {
   const parsed = new URL(proxyUrl);
   const port = parsed.port !== '' ? parsed.port : parsed.protocol === 'https:' ? '443' : '80';

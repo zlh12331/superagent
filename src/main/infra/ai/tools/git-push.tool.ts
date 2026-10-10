@@ -1,3 +1,4 @@
+// git-push.tool.ts：git_push 工具——推送（git-service 承载，force 走 lease）
 import { z } from 'zod';
 import type { IGitService } from '../../git/git-service';
 import { t } from '../../i18n';

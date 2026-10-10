@@ -1,3 +1,5 @@
+// search-service.ts：搜索服务——驱动 @vscode/ripgrep 子进程执行 grep/glob（JSON 流解析）
+// 边界：工作区路径校验在 ipc 层；这里只做「路径不得以 - 开头」的命令注入面防护
 import { type ChildProcess, spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import type { GlobRes, GrepMatch, GrepRes } from '@code-agent/shared/main';
@@ -23,12 +25,14 @@ export interface GlobOptions {
   readonly maxResults: number;
 }
 
+/** 搜索服务接口（IPC handler 与 grep 工具共同消费） */
 export interface ISearchService {
   grep(options: GrepOptions): Promise<GrepRes>;
   glob(options: GlobOptions): Promise<GlobRes>;
   dispose(): Promise<void>;
 }
 
+// ripgrep --json 输出的行类型（本仓只用 begin/match/end 携带的数据）
 type RipgrepJsonLine =
   | { type: 'begin'; data: { path: { text: string } } }
   | {
@@ -56,6 +60,7 @@ type RipgrepJsonLine =
   | { type: 'summary'; data: unknown }
   | { type: 'end'; data: unknown };
 
+// 命令注入面：用户可控路径以 - 开头会被 rg 当选项解析（如 --pre 命令执行面）——直接拒
 function assertSafeSearchPaths(paths: readonly string[]): void {
   const unsafe = paths.find((p) => p.startsWith('-'));
   if (unsafe !== undefined) {
@@ -72,6 +77,7 @@ function appendSearchPaths(args: string[], paths: readonly string[]): void {
 }
 
 export class SearchService implements ISearchService {
+  // spawn 可注入（测试不打真实 rg 进程）
   private readonly spawnFn: typeof spawn;
 
   constructor(options: { spawnFn?: typeof spawn } = {}) {

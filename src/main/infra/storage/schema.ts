@@ -1,6 +1,12 @@
+// schema.ts：全库唯一真源——11 张表 + 领域约束（CHECK/UNIQUE/外键）+ 查询索引
+// 迁移 DDL 由 drizzle-kit 从本文件派生（禁止手写第二份建表 SQL）；改这里必须跑
+// drizzle-kit generate 并验证 check:schema-drift。AI 层需要枚举类型时从本文件导入，勿重复定义
 import { sql } from 'drizzle-orm';
 import { check, index, integer, sqliteTable, text, unique } from 'drizzle-orm/sqlite-core';
 
+// 枚举策略：稳定枚举（不再扩的）落 DB CHECK；演进枚举（会加值的）只用 $type 应用层约束
+//（SQLite 改 CHECK 需重建表，代价高）——sessions.last_run_status/messages.role 是前者，
+// goals/tasks 是后者
 export type MessageRole = 'user' | 'assistant' | 'tool' | 'system';
 export type RunStatus = 'idle' | 'running' | 'interrupted';
 export type SkillSource = 'learned' | 'builtin';
@@ -9,6 +15,7 @@ export type GoalStatus = 'active' | 'completed' | 'aborted';
 export type TaskStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
 export type TaskKind = 'agent' | 'shell';
 
+/** 会话主表：lastRunStatus 有 CHECK（触发器兜底迁移 0002 先例——被 FK 引用的表禁止重建式迁移） */
 export const sessions = sqliteTable(
   'sessions',
   {
@@ -33,6 +40,7 @@ export const sessions = sqliteTable(
   ],
 );
 
+/** 消息表：(session, seq) 唯一保序；角色落 CHECK；级联随会话删除 */
 export const messages = sqliteTable(
   'messages',
   {
@@ -56,6 +64,7 @@ export const messages = sqliteTable(
 export type SessionRow = typeof sessions.$inferSelect;
 export type SessionInsert = typeof sessions.$inferInsert;
 
+/** 系统提示词模板表 */
 export const prompts = sqliteTable(
   'prompts',
   {
@@ -77,6 +86,7 @@ export type MessageInsert = typeof messages.$inferInsert;
 export type PromptRow = typeof prompts.$inferSelect;
 export type PromptInsert = typeof prompts.$inferInsert;
 
+/** token 用量流水（按请求追加；缓存读/推理 token 可空——旧模型不报） */
 export const tokenUsage = sqliteTable(
   'token_usage',
   {
@@ -101,6 +111,7 @@ export const tokenUsage = sqliteTable(
 export type TokenUsageRow = typeof tokenUsage.$inferSelect;
 export type TokenUsageInsert = typeof tokenUsage.$inferInsert;
 
+/** 回合记录：turnId 全局唯一 + (session, seq) 会话内有序；token/时长结束时回填 */
 export const turns = sqliteTable(
   'turns',
   {
@@ -128,6 +139,7 @@ export const turns = sqliteTable(
 export type TurnRow = typeof turns.$inferSelect;
 export type TurnInsert = typeof turns.$inferInsert;
 
+/** 用户自定义模型（运行时新增的供应商模型，区别于内置清单） */
 export const runtimeModels = sqliteTable(
   'runtime_models',
   {
@@ -143,6 +155,7 @@ export const runtimeModels = sqliteTable(
   (t) => [check('chk_runtime_models_is_enabled', sql`${t.isEnabled} IN (0,1)`)],
 );
 
+/** 会话目标（goal-judge 按 condition 判定达成/放弃） */
 export const goals = sqliteTable(
   'goals',
   {
@@ -160,6 +173,7 @@ export const goals = sqliteTable(
   (t) => [index('idx_goals_session').on(t.sessionId)],
 );
 
+/** 后台任务跟踪（agent 子回合 / shell 作业） */
 export const tasks = sqliteTable('tasks', {
   id: text('id').primaryKey(),
   sessionId: text('session_id').notNull(),
@@ -170,6 +184,7 @@ export const tasks = sqliteTable('tasks', {
   endTime: integer('end_time'),
 });
 
+/** 定时任务（cron 表达式 + 触发目标会话） */
 export const cronTasks = sqliteTable(
   'cron_tasks',
   {
@@ -186,6 +201,7 @@ export const cronTasks = sqliteTable(
 
 export type CronTaskRow = typeof cronTasks.$inferSelect;
 
+/** 技能表（learned=LLM 提炼沉淀，builtin=内置） */
 export const skills = sqliteTable(
   'skills',
   {
@@ -209,12 +225,14 @@ export type GoalInsert = typeof goals.$inferInsert;
 export type RuntimeModelRow = typeof runtimeModels.$inferSelect;
 export type RuntimeModelInsert = typeof runtimeModels.$inferInsert;
 
+/** 用户设置键值表（JSON 文本值；渲染层 settings 写穿透目标） */
 export const appSettings = sqliteTable('app_settings', {
   key: text('key').primaryKey(),
   value: text('value').notNull(),
   updatedAt: integer('updated_at').notNull(),
 });
 
+// 聚合导出：drizzle() 初始化与 migrate 使用的 schema 对象（新增表必须登记进来）
 export const schema = {
   sessions,
   messages,

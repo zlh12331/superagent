@@ -1,3 +1,4 @@
+// l0-rewrite.ts：L0 JSONL 中按会话键删除行（用户清记忆时的审计镜像同步清理；改写走 tmp+rename）
 import { existsSync } from 'node:fs';
 import { readdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';

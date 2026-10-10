@@ -1,7 +1,13 @@
+// agent-turn-machine.ts：Agent 回合 XState 状态机（38 号编排化）——8 状态拓扑（idle→waitingModel→
+// executing→审批/ask 嵌套→finalizing→done），全部副作用经 TurnDeps 注入（机器保持纯编排）
+// ⚠️ XState v5 坑：invoked 回调无 context（经 invoke.input 传）、onError type 实值含 actor id
+// （须 startsWith 匹配）、actor 调度跨宏任务（fake timers 测试要 flushAsync）
 import { APPROVAL_TIMEOUT_MS, AppError, ASK_TIMEOUT_MS, ErrorCode } from '@code-agent/shared/main';
 import { assign, createActor, fromPromise, setup } from 'xstate';
 import { isAbortError } from '../tools/error-classifier';
 import type { ApprovalDecisionOutcome } from '../tools/permission-types';
+
+/** 机器执行一回合的产出（gate 放行后 executeTurn 的结果快照） */
 export interface TurnRunOutput {
   readonly reason: 'completed' | 'aborted' | 'timeout';
   readonly durationMs: number;
@@ -10,6 +16,10 @@ export interface TurnRunOutput {
   readonly timeoutSignalAborted: boolean;
 }
 
+/**
+ * 回合机器的全部副作用依赖（12 dep）：模型解析/gate/执行/三种终态收尾/转发冲刷/gate 释放/
+ * 模型超时清理/统一清理/审批与 ask 超时——mock 这一层即可测机器拓扑
+ */
 export interface TurnDeps {
   resolveModel(): Promise<string>;
   acquireGate(): Promise<void>;
@@ -25,6 +35,7 @@ export interface TurnDeps {
   expireAsk(askId: string): void;
 }
 
+/** 机器上下文：会话/回合标识 + deps + 运行产出 + 审批/ask 挂起态（嵌套态间共享） */
 export interface AgentTurnContext {
   readonly sessionId: string;
   readonly turnId: string;

@@ -1,9 +1,11 @@
+// session-title.ts：会话标题生成——首条用户消息喂 LLM 产短标题（agent-service 回合收尾调用）
 import type { ChatMessage } from '@code-agent/shared/main';
 import { logger } from '../../../utils/logger';
 import type { ISessionService } from '../../storage/session-service';
 import { DEFAULT_SESSION_TITLE } from '../../storage/session-service';
 import type { LlmGenerateTextOptions, LlmGenerateTextResult } from '../llm-client';
 
+/** 标题生成器最小接口（AgentService 只需要 generateText——mock 缝） */
 export interface ITitleGenerator {
   generateText(options: LlmGenerateTextOptions): Promise<LlmGenerateTextResult>;
 }

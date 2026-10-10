@@ -1,3 +1,5 @@
+// subagent-manager.ts：子代理管理——内置子代理清单（general/code_review 等）+ run-subagent
+// 工具的执行后端：独立会话起回合，卡死看门狗护体，事件不外发（结果文本回传）
 import { randomUUID } from 'node:crypto';
 import { TurnEventType } from '@code-agent/shared/main';
 import { logger } from '../../../utils/logger';
@@ -5,6 +7,7 @@ import type { IAgentService } from './agent-service';
 import { StallWatchdog } from './stall-watchdog';
 import { TaskKind, TaskStatus, taskService } from './task-service';
 
+/** 子代理规格（name 供工具引用；prompt 为其系统人格） */
 export interface SubagentSpec {
   readonly name: string;
   readonly description: string;
@@ -12,6 +15,7 @@ export interface SubagentSpec {
   readonly maxSteps?: number;
 }
 
+/** 子代理执行结果（output 为最终文本；hasOutput=false 时调用方可提示空产出） */
 export interface SubagentResult {
   readonly output: string;
   readonly durationMs: number;
@@ -23,8 +27,10 @@ export interface SubagentRunOptions {
   readonly maxAttempts?: number;
 }
 
+// 子代理硬超时 5 分钟：委派任务应短平快，超时大概率是子代理循环抽风
 const SUBAGENT_TIMEOUT_MS = 5 * 60 * 1000;
 
+// 内置子代理清单（不可变——运行时新增能力未开）
 const BUILTIN_SUBAGENTS: readonly SubagentSpec[] = Object.freeze([
   {
     name: 'general',

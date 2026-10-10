@@ -1,7 +1,11 @@
+// path-guard.ts：路径越权守卫——解析后必须在 workingDir 内 + realpath 追踪符号链接真身
+// （防 `link → /etc` 逃逸）；所有文件工具与 file 域 IPC 共用此守卫
 import { realpathSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { AppError, ErrorCode } from '@code-agent/shared/main';
 
+// realpath 解析：目标不存在时逐级回退到存在的最近祖先再拼回尾巴（新建文件场景）；
+// 64 层上限防符号链接循环
 export function resolveRealTarget(p: string): string | null {
   const tail: string[] = [];
   let current = p;
@@ -18,11 +22,15 @@ export function resolveRealTarget(p: string): string | null {
   return null;
 }
 
+/** 解析结果：词法落点（resolved）+ 真实落点（realTarget，穿透符号链接后） */
 export interface ResolvedWorkspacePath {
   readonly resolved: string;
   readonly realTarget: string;
 }
 
+/**
+ * 工作区路径守卫：空路径拒 / 解析出界拒 / 真实落点出界拒——三关全过才放行
+ */
 export function resolveWithinWorkspace(
   inputPath: string,
   workingDir: string,

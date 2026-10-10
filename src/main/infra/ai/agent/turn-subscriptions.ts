@@ -1,3 +1,5 @@
+// turn-subscriptions.ts：回合机器的外部事件接线——审批/ask 生命周期 → 机器事件、
+// 事件累积器（转录/流转发）在回合运行时挂载
 import type { TurnTextDeltaEvent, TurnToolCallEvent } from '@code-agent/shared/main';
 import { TurnEventType } from '@code-agent/shared/main';
 import type { TurnEventEmitter } from '../agent-runtime';

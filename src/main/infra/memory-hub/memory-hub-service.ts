@@ -1,3 +1,5 @@
+// memory-hub-service.ts：记忆引擎宿主服务——utilityProcess 子进程生命周期 + HTTP 端口探活 + 启动互斥
+// 引擎为 vendored 上游（packages/memory-engine），协议适配全在 adapter.ts（本文件不碰 HTTP 细节）
 import { randomUUID } from 'node:crypto';
 import { cpSync, existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import net from 'node:net';
@@ -18,18 +20,21 @@ import { countL0Records, listL0SessionKeys, readSessionRecords } from './l0-insp
 import { removeSessionLinesFromJsonl } from './l0-rewrite';
 import type { MemoryPort } from './types';
 
+// 启动超时 60s（Jieba 词库加载慢）；健康探针 300ms 轮询、单次 1.5s 超时
 const TAG = '[memory-hub]';
 
 const START_TIMEOUT_MS = 60_000;
 const HEALTH_POLL_MS = 300;
 const HEALTH_TIMEOUT_MS = 1500;
 
+/** 蒸馏 LLM 配置（记忆压缩/蒸馏调用的上游；llm-config 惰性解析） */
 export interface MemoryHubLlmConfig {
   readonly baseUrl: string;
   readonly apiKey: string;
   readonly model: string;
 }
 
+/** L0 原始记录（对话逐条镜像落 JSONL，引擎不可用时审计与回读靠它） */
 export interface L0Record {
   readonly role: 'user' | 'assistant' | string;
   readonly content: string;
@@ -43,6 +48,7 @@ export interface MemoryHubServiceOptions {
   readonly launcher?: EngineLauncher | undefined;
 }
 
+// 未配置引擎时的空实现端口：所有方法返回「不可用」而不是抛——调用方无需判空
 class UnavailableMemoryPort implements MemoryPort {
   async health(): Promise<boolean> {
     return false;
@@ -64,6 +70,10 @@ class UnavailableMemoryPort implements MemoryPort {
   }
 }
 
+/**
+ * 延迟记忆端口：引擎未启动时是占位，首次真实调用才经 getService 拉起引擎——
+ * 记忆是旁路能力，绝不能阻塞主流程启动
+ */
 export function createDeferredMemoryPort(getService: () => MemoryHubService): MemoryPort {
   const via = async <T>(fn: (p: MemoryPort) => Promise<T>): Promise<T> =>
     fn(await getService().ensureStarted());
@@ -78,6 +88,7 @@ export function createDeferredMemoryPort(getService: () => MemoryHubService): Me
   };
 }
 
+/** 记忆引擎宿主服务：启动/探活/停机；ensureStarted 并发调用合并到同一启动 Promise */
 export class MemoryHubService {
   private child: EngineProcessHandle | null = null;
   private port: MemoryPort | null = null;
@@ -90,6 +101,7 @@ export class MemoryHubService {
 
   constructor(private readonly options: MemoryHubServiceOptions) {}
 
+  /** 引擎是否已配置（hubRoot 解析成功）；未配置时全部能力按「不可用」降级 */
   isConfigured(): boolean {
     return this.options.hubRoot !== undefined && this.options.hubRoot.length > 0;
   }

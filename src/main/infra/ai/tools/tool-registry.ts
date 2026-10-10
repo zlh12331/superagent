@@ -1,9 +1,11 @@
+// tool-registry.ts：工具注册表——name → Tool 映射 + AI SDK 工具集导出（模型侧 schema/执行闭包）
 import type { ToolDescriptor } from '@code-agent/shared/main';
 import { AppError, ErrorCode } from '@code-agent/shared/main';
 import { type Tool as AITool, tool as defineAITool } from 'ai';
 import { logger } from '../../../utils/logger';
 import type { Tool, ToolContext } from './tool';
 
+/** 工具注册表契约（容器构造期 registerBuiltinTools / MCP 运行时注册共用） */
 export interface IToolRegistry {
   register(tool: Tool): void;
 

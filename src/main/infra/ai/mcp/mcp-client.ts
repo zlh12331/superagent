@@ -1,3 +1,5 @@
+// mcp-client.ts：MCP 客户端——官方 SDK Client 包装（stdio/SSE/streamable-http 三传输），
+// 远端传输统一走 proxiedFetch（代理感知）
 import { AppError, ErrorCode } from '@code-agent/shared/main';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';

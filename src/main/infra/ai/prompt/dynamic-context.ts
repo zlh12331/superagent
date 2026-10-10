@@ -1,3 +1,4 @@
+// dynamic-context.ts：提示词动态段——git 摘要（2s TTL 缓存 + 单飞）+ 平台/shell 信息注入模板
 import { homedir, platform } from 'node:os';
 import { resolve } from 'node:path';
 import { resolveAgentsMd } from './agents-md';

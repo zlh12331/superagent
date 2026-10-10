@@ -1,3 +1,6 @@
+// agent-service.ts：Agent 服务——回合生命周期总编排（startAgent 入口）：会话抢占 → 事件发布 →
+// XState 机器驱动（agent-turn-machine）→ 用量落库/失效广播/标题生成
+// 38 号后分工：本类是宿主与装配面，机器是编排者（turn-assembly 拼装回合 deps）
 import { randomUUID } from 'node:crypto';
 import type {
   AgentStreamEndPayload,
@@ -63,6 +66,7 @@ import {
 import type { SdkTotalUsageLike } from './turn-usage-report';
 import { projectTurnUsage, reportTurnUsage } from './turn-usage-report';
 
+/** 启动回合参数：sessionId 缺省则新建；thinking/temperature/modelId 覆盖默认生成配置 */
 export interface StartAgentOptions {
   readonly messages: ChatMessage[];
   readonly sessionId: string | undefined;
@@ -77,6 +81,7 @@ export interface StartAgentOptions {
   readonly webContents?: WebContents;
 }
 
+/** Agent 服务契约（IPC/远程桥/IM 桥/cron/subagent 共同消费） */
 export interface IAgentService {
   startAgent(options: StartAgentOptions): Promise<string>;
   abort(sessionId: string): boolean;
@@ -86,6 +91,10 @@ export interface IAgentService {
   onTurnEvent(listener: (event: TurnEvent) => void): () => void;
 }
 
+/**
+ * Agent 服务：8 依赖注入（注册表/执行器/提示词/会话/标题生成器/并发门/权限/LLM 客户端）；
+ * 事件订阅经 onTurnEvent（记忆捕获、遥测、通知都挂在这条总线上）
+ */
 export class AgentService implements IAgentService {
   constructor(
     private readonly toolRegistry: IToolRegistry,
@@ -100,6 +109,7 @@ export class AgentService implements IAgentService {
 
   private readonly registry = new ActiveSessionRegistry();
   private readonly turnListeners = new Set<(event: TurnEvent) => void>();
+  // 同会话并发启动互斥：自旋等上一个 startAgent 走完抢占段（防双流同时登记）
   private readonly startingSessions = new Set<string>();
 
   onTurnEvent(listener: (event: TurnEvent) => void): () => void {
@@ -116,6 +126,11 @@ export class AgentService implements IAgentService {
     return this.promptService.resolvePrompt(undefined, options.workingDir);
   }
 
+  /**
+   * 启动回合：抢占同会话旧流 → 标记 running → 后台跑流（不 await，立即返回 sessionId）
+   *
+   * 流异常只记日志不抛——渲染层靠 TURN_END(error) 事件得知失败
+   */
   async startAgent(options: StartAgentOptions): Promise<string> {
     const sessionId = options.sessionId ?? randomUUID();
 

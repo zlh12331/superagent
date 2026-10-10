@@ -1,3 +1,5 @@
+// context-compression.ts：会话上下文压缩——消息超预算时裁剪历史（system/tool 保留，早期非工具
+// 消息只留尾部 recent 条），token 估算用 gpt-tokenizer 真编码
 import { type ModelMessage, pruneMessages } from 'ai';
 import { encode } from 'gpt-tokenizer';
 
@@ -6,11 +8,13 @@ interface CompressionOptions {
   readonly recentMessages: number;
 }
 
+// 超 50 条触发压缩，压缩后保留最近 10 条非工具消息（工具往返不占 recent 名额）
 const DEFAULT_OPTIONS: CompressionOptions = {
   maxMessages: 50,
   recentMessages: 10,
 };
 
+/** 压缩消息列表：system 全留 → 合并压缩工具往返 → 保留尾部近期对话（不超限时原样返回） */
 export function compressContext(
   messages: ModelMessage[],
   options: Partial<CompressionOptions> = {},

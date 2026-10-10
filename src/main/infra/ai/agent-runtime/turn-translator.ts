@@ -1,6 +1,8 @@
+// turn-translator.ts：模型流 part → 渲染层回合事件的翻译层（text-delta/tool-call 两型；其余丢弃）
 import type { TurnEvent, TurnEventContext, TurnEventType } from '@code-agent/shared/main';
 import { TurnEventType as TurnEventTypeConst } from '@code-agent/shared/main';
 
+/** 模型流 part 的最小形状（字段不齐的 part 翻译为 null 丢弃） */
 export interface StreamPart {
   readonly type: string;
   readonly delta?: string;

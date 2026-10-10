@@ -1,3 +1,5 @@
+// command-guards.ts：命令类审批辅助——复合命令拆解、白名单模式匹配（含通用 pattern 剔除）、
+// 命令目标越界检测、plan 模式写命令拦截、零副作用工具判定
 import { homedir } from 'node:os';
 import { isAbsolute, join, normalize, relative, resolve } from 'node:path';
 import { splitShellWords } from '../../terminal/terminal-service';

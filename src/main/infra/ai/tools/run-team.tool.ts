@@ -1,3 +1,4 @@
+// run-team.tool.ts：run_team 工具——多成员并行（team-service 承载）
 import { z } from 'zod';
 import { t } from '../../i18n';
 import { teamService } from '../agent/team-service';

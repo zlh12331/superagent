@@ -1,3 +1,5 @@
+// remote-web-client.ts：移动端浏览器客户端（内联 HTML/CSS/JS 单文件，SSE 收流 + fetch 发命令）
+// 由 remote-control 的 HTTP 服务直接伺服；哈希 CSP 锚定内联脚本（REMOTE_CLIENT_CSP）
 import { createHash } from 'node:crypto';
 
 const REMOTE_CLIENT_STYLE = `

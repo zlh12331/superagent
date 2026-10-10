@@ -1,8 +1,11 @@
+// turn-transcript.ts：回合转录持久化——assistant 消息的 reasoning/tool-call/tool-result 三类条目，
+// 工具输出超 16KB 截断（存库体量控制），序列化失败按字符串兜底
 import type { ModelMessage, ToolResultPart } from 'ai';
 
 type AssistantModelMessage = Extract<ModelMessage, { role: 'assistant' }>;
 type AssistantPart = Exclude<AssistantModelMessage['content'], string>[number];
 
+/** 转录条目（持久化的 assistant 中间态；error 携带错误码便于渲染层还原） */
 export interface TurnTranscriptEntry {
   readonly kind: 'reasoning' | 'tool-call' | 'tool-result';
   readonly text?: string;
@@ -13,6 +16,7 @@ export interface TurnTranscriptEntry {
   readonly error?: { readonly code: string; readonly message: string };
 }
 
+// 工具输出持久化上限 16KB：工具输出可能几十 MB（大文件读取），全量入库会把 DB 撑爆
 export const MAX_PERSISTED_TOOL_OUTPUT_BYTES = 16 * 1024;
 
 type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };

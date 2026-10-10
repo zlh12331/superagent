@@ -1,7 +1,9 @@
+// weixin-adapter.ts：微信渠道——iLink 机器人 token，流式轮询收消息 + 文本回发
 import { logger } from '../../../utils/logger';
 import type { ChannelIncomingMessage, ChannelTarget, IChannelAdapter } from '../channel/types';
 import { sendWeixinText, WEIXIN_DEFAULT_BASE_URL, WeixinStreamReceiver } from './weixin-stream';
 
+/** 微信渠道适配器：发送函数与收流器可注入（测试） */
 export class WeixinAdapter implements IChannelAdapter {
   readonly kind = 'wechat';
   readonly displayName = '微信';

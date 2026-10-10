@@ -1,3 +1,4 @@
+// session-io.ts：会话全量导出/导入——自描述 JSON 载荷（schema 版本号 + 批量取数控内存）
 import type { SessionImportRes, TurnSummary } from '@code-agent/shared/main';
 import {
   AppError,
@@ -28,8 +29,10 @@ import {
 import { rowToMeta } from './session-helpers';
 import type { SessionExportPayload } from './session-types';
 
+// 导出载荷标识（导入时校验非本应用文件直接拒）
 const EXPORT_APP_ID = 'code-agent-desktop';
 
+// 关联表按 500 会话一批 IN 查询：SQLite 变量数上限与内存双保险
 const EXPORT_BATCH_SIZE = 500;
 
 export async function exportAllSessions(): Promise<SessionExportPayload> {

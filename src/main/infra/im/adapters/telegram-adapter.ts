@@ -1,3 +1,4 @@
+// telegram-adapter.ts：Telegram Bot 渠道——long polling（getUpdates 30s 长轮询）收消息 + Bot API 回发
 import { AppError, ErrorCode } from '@code-agent/shared/main';
 import { logger } from '../../../utils/logger';
 import { proxiedFetch } from '../../network/proxied-fetch';

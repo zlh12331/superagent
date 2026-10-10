@@ -1,3 +1,5 @@
+// codebase-service.ts：代码库语义检索——驱动 vendored codegraph 平台二进制（子进程）做
+// 查询/探索/调用图/影响面分析；首次使用先建索引（.codegraph 目录为哨兵）
 import { type ChildProcess, spawn } from 'node:child_process';
 import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -15,19 +17,24 @@ import { app } from 'electron';
 import { logger } from '../../utils/logger';
 import { terminateChild } from '../../utils/terminate-child';
 
+// 单命令 60s：语义查询/建索引都可能数秒，但不能无限等
 const CODEGRAPH_COMMAND_TIMEOUT_MS = 60_000;
 
+/** codegraph 启动方式：win32 用捆绑 node 跑 js 入口，其余平台直接执行平台二进制 */
 export interface CodegraphBundle {
   readonly command: string;
   readonly args: readonly string[];
 }
 
+// bundle 解析结果记忆化：pnpm 目录扫描每次调 IO，不该每条命令重扫
 let bundleMemo: CodegraphBundle | undefined;
 
+/** 清空 bundle 记忆（测试隔离用） */
 export function resetCodegraphBundleMemo(): void {
   bundleMemo = undefined;
 }
 
+/** 解析 codegraph 可执行（带记忆化；失败抛 AppError 带修复指引） */
 export function resolveCodegraphBundle(): CodegraphBundle {
   if (bundleMemo !== undefined) {
     return bundleMemo;
@@ -38,6 +45,8 @@ export function resolveCodegraphBundle(): CodegraphBundle {
 }
 
 function resolveCodegraphBundleOnce(): CodegraphBundle {
+  // 平台专属包按 {platform}-{arch} 命名；dev 从 pnpm 虚拟store找最新版本目录，
+  // 打包态由 prepare-codegraph.mjs 拷到 resources/codegraph
   const target = `${process.platform}-${process.arch}`;
   let dir: string;
   if (app.isPackaged) {
@@ -71,6 +80,8 @@ function resolveCodegraphBundleOnce(): CodegraphBundle {
   return { command: join(dir, 'bin', 'codegraph'), args: [] };
 }
 
+// win32 特例：平台包内不带独立 node 二进制，用捆绑的 node.exe 跑 js 入口
+//（--liftoff-only 跳过 npm 启动逻辑，禁实验警告防 stderr 噪音）
 export interface CodebaseQueryOptions {
   readonly path: string;
   readonly search: string;
@@ -105,6 +116,7 @@ export interface CodebaseImpactOptions {
   readonly depth: number;
 }
 
+/** 代码库服务接口（codebase 工具与 IPC 共同消费） */
 export interface ICodebaseService {
   query(options: CodebaseQueryOptions): Promise<CodebaseQueryRes>;
   explore(options: CodebaseExploreOptions): Promise<CodebaseExploreRes>;
@@ -117,6 +129,7 @@ export interface ICodebaseService {
 }
 
 export class CodebaseService implements ICodebaseService {
+  // spawn/timeout/bundle 解析全可注入（测试不打真实子进程）
   private readonly spawnFn: typeof spawn;
   private readonly commandTimeoutMs: number;
   private readonly resolveBundle: () => CodegraphBundle;
@@ -134,6 +147,7 @@ export class CodebaseService implements ICodebaseService {
   }
 
   private readonly activeProcesses = new Set<ChildProcess>();
+  // 同路径建索引去重：并发 ensureIndexed 共享同一 Promise，不叠加子进程
   private readonly indexingInFlight = new Map<string, Promise<void>>();
   async query(options: CodebaseQueryOptions): Promise<CodebaseQueryRes> {
     const { path, search, limit, kind } = options;
@@ -219,6 +233,10 @@ export class CodebaseService implements ICodebaseService {
     logger.info({}, 'CodebaseService 所有子进程已清理');
   }
 
+  /**
+   * 确保路径已建索引：.codegraph 目录存在即视为已索引（幂等哨兵），
+   * 否则跑 init（并发调用按路径合并）
+   */
   async ensureIndexed(path: string): Promise<void> {
     if (existsSync(join(path, '.codegraph'))) {
       return;
@@ -236,6 +254,8 @@ export class CodebaseService implements ICodebaseService {
     return task;
   }
 
+  // 子进程统一管理：登记 activeProcesses（dispose 时 SIGTERM/SIGKILL 收尾）、
+  // 超时杀进程、非零退出码带 stderr 报 AppError
   private runCodegraph(args: string[], cwd: string): Promise<{ stdout: string; stderr: string }> {
     return new Promise((resolve, reject) => {
       const bundle = this.resolveBundle();
@@ -327,6 +347,7 @@ export class CodebaseService implements ICodebaseService {
 
 let codebaseService: CodebaseService | null = null;
 
+/** 惰性单例（服务容器经此取用） */
 export function getCodebaseService(): ICodebaseService {
   if (codebaseService === null) {
     codebaseService = new CodebaseService();
@@ -334,6 +355,7 @@ export function getCodebaseService(): ICodebaseService {
   return codebaseService;
 }
 
+/** 重置单例（dispose 链与测试用） */
 export function resetCodebaseService(): void {
   codebaseService = null;
 }

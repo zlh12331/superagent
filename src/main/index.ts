@@ -1,3 +1,5 @@
+// index.ts：应用入口与生命周期——单实例锁、whenReady 启动序列（遥测→DB→容器→IPC→窗口→托盘）、
+// 深链接管、退出协商与善后链。边界：只做装配与编排，业务实现在 infra/ 与 service-container
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { app, BrowserWindow, nativeTheme, session } from 'electron';
@@ -75,9 +77,13 @@ import { confirmInterruptRunningTurns, createWindow, readCloseAction } from './w
 import { bringMainWindowToFront } from './window-show';
 import { syncTitleBarOverlayFromTheme } from './window-theme';
 
+// ───── 启动前引导：dev 路径重定向 + .env 加载（必须在 whenReady 之前完成）─────
+
 if (!app.isPackaged) {
+  // dev 的 userData 重定向到仓库内目录：避免沙箱拦截 %APPDATA%，也便于整目录删除重置
   const userDataOverride = process.env['CODE_AGENT_USER_DATA'];
   app.setPath('userData', userDataOverride ?? join(__dirname, '../../.electron-user-data'));
+  // dev 固定开 CDP 远程调试端口（E2E / 外部 DevTools 接入依赖）
   const debugPort = process.env['CODE_AGENT_DEBUG_PORT'] ?? '9222';
   app.commandLine.appendSwitch('remote-debugging-port', debugPort);
 }
@@ -88,10 +94,13 @@ if (process.env['NODE_ENV'] !== 'test') {
   } catch {}
 }
 
+// ───── 单实例锁与协议深链接管 ─────
+
 const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
   app.quit();
 } else {
+  // 第二实例拉起时：聚焦主窗，并把第二实例 argv 里的深链转发给现有窗口
   app.on('second-instance', (_event, argv) => {
     bringMainWindowToFront(createWindow);
     broadcastDeepLink(parseDeepLink(argv.find((a) => a.startsWith('code-agent://')) ?? ''));
@@ -99,6 +108,7 @@ if (!gotTheLock) {
 }
 
 registerDeepLinkProtocol();
+// 冷启动深链暂存：窗口未创建时收到 open-url / argv 深链，等启动序列建窗后补广播
 let coldLaunchDeepLink: string | null = null;
 app.on('open-url', (event, url) => {
   event.preventDefault();
@@ -110,10 +120,13 @@ app.on('open-url', (event, url) => {
   }
 });
 
+// ───── whenReady 启动序列（顺序敏感：logger→遥测→DB→容器初始化→IPC→窗口→托盘）─────
+
 app
   .whenReady()
   .then(() => {
     if (!gotTheLock) {
+      // 未获锁实例在上方已发起 quit，这里兜底防止极端时序下重复初始化
       return;
     }
     initLogger();
@@ -263,6 +276,7 @@ app
     logger.info({ isPackaged: app.isPackaged }, 'CSP 策略已注入');
 
     session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
+      // 白名单式收口：渲染层对系统权限（通知/摄像头/地理位置等）的请求一律拒绝
       logger.warn(
         { permission, url: webContents.getURL() },
         '拒绝渲染层权限请求（未授权权限类型）',
@@ -291,6 +305,7 @@ app
     });
     lagMonitor.start();
 
+    // Windows/Linux 无 open-url 事件：冷启动深链从 argv 补提（macOS 走 open-url 暂存）
     coldLaunchDeepLink ??= process.argv.find((a) => a.startsWith('code-agent://')) ?? null;
 
     createWindow();
@@ -343,6 +358,7 @@ app
 
     scheduleMemoryPrewarm({ service: serviceContainer.getMemoryHubService() });
 
+    // 补广播冷启动暂存的深链（必须在 createWindow 之后，渲染层已挂好监听）
     if (coldLaunchDeepLink !== null) {
       broadcastDeepLink(parseDeepLink(coldLaunchDeepLink));
       coldLaunchDeepLink = null;
@@ -366,6 +382,8 @@ app
     app.exit(1);
   });
 
+// ───── 退出链：window-all-closed / POSIX 信号 / before-quit 协商与善后 ─────
+
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
@@ -374,15 +392,17 @@ app.on('window-all-closed', () => {
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.on(signal, () => {
+    // 终端 Ctrl-C / kill 没有窗口可弹协商，视同已确认退出
     setCloseConfirmed();
     app.quit();
   });
 }
 
-let imChannelsInit: Promise<void> | null = null;
-let lagMonitor: EventLoopLagMonitor | null = null;
+let imChannelsInit: Promise<void> | null = null; // IM 渠道初始化 Promise，退出时排水等待
+let lagMonitor: EventLoopLagMonitor | null = null; // 启动期监控句柄，退出时停止
 let stopMemoryMonitor: (() => void) | null = null;
 app.on('before-quit', async (event) => {
+  // 两段式：第一段协商（未确认 + 运行中回合 → 弹窗），第二段善后（preventDefault 走 dispose 链后 exit）
   if (isQuitting()) {
     return;
   }
@@ -412,6 +432,7 @@ app.on('before-quit', async (event) => {
     stopMemoryMonitor?.();
     stopMemoryMonitor = null;
     if (imChannelsInit !== null) {
+      // IM 长连接关闭可能挂起：排水最多等 3 秒，退出不能被拖死
       await Promise.race([
         imChannelsInit.catch(() => {}),
         new Promise((resolve) => setTimeout(resolve, 3000)),
@@ -424,10 +445,13 @@ app.on('before-quit', async (event) => {
   } catch (err) {
     logger.error({ error: err }, '应用退出清理失败');
   }
+  // 善后链尾才是 quitAndInstall 的安全时机（此刻回合已全部中断、服务已停）
   serviceContainer.getUpdateService().runDeferredInstall();
   await flushPendingLogs();
   app.exit(0);
 });
+
+// ───── 设置读取容错包装（托盘/更新装配用；损坏或缺失回落默认值，不阻塞启动）─────
 
 function readWindowSettings(): Record<string, unknown> {
   try {

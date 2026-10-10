@@ -1,3 +1,4 @@
+// dangerous-commands.ts：危险命令模式库——git 破坏性/IaC 销毁类正则（只读放行判据同文件）
 export interface DangerousCommandDecision {
   readonly isDangerous: boolean;
   readonly category: 'git-destructive' | 'iac-destroy' | 'none';

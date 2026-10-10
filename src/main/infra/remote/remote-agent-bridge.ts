@@ -1,3 +1,5 @@
+// remote-agent-bridge.ts：远程命令 → Agent 回合的桥——收命令、起会话跑回合、流式回传 SSE
+// 安全边界：远程回合工作目录锁定在 userData/remote-workspace（绝不碰用户任意路径）
 import { randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -15,10 +17,12 @@ import type {
   RemoteCommandResult,
 } from './remote-control';
 
+/** 远程工作区根（固定 userData 下，不让远程客户端指定任意目录） */
 export function getRemoteDefaultWorkingDir(): string {
   return join(app.getPath('userData'), 'remote-workspace');
 }
 
+// 远程回合护栏：步数 20 / 总时长 10 分钟 / 回复截断 2 万字符——移动端窄屏场景不需要完整深度
 const MAX_STEPS = 20;
 const TURN_TIMEOUT_MS = 10 * 60 * 1000;
 const MAX_REPLY_CHARS = 20_000;
@@ -31,6 +35,7 @@ const REASON_LABELS: Record<string, string> = {
   timeout: '⏱ 执行超时',
 };
 
+/** 远程命令 → Agent 桥：客户端级互斥（单客户端同时只跑一回合）+ 审批模式前置检查 */
 export class RemoteAgentBridge {
   private readonly sessionMap = new Map<string, string>();
   private readonly busyClients = new Set<string>();
@@ -83,6 +88,7 @@ export class RemoteAgentBridge {
       };
     }
 
+    // 前置检查：远程无人在场点审批，plan/ask 模式会卡死回合——要求 auto/yolo 才放行
     const mode = this.permissionService.getApprovalMode();
     if (mode !== 'auto' && mode !== 'yolo') {
       return {
@@ -104,6 +110,7 @@ export class RemoteAgentBridge {
     }
   }
 
+  /** 客户端专属会话（clientId 一对一；创建失败降级一次性 sessionId——无历史但能跑） */
   private async ensureSession(clientId: string): Promise<string> {
     const existing = this.sessionMap.get(clientId);
     if (existing !== undefined) {
@@ -123,6 +130,8 @@ export class RemoteAgentBridge {
     }
   }
 
+  // 跑一回合并等结束：onTurnEvent 边流边 emit，TURN_END/超时先到者触发 completion——
+  // 超时只是不再等（回合继续跑完），回复标注 timeout
   private async runTurn(
     sessionId: string,
     userText: string,

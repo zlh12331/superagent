@@ -1,5 +1,7 @@
+// retry.ts：LLM 调用重试——可重试判据（429/5xx/网络错误码）+ 指数退避执行器 + 错误码/状态码提取
 import { APICallError } from 'ai';
 
+// 网络层可重试错误码（undici 系列 + 经典 socket 错误）
 export const RETRYABLE_NETWORK_ERROR_CODES: ReadonlySet<string> = new Set([
   'ECONNRESET',
   'ETIMEDOUT',
@@ -26,6 +28,7 @@ export function getErrorStatus(error: unknown): number | undefined {
   return undefined;
 }
 
+/** 可重试判定：429/5xx/SDK 标记可重试/网络错误码/TypeError（fetch 失联形态） */
 export function isRetryableError(error: unknown): boolean {
   const status = getErrorStatus(error);
   if (status !== undefined) {

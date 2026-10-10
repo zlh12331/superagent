@@ -1,3 +1,4 @@
+// task.handler.ts：task 域 IPC——后台任务列表（按会话过滤）
 import type { InferHandlers, IPC_DEFINITIONS } from '@code-agent/shared/main';
 
 import { taskService } from '../infra/ai/agent/task-service';

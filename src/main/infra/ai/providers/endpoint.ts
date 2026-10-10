@@ -1,9 +1,13 @@
+// endpoint.ts：供应商端点策略——根地址补 /v1 后缀规则 + API 格式协议路径 + 请求 URL 拼装
+// （config/ 的 baseURL 表只存根地址，协议路径由本文件负责——两处职责分开）
 import type { ModelApiFormat } from '@code-agent/shared/main';
 
 import type { ProviderKind } from './types';
 
 const ANTHROPIC_OFFICIAL_URL = 'https://api.anthropic.com';
 
+// 每家供应商的端点策略：fillVersionSuffix=根地址缺后缀时补什么；
+// onlyWhenEquals=仅官方地址才补（anthropic 自托管网关不带 /v1）
 interface EndpointPolicy {
   readonly fillVersionSuffix: string | null;
   readonly onlyWhenEquals?: string;
@@ -38,6 +42,7 @@ export function resolveProviderBaseUrl(kind: ProviderKind, baseUrl: string): str
   return trimmed.endsWith(fillVersionSuffix) ? trimmed : `${trimmed}${fillVersionSuffix}`;
 }
 
+/** API 格式 → 协议路径（models.handler 探针与 registry 构建共用） */
 const PROTOCOL_PATHS: Record<ModelApiFormat, string> = {
   'openai-chat': '/chat/completions',
   'openai-responses': '/responses',

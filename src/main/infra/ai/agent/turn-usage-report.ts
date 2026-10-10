@@ -1,7 +1,9 @@
+// turn-usage-report.ts：回合用量上报——SDK usage 投影为 TurnUsage + 落库 + 记入 OTel span
 import type { TurnUsage } from '@code-agent/shared/main';
 import { logger } from '../../../utils/logger';
 import type { ISessionService } from '../../storage/session-service';
 
+/** SDK usage 的最小形状（AI SDK 版本间字段漂移，只取用到的） */
 export interface SdkTotalUsageLike {
   readonly inputTokens: number | undefined;
   readonly outputTokens: number | undefined;

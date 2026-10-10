@@ -1,3 +1,4 @@
+// grep.tool.ts：grep 工具——ripgrep 内容搜索（search-service 承载）
 import type { GrepRes } from '@code-agent/shared/main';
 import { z } from 'zod';
 import { t } from '../../i18n';

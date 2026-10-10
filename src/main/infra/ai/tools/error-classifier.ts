@@ -1,6 +1,8 @@
+// error-classifier.ts：错误分类器——裸错误 → AppError 错误码（AI_* 码族），渲染层按码提示
 import { AppError, ErrorCode } from '@code-agent/shared/main';
 import { APICallError, LoadAPIKeyError } from 'ai';
 
+/** 是否中止类错误（AbortError 名——回合取消/超时统一判据） */
 export function isAbortError(error: unknown): boolean {
   if (error instanceof Error) {
     return error.name === 'AbortError';

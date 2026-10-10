@@ -1,3 +1,4 @@
+// lsp-definition.tool.ts：lsp_definition 工具——跳转定义（lsp-server-manager 承载）
 import { pathToFileURL } from 'node:url';
 import { z } from 'zod';
 import { t } from '../../i18n';

@@ -1,3 +1,5 @@
+// builtin-models.ts：内置模型清单（各供应商预置模型 + 能力/上下文窗口/生成配置）
+// ⚠️ P3-50 已知死字段：displayName 在此维护但运行时模型列表未接 UI（技术债台账登记在案）
 import { DEFAULT_MODEL, DEFAULT_PROVIDER } from '@code-agent/shared/main';
 
 import type { ProviderKind } from '../providers/types';

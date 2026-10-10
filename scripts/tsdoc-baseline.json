@@ -1,60 +1,30 @@
 {
-  "src/main/deep-link.ts": {
+  "src/main/infra/ai/agent-runtime/agent-turn-machine.ts": {
     "count": 5
   },
-  "src/main/diagnostics.ts": {
-    "count": 4
-  },
-  "src/main/infra/ai/agent-runtime/abort-utils.ts": {
-    "count": 2
-  },
-  "src/main/infra/ai/agent-runtime/active-session-registry.ts": {
-    "count": 1
-  },
-  "src/main/infra/ai/agent-runtime/agent-turn-machine.ts": {
-    "count": 8
-  },
-  "src/main/infra/ai/agent-runtime/concurrency-gate.ts": {
-    "count": 3
-  },
   "src/main/infra/ai/agent-runtime/create-stream.ts": {
-    "count": 4
-  },
-  "src/main/infra/ai/agent-runtime/loop-detector.ts": {
-    "count": 2
-  },
-  "src/main/infra/ai/agent-runtime/stream-reader.ts": {
     "count": 1
   },
   "src/main/infra/ai/agent-runtime/text-delta-batcher.ts": {
-    "count": 4
-  },
-  "src/main/infra/ai/agent-runtime/turn-emitter.ts": {
-    "count": 1
+    "count": 3
   },
   "src/main/infra/ai/agent-runtime/turn-runner.ts": {
-    "count": 3
+    "count": 1
   },
   "src/main/infra/ai/agent-runtime/turn-transcript.ts": {
-    "count": 3
+    "count": 2
   },
   "src/main/infra/ai/agent-runtime/turn-translator.ts": {
-    "count": 3
-  },
-  "src/main/infra/ai/agent/agent-ask-service.ts": {
-    "count": 3
-  },
-  "src/main/infra/ai/agent/agent-service.ts": {
-    "count": 3
+    "count": 2
   },
   "src/main/infra/ai/agent/branch-service.ts": {
-    "count": 5
+    "count": 4
   },
   "src/main/infra/ai/agent/context-compression.ts": {
-    "count": 11
+    "count": 10
   },
   "src/main/infra/ai/agent/cron-service.ts": {
-    "count": 3
+    "count": 1
   },
   "src/main/infra/ai/agent/hook-registry.ts": {
     "count": 6
@@ -63,19 +33,19 @@
     "count": 3
   },
   "src/main/infra/ai/agent/stall-watchdog.ts": {
-    "count": 4
+    "count": 2
   },
   "src/main/infra/ai/agent/stream-part-forward.ts": {
-    "count": 3
+    "count": 2
   },
   "src/main/infra/ai/agent/subagent-manager.ts": {
-    "count": 6
-  },
-  "src/main/infra/ai/agent/task-service.ts": {
     "count": 4
   },
+  "src/main/infra/ai/agent/task-service.ts": {
+    "count": 2
+  },
   "src/main/infra/ai/agent/team-service.ts": {
-    "count": 5
+    "count": 3
   },
   "src/main/infra/ai/agent/token-overhead.ts": {
     "count": 3
@@ -87,82 +57,73 @@
     "count": 3
   },
   "src/main/infra/ai/agent/turn-usage-report.ts": {
-    "count": 4
+    "count": 3
   },
   "src/main/infra/ai/agent/workflow-service.ts": {
-    "count": 9
+    "count": 7
   },
   "src/main/infra/ai/knowledge/goal-judge.ts": {
-    "count": 2
-  },
-  "src/main/infra/ai/knowledge/goal-service.ts": {
     "count": 1
   },
   "src/main/infra/ai/knowledge/learn-skill-agent.ts": {
     "count": 3
   },
   "src/main/infra/ai/knowledge/session-title.ts": {
-    "count": 4
+    "count": 3
   },
   "src/main/infra/ai/llm-client/ai-provider.ts": {
-    "count": 4
+    "count": 3
   },
   "src/main/infra/ai/llm-client/llm-client.ts": {
-    "count": 5
+    "count": 1
   },
   "src/main/infra/ai/llm-client/retry.ts": {
-    "count": 7
+    "count": 6
   },
   "src/main/infra/ai/mcp/mcp-client.ts": {
     "count": 3
   },
   "src/main/infra/ai/mcp/mcp-service.ts": {
-    "count": 4
+    "count": 2
   },
   "src/main/infra/ai/mcp/mcp-tool-adapter.ts": {
-    "count": 6
+    "count": 5
   },
   "src/main/infra/ai/mcp/mcp-types.ts": {
-    "count": 8
+    "count": 6
   },
   "src/main/infra/ai/models/generation-options.ts": {
-    "count": 3
+    "count": 1
   },
   "src/main/infra/ai/models/reasoning-effort.ts": {
     "count": 4
   },
-  "src/main/infra/ai/models/registry.ts": {
-    "count": 2
-  },
   "src/main/infra/ai/models/runtime-model-store.ts": {
-    "count": 5
-  },
-  "src/main/infra/ai/models/token-limits.ts": {
-    "count": 2
+    "count": 3
   },
   "src/main/infra/ai/models/types.ts": {
     "count": 7
   },
   "src/main/infra/ai/prompt/agents-md.ts": {
-    "count": 5
+    "count": 4
   },
   "src/main/infra/ai/prompt/dynamic-context.ts": {
     "count": 4
   },
   "src/main/infra/ai/prompt/prompt-service.ts": {
-    "count": 4
+    "count": 1
   },
   "src/main/infra/ai/providers/endpoint.ts": {
     "count": 4
   },
   "src/main/infra/ai/providers/registry.ts": {
-    "count": 3
+    "count": 1
   },
   "src/main/infra/ai/providers/types.ts": {
-    "count": 6
+    "count": 4
   },
   "src/main/infra/ai/skills/skill-registry.ts": {
-    "count": 2
+    "count": 1
   },
   "src/main/infra/ai/tools/ask-user-question.tool.ts": {
     "count": 1
@@ -201,7 +162,7 @@
     "count": 1
   },
   "src/main/infra/ai/tools/error-classifier.ts": {
-    "count": 2
+    "count": 1
   },
   "src/main/infra/ai/tools/git-add.tool.ts": {
     "count": 1
@@ -234,10 +195,10 @@
     "count": 1
   },
   "src/main/infra/ai/tools/path-guard.ts": {
-    "count": 3
+    "count": 1
   },
   "src/main/infra/ai/tools/permission-service.ts": {
-    "count": 2
+    "count": 1
   },
   "src/main/infra/ai/tools/permission-types.ts": {
     "count": 4
@@ -285,16 +246,13 @@
     "count": 1
   },
   "src/main/infra/ai/tools/tool-executor.ts": {
-    "count": 5
+    "count": 3
   },
   "src/main/infra/ai/tools/tool-registry.ts": {
-    "count": 2
-  },
-  "src/main/infra/ai/tools/tool.ts": {
-    "count": 4
+    "count": 1
   },
   "src/main/infra/ai/tools/url-guard.ts": {
-    "count": 6
+    "count": 5
   },
   "src/main/infra/ai/tools/web-fetch.tool.ts": {
     "count": 1
@@ -303,46 +261,28 @@
     "count": 1
   },
   "src/main/infra/autostart/autostart.ts": {
-    "count": 17
-  },
-  "src/main/infra/browser/preview-service.ts": {
     "count": 3
   },
   "src/main/infra/code-analysis/code-analyzer.ts": {
-    "count": 6
-  },
-  "src/main/infra/codebase/codebase-service.ts": {
-    "count": 12
-  },
-  "src/main/infra/file/file-service.ts": {
-    "count": 12
-  },
-  "src/main/infra/file/tree-ignore.ts": {
     "count": 2
   },
-  "src/main/infra/file/user-grants.ts": {
-    "count": 4
+  "src/main/infra/codebase/codebase-service.ts": {
+    "count": 6
+  },
+  "src/main/infra/file/file-service.ts": {
+    "count": 11
   },
   "src/main/infra/git/git-service.ts": {
-    "count": 7
+    "count": 6
   },
   "src/main/infra/i18n/dictionaries.ts": {
-    "count": 1
-  },
-  "src/main/infra/im/adapters/dingtalk-adapter.ts": {
     "count": 1
   },
   "src/main/infra/im/adapters/dingtalk-stream.ts": {
     "count": 5
   },
-  "src/main/infra/im/adapters/feishu-adapter.ts": {
-    "count": 1
-  },
   "src/main/infra/im/adapters/feishu-stream.ts": {
     "count": 5
-  },
-  "src/main/infra/im/adapters/qq-adapter.ts": {
-    "count": 1
   },
   "src/main/infra/im/adapters/qq-stream.ts": {
     "count": 9
@@ -350,59 +290,26 @@
   "src/main/infra/im/adapters/telegram-adapter.ts": {
     "count": 1
   },
-  "src/main/infra/im/adapters/webhook-channel.ts": {
-    "count": 2
-  },
   "src/main/infra/im/adapters/wecom-adapter.ts": {
     "count": 1
   },
   "src/main/infra/im/adapters/wecom-stream.ts": {
     "count": 4
   },
-  "src/main/infra/im/adapters/weixin-adapter.ts": {
-    "count": 1
-  },
   "src/main/infra/im/adapters/weixin-stream.ts": {
     "count": 8
   },
   "src/main/infra/im/channel/types.ts": {
-    "count": 3
-  },
-  "src/main/infra/im/im-agent-bridge.ts": {
-    "count": 2
-  },
-  "src/main/infra/im/im-service.ts": {
-    "count": 2
-  },
-  "src/main/infra/invalidation/invalidation.ts": {
     "count": 1
   },
   "src/main/infra/lsp/ls-config.ts": {
-    "count": 6
-  },
-  "src/main/infra/lsp/ls-settings.ts": {
-    "count": 1
+    "count": 2
   },
   "src/main/infra/lsp/lsp-client.ts": {
-    "count": 8
-  },
-  "src/main/infra/lsp/lsp-server-manager.ts": {
-    "count": 2
-  },
-  "src/main/infra/memory-hub/adapter.ts": {
-    "count": 2
-  },
-  "src/main/infra/memory-hub/capture-wire.ts": {
-    "count": 3
-  },
-  "src/main/infra/memory-hub/engine-env.ts": {
-    "count": 1
-  },
-  "src/main/infra/memory-hub/engine-process.ts": {
-    "count": 3
+    "count": 5
   },
   "src/main/infra/memory-hub/l0-inspect.ts": {
-    "count": 5
+    "count": 4
   },
   "src/main/infra/memory-hub/l0-rewrite.ts": {
     "count": 1
@@ -411,70 +318,40 @@
     "count": 1
   },
   "src/main/infra/memory-hub/memory-hub-service.ts": {
-    "count": 6
-  },
-  "src/main/infra/memory-hub/memory-pref.ts": {
     "count": 2
   },
   "src/main/infra/memory-hub/node-launcher.ts": {
     "count": 1
   },
   "src/main/infra/memory-hub/prewarm.ts": {
-    "count": 4
+    "count": 2
   },
   "src/main/infra/memory-hub/types.ts": {
-    "count": 8
-  },
-  "src/main/infra/network/proxied-fetch.ts": {
-    "count": 3
-  },
-  "src/main/infra/network/proxy-applier.ts": {
-    "count": 1
+    "count": 7
   },
   "src/main/infra/network/proxy-resolver.ts": {
-    "count": 7
-  },
-  "src/main/infra/remote/network-info.ts": {
-    "count": 2
-  },
-  "src/main/infra/remote/remote-agent-bridge.ts": {
-    "count": 2
-  },
-  "src/main/infra/remote/remote-control.ts": {
-    "count": 7
-  },
-  "src/main/infra/search/search-service.ts": {
-    "count": 6
-  },
-  "src/main/infra/storage/ai-pref.ts": {
     "count": 1
   },
-  "src/main/infra/storage/app-data.ts": {
+  "src/main/infra/remote/remote-control.ts": {
+    "count": 4
+  },
+  "src/main/infra/search/search-service.ts": {
     "count": 5
   },
-  "src/main/infra/storage/approval-pref.ts": {
-    "count": 2
-  },
   "src/main/infra/storage/backup-store.ts": {
-    "count": 8
+    "count": 1
   },
   "src/main/infra/storage/db.ts": {
-    "count": 8
-  },
-  "src/main/infra/storage/im-allowlist-pref.ts": {
-    "count": 3
+    "count": 1
   },
   "src/main/infra/storage/keychain.ts": {
-    "count": 7
-  },
-  "src/main/infra/storage/remote-pref.ts": {
-    "count": 3
+    "count": 2
   },
   "src/main/infra/storage/schema.ts": {
     "count": 25
   },
   "src/main/infra/storage/session-helpers.ts": {
-    "count": 5
+    "count": 2
   },
   "src/main/infra/storage/session-io.ts": {
     "count": 2
@@ -483,162 +360,48 @@
     "count": 3
   },
   "src/main/infra/storage/session-types.ts": {
-    "count": 5
+    "count": 2
   },
   "src/main/infra/storage/settings-io.ts": {
     "count": 4
-  },
-  "src/main/infra/storage/settings-pref.ts": {
-    "count": 6
-  },
-  "src/main/infra/storage/telemetry-pref.ts": {
-    "count": 2
   },
   "src/main/infra/storage/test-utils.ts": {
     "count": 2
   },
   "src/main/infra/storage/usage-turn-store.ts": {
-    "count": 6
-  },
-  "src/main/infra/storage/whitelist-pref.ts": {
     "count": 2
   },
   "src/main/infra/telemetry/event-loop-lag.ts": {
-    "count": 5
-  },
-  "src/main/infra/telemetry/lag-alert.ts": {
-    "count": 1
+    "count": 3
   },
   "src/main/infra/telemetry/memory-monitor.ts": {
-    "count": 7
-  },
-  "src/main/infra/telemetry/otel.ts": {
-    "count": 4
-  },
-  "src/main/infra/telemetry/sdk-telemetry.ts": {
-    "count": 1
+    "count": 3
   },
   "src/main/infra/terminal/terminal-service.ts": {
-    "count": 7
-  },
-  "src/main/infra/update/update-cache.ts": {
     "count": 6
   },
+  "src/main/infra/update/update-cache.ts": {
+    "count": 2
+  },
   "src/main/infra/update/update-service.ts": {
-    "count": 10
+    "count": 9
   },
   "src/main/ipc/agent-approval.handler.ts": {
-    "count": 2
-  },
-  "src/main/ipc/agent-ask.handler.ts": {
     "count": 1
-  },
-  "src/main/ipc/agent.handler.ts": {
-    "count": 2
-  },
-  "src/main/ipc/backup.handler.ts": {
-    "count": 2
-  },
-  "src/main/ipc/browser.handler.ts": {
-    "count": 2
   },
   "src/main/ipc/file.handler.ts": {
-    "count": 5
-  },
-  "src/main/ipc/git.handler.ts": {
-    "count": 2
-  },
-  "src/main/ipc/goal.handler.ts": {
-    "count": 1
-  },
-  "src/main/ipc/im.handler.ts": {
     "count": 1
   },
   "src/main/ipc/mcp.handler.ts": {
     "count": 1
   },
-  "src/main/ipc/memory.handler.ts": {
-    "count": 2
-  },
-  "src/main/ipc/proxy.handler.ts": {
-    "count": 1
-  },
-  "src/main/ipc/register.ts": {
-    "count": 1
-  },
-  "src/main/ipc/remote.handler.ts": {
-    "count": 2
-  },
-  "src/main/ipc/search.handler.ts": {
-    "count": 2
-  },
   "src/main/ipc/session.handler.ts": {
-    "count": 2
-  },
-  "src/main/ipc/settings.handler.ts": {
     "count": 1
-  },
-  "src/main/ipc/terminal.handler.ts": {
-    "count": 3
-  },
-  "src/main/ipc/tool.handler.ts": {
-    "count": 2
-  },
-  "src/main/ipc/update.handler.ts": {
-    "count": 2
-  },
-  "src/main/ipc/whitelist.handler.ts": {
-    "count": 1
-  },
-  "src/main/ipc/window.handler.ts": {
-    "count": 1
-  },
-  "src/main/main-events.ts": {
-    "count": 2
-  },
-  "src/main/notification.ts": {
-    "count": 3
-  },
-  "src/main/quit-state.ts": {
-    "count": 7
-  },
-  "src/main/security/csp.ts": {
-    "count": 2
   },
   "src/main/service-container.ts": {
-    "count": 4
-  },
-  "src/main/tray.ts": {
-    "count": 4
-  },
-  "src/main/utils/emit-event.ts": {
     "count": 2
-  },
-  "src/main/utils/error-report.ts": {
-    "count": 3
-  },
-  "src/main/utils/json-file.ts": {
-    "count": 1
   },
   "src/main/utils/logger.ts": {
-    "count": 7
-  },
-  "src/main/utils/terminate-child.ts": {
-    "count": 1
-  },
-  "src/main/utils/window-state.ts": {
-    "count": 4
-  },
-  "src/main/utils/wrap.ts": {
     "count": 2
-  },
-  "src/main/window-show.ts": {
-    "count": 3
-  },
-  "src/main/window-theme.ts": {
-    "count": 2
-  },
-  "src/main/window.ts": {
-    "count": 3
   }
 }

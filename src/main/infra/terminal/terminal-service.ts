@@ -1,3 +1,5 @@
+// terminal-service.ts：终端服务——node-pty 会话管理（创建/输入/改尺寸/杀），输出环形缓冲 +
+// 流式推送（terminal:stream:output 事件）+ 退出后缓冲留存供 getOutput 补拉
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import * as os from 'node:os';
@@ -34,6 +36,7 @@ export interface TerminalCreateOptions {
   readonly webContents: WebContents;
 }
 
+/** 终端服务契约（IPC handler 与 run-command 工具共同消费） */
 export interface ITerminalService {
   create(options: TerminalCreateOptions): Promise<TerminalCreateRes>;
   input(terminalId: string, data: string): Promise<TerminalInputRes>;
@@ -44,9 +47,11 @@ export interface ITerminalService {
   dispose(): Promise<void>;
 }
 
+// 每终端输出环形缓冲 100KB（断线重连补拉）；退出的终端保留最近 20 份缓冲（防历史瞬间被清）
 const MAX_BUFFER_BYTES = 100 * 1024;
 
 export class TerminalService implements ITerminalService {
+  // spawn 可注入（测试不打真实 pty）
   private readonly spawnFn: typeof spawn;
 
   constructor(options: { spawnFn?: typeof spawn } = {}) {
@@ -66,6 +71,7 @@ export class TerminalService implements ITerminalService {
 
   private static readonly MAX_RETAINED_EXITED_BUFFERS = 20;
 
+  // dispose 时杀全部 pty 的 SIGKILL 升级宽限（3s 不退强杀，防孤儿 pty 挂住退出链）
   private static readonly DISPOSE_ESCALATION_MS = 3_000;
 
   private appendToOutputBuffer(terminalId: string, data: string): void {

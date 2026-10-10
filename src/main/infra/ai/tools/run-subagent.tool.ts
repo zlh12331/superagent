@@ -1,3 +1,4 @@
+// run-subagent.tool.ts：run_subagent 工具——委派子代理（subagent-manager 承载）
 import { z } from 'zod';
 import { t } from '../../i18n';
 import { getSubagentManager } from '../agent/subagent-manager';

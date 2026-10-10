@@ -1,3 +1,4 @@
+// concurrency-gate.ts：回合并发门——全局最多 4 回合并行，超出按 FIFO 排队（AbortSignal 可取消排队）
 interface GateEntry {
   readonly sessionId: string;
   readonly resolve: (release: () => void) => void;
@@ -7,17 +8,21 @@ interface GateEntry {
   readonly onDequeued: () => void;
 }
 
+/** 并发上限默认值：4 槽（LLM 网关并发约束 + 内存考量；容器初始化传此常量） */
 export const DEFAULT_MAX_CONCURRENT_TURNS = 4;
 
+/** 并发门接口：acquire 返回 release 函数（用完必须释放） */
 export interface ConcurrencyGate {
   acquire(sessionId: string, signal?: AbortSignal): Promise<() => void>;
   getStats(): { readonly running: number; readonly queued: number };
 }
 
+/** 排队被中止时抛的错误（与 AbortError 同形，上游统一按中止处理） */
 export function createGateAbortError(): Error {
   return new DOMException('Concurrency gate aborted', 'AbortError');
 }
 
+// 排队等待上限 10 分钟：防队列堆积死等（上游Bug 不释放槽位时排队者也能脱身）
 export const DEFAULT_ACQUIRE_TIMEOUT_MS = 10 * 60 * 1000;
 
 function enqueueGateEntry(
@@ -61,6 +66,7 @@ function enqueueGateEntry(
   });
 }
 
+/** 创建并发门（running 计数 + FIFO 队列；release 幂等防双放行） */
 export function createConcurrencyGate(maxConcurrent: number): ConcurrencyGate {
   if (!Number.isInteger(maxConcurrent) || maxConcurrent <= 0) {
     throw new Error(`createConcurrencyGate: maxConcurrent 必须为正整数（收到 ${maxConcurrent}）`);

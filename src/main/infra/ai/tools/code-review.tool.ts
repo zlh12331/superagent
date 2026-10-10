@@ -1,3 +1,4 @@
+// code-review.tool.ts：code_review 工具——读变更文件组交由模型审查（独立会话跑）
 import type { FileReadRes } from '@code-agent/shared/main';
 import { z } from 'zod';
 import type { IFileService } from '../../file/file-service';

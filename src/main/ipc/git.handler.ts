@@ -1,12 +1,15 @@
+// git.handler.ts：git 域 IPC——status/diff/add/commit/push（透传 gitService，渲染层 git 面板消费）
 import type { InferHandlers, IPC_DEFINITIONS } from '@code-agent/shared/main';
 
 import type { IGitService } from '../infra/git/git-service';
 import type { IpcHandlerContext } from '../utils/wrap';
 
+/** 依赖注入工厂：index.ts 传入 gitService */
 export interface GitHandlerDeps {
   readonly gitService: IGitService;
 }
 
+/** 依赖注入工厂 */
 export function createGitHandlers(
   deps: GitHandlerDeps,
 ): InferHandlers<typeof IPC_DEFINITIONS, IpcHandlerContext>['git'] {

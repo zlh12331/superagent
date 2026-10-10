@@ -1,3 +1,5 @@
+// tray.ts：系统托盘（后台驻留中心）——右键菜单（状态/最近会话/更新/自启/关窗行为/退出）、
+// tooltip 随更新状态变化、首关到托盘引导。依赖经 TrayDeps 注入（不直连服务容器，index.ts 装配）
 import { join } from 'node:path';
 import type { UpdateStatusPayload } from '@code-agent/shared/main';
 import {
@@ -14,6 +16,7 @@ import { readSetting, writeSetting } from './infra/storage/settings-pref';
 import { logger } from './utils/logger';
 import { showMainWindow } from './window-show';
 
+// 托盘文案内置双语：托盘在主进程，不走渲染层 i18n 管线；语言跟随 settings.language
 interface TrayText {
   readonly running: string;
   readonly idle: string;
@@ -59,13 +62,16 @@ const TRAY_TEXT: Readonly<Record<TrayLocale, TrayText>> = {
   },
 } as const;
 
+/** 最近会话菜单项（id 用于深链打开，title 直接展示） */
 export interface TraySessionItem {
   readonly id: string;
   readonly title: string;
 }
 
+// 首次「最小化到托盘」引导通知的已读标记（一次性）
 const HIDE_HINT_KEY = 'window.hideHintShown';
 
+/** 托盘依赖注入接口：全部能力由 index.ts 从服务容器装配传入，托盘自身无业务依赖 */
 export interface TrayDeps {
   getUpdateStatus: () => UpdateStatusPayload | null;
   hasRunningTurns: () => boolean;
@@ -84,6 +90,10 @@ export interface TrayDeps {
 let tray: Tray | null = null;
 let deps: TrayDeps | null = null;
 
+/**
+ * 构建托盘图标，三级降级：macOS template 图标（自适应明暗）→ 多分辨率 rep（1.5x/2x 保高清屏清晰）
+ * → 应用图标缩到 16px → 空图（托盘仍可创建）
+ */
 function createTrayImage(): Electron.NativeImage {
   const resourcesDir = join(app.getAppPath(), 'resources/icons');
 
@@ -115,6 +125,7 @@ function createTrayImage(): Electron.NativeImage {
   const fallback = nativeImage.createEmpty();
   return image.isEmpty() ? fallback : image.resize({ width: 16, height: 16 });
 }
+/** 创建托盘单例（重复调用幂等）；左键唤起主窗，右键弹菜单（Windows/Linux 惯例） */
 export function createTray(trayDeps: TrayDeps): void {
   if (tray !== null) {
     return;
@@ -145,6 +156,7 @@ function currentText(): TrayText {
   return TRAY_TEXT[locale] ?? TRAY_TEXT['zh-CN'];
 }
 
+/** tooltip 承载更新状态：下载中显示进度、下载完提示可安装，平时只显示应用名 */
 function updateTrayPresentation(): void {
   if (tray === null || deps === null) {
     return;
@@ -162,6 +174,7 @@ function updateTrayPresentation(): void {
   tray.setToolTip(name);
 }
 
+// 每次右键实时重建菜单：回合状态/更新进度/最近会话都是易变状态，缓存模板会展示过期数据
 async function popUpMenu(): Promise<void> {
   const d = deps;
   const t = tray;
@@ -257,11 +270,16 @@ async function popUpMenu(): Promise<void> {
   t.popUpContextMenu(Menu.buildFromTemplate(template));
 }
 
+/** 从托盘打开会话：先唤起主窗，再经深链通道让渲染层切换激活会话 */
 function openSession(sessionId: string): void {
   showMainWindow();
   broadcastDeepLink({ sessionId, url: `code-agent://open/session/${sessionId}` });
 }
 
+/**
+ * 首次「最小化到托盘」引导通知：读 HIDE_HINT_KEY 即置位，只提示这一次
+ * （关窗即消失的应用容易让用户以为已退出，找不到入口）
+ */
 export function notifyMinimizedToTray(): void {
   if (tray === null || deps === null || !Notification.isSupported()) {
     return;

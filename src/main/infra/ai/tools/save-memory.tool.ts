@@ -1,3 +1,4 @@
+// save-memory.tool.ts：save_memory 工具——记忆捕获（memoryPort 承载）
 import { z } from 'zod';
 import { t } from '../../i18n';
 import { isMemoryEnabled } from '../../memory-hub/memory-pref';

@@ -1,3 +1,5 @@
+// qq-stream.ts：QQ 官方机器人 WebSocket 流协议——op code 状态机（hello/identify/heartbeat/resume）
+// + accessToken 获取与续期；QqStreamReceiver 为协议接收器（重连退避封顶 60s），协议细节全封在本文件
 import { AppError, ErrorCode } from '@code-agent/shared/main';
 import { logger } from '../../../utils/logger';
 import type { ChannelIncomingMessage } from '../channel/types';

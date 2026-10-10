@@ -1,3 +1,4 @@
+// token-overhead.ts：回合固定开销估算——工具 schema 集 + 系统提示词的 token 占用（预算决策的基数）
 import { z } from 'zod';
 import type { IToolRegistry } from '../tools/tool-registry';
 import { estimateTokenCount } from './context-compression';

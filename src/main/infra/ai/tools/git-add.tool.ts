@@ -1,3 +1,4 @@
+// git-add.tool.ts：git_add 工具——暂存文件（git-service 承载）
 import { z } from 'zod';
 import type { IGitService } from '../../git/git-service';
 import { t } from '../../i18n';

@@ -1,3 +1,5 @@
+// llm-config.ts：记忆蒸馏 LLM 配置解析——从默认模型推导 baseUrl/apiKey/model 供引擎调用
+// 协议兼容性：上游只吃 OpenAI Compatible 形态，anthropic 直连不兼容则显式不接线
 import { getAppConfig } from '../../config';
 import { logger } from '../../utils/logger';
 import { modelRegistry } from '../ai/models';

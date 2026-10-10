@@ -1,3 +1,4 @@
+// skill.handler.ts：skill 域 IPC——技能列表 / 学习新技能（LLM 提炼）/ 已学列表 / 删除
 import type { InferHandlers, IPC_DEFINITIONS } from '@code-agent/shared/main';
 import { LearnSkillService } from '../infra/ai/knowledge/learn-skill-agent';
 import { llmClient } from '../infra/ai/llm-client/ai-provider';

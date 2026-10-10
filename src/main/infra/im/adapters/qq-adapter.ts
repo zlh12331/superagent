@@ -1,3 +1,4 @@
+// qq-adapter.ts：QQ 官方机器人渠道——appId:appSecret 换 accessToken，WebSocket 流收消息，REST 回发
 import { AppError, ErrorCode } from '@code-agent/shared/main';
 import { logger } from '../../../utils/logger';
 import { proxiedFetch } from '../../network/proxied-fetch';
@@ -7,6 +8,7 @@ import { fetchQqAccessToken, QqStreamReceiver } from './qq-stream';
 const API_HOST = 'https://api.sgroup.qq.com';
 const SEND_TIMEOUT_MS = 10_000;
 
+/** QQ 渠道适配器：token/收流/HTTP 全部可注入（测试不打真实网关） */
 export class QqAdapter implements IChannelAdapter {
   readonly kind = 'qq';
   readonly displayName = 'QQ';

@@ -1,3 +1,4 @@
+// terminal.tool.ts：terminal 工具——后台终端执行（terminal-service 承载，输出流式推送）
 import { z } from 'zod';
 import { t } from '../../i18n';
 import type { ITerminalService } from '../../terminal/terminal-service';

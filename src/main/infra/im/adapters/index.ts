@@ -1,3 +1,4 @@
+// adapters/index.ts：全渠道适配器装配（6 实渠道；webhook 通道经由 DingTalk/Wecom 基类承载）
 import type { IChannelAdapter } from '../channel/types';
 import { DingTalkAdapter } from './dingtalk-adapter';
 import { FeishuAdapter } from './feishu-adapter';

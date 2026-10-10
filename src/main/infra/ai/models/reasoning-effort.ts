@@ -1,3 +1,4 @@
+// reasoning-effort.ts：推理力度档位——五档枚举 + 档位秩（clamp/比较用）+ 别名归一
 export type ReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
 export const REASONING_EFFORT_TIERS: readonly ReasoningEffort[] = [
@@ -8,6 +9,7 @@ export const REASONING_EFFORT_TIERS: readonly ReasoningEffort[] = [
   'max',
 ] as const;
 
+// 档位秩：数值供 clamp 越界回退与跨档比较（间隔刻意不均匀——xhigh/max 是深思考专区）
 export const REASONING_EFFORT_RANKS: Record<ReasoningEffort, number> = {
   low: 20,
   medium: 30,

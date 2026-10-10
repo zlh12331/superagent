@@ -1,3 +1,4 @@
+// recall-memory.tool.ts：recall_memory 工具——记忆召回（memoryPort 承载）
 import { z } from 'zod';
 import { t } from '../../i18n';
 import { isMemoryEnabled } from '../../memory-hub/memory-pref';

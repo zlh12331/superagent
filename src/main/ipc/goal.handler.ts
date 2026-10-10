@@ -1,8 +1,10 @@
+// goal.handler.ts：goal 域 IPC——会话目标的建/列/清（透传 goalService）
 import type { InferHandlers, IPC_DEFINITIONS } from '@code-agent/shared/main';
 
 import type { GoalService } from '../infra/ai/knowledge/goal-service';
 import type { IpcHandlerContext } from '../utils/wrap';
 
+/** 依赖注入工厂：index.ts 传入 goalService */
 export function createGoalHandlers(params: {
   goalService: GoalService;
 }): InferHandlers<typeof IPC_DEFINITIONS, IpcHandlerContext>['goal'] {

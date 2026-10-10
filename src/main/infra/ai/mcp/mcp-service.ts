@@ -1,3 +1,5 @@
+// mcp-service.ts：MCP 服务——多 server 生命周期管理（启动/停止单实例），工具注册进 ToolRegistry
+//（mcp__server__tool 前缀命名；重名工具跳过并告警）
 import {
   AppError,
   ErrorCode,
@@ -19,6 +21,7 @@ interface ServerEntry {
   toolNames: string[];
 }
 
+/** MCP 服务契约（IPC handler 消费） */
 export interface IMCPService {
   startServer(config: McpServerConfig): Promise<void>;
   stopServer(name: string): Promise<void>;
@@ -27,6 +30,7 @@ export interface IMCPService {
   hasRunningServers(): boolean;
 }
 
+/** MCP 服务：server 表（name → client/状态/工具清单）；重名 server 先停旧再启新 */
 export class MCPService implements IMCPService {
   private readonly servers = new Map<string, ServerEntry>();
 

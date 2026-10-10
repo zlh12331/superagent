@@ -1,3 +1,5 @@
+// run-command.tool.ts：run_command 工具——shell 命令执行（killTree 防孤儿、输出上限 100KB、
+// 超时 30s 默认可至 300s）+ 危险命令黑名单拦截（rm -rf 根目录/fork bomb 等模式）
 import { type ChildProcess, spawn } from 'node:child_process';
 import { z } from 'zod';
 import { t } from '../../i18n';
@@ -8,10 +10,13 @@ const MAX_OUTPUT_BYTES = 100 * 1024;
 const DEFAULT_TIMEOUT_MS = 30_000;
 const MAX_TIMEOUT_MS = 300_000;
 
+// 危险扫描前归一：去引号与裸 -- 分隔符——防用引号变体绕过模式匹配
 function normalizeForDangerScan(command: string): string {
   return command.replace(/['"`]/g, '').replace(/(^|\s)--(?=\s|$)/g, '$1');
 }
 
+// 危险命令黑名单（硬拦，不经审批——这些命令连问都不该问）：
+// 递归删根/家目录、格式化、fork bomb、关机重启、盘符格式化、组合攻击变体
 const DANGEROUS_PATTERNS: readonly { pattern: RegExp; reason: string }[] = [
   {
     pattern: /\brm\s+(-[a-z]*r[a-z]*f?|-[a-z]*f[a-z]*r?)\s+[/~]/i,

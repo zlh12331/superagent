@@ -1,3 +1,4 @@
+// plan-mode.tools.ts：plan 模式进出工具——enter 切 plan 只读态（记住原模式），exit 还原
 import type { ApprovalMode } from '@code-agent/shared/main';
 import { z } from 'zod';
 import { t } from '../../i18n';

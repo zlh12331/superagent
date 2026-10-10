@@ -1,3 +1,4 @@
+// task-create.tool.ts：task_create 工具——登记后台任务
 import { z } from 'zod';
 import { t } from '../../i18n';
 import { TaskKind, taskService } from '../agent/task-service';

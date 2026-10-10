@@ -1,3 +1,4 @@
+// web-fetch.tool.ts：web_fetch 工具——抓取网页正文（url-guard SSRF 防线 + 去标签截断）
 import { z } from 'zod';
 import { t } from '../../i18n';
 import type { Tool, ToolContext, ToolResult } from './tool';

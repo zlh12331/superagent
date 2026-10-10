@@ -1,3 +1,5 @@
+// update-cache.ts：electron-updater 缓存目录定位/度量/清理 + 差分基线一致性修剪
+// 目录名真源 = 打包的 app-update.yml（updaterCacheDirName），不硬编码——yml 改了这里自动跟
 import { readdir, readFile, rm, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -7,6 +9,7 @@ import type { UpdateCacheInfo } from '@code-agent/shared/main';
 
 const CACHE_DIR_NAME_RE = /^updaterCacheDirName:\s*(.+?)\s*$/m;
 
+// 目录名白名单（拼进系统缓存路径用，防 yml 注入路径穿越）
 const CACHE_DIR_NAME_SAFE_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
 function getAppCacheRoot(): string {
@@ -19,6 +22,7 @@ function getAppCacheRoot(): string {
   return process.env['XDG_CACHE_HOME'] ?? join(homedir(), '.cache');
 }
 
+/** 从 app-update.yml 解析 updater 缓存目录（yml 缺失/目录名非法 → null） */
 export async function resolveUpdaterCacheDir(
   resourcesPath: string,
   cacheRoot: string = getAppCacheRoot(),
@@ -64,6 +68,7 @@ export async function measureDirRecursive(dir: string): Promise<{
   return { bytes, fileCount };
 }
 
+/** 缓存度量（递归累计字节与文件数；设置面「清理更新缓存」展示用） */
 export async function readUpdateCacheInfo(
   resourcesPath: string,
   cacheRoot?: string,
@@ -79,6 +84,7 @@ export async function readUpdateCacheInfo(
   return { path: dir, bytes: measured.bytes, fileCount: measured.fileCount };
 }
 
+/** 清空更新缓存目录（递归强删；设置面入口） */
 export async function clearUpdateCache(
   resourcesPath: string,
   cacheRoot?: string,
@@ -94,6 +100,12 @@ export async function clearUpdateCache(
   return { path: dir, bytes: 0, fileCount: 0 };
 }
 
+/**
+ * 差分基线一致性修剪：blockmap 记录的安装包总大小与缓存内 installer.exe 实际大小不符时
+ * 删掉旧 blockmap（1.6.x 事故教训——陈旧基线会让差分更新静默失败）
+ *
+ * @returns pruned=清了陈旧基线 / consistent=一致 / absent=文件缺失无从校验
+ */
 export type BaselinePruneResult = 'pruned' | 'consistent' | 'absent';
 
 export async function pruneStaleDifferentialBaseline(

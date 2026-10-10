@@ -1,3 +1,5 @@
+// dingtalk-adapter.ts：钉钉渠道——webhook 回发（基类）+ 可选 Stream 模式收消息
+//（appKey:appSecret:webhookUrl 三段 token 时启用长连接接收）
 import { logger } from '../../../utils/logger';
 import type { ChannelIncomingMessage } from '../channel/types';
 import { DingTalkStreamReceiver, parseDingTalkEvent } from './dingtalk-stream';
@@ -5,6 +7,7 @@ import { dingtalkSign, WebhookChannelAdapter } from './webhook-channel';
 
 const STREAM_SEPARATOR = ':';
 
+/** 钉钉渠道适配器（webhook 基类扩展：Stream 接收 + 加签回发） */
 export class DingTalkAdapter extends WebhookChannelAdapter {
   readonly kind = 'dingtalk';
   readonly displayName = '钉钉';

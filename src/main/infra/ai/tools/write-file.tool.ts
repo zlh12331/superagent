@@ -1,3 +1,4 @@
+// write-file.tool.ts：write_file 工具——整文件写入/追加（createDirs 可选）
 import { promises as fs } from 'node:fs';
 import type { FileWriteRes } from '@code-agent/shared/main';
 import { z } from 'zod';

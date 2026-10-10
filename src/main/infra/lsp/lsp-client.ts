@@ -1,7 +1,10 @@
+// lsp-client.ts：单语言服务器客户端——stdio JSON-RPC（Content-Length 帧）、initialize 握手、
+// 请求/通知收发。定义/引用/hover 三方法由上游组合
 import { type ChildProcessWithoutNullStreams, spawn } from 'node:child_process';
 import { logger } from '../../utils/logger';
 import { terminateChild } from '../../utils/terminate-child';
 
+/** LSP 位置/区间/位置引用（uri 为 file:// 形态，与协议一致） */
 export interface LspPosition {
   readonly line: number;
   readonly character: number;
@@ -26,6 +29,7 @@ export interface LspHoverResult {
   readonly range?: LspRange;
 }
 
+/** 服务器启动配置（command 为 PATH 内可执行；timeoutMs 作用于单次请求等待） */
 export interface LspServerConfig {
   readonly command: string;
   readonly args?: readonly string[];
@@ -40,6 +44,10 @@ interface ResponseMessage {
   readonly error?: { readonly code: number; readonly message: string };
 }
 
+/**
+ * LSP 客户端：按 id 配对请求/响应（pending 表），输入流按 Content-Length 分帧解析；
+ * 请求级超时（默认 15s）防服务器卡死拖死调用方
+ */
 export class LspClient {
   private readonly command: string;
   private readonly args: readonly string[];

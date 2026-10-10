@@ -1,3 +1,6 @@
+// service-container.ts：主进程服务容器（组合根）——20 个 lazy accessor 按反向依赖装配、
+// dispose 善后链（顺序敏感：cron 先停，DB 最后关）、崩溃恢复。导出单例 serviceContainer
+// 边界：agentAskService 与 cronService 是模块级单例 import 直引，不经容器管理
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { app, BrowserWindow } from 'electron';
@@ -5,6 +8,8 @@ import electronUpdater from 'electron-updater';
 
 const { autoUpdater, CancellationToken } = electronUpdater;
 
+// electron-updater 的 CancellationToken 是一次性语义：每次更新检查必须用全新实例，
+// 复用已取消的 token 会让后续所有检查被永久取消——故传工厂而非实例
 const createUpdateToken = (): InstanceType<typeof CancellationToken> => new CancellationToken();
 
 import { resetConfigCache } from './config';
@@ -65,6 +70,8 @@ import { getTerminalService, resetTerminalService } from './infra/terminal/termi
 import { type IUpdateService, UpdateService } from './infra/update/update-service';
 import { clearCrashMarker, hasCrashMarker, logger } from './utils/logger';
 
+// 记忆引擎（vendored 上游）的定位：打包态用 resources 内 bundle 产物；dev 优先找仓库内
+// 构建产物，再退 MEMORY_HUB_ROOT 环境变量；均无则 undefined（引擎走默认定位，功能降级）
 function resolveMemoryHubRoot(): string | undefined {
   if (app.isPackaged) {
     return join(process.resourcesPath, 'memory-hub');
@@ -77,12 +84,15 @@ function resolveMemoryHubRoot(): string | undefined {
 }
 
 class ServiceContainer {
+  // ConcurrencyGate 不做 accessor：无重依赖、构造廉价，直接初始化为 readonly 字段
   private readonly concurrencyGate: ConcurrencyGate = createConcurrencyGate(
     DEFAULT_MAX_CONCURRENT_TURNS,
   );
 
   private cronUnsubscribe: (() => void) | null = null;
   private cronInitialized = false;
+
+  // ───── 惰性单例字段：null = 未构造，首次 get* 才实例化；set* 仅供测试注入替换 ─────
 
   private fileService: IFileService | null = null;
   private searchService: ISearchService | null = null;
@@ -132,6 +142,7 @@ class ServiceContainer {
     this.searchService = service;
   }
 
+  /** 工具注册表：首次构造时注册全部内置工具（file/search/terminal/git/memory/lsp/ask/permission/codebase 全部先行就绪） */
   getToolRegistry(): IToolRegistry {
     if (this.toolRegistry === null) {
       const registry = new ToolRegistry();
@@ -156,6 +167,7 @@ class ServiceContainer {
     this.toolRegistry = registry;
   }
 
+  /** 权限服务：构造即读持久化审批模式（approval-pref），后续 mode:set 才会变更 */
   getPermissionService(): IPermissionService {
     if (this.permissionService === null) {
       this.permissionService = new PermissionService(new CommandClassifier(this.getLlmClient()));
@@ -205,6 +217,7 @@ class ServiceContainer {
     this.promptService = service;
   }
 
+  /** Agent 服务：回合执行核心，注入注册表/执行器/提示词/会话/LLM/并发门/权限 8 依赖 */
   getAgentService(): IAgentService {
     if (this.agentService === null) {
       this.agentService = new AgentService(
@@ -221,6 +234,7 @@ class ServiceContainer {
     return this.agentService;
   }
 
+  /** 子代理管理器接线（幂等；依赖 AgentService 就绪，启动序列在 initImChannels 前调用） */
   initSubagents(): void {
     if (!this.subagentsInitialized) {
       initSubagentManager(this.getAgentService());
@@ -228,10 +242,15 @@ class ServiceContainer {
     }
   }
 
+  /**
+   * 记忆写入口（deferred 模式）：引擎未启动时是占位空实现，首次真实写入才拉起引擎子进程——
+   * 记忆是旁路能力，引擎崩溃/未配置都不能阻塞主流程
+   */
   getMemoryPort(): MemoryPort {
     return createDeferredMemoryPort(() => this.getMemoryHubService());
   }
 
+  /** 记忆引擎宿主服务（utilityProcess 子进程管理 + HTTP 协议适配） */
   getMemoryHubService(): MemoryHubService {
     if (this.memoryHub === null) {
       this.memoryHub = new MemoryHubService({
@@ -249,6 +268,7 @@ class ServiceContainer {
     return this.lspManager;
   }
 
+  /** 目标服务：构造即 mount（订阅回合事件推进目标状态） */
   getGoalService(): GoalService {
     if (this.goalService === null) {
       this.goalService = new GoalService(
@@ -260,6 +280,7 @@ class ServiceContainer {
     return this.goalService;
   }
 
+  /** IM 服务：构造即挂 agent 桥（渠道消息 → Agent 回合）；渠道连接由 initImChannels 显式恢复 */
   getImService(): ImService {
     if (this.imService === null) {
       this.imService = new ImService();
@@ -274,10 +295,12 @@ class ServiceContainer {
     return this.imService;
   }
 
+  /** 恢复持久化的 IM 渠道连接（启动序列显式调用；返回的 Promise 由退出链排水等待） */
   async initImChannels(): Promise<void> {
     await this.getImService().restore();
   }
 
+  /** 定时任务调度接线（幂等）：订阅 onFire → 触发会话回合，start() 启动时钟 */
   initCronScheduler(): void {
     if (this.cronInitialized) {
       return;
@@ -287,6 +310,7 @@ class ServiceContainer {
     cronService.start();
   }
 
+  // 定时触发即跑一回合：会话仍在 running 时跳过（防上一回合未完叠发）；步骤上限收紧到 20
   private async runCronTurn(task: {
     readonly id: string;
     readonly sessionId: string;
@@ -324,6 +348,7 @@ class ServiceContainer {
     }
   }
 
+  /** 远程控制服务：构造即挂 agent 桥；bindScope 来自 remote-pref（loopback/局域网） */
   getRemoteControlService(): IRemoteControlService {
     if (this.remoteControlService === null) {
       this.remoteControlService = new RemoteControlService({
@@ -410,6 +435,11 @@ class ServiceContainer {
     this.sessionService = service;
   }
 
+  /**
+   * 退出善后链：顺序敏感——cron 停表 → goal/im/remote 摘桥 → agentService drain →
+   * 残留 running 标 interrupted → MCP/LSP/权限/基础设施逐层关闭 → AI provider 重置 → **最后关 DB**
+   * 单步失败收集到 failures 继续走（createDisposeStep），确保一个卡死服务不拖垮整条链
+   */
   async dispose(): Promise<void> {
     logger.info({}, '开始清理应用服务');
 
@@ -567,6 +597,7 @@ class ServiceContainer {
     }
   }
 
+  /** 更新服务：electron-updater 实例注入（isPackaged 探针 + token 工厂由这里给定） */
   getUpdateService(): IUpdateService {
     if (this.updateService === null) {
       this.updateService = new UpdateService(autoUpdater, () => app.isPackaged, createUpdateToken);
@@ -574,6 +605,7 @@ class ServiceContainer {
     return this.updateService;
   }
 
+  /** 浏览器预览（WebContentsView 独立分区）：挂在首个存活窗口上，与渲染层 iframe 无关 */
   getBrowserPreviewService(): IBrowserPreviewService {
     if (this.browserPreviewService === null) {
       this.browserPreviewService = new BrowserPreviewService({
@@ -630,8 +662,11 @@ class ServiceContainer {
   }
 }
 
+// 释放单例：disposeServices 只做 dispose 不做单例重置——退出路径专属；
+// reset() 是测试用全量重置（含 DB/config 缓存），生产代码不得调用
 export const serviceContainer = new ServiceContainer();
 
+// dispose 单步包装：失败记名继续，返回收集器供 dispose 汇总日志
 function createDisposeStep(
   failures: string[],
 ): (name: string, fn: () => Promise<void> | void) => Promise<void> {
@@ -651,10 +686,15 @@ function createDisposeStep(
   };
 }
 
+/** 启动序列调用：加载运行时模型仓库（用户已配置的自定义模型） */
 export async function initRuntimeModels(): Promise<void> {
   await runtimeModelStore.loadAll();
 }
 
+/**
+ * 崩溃恢复：无条件把残留 running 会话标 interrupted（不依赖崩溃标记——强杀/断电没有标记可查），
+ * running 任务标 failed；finally 清崩溃标记
+ */
 export async function recoverFromCrash(): Promise<void> {
   const wasCrash = hasCrashMarker();
   if (wasCrash) {

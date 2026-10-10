@@ -1,3 +1,4 @@
+// weixin-stream.ts：微信 iLink 机器人流协议——轮询收消息 + 文本回发（协议细节封在本文件）
 import { randomUUID } from 'node:crypto';
 import { AppError, ErrorCode } from '@code-agent/shared/main';
 import { logger } from '../../../utils/logger';

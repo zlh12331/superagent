@@ -1,3 +1,4 @@
+// codebase.tool.ts：codebase 工具——语义检索/调用图/影响面（codebase-service 承载）
 import { AppError, ErrorCode } from '@code-agent/shared/main';
 import { z } from 'zod';
 import type { ICodebaseService } from '../../codebase/codebase-service';

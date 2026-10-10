@@ -1,13 +1,18 @@
+// session-helpers.ts：会话行/消息的纯函数工具——行转 Meta、标题与预览推导、消息序列化
+// 无状态（不碰 DB），供 session-service 与测试共用
 import type { ChatMessage, SessionMeta } from '@code-agent/shared/main';
 import { AppError, ErrorCode } from '@code-agent/shared/main';
 import type { MessageRole, sessions } from './schema';
 
+// 标题/预览长度档：标题截 100（防超长粘贴当标题）、首条用户消息取前 50 作默认标题、
+// 列表预览取最后一条用户消息前 100
 const TITLE_MAX_LENGTH = 100;
 
 const TITLE_PREVIEW_LENGTH = 50;
 
 const LAST_MESSAGE_PREVIEW_LENGTH = 100;
 
+/** DB 行 → 列表 Meta（pinned 0/1 → boolean） */
 export function rowToMeta(row: typeof sessions.$inferSelect): SessionMeta {
   return {
     id: row.id,
@@ -22,6 +27,7 @@ export function rowToMeta(row: typeof sessions.$inferSelect): SessionMeta {
   };
 }
 
+/** 标题推导：显式标题（截 100）→ 首条用户消息前 50 → 默认标题 */
 export function resolveTitle(
   title: string | undefined,
   messageList: readonly ChatMessage[],
@@ -43,6 +49,7 @@ export function resolveTitle(
   return defaultTitle;
 }
 
+/** 列表预览：最后一条用户文本消息前 100 字符（assistant/tool 回复不进预览） */
 export function resolveLastMessagePreview(messageList: readonly ChatMessage[]): string | null {
   const lastUserContent = findLastUserText(messageList);
   if (lastUserContent === null) {

@@ -1,3 +1,5 @@
+// create-stream.ts：模型流创建（带重试）——可重试错误（429/网络）重建流直到拿到首 part；
+// 首部分已抢读交给调用方（38 号时序约定：TurnRunner 消费 firstPart）
 import { APICallError, RetryError } from 'ai';
 
 import { logger } from '../../../utils/logger';
@@ -5,11 +7,13 @@ import type { RetryAttemptInfo } from '../llm-client/retry';
 import { isRetryableError, retryWithBackoff } from '../llm-client/retry';
 import { DEFAULT_STREAM_IDLE_TIMEOUT_MS, readWithIdleTimeout } from './stream-reader';
 
+/** 可产生 UI 消息流的对象（AI SDK streamText 等结果的形状约定） */
 export interface MessageStreamSource {
   // biome-ignore lint/style/useNamingConvention: SDK 方法名 toUIMessageStream（AI SDK 约定，不可改名）
   toUIMessageStream(): ReadableStream<unknown>;
 }
 
+/** 创建流的结果：原始 result + 流 + 已抢读的 reader/首 part（TurnRunner 从 firstPart 接力） */
 export interface CreatedStream<T extends MessageStreamSource = MessageStreamSource> {
   readonly result: T;
   readonly stream: ReadableStream<unknown>;
@@ -24,6 +28,10 @@ export interface CreateStreamWithRetryOptions<T extends MessageStreamSource = Me
   readonly maxAttempts?: number;
 }
 
+/**
+ * 创建模型流（带重试与首 part 预读）：每次尝试先拿首 part 才算成功——
+ * 「连接建立但流立即断」这类半途失败也纳入重试判定
+ */
 export async function createStreamWithRetry<T extends MessageStreamSource>(
   options: CreateStreamWithRetryOptions<T>,
 ): Promise<CreatedStream<T>> {

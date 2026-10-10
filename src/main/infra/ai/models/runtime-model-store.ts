@@ -1,3 +1,5 @@
+// runtime-model-store.ts：用户自定义模型 CRUD（runtime_models 表）——apiKey 落 keychain，
+// 变更同步 modelRegistry 快照与停用集
 import {
   AppError,
   ErrorCode,
@@ -14,10 +16,12 @@ import { modelRegistry } from './index';
 import type { RuntimeModelSnapshot } from './types';
 import { buildRuntimeSnapshotId } from './types';
 
+/** 运行时模型的 keychain 键（runtime:<modelId>） */
 export function runtimeModelKeychainKey(modelId: string): string {
   return `runtime:${modelId}`;
 }
 
+/** 运行时模型记录（表行 + isEnabled 展开） */
 export interface RuntimeModelRecord {
   readonly modelId: string;
   readonly providerKind: ProviderKind;

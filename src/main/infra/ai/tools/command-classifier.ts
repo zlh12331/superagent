@@ -1,3 +1,4 @@
+// command-classifier.ts：命令安全分类器——LLM 判 safe/dangerous/unknown（ask 模式下审批弹窗文案用）
 import { z } from 'zod';
 import { logger } from '../../../utils/logger';
 import type { LlmClient } from '../llm-client';

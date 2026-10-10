@@ -1,9 +1,11 @@
+// devtools.handler.ts：devtools 域 IPC——渲染层主动请求打开 DevTools（快捷键入口）
 import type { InferHandlers, IPC_DEFINITIONS } from '@code-agent/shared/main';
 import { BrowserWindow } from 'electron';
 
 import { logger } from '../utils/logger';
 import type { IpcHandlerContext } from '../utils/wrap';
 
+// 独立窗口模式默认（detach）：不挤占应用布局
 const DEFAULT_MODE: 'detach' | 'right' | 'bottom' = 'detach';
 
 export const devtoolsHandlers: InferHandlers<

@@ -1,3 +1,5 @@
+// prompt-service.ts：系统提示词服务——prompts 表（首启播种默认提示词）+ 动态上下文注入
+// resolvePrompt 单一出口：DB 命中或内置默认；git 摘要按需注入（容器装配时传 provider）
 import { eq } from 'drizzle-orm';
 import { logger } from '../../../utils/logger';
 import { getDb } from '../../storage/db';
@@ -7,6 +9,7 @@ import { type GitSummaryProvider, injectDynamicContext } from './dynamic-context
 
 export const DEFAULT_CODE_AGENT_PROMPT_ID = 'code-agent';
 
+/** 提示词服务契约（AgentService 与记忆召回共用） */
 export interface IPromptService {
   initialize(): void;
   resolvePrompt(id: string | undefined, workingDir: string): Promise<ResolvedPrompt>;
@@ -16,11 +19,13 @@ export interface PromptServiceOptions {
   readonly gitSummaryProvider?: GitSummaryProvider;
 }
 
+/** 解析结果：content + 来源（database=用户自定义 / default-fallback=内置兜底） */
 export interface ResolvedPrompt {
   readonly content: string;
   readonly source: 'database' | 'default-fallback';
 }
 
+/** 提示词服务：initialize 播种默认行（onConflictDoNothing 幂等），失败下次调用重试 */
 export class PromptService implements IPromptService {
   private initialized = false;
   private readonly gitSummaryProvider: GitSummaryProvider | undefined;

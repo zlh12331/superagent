@@ -1,3 +1,4 @@
+// code-symbols.tool.ts：code_symbols 工具——tree-sitter 符号概览（code-analyzer 承载）
 import { z } from 'zod';
 import { getCodeAnalyzer } from '../../code-analysis/code-analyzer';
 import { t } from '../../i18n';

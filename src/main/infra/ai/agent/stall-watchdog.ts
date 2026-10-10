@@ -1,3 +1,4 @@
+// stall-watchdog.ts：停滞看门狗——执行超过 60s 无进度事件即判卡死，重试至多 3 次
 import { logger } from '../../../utils/logger';
 
 export interface StallWatchdogOptions {
@@ -5,6 +6,7 @@ export interface StallWatchdogOptions {
   readonly maxAttempts?: number;
 }
 
+/** 看门狗喂狗事件：进度/工具起止——任一事件即重置停滞计时 */
 export type WatchdogEvent =
   | { readonly type: 'progress' }
   | { readonly type: 'tool-start' }
@@ -17,11 +19,13 @@ export interface GuardOptions<T> {
   readonly label: string;
 }
 
+/** 停滞看门狗：guard 包裹执行体，停滞自动重试（subagent-manager 使用） */
 export class StallWatchdog {
   private readonly stallMs: number;
   private readonly maxAttempts: number;
 
   constructor(options?: StallWatchdogOptions) {
+    // 单次尝试 60s 无事件 = 卡死；共 3 次机会
     this.stallMs = options?.stallMs ?? 60_000;
     this.maxAttempts = options?.maxAttempts ?? 3;
   }

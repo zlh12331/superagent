@@ -1,11 +1,16 @@
+// agents-md.ts：工作区 AGENTS.md 查找与注入——工作目录逐层向上找，全文 8KB 预算截断，
+// 结果按目录树签名记忆化（文件没变不重读）
 import { readFileSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 
 const AGENTS_MD_FILENAME = 'AGENTS.md';
+// 大小写双探：Linux 敏感、macOS/Windows 不敏感——两种名字都认，统一行为
 const AGENTS_MD_FILENAME_LOWER = 'agents.md';
 
+// 注入预算 8KB：AGENTS.md 可能巨大（整仓规范），超过截断防吃掉上下文
 const BYTE_BUDGET = 8192;
 
+/** 命中的 AGENTS.md（路径 + 截断后内容） */
 export interface FoundAgentsMd {
   readonly path: string;
   readonly content: string;

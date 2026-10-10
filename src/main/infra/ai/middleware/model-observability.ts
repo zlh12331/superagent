@@ -1,3 +1,5 @@
+// model-observability.ts：AI SDK 中间件——generate/stream 前后记延迟与用量（debug 级，
+// 失败 warn；llm-client wrapLanguageModel 挂载）
 import type { LanguageModelMiddleware } from 'ai';
 import { logger } from '../../../utils/logger';
 

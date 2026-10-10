@@ -1,3 +1,5 @@
+// memory.handler.ts：memory 域 IPC——L0 记忆列表/按会话清除/全量清除/引擎状态
+// 依赖全部以函数注入（index.ts 装配容器调用）：引擎未启动时这些函数内部各自兜底
 import type { InferHandlers, IPC_DEFINITIONS } from '@code-agent/shared/main';
 import { INVALIDATION_DOMAINS } from '@code-agent/shared/main';
 import { broadcastInvalidation } from '../infra/invalidation/invalidation';
@@ -5,6 +7,7 @@ import type { L0Record } from '../infra/memory-hub/memory-hub-service';
 import type { MemoryClearResult } from '../infra/memory-hub/types';
 import type { IpcHandlerContext } from '../utils/wrap';
 
+/** 状态探针依赖（启停/健康/统计各一探针，渲染层状态灯消费） */
 export interface MemoryStatusDeps {
   readonly isEnabled: () => boolean;
   readonly isAvailable: () => boolean;
@@ -13,6 +16,7 @@ export interface MemoryStatusDeps {
   readonly countRecords: () => Promise<{ sessionCount: number; recordCount: number }>;
 }
 
+/** 依赖注入工厂 */
 export function createMemoryHandlers(params: {
   listL0BySession: (sessionKey: string, limit?: number) => Promise<L0Record[]>;
   clearBySession: (sessionKey: string) => Promise<MemoryClearResult>;
@@ -52,6 +56,8 @@ export function createMemoryHandlers(params: {
     },
 
     clearAll: async () => {
+      // 全量清除：逐会话清引擎记录（单会话失败记入 failed 不中断），JSONL 审计镜像仅对
+      // 引擎清除成功（或已尝试）的会话删除——保持审计文件与引擎状态一致
       const keys = await listKnownSessionKeys();
       if (keys.length === 0) {
         return { ok: true, clearedSessions: 0, deletedCount: 0 };

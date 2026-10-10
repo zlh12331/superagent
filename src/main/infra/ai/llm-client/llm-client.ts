@@ -1,3 +1,5 @@
+// llm-client.ts：LLM 客户端——generateText / generateJson（结构化 Output）两入口，
+// 重试/超时/错误码归一收口；模型经 registry 解析 + 缓存，中间件挂可观测性
 import { AppError, ErrorCode, type ModelApiFormat } from '@code-agent/shared/main';
 import {
   APICallError,
@@ -20,8 +22,10 @@ const DEFAULT_MODEL_TIMEOUT_MS = 60_000;
 
 type WrapableModel = Parameters<typeof wrapLanguageModel>[0]['model'];
 
+// SDK 内层重试关死：重试统一收口在本文件 retryWithBackoff（双层重试会放大延迟）
 const SDK_MODEL_CALL_RETRY_DISABLED = { maxRetries: 0 } as const;
 
+// 可重试判据：5xx / SDK 标记可重试的 API 错误 / 网络层错误码（连接重置、超时、socket 断）
 function isFallbackEligibleError(error: unknown): boolean {
   const status = getErrorStatus(error);
   if (status !== undefined) {
@@ -44,6 +48,7 @@ function isFallbackEligibleError(error: unknown): boolean {
   return false;
 }
 
+/** 客户端依赖：模型注册表 + 供应商工厂 + 可选模型级 gate（限流闸）与默认超时 */
 export interface LlmClientDeps {
   readonly modelRegistry: ModelRegistry;
   readonly defaultTimeoutMs?: number;
@@ -58,6 +63,7 @@ export interface LlmClientDeps {
   readonly modelGate?: () => Promise<void>;
 }
 
+/** 文本生成入参（model 缺省走默认模型；signal 可中止） */
 export interface LlmGenerateTextOptions {
   readonly model?: string;
   readonly system?: string;
@@ -77,6 +83,7 @@ export interface LlmGenerateTextResult {
     | undefined;
 }
 
+/** 结构化 JSON 生成入参（schema 驱动 AI SDK Output；T 为 zod 推导类型） */
 export interface LlmGenerateJsonOptions<T> {
   readonly model?: string;
   readonly schema: ZodType<T>;
@@ -86,6 +93,7 @@ export interface LlmGenerateJsonOptions<T> {
   readonly signal?: AbortSignal;
 }
 
+/** LLM 客户端：模型实例按 modelId 缓存；generateText/generateJson 全带重试+超时+统一错误归一 */
 export class LlmClient {
   private readonly modelCache = new Map<string, LanguageModel>();
 

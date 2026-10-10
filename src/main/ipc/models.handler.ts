@@ -1,3 +1,4 @@
+// models.handler.ts：models 域 IPC——运行时/内置模型清单 + 模型连通性测试（设置面模型管理消费）
 import type {
   AvailableModelInfo,
   ModelApiFormat,
@@ -16,8 +17,10 @@ import type { ProviderKind } from '../infra/ai/providers/types';
 import { isBlockedAddress, isBlockedHostname } from '../infra/ai/tools/url-guard';
 import { getSecret } from '../infra/storage/keychain';
 
+// 连通性探针 10s 超时：真实推理请求（max_tokens=1），慢网关不值得久等
 const TEST_TIMEOUT_MS = 10_000;
 
+// 环回判定要覆盖 IPv4/IPv6/IPv4-mapped IPv6 各写法——SSRF 校验漏一种写法就是洞
 function isLoopbackTarget(hostname: string): boolean {
   const host = hostname
     .trim()
@@ -43,6 +46,8 @@ function buildTestUrl(
   return resolveProviderRequestUrl(providerKind, baseUrl, apiFormat);
 }
 
+// 最小探针请求按 API 格式分型：三种格式（anthropic/openai-responses/其余 OpenAI Compatible）
+// 的必填字段与版本头不同，探针要严格贴合各格式否则误报连通失败
 function buildProbeRequest(
   apiFormat: ModelApiFormat,
   model: string,
@@ -80,6 +85,8 @@ function buildProbeRequest(
   };
 }
 
+// SSRF 防线：自定义 baseUrl 探测必须显式携带 apiKey（不许拿已存密钥打任意端点），
+// 且目标不得是内网/云元数据地址（环回地址除外——本地网关是合法场景）
 function assertSafeTestBaseUrl(baseUrl: string, apiKey: string | undefined): void {
   if (apiKey === undefined) {
     throw new AppError(

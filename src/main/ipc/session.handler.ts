@@ -1,3 +1,5 @@
+// session.handler.ts：session 域 IPC——会话 CRUD/置顶/导出导入/用量/回合明细/上下文压缩
+// compact 依赖注入（compactMessages）：压缩预算与 token 估算在 index.ts 装配（依赖模型上下文窗口）
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type {
@@ -14,6 +16,7 @@ import { readJsonImportFile } from '../utils/json-file';
 import { logger } from '../utils/logger';
 import type { IpcHandlerContext } from '../utils/wrap';
 
+/** 依赖注入工厂：compactMessages（模型感知的压缩策略）与 hasRunningAgentTurns（清空护栏）由 index.ts 装配 */
 export interface SessionHandlerDeps {
   readonly sessionService: ISessionService;
   readonly compactMessages: (messages: readonly ChatMessage[]) => {
@@ -84,6 +87,7 @@ export function createSessionHandlers(
     },
 
     clearAll: async () => {
+      // 危险操作双保险：运行中回合直接拒（确认弹窗在渲染层，这里是兜底）
       if (hasRunningAgentTurns()) {
         throw new AppError(ErrorCode.SESSION_IN_USE);
       }
@@ -137,6 +141,7 @@ export function createSessionHandlers(
     },
 
     compact: async (input) => {
+      // 压缩按预算裁历史消息；零回收时不落库（避免无意义重写整条会话）
       const session = await sessionService.get(input.sessionId);
       const { trimmed, removed, reclaimedTokens } = compactMessages(session.messages);
       if (reclaimedTokens > 0) {

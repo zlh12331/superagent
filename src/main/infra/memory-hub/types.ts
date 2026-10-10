@@ -1,3 +1,4 @@
+// types.ts：记忆端口契约——宿主与引擎之间全部交互的接口（adapter 与空实现各自满足）
 export interface MemoryCaptureInput {
   readonly sessionKey: string;
   readonly userContent: string;
@@ -37,6 +38,7 @@ export interface MemoryClearResult {
   readonly message?: string;
 }
 
+/** 记忆端口（唯一交互面）：健康/捕获/召回/两类搜索/清除 */
 export interface MemoryPort {
   health(): Promise<boolean>;
   capture(input: MemoryCaptureInput): Promise<MemoryCaptureResult>;

@@ -1,3 +1,4 @@
+// task-list.tool.ts：task_list 工具——列后台任务
 import { z } from 'zod';
 import { t } from '../../i18n';
 import { taskService } from '../agent/task-service';

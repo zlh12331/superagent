@@ -1,3 +1,5 @@
+// cron-service.ts：定时任务服务——croner 表达式调度（内存 job 表）+ cron_tasks 表持久化，
+// 触发经 onFire 回调（容器 initCronScheduler 订阅后转 Agent 回合）；模块级单例导出
 import { randomUUID } from 'node:crypto';
 import { Cron } from 'croner';
 import { eq } from 'drizzle-orm';
@@ -6,6 +8,7 @@ import { getDb } from '../../storage/db';
 import type { CronTaskRow } from '../../storage/schema';
 import { cronTasks } from '../../storage/schema';
 
+/** 定时任务记录（表行 + 运行时 nextFireAt 快照） */
 export interface CronTask {
   readonly id: string;
   readonly sessionId: string;
@@ -18,6 +21,7 @@ export interface CronTask {
 
 export type CronFireHandler = (task: CronTask) => Promise<void> | void;
 
+/** 定时任务调度器：job 随启停同步 DB 行（nextFireAt 供 UI 展示倒计时） */
 export class CronService {
   private jobs = new Map<string, Cron>();
 

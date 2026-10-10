@@ -1,7 +1,9 @@
+// l0-inspect.ts：L0 JSONL 审计镜像的只读检视——会话目录定位、记录计数、键枚举（IPC status 消费）
 import { existsSync } from 'node:fs';
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
+/** L0 对话目录（引擎数据根下的 data/conversations） */
 export function conversationsDir(dataDir: string): string {
   return join(dataDir, 'data', 'conversations');
 }

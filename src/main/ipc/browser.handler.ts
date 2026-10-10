@@ -1,12 +1,15 @@
+// browser.handler.ts：browser 域 IPC——右面板网页预览的导航/视口/配置（WebContentsView 承载，非 iframe）
 import type { InferHandlers, IPC_DEFINITIONS } from '@code-agent/shared/main';
 
 import type { IBrowserPreviewService } from '../infra/browser/preview-service';
 import type { IpcHandlerContext } from '../utils/wrap';
 
+/** 依赖注入工厂：index.ts 传入 browserPreviewService */
 export interface BrowserHandlerDeps {
   readonly browserPreviewService: IBrowserPreviewService;
 }
 
+/** 依赖注入工厂（全部方法透传） */
 export function createBrowserHandlers(
   deps: BrowserHandlerDeps,
 ): InferHandlers<typeof IPC_DEFINITIONS, IpcHandlerContext>['browser'] {

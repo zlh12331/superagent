@@ -1,3 +1,6 @@
+// settings.handler.ts：settings 域 IPC——设置读写 + 副作用分发 + API Key（keychain）+ 遥测级别 +
+// 审批模式 + 运行时模型 CRUD + 设置导入导出/重置
+// 注意：set 是「写穿透 + 按键分发副作用」模式，新增带主进程副作用的键必须在这里补分支
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { type InferHandlers, type IPC_DEFINITIONS, SETTING_KEYS } from '@code-agent/shared/main';
@@ -24,6 +27,7 @@ import { logger } from '../utils/logger';
 import type { IpcHandlerContext } from '../utils/wrap';
 import { syncTitleBarOverlayFromTheme } from '../window-theme';
 
+/** 依赖注入工厂：index.ts 传入 permissionService（审批模式写穿透用） */
 export function createSettingsHandlers(params: {
   permissionService: IPermissionService;
 }): InferHandlers<typeof IPC_DEFINITIONS, IpcHandlerContext>['settings'] {
@@ -36,6 +40,8 @@ export function createSettingsHandlers(params: {
     },
 
     set: async (input) => {
+      // 写透传 SQLite 后按键分发主进程侧副作用：主题（win32 overlay）、语言、代理（34 号收口）
+      // 渲染层自身的响应式刷新走 SETTINGS_EVENT_CHANGED 广播（settings-store 订阅）
       writeSetting(input.key, input.value);
       if (input.key === 'theme') {
         syncTitleBarOverlayFromTheme(input.value);
@@ -94,6 +100,7 @@ export function createSettingsHandlers(params: {
     },
 
     resetAll: async () => {
+      // 按白名单键清空（app_settings 表内其他键如 draft 不动），并重放副作用到默认态
       deleteSettings(SETTING_KEYS);
       syncTitleBarOverlayFromTheme(undefined);
       await applyProxyChange(undefined);

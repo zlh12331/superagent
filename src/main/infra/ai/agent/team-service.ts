@@ -1,6 +1,8 @@
+// team-service.ts：多成员团队并行——成员子代理 Promise.all 同跑 + 队长（可选）汇总产出
 import { logger } from '../../../utils/logger';
 import { getSubagentManager, type SubagentManager } from './subagent-manager';
 
+/** 团队成员任务（agent 为子代理名，task 为委派任务） */
 export interface TeamMemberTask {
   readonly agent: string;
   readonly task: string;
@@ -14,6 +16,7 @@ export interface TeamMemberResult {
   readonly durationMs: number;
 }
 
+/** 团队运行结果：成员结果列表 + 成败计数 + 队长汇总（无队长配置时 null） */
 export interface TeamRunResult {
   readonly members: readonly TeamMemberResult[];
   readonly succeeded: number;

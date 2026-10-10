@@ -1,3 +1,5 @@
+// vitest.config.ts：主进程单测配置（pnpm test:main 的 --root 指向本目录）；
+// 覆盖率阈值从 scripts/coverage-floors.json 的 main 层读取（数字真源不在本文件）
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { defineConfig } from 'vitest/config';

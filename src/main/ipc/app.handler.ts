@@ -1,3 +1,4 @@
+// app.handler.ts：app 域 IPC——就绪状态/构建信息/外链打开/数据目录/开机自启/退出/诊断包导出
 import { join } from 'node:path';
 import type { InferHandlers } from '@code-agent/shared/main';
 import {
@@ -17,6 +18,7 @@ import {
 import { logger } from '../utils/logger';
 import type { IpcHandlerContext } from '../utils/wrap';
 
+// 构建信息从打包时注入的 build-info.json 读（CI 产物）；读不到按 dev 兜底
 interface BuildInfo {
   readonly version?: string;
   readonly channel?: string;
@@ -62,6 +64,7 @@ export const appHandlers: InferHandlers<typeof IPC_DEFINITIONS, IpcHandlerContex
   },
 
   openExternal: async (input) => {
+    // 协议白名单：shell.openExternal 对 file:/自定 scheme 会被系统关联程序处理，只放行 http/https
     if (!input.url.startsWith('http://') && !input.url.startsWith('https://')) {
       throw new AppError(ErrorCode.INVALID_INPUT, '仅允许 http/https 协议');
     }
@@ -88,7 +91,9 @@ export const appHandlers: InferHandlers<typeof IPC_DEFINITIONS, IpcHandlerContex
     return { ok: true };
   },
 
+  // 诊断包：保存对话框选落点 → 打 zip（导出器在 ../diagnostics，内部已做敏感信息脱敏）
   exportDiagnostics: async () => {
+    // 文件名时间戳剔除 :/（Windows 文件名非法字符）
     const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
     const { canceled, filePath } = await dialog.showSaveDialog({
       title: '导出诊断包',

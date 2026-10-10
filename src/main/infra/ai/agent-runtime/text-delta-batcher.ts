@@ -1,7 +1,10 @@
+// text-delta-batcher.ts：text-delta 流事件合批——20ms 窗口或 4096 字符先到先发，
+// 削峰渲染层 IPC 事件量（模型高频小 delta 直发会打爆通道）
 export const TEXT_DELTA_BATCH_MS = 20;
 
 export const TEXT_DELTA_BATCH_MAX_CHARS = 4096;
 
+/** 调度注入缝（测试用 fake timer 替换 setTimeout） */
 export type BatchScheduler = (callback: () => void, ms: number) => () => void;
 
 const defaultScheduler: BatchScheduler = (callback, ms) => {

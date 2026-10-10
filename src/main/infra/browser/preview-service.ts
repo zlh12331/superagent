@@ -1,3 +1,5 @@
+// preview-service.ts：网页预览服务——WebContentsView 附着主窗承载外站，独立内存分区隔离会话
+// ⚠️ 网页预览绝不能回渲染层 iframe（主进程 CSP/XFO 三层拦截）；本服务是唯一合法承载路径
 import {
   type BrowserConfigureReq,
   type BrowserNavigateReq,
@@ -10,11 +12,13 @@ import { BrowserWindow, session, shell, WebContentsView } from 'electron';
 import { emitEvent } from '../../utils/emit-event';
 import { logger } from '../../utils/logger';
 
+// 独立分区：预览的 cookie/缓存与主应用 defaultSession 完全隔离（不污染登录态、不泄露存储）
 const PREVIEW_PARTITION = 'browser-preview';
 
 const STATE_EVENT = IPC_DEFINITIONS.browser.subscribeState;
 const LOAD_FAILED_EVENT = IPC_DEFINITIONS.browser.subscribeLoadFailed;
 
+/** 预览服务接口（IPC handler 直接消费） */
 // biome-ignore lint/style/useNamingConvention: I 前缀接口遵循项目惯例（IUpdateService 等）
 export interface IBrowserPreviewService {
   navigate(input: BrowserNavigateReq): Promise<{ ok: boolean }>;
@@ -27,12 +31,14 @@ export interface IBrowserPreviewService {
   dispose(): void;
 }
 
+/** 依赖注入：宿主窗口探针必传；createView/broadcast 可替换（测试） */
 export interface BrowserPreviewServiceDeps {
   readonly getWindow: () => BrowserWindow | null;
   readonly createView?: (options: { readonly javascript: boolean }) => WebContentsView;
   readonly broadcast?: (channel: string, payload: unknown) => void;
 }
 
+// 分区一次性配置：权限请求全拒、下载一律取消（预览不承载这两类交互）
 let previewSessionConfigured = false;
 
 function ensurePreviewSession(): void {
@@ -65,6 +71,11 @@ function defaultBroadcast(channel: string, payload: unknown): void {
   }
 }
 
+/**
+ * 网页预览服务：按需创建 WebContentsView 附着到主窗 contentView，随视口参数显隐/定位/缩放
+ *
+ * strictSandbox=true 时禁 JS（静态快照模式），切换需重建视图并恢复当前 URL
+ */
 export class BrowserPreviewService implements IBrowserPreviewService {
   private view: WebContentsView | null = null;
   private strictSandbox = false;
@@ -75,6 +86,7 @@ export class BrowserPreviewService implements IBrowserPreviewService {
   constructor(private readonly deps: BrowserPreviewServiceDeps) {}
 
   async navigate(input: BrowserNavigateReq): Promise<{ ok: boolean }> {
+    // 协议白名单：file:/ftp:/自定 scheme 一律不进预览（防本地文件探测）
     if (!/^https?:\/\//i.test(input.url)) {
       throw new Error(`浏览器预览仅支持 http/https 地址：${input.url}`);
     }
@@ -82,6 +94,7 @@ export class BrowserPreviewService implements IBrowserPreviewService {
     if (view === null) {
       return { ok: false };
     }
+    // loadURL 失败静默：did-fail-load 事件已向渲染层推送错误态，这里吞掉未处理 rejection
     void view.webContents.loadURL(input.url).catch(() => {});
     return { ok: true };
   }
@@ -120,6 +133,7 @@ export class BrowserPreviewService implements IBrowserPreviewService {
   }
 
   configure(input: BrowserConfigureReq): { ok: boolean } {
+    // strictSandbox 切换必须重建视图（webPreferences 创建后不可变）；先记 URL 再恢复
     if (input.strictSandbox === this.strictSandbox) {
       return { ok: true };
     }
@@ -173,6 +187,7 @@ export class BrowserPreviewService implements IBrowserPreviewService {
   }
 
   private wireWebContents(wc: WebContents): void {
+    // 新开窗拒绝、外链交系统浏览器（与主窗 window-open 策略一致）
     wc.setWindowOpenHandler(({ url }) => {
       if (/^https?:\/\//i.test(url)) {
         void shell.openExternal(url);
@@ -188,7 +203,7 @@ export class BrowserPreviewService implements IBrowserPreviewService {
     wc.on('did-navigate-in-page', emitState);
     wc.on('page-title-updated', emitState);
     wc.on('did-fail-load', (_event, errorCode, errorDescription, validatedUrl, isMainFrame) => {
-      if (!isMainFrame) return;
+      if (!isMainFrame) return; // 子资源失败属常态（图标/追踪脚本），只报主框架失败
       this.broadcast(LOAD_FAILED_EVENT.channel, {
         errorCode,
         errorDescription,
@@ -212,6 +227,7 @@ export class BrowserPreviewService implements IBrowserPreviewService {
   private destroyView(): void {
     const view = this.view;
     if (view === null) return;
+    // 先从 contentView 摘除再关 webContents：直接 close 会连带窗口渲染异常
     const win = this.deps.getWindow();
     if (win !== null && !win.isDestroyed()) {
       win.contentView.removeChildView(view);

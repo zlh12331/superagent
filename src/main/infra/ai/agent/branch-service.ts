@@ -1,3 +1,5 @@
+// branch-service.ts：会话分支服务——分支点分类（普通/回退子孙/回退兄弟/混合回退）与分支记录
+/** 分支分类：rewind-descendant=回退到祖先且仅一条链 / rewind-sibling=分支点有兄弟 / mixed=多次回退 */
 export type BranchClassification =
   | 'ordinary'
   | 'rewind-descendant'

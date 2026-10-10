@@ -1,3 +1,4 @@
+// edit-file.tool.ts：edit_file 工具——精确替换（old→new 唯一性校验防误替换）
 import { promises as fs } from 'node:fs';
 import { AppError, ErrorCode } from '@code-agent/shared/main';
 import { z } from 'zod';

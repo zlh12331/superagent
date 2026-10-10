@@ -1,7 +1,12 @@
+// lag-alert.ts：事件循环阻塞告警的文案与上报（reportMessage + warn 双落）
 import { reportMessage } from '../../utils/error-report';
 import { logger } from '../../utils/logger';
 import type { EventLoopLagSample } from './event-loop-lag';
 
+/**
+ * 上报一次阻塞采样：附活跃回合状态与堆占用（归因用——空闲期阻塞多半是系统级，
+ * 回合期阻塞才指向我们的代码）
+ */
 export function reportEventLoopLag(sample: EventLoopLagSample, hasActiveTurn: () => boolean): void {
   const context = {
     lagMs: sample.lagMs,

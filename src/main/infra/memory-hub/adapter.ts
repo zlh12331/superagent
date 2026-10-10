@@ -1,3 +1,5 @@
+// adapter.ts：记忆引擎 HTTP 协议适配——全仓唯一知晓上游 gateway 请求/响应形状的文件
+// ⚠️ 上游字段是 snake_case（协议面）；本文件转成 camelCase 端口对象，改协议先改这里
 import { logger } from '../../utils/logger';
 import type {
   MemoryCaptureInput,
@@ -10,13 +12,16 @@ import type {
   MemorySearchResult,
 } from './types';
 
+// 单请求 8s 超时：记忆调用不能拖住回合主流程
 const REQUEST_TIMEOUT_MS = 8000;
 
+/** HTTP 端口配置（baseUrl 已含 token 鉴权路径语义，apiKey 走 Bearer） */
 export interface HttpMemoryPortOptions {
   readonly baseUrl: string;
   readonly apiKey: string;
 }
 
+/** 引擎 HTTP 端口实现（MemoryPort 的协议侧；每个方法自带降级——失败返回空/假值不抛） */
 export class HttpMemoryPort implements MemoryPort {
   private readonly baseUrl: string;
   private readonly apiKey: string;

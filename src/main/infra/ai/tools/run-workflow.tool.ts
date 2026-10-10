@@ -1,3 +1,4 @@
+// run-workflow.tool.ts：run_workflow 工具——多步工作流（workflow-service 承载）
 import { z } from 'zod';
 import { t } from '../../i18n';
 import { workflowService } from '../agent/workflow-service';

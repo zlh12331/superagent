@@ -1,3 +1,4 @@
+// load-skill.tool.ts：load_skill 工具——按名加载技能 prompt（skill-registry 承载）
 import { z } from 'zod';
 import { t } from '../../i18n';
 import type { SkillRegistry } from '../skills/skill-registry';

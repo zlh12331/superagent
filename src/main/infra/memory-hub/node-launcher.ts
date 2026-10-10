@@ -1,6 +1,8 @@
+// node-launcher.ts：以当前 Node 运行时拉起引擎 launcher 脚本（dev/直跑场景的 EngineLauncher 实现）
 import type { ChildProcess } from 'node:child_process';
 import type { EngineLauncher, EngineProcessHandle, LaunchEngineOptions } from './engine-process';
 
+// stderr 尾部留 2KB：崩溃归因只看尾部就够，全量留会无限涨
 const STDERR_TAIL_LIMIT = 2000;
 
 async function loadSpawn(): Promise<(file: string, args: string[], opts: object) => ChildProcess> {

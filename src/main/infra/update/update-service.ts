@@ -1,3 +1,6 @@
+// update-service.ts：自动更新编排——electron-updater 事件桥接为状态机快照 + 检查调度（启动延迟/
+// 失败退避/长会话 12h）+ 下载取消 + win32 两段式安装（27/28 号）
+// 边界：updater 实例全量注入（AutoUpdaterLike），本文件不直接 import electron-updater
 import type {
   UpdateCheckRes,
   UpdateErrorKind,
@@ -16,6 +19,8 @@ import { emitEvent } from '../../utils/emit-event';
 import { logger } from '../../utils/logger';
 import { pruneStaleDifferentialBaseline, resolveUpdaterCacheDir } from './update-cache';
 
+// 启动检查延迟 5s（不与首屏抢资源）；失败按 1m/5m/15m 退避重试；长会话 12h 兜底再查；
+// 单次检查 45s 超时（GitHub 网络卡死不能挂着调度链）
 const LAUNCH_CHECK_DELAY_MS = 5_000;
 
 const LAUNCH_CHECK_RETRY_DELAYS_MS: readonly number[] = [60_000, 5 * 60_000, 15 * 60_000];
@@ -74,6 +79,7 @@ export interface UpdateInfoLike {
   readonly releaseNotes?: unknown;
 }
 
+/** 更新服务契约（IPC handler 与托盘共同消费） */
 // biome-ignore lint/style/useNamingConvention: I 前缀接口遵循项目惯例（IChatService 等）
 export interface IUpdateService {
   start(options?: UpdateStartOptions): void;
@@ -123,6 +129,7 @@ export class UpdateService implements IUpdateService {
     private readonly createCancellationToken: () => CancellationTokenLike,
   ) {}
 
+  /** 启动调度：配 logger/自动下载关闭（用户显式确认后才下）/预发布开关；dev 或用户关闭时跳过 */
   start(options: UpdateStartOptions = {}): void {
     this.started = true;
     const autoCheckEnabled = (options.autoCheckEnabled ?? ((): boolean => true))();
@@ -149,6 +156,11 @@ export class UpdateService implements IUpdateService {
     this.schedule('launch', LAUNCH_CHECK_DELAY_MS);
   }
 
+  /**
+   * 检查更新（手动触发时错误才进快照，静默失败只留日志）
+   *
+   * 预发布通道：用户开了 allowPrerelease 或当前版本本身是预发布（预发布升级链不能断）
+   */
   async check(manual: boolean): Promise<UpdateCheckRes> {
     this.updater.allowPrerelease =
       (this.allowPrereleaseEnabled?.() ?? false) || app.getVersion().includes('-');
@@ -229,6 +241,11 @@ export class UpdateService implements IUpdateService {
     };
   }
 
+  /**
+   * win32 两段式安装：先置延迟安装标记 + 关窗协商放行 + 常规退出——
+   * 退出善后链尾 runDeferredInstall 才真正拉安装器（防带进程写坏安装目录）
+   * macOS/Linux 可直接 quitAndInstall
+   */
   quitAndInstall(): void {
     if (process.platform === 'win32') {
       requestDeferredInstall();
@@ -239,6 +256,7 @@ export class UpdateService implements IUpdateService {
     this.updater.quitAndInstall(true, true);
   }
 
+  /** 退出善后链尾调用：消费延迟安装标记，拉起安装向导（不重启应用） */
   runDeferredInstall(): void {
     if (!isDeferredInstallPending()) {
       return;
@@ -248,6 +266,7 @@ export class UpdateService implements IUpdateService {
     this.updater.quitAndInstall(false, false);
   }
 
+  /** 退出前刷新「退出时自动安装」开关（用户可能在运行中改过设置，按最新值执行） */
   refreshAutoInstallOnAppQuit(): void {
     this.updater.autoInstallOnAppQuit = this.autoCheckEnabled?.() ?? true;
   }
