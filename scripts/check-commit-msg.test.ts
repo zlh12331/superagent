@@ -1,3 +1,7 @@
+// scripts/check-commit-msg.test.ts
+// check-commit-msg 单测：路径安全判定（常规仓库 / linked worktree gitdir 指针 / 越界拒绝）+ extractHeader 首行提取
+// 看护重点是 worktree 布局——真实钩子传入的 COMMIT_EDITMSG 落在主仓 .git/worktrees/<名>/ 下，误判越界会挡下全部 worktree 提交
+
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -27,8 +31,10 @@ function makeRoot(kind: 'repo' | 'worktree'): string {
   const mainGitDir = join(root, 'main-repo', '.git');
   mkdirSync(mainGitDir, { recursive: true });
   if (kind === 'repo') {
+    // 常规仓库：.git 是目录，走 resolveGitDir 的目录分支
     mkdirSync(join(root, '.git'), { recursive: true });
   } else {
+    // linked worktree：.git 是指针文件，gitdir 指向主仓 .git/worktrees/<名>
     const worktreeGitDir = join(mainGitDir, 'worktrees', 't3');
     mkdirSync(worktreeGitDir, { recursive: true });
     writeFileSync(join(root, '.git'), `gitdir: ${worktreeGitDir}\n`, 'utf8');

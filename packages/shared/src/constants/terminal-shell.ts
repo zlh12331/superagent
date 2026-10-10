@@ -1,6 +1,10 @@
-/** 合法 shell 档位（全集；平台适用性由 terminalShellChoicesForPlatform 收敛） */
+// terminal-shell.ts：终端 shell 档位与字号档位的单一真源（主进程与渲染层共用）
+// shell 语义：settings.terminal.shell 由主进程在 PTY spawn 时读取解析——terminal:create 契约无 shell 字段，渲染层只渲染选项。
+// 字号语义：xterm.js fontSize（px）——渲染层读设置直写 xterm，主进程不读。
+
+/** 合法 shell 档位（全集；写侧 schema 门禁与 terminalShellChoicesForPlatform 共用，后者按平台收敛为可用子集） */
 export const TERMINAL_SHELL_CHOICES = [
-  'auto',
+  'auto', // 交还平台默认：Windows → powershell.exe；Unix → $SHELL（缺省 /bin/bash）
   'powershell',
   'cmd',
   'gitbash',
@@ -49,11 +53,11 @@ export function isShellChoiceApplicable(
   return terminalShellChoicesForPlatform(platform).includes(choice);
 }
 
-/** 合法字号档位（px，升序；SegControl 选项与 clampFontSize 共用） */
+/** 合法字号档位（px，升序；写侧 schema 门禁、SegControl 选项与 clampFontSize 共用） */
 export const TERMINAL_FONT_SIZES: readonly number[] = [12, 13, 14, 16, 18];
 
 /**
- * 默认终端字号（13 = 此前 xterm 硬编码值——默认取现状保证升级零视觉变化）
+ * 默认终端字号（13 = 字号档位引入前终端视图硬编码给 xterm 的值，取现状保证升级零视觉变化）
  */
 export const DEFAULT_TERMINAL_FONT_SIZE = 13;
 
@@ -61,12 +65,13 @@ export const DEFAULT_TERMINAL_FONT_SIZE = 13;
  * 任意数值归一到最近合法档位（损坏 DB 值归一——15 → 14，非整域丢弃）
  *
  * 非有限数（undefined/NaN/Infinity，即「缺失或彻底损坏」）→ DEFAULT_TERMINAL_FONT_SIZE：
- * NaN 比较全 false 会把结果停在数组首项，必须前置拦截（35 号 clampZoom 同款教训）。
+ * NaN 比较全 false 会把结果停在数组首项，必须前置拦截（clampZoom 同款教训，见 constants/zoom.ts）。
  */
 export function clampFontSize(value: number): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
     return DEFAULT_TERMINAL_FONT_SIZE;
   }
+  // 初值仅作占位（首轮循环必覆盖）；索引访问在 noUncheckedIndexedAccess 下为 T | undefined，故需 as 收窄
   let nearest = TERMINAL_FONT_SIZES[0] as number;
   let best = Number.POSITIVE_INFINITY;
   for (const size of TERMINAL_FONT_SIZES) {

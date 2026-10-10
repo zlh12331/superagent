@@ -1,16 +1,16 @@
+// errors.ts：跨进程共享的错误基础设施——错误码表 + 错误元数据（用户文案/可重试/严重级别）+ 统一错误类 AppError
+// 流向：主进程抛 AppError → wrap() 捕获并 toIpcError() 过 IPC → 渲染层 unwrap() 抛 `[CODE] message` → getErrorMessage() 取 i18n 文案
 /**
- * 错误码枚举
+ * 错误码表：键与值同名，值即跨进程契约
  *
- * 仅包含与数据库无关的通用错误码：
- * - 通用：UNKNOWN/INTERNAL_ERROR/INVALID_INPUT/NOT_FOUND/UNAUTHORIZED/RATE_LIMITED
- * - IPC 边界：IPC_SENDER_INVALID/IPC_CHANNEL_NOT_FOUND
- * - AI 调用：AI_API_KEY_MISSING/AI_API_KEY_INVALID/AI_RATE_LIMITED/AI_TIMEOUT/AI_MODEL_ERROR/AI_STREAM_INTERRUPTED/AI_CONTEXT_TOO_LARGE/AI_LOOP_DETECTED
- * - 文件系统：FS_READ_FAILED/FS_WRITE_FAILED/FS_DISK_FULL
- * - Code Agent 工具：TOOL_NOT_FOUND/TOOL_EXECUTION_FAILED/TOOL_PERMISSION_DENIED/TOOL_ABORTED
- * - Code Agent 会话：SESSION_NOT_FOUND
- * - Code Agent 终端：TERMINAL_SPAWN_FAILED
+ * IpcError.code 原样过 IPC，渲染层据它拼 i18n key `errors.<code>`——改值不会编译报错，
+ * 只会静默退回兜底文案（shared 单测因此逐个钉死码值）。
+ *
+ * 按域分组；新增码必须同步补 ERROR_META（Record<ErrorCode, ErrorMeta> 缺项编译期即报错）。
  */
 export const ErrorCode = {
+  // ── 通用 ────────────────────────────────────────────
+  /** 未分类失败的兜底码（渲染层回合错误未分类时写它；主进程裸异常由 wrap() 归为 INTERNAL_ERROR） */
   UNKNOWN: 'UNKNOWN',
   INTERNAL_ERROR: 'INTERNAL_ERROR',
   INVALID_INPUT: 'INVALID_INPUT',
@@ -19,11 +19,14 @@ export const ErrorCode = {
   UNAUTHORIZED: 'UNAUTHORIZED',
   RATE_LIMITED: 'RATE_LIMITED',
 
+  // ── IPC 边界 ────────────────────────────────────────
+  /** 调用来源非法：发送方窗口已不存在，或其 URL 不在白名单（wrap() 在进 handler 前拒绝） */
   IPC_SENDER_INVALID: 'IPC_SENDER_INVALID',
   IPC_CHANNEL_NOT_FOUND: 'IPC_CHANNEL_NOT_FOUND',
   /** 主进程 handler 返回结构不符合契约（resSchema 校验失败） */
   INVALID_RESPONSE: 'INVALID_RESPONSE',
 
+  // ── AI 调用 ─────────────────────────────────────────
   AI_API_KEY_MISSING: 'AI_API_KEY_MISSING',
   AI_API_KEY_INVALID: 'AI_API_KEY_INVALID',
   AI_RATE_LIMITED: 'AI_RATE_LIMITED',
@@ -35,13 +38,14 @@ export const ErrorCode = {
   AI_MODEL_NOT_CONFIGURED: 'AI_MODEL_NOT_CONFIGURED',
   AI_STREAM_INTERRUPTED: 'AI_STREAM_INTERRUPTED',
   AI_CONTEXT_TOO_LARGE: 'AI_CONTEXT_TOO_LARGE',
-  /** 检测到工具调用/文件读取循环，回合已终止（对齐 qwen loopDetection） */
+  /** 检测到重复操作循环：相同工具调用/同一文件反复读取连续超阈值，回合终止（判据在 src/main/infra/ai/agent-runtime/loop-detector.ts） */
   AI_LOOP_DETECTED: 'AI_LOOP_DETECTED',
-  /** HTTP 402：账户余额不足（DeepSeek 等供应商返回） */
+  /** HTTP 402：账户余额不足（供应商以状态码返回，error-classifier 映射到此码） */
   AI_BALANCE_INSUFFICIENT: 'AI_BALANCE_INSUFFICIENT',
   /** 流正常结束但零文本零工具（空响应：API 配置/余额/模型名异常时供应商可能静默返回） */
   AI_EMPTY_RESPONSE: 'AI_EMPTY_RESPONSE',
 
+  // ── IM 渠道 ─────────────────────────────────────────
   /** 渠道未配置 token（keychain 无凭证） */
   IM_CHANNEL_NOT_CONFIGURED: 'IM_CHANNEL_NOT_CONFIGURED',
   /** 渠道 token 无效（getMe 等校验失败） */
@@ -51,34 +55,39 @@ export const ErrorCode = {
   /** 渠道 API 请求失败（网络/HTTP 错误） */
   IM_CHANNEL_REQUEST_FAILED: 'IM_CHANNEL_REQUEST_FAILED',
 
+  // ── 文件系统 ────────────────────────────────────────
   FS_READ_FAILED: 'FS_READ_FAILED',
   FS_WRITE_FAILED: 'FS_WRITE_FAILED',
   FS_DISK_FULL: 'FS_DISK_FULL',
 
+  // ── Code Agent：工具调用 ────────────────────────────
   TOOL_NOT_FOUND: 'TOOL_NOT_FOUND',
   TOOL_EXECUTION_FAILED: 'TOOL_EXECUTION_FAILED',
   TOOL_PERMISSION_DENIED: 'TOOL_PERMISSION_DENIED',
   TOOL_ABORTED: 'TOOL_ABORTED',
+  // ── Code Agent：会话与备份 ──────────────────────────
   SESSION_NOT_FOUND: 'SESSION_NOT_FOUND',
-  /** 会话正被占用（有运行中回合）：破坏性批量操作（清空全部会话）拒绝执行（36-D） */
+  /** 会话正被占用（有运行中回合）：破坏性批量操作（清空全部会话）拒绝执行（docs/design/36-settings-gaps-spec.md §1D） */
   SESSION_IN_USE: 'SESSION_IN_USE',
-  /** 备份操作失败（恢复点不存在/损坏、路径非法）（37-B） */
+  /** 备份操作失败（恢复点不存在/损坏、路径非法）（docs/design/37-settings-gaps-2-spec.md §1B） */
   BACKUP_INVALID: 'BACKUP_INVALID',
+  // ── Code Agent：终端 ────────────────────────────────
   TERMINAL_SPAWN_FAILED: 'TERMINAL_SPAWN_FAILED',
 } as const;
 
 /** 错误码字面量联合类型（从 ErrorCode 派生） */
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];
 
-/** 错误严重级别 */
+/** 错误严重级别（由低到高：info < warn < error < fatal；当前 ERROR_META 只用到前三级） */
 export type ErrorSeverity = 'info' | 'warn' | 'error' | 'fatal';
 
 /**
  * 错误元数据
  *
- * - userMessage：面向终端用户的中文友好提示
+ * - userMessage：面向终端用户的中文友好提示；渲染层 i18n 缺 `errors.<code>` 时的兜底
+ *   （src/renderer/i18n/use-translation.ts）
  * - retryable：是否可自动重试（AI 限流、超时等）
- * - severity：日志级别 + Sentry 事件级别
+ * - severity：严重级别（ErrorSeverity）
  */
 export interface ErrorMeta {
   readonly userMessage: string;
@@ -89,10 +98,11 @@ export interface ErrorMeta {
 /**
  * ERROR_META：错误码 → 元数据映射表
  *
- * 完整覆盖所有 ErrorCode，缺失即视为 bug（单测会校验）
- * 用户友好提示文案参考设计文档 §7.10
+ * 必须覆盖全部 ErrorCode（Record<ErrorCode, ErrorMeta> 类型层面强制；shared 单测另断言
+ * userMessage 非空、severity 合法）
  */
 export const ERROR_META: Readonly<Record<ErrorCode, ErrorMeta>> = {
+  // ── 通用 ────────────────────────────────────────────
   UNKNOWN: { userMessage: '未知错误', retryable: false, severity: 'error' },
   INTERNAL_ERROR: { userMessage: '内部错误', retryable: false, severity: 'error' },
   INVALID_INPUT: { userMessage: '输入参数有误', retryable: false, severity: 'warn' },
@@ -101,6 +111,7 @@ export const ERROR_META: Readonly<Record<ErrorCode, ErrorMeta>> = {
   UNAUTHORIZED: { userMessage: '未授权', retryable: false, severity: 'warn' },
   RATE_LIMITED: { userMessage: '操作过于频繁', retryable: true, severity: 'warn' },
 
+  // ── IPC 边界 ────────────────────────────────────────
   IPC_SENDER_INVALID: { userMessage: 'IPC 调用来源无效', retryable: false, severity: 'error' },
   IPC_CHANNEL_NOT_FOUND: { userMessage: 'IPC 通道不存在', retryable: false, severity: 'error' },
   INVALID_RESPONSE: {
@@ -109,6 +120,7 @@ export const ERROR_META: Readonly<Record<ErrorCode, ErrorMeta>> = {
     severity: 'error',
   },
 
+  // ── AI 调用 ─────────────────────────────────────────
   AI_API_KEY_MISSING: { userMessage: '请先配置 API Key', retryable: false, severity: 'warn' },
   AI_API_KEY_INVALID: { userMessage: 'API Key 无效', retryable: false, severity: 'warn' },
   AI_RATE_LIMITED: { userMessage: 'AI 调用频繁，正在重试', retryable: true, severity: 'warn' },
@@ -146,6 +158,7 @@ export const ERROR_META: Readonly<Record<ErrorCode, ErrorMeta>> = {
     severity: 'warn',
   },
 
+  // ── IM 渠道 ─────────────────────────────────────────
   IM_CHANNEL_NOT_CONFIGURED: {
     userMessage: 'IM 渠道未配置凭证',
     retryable: false,
@@ -167,10 +180,12 @@ export const ERROR_META: Readonly<Record<ErrorCode, ErrorMeta>> = {
     severity: 'warn',
   },
 
+  // ── 文件系统 ────────────────────────────────────────
   FS_READ_FAILED: { userMessage: '文件读取失败', retryable: false, severity: 'error' },
   FS_WRITE_FAILED: { userMessage: '文件写入失败', retryable: false, severity: 'error' },
   FS_DISK_FULL: { userMessage: '磁盘空间不足', retryable: false, severity: 'warn' },
 
+  // ── Code Agent：工具调用 ────────────────────────────
   TOOL_NOT_FOUND: { userMessage: '工具不存在', retryable: false, severity: 'warn' },
   TOOL_EXECUTION_FAILED: {
     userMessage: '工具执行失败',
@@ -183,6 +198,7 @@ export const ERROR_META: Readonly<Record<ErrorCode, ErrorMeta>> = {
     severity: 'warn',
   },
   TOOL_ABORTED: { userMessage: '工具执行被中断', retryable: false, severity: 'info' },
+  // ── Code Agent：会话与备份 ──────────────────────────
   SESSION_NOT_FOUND: { userMessage: '会话不存在', retryable: false, severity: 'warn' },
   SESSION_IN_USE: {
     userMessage: '有回合正在运行，请先停止后再操作',
@@ -194,6 +210,7 @@ export const ERROR_META: Readonly<Record<ErrorCode, ErrorMeta>> = {
     retryable: false,
     severity: 'warn',
   },
+  // ── Code Agent：终端 ────────────────────────────────
   TERMINAL_SPAWN_FAILED: {
     userMessage: '终端启动失败',
     retryable: false,
@@ -209,16 +226,16 @@ export const ERROR_META: Readonly<Record<ErrorCode, ErrorMeta>> = {
 export interface IpcError {
   readonly code: ErrorCode;
   readonly message: string;
+  /** 结构化上下文（如 zod 校验的 issues）；cause 有意不外传（可能含不可序列化的原生错误对象） */
   readonly details?: unknown;
 }
 
 /**
  * AppError：应用统一错误类
  *
- * 设计文档 §7.3
- * - 主进程 service / infra 层抛出 AppError
- * - wrap() 捕获并调用 toIpcError() 返回给渲染层
- * - 渲染层通过 handleIpcError() 根据 code 显示 toast 与操作建议
+ * - 主进程 service / infra 层抛出 AppError（可预期失败；裸 Error 由 wrap() 归为 INTERNAL_ERROR）
+ * - wrap() 捕获并调用 toIpcError() 返回给渲染层；渲染层 unwrap() 抛 `[CODE] message`，
+ *   unwrapErrorMessage() + getErrorMessage() 据 code 取 i18n 文案并提示
  *
  * 注意：复用 ES2022 Error 原生 cause 属性（通过 super 第二参数传入）
  * 不在子类重新声明 cause，避免与 lib.es2022.error 的 Error.cause 冲突
@@ -231,7 +248,9 @@ export class AppError extends Error {
   readonly details?: unknown;
 
   constructor(code: ErrorCode, message?: string, cause?: unknown, details?: unknown) {
+    // 回退到 ERROR_META：调用方没给 message 时，渲染层也要有可展示文案
     const messageOrDefault = message ?? ERROR_META[code].userMessage;
+    // cause 缺省时不传 ErrorOptions：exactOptionalPropertyTypes 下不允许显式传 cause: undefined
     if (cause !== undefined) {
       super(messageOrDefault, { cause });
     } else {
@@ -254,7 +273,7 @@ export class AppError extends Error {
     return this.meta.retryable;
   }
 
-  /** 日志/Sentry 级别 */
+  /** 严重级别（来自 ERROR_META） */
   get severity(): ErrorSeverity {
     return this.meta.severity;
   }
@@ -263,9 +282,9 @@ export class AppError extends Error {
    * 序列化为 IPC 传输结构
    *
    * 注意 cause 不序列化（可能含不可序列化的原生错误对象）
-   * 注意 details 通过条件构建对象赋值，避免修改 readonly 字段
    */
   toIpcError(): IpcError {
+    // details 是 readonly 可选字段：只能条件构建对象（不可先建再补字段），也避免显式传 undefined
     if (this.details !== undefined) {
       return {
         code: this.code,

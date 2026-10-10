@@ -1,6 +1,13 @@
+// derive.ts：IPC 定义表（单一真源）→ 通道常量 + 类型映射的推导器
+// 边界：只做形状推导，不含 zod 校验（校验在主进程 wrap 层）。两条产线——
+// deriveChannels 运行时折叠 IPC_META 生成 IPC_CHANNELS；Infer* 系列在类型层
+// 推导 IpcApi / 请求·事件映射 / handler 形状，消费方一律从定义表派生，杜绝手写漂移。
+
 import type { z } from 'zod';
 
 import type { IpcResponse } from './response';
+
+// ─── 定义表条目形状 + 通道常量生成器 ───────────────────────────
 
 /** 请求-响应定义形状 */
 interface RequestDefLike {
@@ -34,7 +41,11 @@ type SnakeCase<S extends string> = S extends `${infer Head}${infer Rest}`
       : `${Head}${SnakeCase<Rest>}`
   : '';
 
-/** 生成器产出的 key 类型：从 channel 推导（app:getStatus → APP_GET_STATUS；chat:stream:part → CHAT_STREAM_PART） */
+/**
+ * 生成器产出的 key 类型：从 channel 推导（app:getStatus → APP_GET_STATUS；chat:stream:part → CHAT_STREAM_PART）
+ *
+ * 折叠规则是运行时 toConstantKey 的类型层复刻，改一处必须同步另一处。
+ */
 type ChannelKey<D, K extends keyof D, M extends keyof D[K]> = D[K][M] extends {
   readonly channel: infer C;
 }
@@ -60,15 +71,22 @@ export function deriveChannels<D extends Record<string, Record<string, MetaEntry
   const result: Record<string, string> = {};
   for (const [domain, methods] of Object.entries(defs)) {
     for (const def of Object.values(methods)) {
+      // fail-fast：类型层 ChannelKey 与运行时 toConstantKey 是两套独立实现，域键与
+      // channel 前缀不一致时，类型层产出 never（该常量从联合里静默消失）而运行时
+      // 照常生成——两套真源静默分叉，故此处直接抛错而非放过
       if (!def.channel.startsWith(`${domain}:`)) {
         throw new Error(
           `IPC_META channel "${def.channel}" 与域键 "${domain}" 不匹配（channel 必须以 "${domain}:" 开头）`,
         );
       }
+      // key 由 channel 折叠而来，理论上可撞名并被 result[key] 静默覆盖（丢通道不报错）；
+      // 「键数 = 通道数」由契约测试兜底（packages/shared/src/__tests__/shared-gaps.test.ts）
       const key = toConstantKey(def.channel);
       result[key] = def.channel;
     }
   }
+  // 循环只写得出 Record<string, string>，无法自动收窄到按 ChannelKey 推导的映射类型，
+  // 出口断言是必要步骤；形状由上方循环与类型层共同保证
   return result as unknown as {
     readonly [K in keyof D as ChannelKey<D, K, keyof D[K]>]: string;
   };
@@ -76,12 +94,15 @@ export function deriveChannels<D extends Record<string, Record<string, MetaEntry
 
 /** channel → SCREAMING_SNAKE_CASE（app:getStatus → APP_GET_STATUS；chat:stream:part → CHAT_STREAM_PART） */
 function toConstantKey(channel: string): string {
+  // rest 可能含多段（stream:part / event:created），故按段切开逐段转 snake 后拼接
   const [domain, ...rest] = channel.split(':');
   const restSnake = (rest ?? [])
     .map((seg) => seg.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`))
     .join('_');
   return `${domain}_${restSnake}`.toUpperCase();
 }
+
+// ─── 类型层推导：IpcApi / RequestMap / EventMap / Handlers ─────
 
 /** 提取域内所有 request 方法名 */
 type RequestMethods<D, Domain extends keyof D> = {
@@ -91,9 +112,9 @@ type RequestMethods<D, Domain extends keyof D> = {
 /**
  * 渲染层发送的入参类型：schema=null → undefined（无参）；否则取 zod **input** 类型。
  *
- * P2 修复：此前取 z.output，导致带 .default()/.transform() 的 schema 把"校验后的
- * 形状"当"发送形状"——渲染层被迫按填充默认值后的形状传参；z.input 才与
- * ipcRenderer.invoke 实际发送的字节语义一致。
+ * 必须用 z.input 而非 z.output：invoke 发出的就是调用方填的原始入参，而 output 是
+ * 校验后形状（.default() 已填充、.transform() 已应用）——用 output 会迫使渲染层
+ * 按"填充默认值后"的形状传参。
  */
 type ReqOf<S> = S extends null ? undefined : S extends z.ZodType ? z.input<S> : never;
 
@@ -128,6 +149,7 @@ type EventSignature<Def> = Def extends { readonly kind: 'event'; readonly payloa
  * ```
  */
 export type InferIpcApi<D extends Record<string, Record<string, RequestDefLike | EventDefLike>>> = {
+  // -readonly 显式剥离 as const 源带上的只读（不改则测试无法覆写域属性）
   -readonly [Domain in keyof D]: {
     -readonly [M in keyof D[Domain]]: D[Domain][M] extends RequestDefLike
       ? RequestSignature<D[Domain][M]>
@@ -144,7 +166,7 @@ type RequestEntry<Def> = Def extends {
   : never;
 
 /**
- * 从定义表推导 IpcRequestMap（替代手写 payloads.ts 映射）
+ * 从定义表推导 IpcRequestMap：channel 字面量 → { req, res }（替代手写 payloads.ts 映射）
  */
 export type InferRequestMap<
   D extends Record<string, Record<string, RequestDefLike | EventDefLike>>,
@@ -170,7 +192,7 @@ type EventEntry<Def> = Def extends {
   : never;
 
 /**
- * 从定义表推导 IpcEventMap（替代手写 payloads.ts 事件映射）
+ * 从定义表推导 IpcEventMap：channel 字面量 → payload（替代手写 payloads.ts 事件映射）
  */
 export type InferEventMap<D extends Record<string, Record<string, RequestDefLike | EventDefLike>>> =
   {
@@ -199,7 +221,7 @@ export type HandlerSignature<Def, C> = Def extends {
  *
  * 缺失任一 request 方法的 handler → 编译期报错（通道↔handler 一致性保证）。
  * 仅含 event 方法的域（如 invalidation）经 key remapping 整域免除——事件由主进程
- * 推送侧广播，无 handler 可注册（31 号设计文档 §2.1）。
+ * 推送侧广播，无 handler 可注册（docs/design/31-invalidation-automation-spec.md §2.1）。
  */
 export type InferHandlers<
   D extends Record<string, Record<string, RequestDefLike | EventDefLike>>,

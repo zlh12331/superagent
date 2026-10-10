@@ -1,3 +1,7 @@
+// e2e/journey-agent.spec.ts：浏览器模式 E2E——Agent 审批旅程（工具调用 → 内联审批卡片 → 批准/拒绝）
+// window.api 由 src/renderer/dev/mock-api.ts 提供，mock 经 agent:approval:request 推送审批请求；
+// 三个用例分段覆盖契约：卡片出现 / 批准后卡片收敛 / 拒绝后卡片收敛
+
 import { expect, test } from '@playwright/test';
 
 import {
@@ -11,6 +15,10 @@ import {
 } from './journey-helpers';
 
 test.describe('Agent 审批用户旅程（batch 2）', () => {
+  // 预热：vite dev 冷启动首次编译慢，且本批首个用例要跑通完整发送链（transport/useChat/
+  // 审批卡片组件均为冷编译）——先自跑一遍轻量发送，别让首个用例独自承担编译耗时
+  // （同 e2e/journey-chat.spec.ts 的预热策略）。catch 为空是刻意为之：用例自带前置与
+  // 重试，预热失败不应让整个批次失败
   test.beforeAll(async ({ browser }) => {
     const page = await browser.newPage();
     await page.goto('/');
@@ -43,6 +51,7 @@ test.describe('Agent 审批用户旅程（batch 2）', () => {
     const approveBtn = await sendAndWaitApproval(page, async () => {
       await page.locator('.send-btn:visible').first().click({ timeout: 5_000 });
     });
+    // 高负载下点击可能落在 React 重渲染间隙而丢失——反复点击直至状态翻转（审批按钮消失）
     await expect(async () => {
       if (await approveBtn.isVisible()) {
         await approveBtn.click();
@@ -60,6 +69,7 @@ test.describe('Agent 审批用户旅程（batch 2）', () => {
     });
     const rejectBtn = page.getByRole('button', { name: /拒绝|取消/ }).first();
     await expect(rejectBtn).toBeVisible({ timeout: 5_000 });
+    // 同批准用例：点击可能落在重渲染间隙被丢弃，重试到卡片消失为止
     await expect(async () => {
       if (await rejectBtn.isVisible()) {
         await rejectBtn.click();

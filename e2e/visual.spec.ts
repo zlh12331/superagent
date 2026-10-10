@@ -1,8 +1,14 @@
+// e2e/visual.spec.ts：视觉回归——欢迎页面板状态 + 品牌区的截图基线对比
+//
+// 基线存 e2e/visual.spec.ts-snapshots/（生成后须提交仓库）；三张面板态基线必须互不相同，
+// 否则 1% 阈值（SHOT_OPTIONS.maxDiffPixelRatio）会把版本号 / mock 数据漂移一并吸收，门禁形同虚设。
+
 import { expect, type Page, test } from '@playwright/test';
 
 /** 面板开关描述（label 取自真实 i18n：topbar.expandSidebar / topbar.expandPanel） */
 interface PanelToggle {
-  readonly name: string;
+  readonly name: string; // 面板名，仅用于断言失败消息，不参与元素定位
+  // 同一开关按钮两态各持一个 aria-label；定位靠 getByRole 的 accessible name，须与 i18n 实时文案逐字一致
   readonly expandLabel: string;
   readonly collapseLabel: string;
 }
@@ -61,10 +67,14 @@ async function setPanelExpanded(page: Page, toggle: PanelToggle, expanded: boole
 }
 
 test.describe('视觉回归测试', () => {
+  // 基线仅 win32 生成（Playwright 快照名自带平台后缀，仓内即 -win32.png）；本文件同属浏览器模式套件，
+  // CI 的 e2e-browser job 跑 ubuntu-latest，会期待 -linux.png 而基线不存在 → 必然假红。
+  // 跨平台字体渲染差异无法用阈值抹平；要放开需先在目标平台生成基线并提交。
   test.skip(process.platform !== 'win32', '视觉基线仅 Windows 维护（需在目标平台生成基线后放开）');
 
   test('欢迎页默认态快照', async ({ page }) => {
     await gotoWelcome(page);
+    // 显式锁定默认态（两个面板展开），不依赖 store 默认值恰好如此
     await setPanelExpanded(page, SIDEBAR, true);
     await setPanelExpanded(page, RIGHT_PANEL, true);
 

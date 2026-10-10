@@ -1,3 +1,6 @@
+// payloads.ts：IPC payload 类型层——汇集各域 Req 类型（一律 z.infer 自 zod schema）与两张 channel 类型映射
+// 边界：不定义字段与运行时逻辑（字段语义以 packages/shared/src/schemas/ 下的 schema 为单一真源）；映射从 definitions.ts 的定义表整体推导，新增 channel 无需改本文件
+
 import type { z } from 'zod';
 import type {
   AgentApprovalResponseReqSchema,
@@ -47,24 +50,26 @@ import type { ToolListReqSchema } from '../schemas/tool';
 import type { IPC_DEFINITIONS } from './definitions';
 import type { InferEventMap, InferRequestMap } from './derive';
 
+// ChatMessage 转发自 schemas/chat.ts（= AI SDK 的 ModelMessage）
 export type { ChatMessage } from '../schemas/chat';
 
+// ─── 应用级 payload ───
+
 /**
- * 应用状态（health check）
+ * app:getStatus 响应：应用就绪标记 + IPC 协议版本
  *
- * 说明：原 PG/Ollama/DB 状态字段已随数据库层删除，
- * 当前仅保留应用运行状态标记，便于渲染层做基本健康检查。
+ * 渲染层挂载时（src/renderer/hooks/use-protocol-check.ts）取 protocolVersion 与本地
+ * IPC_PROTOCOL_VERSION（packages/shared/src/constants/protocol.ts）比对：不一致 = 主进程与
+ * 渲染层来自不同构建（自动更新后单侧先更新），仅提示重启，不阻断功能。
  */
 export interface AppStatus {
-  /** 应用是否已就绪（true 表示主进程初始化完成） */
+  /** 应用是否已就绪（true = 主进程初始化完成） */
   readonly ready: boolean;
-  /**
-   * IPC 协议版本（渲染层启动时校验；不匹配 = 主进程/渲染层来自不同构建，提示重启）
-   *
-   * 与 IPC_PROTOCOL_VERSION（constants/protocol.ts）比较。
-   */
+  /** IPC 协议版本（契约兼容性版本，非应用版本号；对照常量见上方 TSDoc） */
   readonly protocolVersion: number;
 }
+
+// ─── Agent 域 Req ───
 
 /** agent:run 请求 payload：发起一次 agent 对话 */
 export type AgentRunReq = z.infer<typeof AgentRunReqSchema>;
@@ -74,6 +79,8 @@ export type AgentStopReq = z.infer<typeof AgentStopReqSchema>;
 
 /** agent:approval:response 请求 payload：渲染层回传审批结果 */
 export type AgentApprovalResponseReq = z.infer<typeof AgentApprovalResponseReqSchema>;
+
+// ─── File 域 Req ───
 
 /** file:read 请求 payload：读取文件内容（支持分批） */
 export type FileReadReq = z.infer<typeof FileReadReqSchema>;
@@ -102,11 +109,15 @@ export type FileDeleteReq = z.infer<typeof FileDeleteReqSchema>;
 /** file:rename 请求 payload：重命名/移动文件或目录 */
 export type FileRenameReq = z.infer<typeof FileRenameReqSchema>;
 
+// ─── Search 域 Req（grep 由 ripgrep 驱动，见 src/main/infra/search/search-service.ts） ───
+
 /** search:grep 请求 payload：正则搜索文件内容 */
 export type GrepReq = z.infer<typeof GrepReqSchema>;
 
 /** search:glob 请求 payload：glob 模式匹配文件路径 */
 export type GlobReq = z.infer<typeof GlobReqSchema>;
+
+// ─── Terminal 域 Req（node-pty 会话池） ───
 
 /** terminal:create 请求 payload：创建终端会话 */
 export type TerminalCreateReq = z.infer<typeof TerminalCreateReqSchema>;
@@ -119,6 +130,8 @@ export type TerminalResizeReq = z.infer<typeof TerminalResizeReqSchema>;
 
 /** terminal:kill 请求 payload：终止终端会话 */
 export type TerminalKillReq = z.infer<typeof TerminalKillReqSchema>;
+
+// ─── Git 域 Req（经 simple-git 驱动 git CLI） ───
 
 /** git:status 请求 payload：获取工作区状态 */
 export type GitStatusReq = z.infer<typeof GitStatusReqSchema>;
@@ -134,6 +147,8 @@ export type GitCommitReq = z.infer<typeof GitCommitReqSchema>;
 
 /** git:push 请求 payload：推送本地提交到远程（git push） */
 export type GitPushReq = z.infer<typeof GitPushReqSchema>;
+
+// ─── Session 域 Req ───
 
 /** session:list 请求 payload：分页列出会话 */
 export type SessionListReq = z.infer<typeof SessionListReqSchema>;
@@ -153,8 +168,12 @@ export type SessionCreateReq = z.infer<typeof SessionCreateReqSchema>;
 /** session:listRecentDirs 请求 payload */
 export type SessionListRecentDirsReq = z.infer<typeof SessionListRecentDirsReqSchema>;
 
+// ─── Tool 域 Req ───
+
 /** tool:list 请求 payload：列出已注册工具清单（可按权限过滤） */
 export type ToolListReq = z.infer<typeof ToolListReqSchema>;
+
+// ─── Settings 域 Req ───
 
 /** settings:getApiKey 请求 payload：查询指定提供商的 API Key */
 export type GetApiKeyReq = z.infer<typeof GetApiKeyReqSchema>;
@@ -168,6 +187,8 @@ export type DeleteApiKeyReq = z.infer<typeof DeleteApiKeyReqSchema>;
 /** settings:setTelemetryLevel 请求 payload：设置遥测级别 */
 export type SetTelemetryLevelReq = z.infer<typeof SetTelemetryLevelReqSchema>;
 
+// ─── 非 z.infer 派生的转发（接口 / 联合 / 枚举 + 对应 schema 值） ───
+
 export type { OpenDevToolsReq, OpenDevToolsRes } from '../schemas/devtools';
 export { OpenDevToolsReqSchema } from '../schemas/devtools';
 export type {
@@ -177,31 +198,29 @@ export type {
 } from '../schemas/settings';
 export { SetTelemetryLevelReqSchema, TelemetryLevelSchema } from '../schemas/settings';
 
+// ─── IPC 类型映射 ───
+
 /**
- * 请求-响应 channel 类型映射：Req → Res
+ * 请求-响应 channel 的类型映射：channel → { req, res }
  *
- * 每个 channel 定义 req 与 res 两个字段：
- * - req：渲染层 invoke 时传入的入参类型
- * - res：主进程 handle 返回的响应数据类型
+ * - req：渲染层 invoke 传出的入参形状，取 schema 的 z.input（默认值 / transform 应用前，
+ *   与 ipcRenderer.invoke 实际发送的字节一致）
+ * - res：主进程 handler 返回的响应类型
  *
- * 渲染层通过 ipcRenderer.invoke(channel, req) 调用，
- * 主进程通过 ipcMain.handle(channel, (e, req: Req) => Res) 注册 handler。
- *
- * 类型完整性：所有在 definitions.ts 中定义的请求-响应 channel 自动进入此映射，
- * 无需手写（由 InferRequestMap 推导）。
+ * 由 InferRequestMap 从 definitions.ts 的定义表整体推导：新增 channel 自动进入映射，无需在此手写。
  */
 export type IpcRequestMap = InferRequestMap<typeof IPC_DEFINITIONS>;
 
 /**
- * 流式/事件 channel payload 映射（从 IPC_DEFINITIONS 自动推导）
+ * 流式 / 事件 channel 的 payload 映射：channel → payload
  *
- * 流式 channel 由主进程主动 webContents.send 推送，渲染层通过 ipcRenderer.on 订阅。
- * 事件 channel 同样由主进程推送，但表示一次性状态变更（如终端退出）。
+ * 两类 channel 都由主进程主动推送（webContents.send），渲染层经 subscribe 被动接收；
+ * 订阅返回 unsubscribe，组件卸载必须调用，否则监听器泄漏：
+ * - 流式：数据分片，如 agent:stream:part
+ * - 事件：一次性状态变更，如 terminal:event:exit（终端退出）
  *
- * 与请求-响应 channel 的区别：
- * - 请求-响应：渲染层主动 invoke，主进程返回结果（同步等待）
- * - 流式/事件：主进程主动推送，渲染层被动接收（异步观察）
+ * 消费时必须按 payload 携带的关联键（sessionId / terminalId / watcherId）过滤，避免跨会话污染。
  *
- * 渲染层订阅后必须按 sessionId / terminalId 过滤事件，避免跨会话污染。
+ * 由 InferEventMap 从 definitions.ts 的定义表整体推导，新增 channel 无需在此手写。
  */
 export type IpcEventMap = InferEventMap<typeof IPC_DEFINITIONS>;

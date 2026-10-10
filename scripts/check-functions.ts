@@ -1,3 +1,8 @@
+// check-functions.ts：函数门禁——形参 ≤4（自研正则）+ 函数体 ≤200 行（Biome 度量），棘轮只允许收紧。
+// 数据通路与 check-complexity 同款：package.json 以管道把 Biome 的 JSON 诊断喂进标准输入
+// （`biome lint --only=… --reporter=json src | tsx scripts/check-functions.ts`），脚本不自起
+// child_process——既避开安全扫描对子进程的拦截，也避开 shell 重定向的跨平台不可移植。
+// 边界：本脚本只判定与报告，不代偿重构；阈值与分档真源在 scripts/limits.json，本文件只读取。
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { collectSourceFiles, toPosixRelative } from './lib/file-metrics';

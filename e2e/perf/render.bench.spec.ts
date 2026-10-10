@@ -1,9 +1,14 @@
+// e2e/perf/render.bench.spec.ts：渲染性能基准——大列表 DOM 注入 reflow、滚动耗时、CDP 指标增量、longtask 卡顿观测（随 pnpm test:perf 运行）
+// 共用前提：先经 /#/chat/mock-1 真实聊天路由（覆盖路由懒加载热路径）断言消息列表容器可见，注入的负载才有落点
+// 边界：DOM 注入用例绕开 React reconcile，只卡布局引擎层防回退；真实 React 交互路径由文件内 CDP 指标用例覆盖
+
 import { expect, test } from '@playwright/test';
 
 test.describe('渲染性能基准', () => {
   test('1000 条消息 DOM 注入 reflow < 5000ms（布局引擎基线）', async ({ page }) => {
     await page.goto('/#/chat/mock-1');
     await page.waitForLoadState('networkidle');
+    // 先等真实聊天容器可见：否则注入脚本会因 container === null 静默空跑，基准变成没测
     await expect(page.locator('[data-testid="chat-message-list"]')).toBeVisible({
       timeout: 15_000,
     });
@@ -23,7 +28,7 @@ test.describe('渲染性能基准', () => {
 
     const start = performance.now();
     await page.evaluate(() => {
-      void document.body.offsetHeight;
+      void document.body.offsetHeight; // 强制同步 reflow：本用例度量的就是布局引擎这一步的成本
     });
     const duration = performance.now() - start;
 
@@ -56,7 +61,7 @@ test.describe('渲染性能基准', () => {
     const start = performance.now();
     await page.evaluate(() => {
       window.scrollBy(0, 1000);
-      void document.body.offsetHeight;
+      void document.body.offsetHeight; // 同步取值，把滚动触发的布局成本落在本段度量内
     });
     const duration = performance.now() - start;
 
@@ -71,6 +76,7 @@ test.describe('渲染性能基准', () => {
       timeout: 15_000,
     });
 
+    // CDP 会话（Performance 域）：取引擎侧真实运行时指标
     const cdp = await page.context().newCDPSession(page);
     await cdp.send('Performance.enable');
     const metricsOf = (name: string, metrics: { name: string; value: number }[]): number =>
@@ -78,6 +84,7 @@ test.describe('渲染性能基准', () => {
 
     const before = await cdp.send('Performance.getMetrics');
 
+    // 真实交互：动态加入并激活右面板「文件变更」Tab（走真实 React 渲染路径；文案用中英双语正则匹配）
     await page
       .getByRole('button', { name: /添加视图|Add view/ })
       .first()
@@ -90,7 +97,7 @@ test.describe('渲染性能基准', () => {
     await expect(diffTab).toBeVisible({ timeout: 10_000 });
     await diffTab.click();
     await expect(diffTab).toHaveAttribute('data-state', 'active', { timeout: 5_000 });
-    await page.waitForTimeout(300);
+    await page.waitForTimeout(300); // 留出结算窗口，让本次切换的脚本/布局任务全计入 before→after 增量
 
     const after = await cdp.send('Performance.getMetrics');
     const scriptDelta =
@@ -103,6 +110,7 @@ test.describe('渲染性能基准', () => {
     console.log(
       `[perf] Tab 切换增量: Script ${scriptDelta.toFixed(1)}ms / Layout ${layoutDelta.toFixed(1)}ms / Task ${taskDelta.toFixed(1)}ms`,
     );
+    // 阈值取宽松基线（CI 机器波动大）：单次 Tab 交互的 JS 执行与布局总成本
     expect(
       scriptDelta + layoutDelta,
       'Tab 切换脚本+布局增量应 < 1000ms（基线，渐进收紧）',
@@ -129,11 +137,12 @@ test.describe('渲染性能基准', () => {
         setTimeout(() => {
           observer.disconnect();
           resolve();
-        }, 3000);
+        }, 3000); // 3s 观测窗口：覆盖加载 + 首屏渲染 + 稳定期
       });
       return tasks;
     });
 
+    // longtask API 只上报 >50ms 的任务；这里再筛 >200ms 作卡顿级门槛
     const severe = longTasks.filter((d) => d > 200);
     console.log(
       `[perf] 长任务: 共 ${longTasks.length} 个（>50ms），其中 >200ms ${severe.length} 个：${longTasks.map((d) => d.toFixed(0)).join(', ')}`,
@@ -154,6 +163,7 @@ test.describe('渲染性能基准', () => {
       const container = document.querySelector('[data-testid="chat-message-list"]');
       if (container === null) return;
       const fragment = document.createDocumentFragment();
+      // 模拟真实消息结构（标题 + 多行正文）的负载，衡量长会话的 DOM 节点总量
       for (let i = 0; i < 300; i++) {
         const div = document.createElement('div');
         div.className = 'msg-item';
@@ -186,6 +196,7 @@ test.describe('渲染性能基准', () => {
       const container = document.querySelector('[data-testid="chat-message-list"]');
       if (container === null) return;
       const fragment = document.createDocumentFragment();
+      // 注入 500 条占位消息作为滚动对象，随后在滚动期间观测长任务
       for (let i = 0; i < 500; i++) {
         const div = document.createElement('div');
         div.className = 'msg-item';
@@ -211,6 +222,7 @@ test.describe('渲染性能基准', () => {
             resolve([]);
             return;
           }
+          // 连续滚动 3 轮（每轮 40 × 16px 步长），让布局/合成路径持续出任务
           let rounds = 0;
           const scrollPass = (): void => {
             rounds += 1;
@@ -220,7 +232,7 @@ test.describe('渲染性能基准', () => {
               return;
             }
             container.scrollTop += 40 * 16;
-            void document.body.offsetHeight;
+            void document.body.offsetHeight; // 强制 reflow，暴露布局成本
             requestAnimationFrame(scrollPass);
           };
           requestAnimationFrame(scrollPass);

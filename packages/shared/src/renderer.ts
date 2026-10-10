@@ -43,6 +43,8 @@ export type { IpcDefinitions } from './ipc/definitions';
 export type * from './ipc/payloads';
 export type { IpcEventMap, IpcRequestMap } from './ipc/payloads';
 export type { IpcResponse } from './ipc/response';
+// schemas 一律 type-only 重导出：`export type` 编译期擦除，对应 schema 模块不进渲染层打包图；
+// 渲染层要用的值只有下面两处具名导出（失效域词表 / 设置键白名单）。
 export type * from './schemas/agent';
 export type * from './schemas/agent-ask';
 export type * from './schemas/agent-events';
@@ -58,6 +60,7 @@ export type * from './schemas/git';
 export type * from './schemas/goal';
 export type * from './schemas/im';
 export type * from './schemas/invalidation';
+// 失效域词表：渲染层前缀失效映射与回合结束回落判定须与主进程声明侧同源（禁散写字面量）
 export { INVALIDATION_DOMAINS, TURN_END_GLOBAL_DOMAINS } from './schemas/invalidation';
 export type * from './schemas/memory';
 export type * from './schemas/models';
@@ -67,6 +70,7 @@ export type * from './schemas/search';
 export type * from './schemas/session';
 export type * from './schemas/settings';
 export type { SettingKey } from './schemas/settings';
+// settings:set 可写键白名单：渲染层侧用于启动时逐键过滤旧 localStorage 遗留设置再迁移落库
 export { SETTING_KEYS } from './schemas/settings';
 export type * from './schemas/skill';
 export type * from './schemas/system';

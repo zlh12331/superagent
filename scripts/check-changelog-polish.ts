@@ -1,3 +1,10 @@
+// check-changelog-polish.ts：CHANGELOG 润色门禁——版本段仍是机器原文即失败，拦「Release PR 未润色就合并 / 未润色就打 tag」。
+// 为什么需要：release-please 以 commit 为粒度产出 CHANGELOG，项目又走 squash 合并 ⇒ 一个含几十个修复的 PR
+// 在 CHANGELOG 里只剩一行 PR 标题，用户能感知的改动全部不可见；润色（RELEASING.md §2.1）纯靠人工，
+// 没有门禁时漏做不会被任何环节发现。
+// 接入两处：.github/workflows/ci.yml 的 quality job（仅 release-please-- 前缀分支，借既有必需检查获得合并阻塞力）
+// 与 .github/workflows/release.yml 的 gate job（打 tag 前兜底，未润色即失败、不占版本号）。
+// 判定口径与豁免标记在 scripts/lib/changelog-polish.ts；本文件只管参数解析、定位版本段与失败指引输出，入口 pnpm check:changelog-polish。
 import { readFileSync } from 'node:fs';
 
 import {
@@ -8,6 +15,7 @@ import {
   type VersionSection,
 } from './lib/changelog-polish';
 
+// ───── 输入：CLI 参数与 CHANGELOG 原文（路径写死，不开放外部传入）─────
 /** 固定只检查仓库根下的 CHANGELOG.md（不开放路径参数，避免任意路径读取面） */
 const CHANGELOG_FILE = 'CHANGELOG.md';
 
@@ -41,6 +49,7 @@ function readChangelog(): string | null {
   }
 }
 
+// ───── 门禁判定与输出：定位目标版本段 → 需润色则打印润色指引并退出 ─────
 /** 定位待检查的版本段 */
 function pickSection(
   sections: readonly VersionSection[],
@@ -72,6 +81,7 @@ function failWithGuidance(section: VersionSection): never {
   process.exit(1);
 }
 
+/** 门禁入口（CI 直接调用）：结论由退出码表达——0 = 已润色或按「跳过」处理，1 = 参数非法 / 版本段不存在 / 需润色 */
 function main(): void {
   const options = parseArgs(process.argv.slice(2));
   const markdown = readChangelog();

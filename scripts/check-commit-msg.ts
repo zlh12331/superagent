@@ -1,7 +1,21 @@
+// check-commit-msg.ts：提交标题严格校验（.husky/commit-msg 钩子调用，CI 亦可单独跑）
+// 用法：tsx scripts/check-commit-msg.ts <文件> | --stdin（--stdin 便于手工验证）。
+//
+// 为什么存在（2026-09-20 实证）：commitlint 21.x 的默认 header 解析会把
+// `fix(autostart)+build(release): …` 的 `(autostart)+build(release)` 整体当作 scope
+// 吞掉，只触发 warning 级的 scope-enum 而放行；release-please 的严格解析器则拒绝该
+// header 并跳过整个提交——当它是版本区间内唯一提交时即「0 commits」，不开 Release PR
+// （发版通道静默阻断）。commitlint 无 header-pattern 规则（未知规则会抛错），故以本
+// 脚本补齐；判据在 scripts/lib/commit-header.ts。
+// 路径安全：只接受真实 git 目录内的提交信息文件，见 resolveCommitMsgPath。
+// ──────────────────────────────────────────────────────────────
+
 import { readFileSync, type Stats, statSync } from 'node:fs';
 import { resolve, sep } from 'node:path';
 
 import { checkCommitHeader } from './lib/commit-header';
+
+// ───── 解析与路径守卫（纯函数，导出供单测直接调用） ─────
 
 /** 取提交信息首行作为 header（忽略注释行与空行） */
 export function extractHeader(raw: string): string {
@@ -67,9 +81,12 @@ export function resolveCommitMsgPath(
   if (base === null) {
     return null;
   }
+  // git 输出 posix 风格分隔符，resolve 统一为平台分隔符再比较（Windows 必需）
   const dir = resolve(base) + sep;
   return absolute.startsWith(dir) ? absolute : null;
 }
+
+// ───── CLI 入口 ─────
 
 function readInput(argv: readonly string[], cwd: string): string | null {
   if (argv.includes('--stdin')) {
@@ -94,6 +111,7 @@ function main(): void {
   try {
     raw = readInput(argv, process.cwd());
   } catch (error) {
+    // 读不到文件（如首次提交尚无 COMMIT_EDITMSG）：不阻断，交由 commitlint 处理
     console.error(`[check-commit-msg] 跳过：无法读取提交信息（${String(error)}）`);
     return;
   }

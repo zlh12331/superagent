@@ -1,33 +1,39 @@
+// tool.ts：Tool 域 zod 契约单一真源——工具权限值域、错误/结果形状，以及渲染层可见的工具清单
+// （ToolDescriptor 与 tool:list 请求/响应）。
+// 边界：不定义 Tool 接口本身（inputSchema 与 execute 属主进程范畴，见
+// src/main/infra/ai/tools/tool.ts）；工具入参/输出结构由各工具自己的 schema 决定，
+// 此处 output 一律 z.unknown()，IPC 层不强制校验。
+
 import { z } from 'zod';
 
 /**
  * 工具权限级别（字面量联合类型）
  *
- * 与用户决策对齐：
- * - 'auto'：白名单工具（只读操作，如 read_file / grep / glob / list_directory），
- *           自动执行无需用户审批
- * - 'ask'：危险工具（写操作 / 执行命令，如 write_file / run_command），
- *          需通过 ApprovalModal 请求用户审批
+ * 三种取值的来源不同：
+ * - 'auto'：工具声明的免审批级别（只读类工具，如 read_file / grep / glob / list_directory）
+ * - 'ask'：工具声明的需审批级别（写操作 / 执行命令，如 write_file / run_command）——
+ *   主进程推 agent:approval:request，渲染层裁决后经 agent:approval:response 回传
+ * - 'deny'：拒绝执行——不是工具声明值，而是权限决策产物（如 plan 模式对非只读工具的硬拦截），
+ *   渲染层工具卡片直接展示拒绝态
  *
- * 与 AgentToolCallPayload.permission / AgentApprovalRequestPayload 字段对齐，
- * 与 AI SDK v7 的 toolApproval 状态映射：
- * - 'auto' → toolApproval 返回 'approved'
- * - 'ask'  → toolApproval 返回 'user-approval'
+ * 与 AgentToolCallPayload.permission 值域一致（agent:tool:call 事件携带决策后的级别）。
  */
 export const ToolPermissionSchema = z.enum(['auto', 'ask', 'deny']);
 
 /** 工具权限级别 TypeScript 类型（z.infer 派生） */
 export type ToolPermission = z.infer<typeof ToolPermissionSchema>;
 
+// ────────── 工具调用结果：错误与标准化返回 ──────────
+
 /**
  * 工具错误 zod schema
  *
- * 结构与 AgentToolResultPayload.error 对齐（code + message）：
- * - code 与 AppError.code 对齐（如 TOOL_EXECUTION_FAILED / TOOL_PERMISSION_DENIED）
- * - message 人类可读，用于渲染层 toast
+ * 与 AgentToolResultPayload.error 同形（code + message，packages/shared/src/schemas/agent.ts）：
+ * - code：AppError.code 值域（ErrorCode，如 TOOL_EXECUTION_FAILED / TOOL_PERMISSION_DENIED）
+ * - message：人类可读文案
  */
 export const ToolErrorSchema = z.object({
-  /** 错误码（与 @code-agent/shared 的 ErrorCode 对齐） */
+  /** 错误码（取 packages/shared/src/constants/errors.ts 的 ErrorCode） */
   code: z.string().min(1),
   /** 人类可读错误消息 */
   message: z.string().min(1),
@@ -39,12 +45,12 @@ export type ToolError = z.infer<typeof ToolErrorSchema>;
 /**
  * 工具执行结果 zod schema
  *
- * output 为 unknown：工具自身决定输出结构（如 read_file 返回 { content }，
- * write_file 返回 { bytesWritten }），IPC 层不强制约束。
+ * output 为 z.unknown()：输出结构由各工具自定（避免 shared 包耦合具体工具），IPC 层不强制约束。
+ * error 有值表示执行失败、无值表示成功。
  *
- * error 为可选：有值表示执行失败，无值表示成功。
- * exactOptionalPropertyTypes 兼容：用 `.optional().transform(v => v ?? undefined)`
- * 让 output 类型为 `ToolError | undefined`。
+ * error 尾部 `.optional().transform(v => v ?? undefined)` 与裸 `.optional()` 运行时等价，
+ * 差异在类型：该键保持「必填、值可为 ToolError | undefined」，兼容 exactOptionalPropertyTypes
+ * （消费方直接赋值即可，无需条件展开）。
  */
 export const ToolResultSchema = z.object({
   /** 工具调用 id（与 AI SDK 的 toolCallId 配对） */
@@ -60,21 +66,23 @@ export const ToolResultSchema = z.object({
 /** 工具执行结果 TypeScript 类型（z.infer 派生） */
 export type ToolResult = z.infer<typeof ToolResultSchema>;
 
+// ────────── 工具清单（tool:list）：渲染层展示用元数据 ──────────
+
 /**
  * 工具元数据 zod schema
  *
- * 用于 IPC 向渲染层暴露工具清单（tool:list channel），渲染层据此展示
- * 可用工具列表及权限级别，无需感知工具具体实现。
+ * tool:list 返回的条目：渲染层据此展示可用工具与权限级别（审批模式设置区按权限分组），
+ * 无需感知工具具体实现。
  *
- * inputSchema 不通过 IPC 传输（ZodType 不可序列化），
- * 渲染层如需校验入参可调用 tool:validate 或直接在主进程校验。
+ * 不含 inputSchema——ZodType 不可跨 IPC 序列化，入参校验在主进程做（见
+ * src/main/infra/ai/tools/tool.ts 的 Tool.inputSchema）。
  */
 export const ToolDescriptorSchema = z.object({
-  /** 工具唯一名称（kebab-case，如 read_file / write_file） */
+  /** 工具唯一名称（snake_case，如 read_file / write_file） */
   name: z.string().min(1),
   /** 工具描述（LLM 据此决定是否调用，应清晰说明用途） */
   description: z.string().min(1),
-  /** 权限级别：'auto' 自动执行 / 'ask' 需用户审批 */
+  /** 权限级别：'auto' 免审批 / 'ask' 需用户审批（清单来自工具声明，不会出现 'deny'） */
   permission: ToolPermissionSchema,
 });
 
@@ -84,30 +92,30 @@ export type ToolDescriptor = z.infer<typeof ToolDescriptorSchema>;
 /**
  * tool:list 请求 payload：列出当前已注册的工具清单
  *
- * 渲染层启动时调用一次，展示工具面板；后续可通过 tool:added / tool:removed
- * 事件增量更新（当前阶段不实现，后续按需扩展）。
+ * 消费方为审批模式设置区的工具清单（src/renderer/lib/settings-ops.ts 的 listTools）。
  *
- * permission 过滤可选：省略则列出全部工具，传 'auto' 仅列白名单工具，
- * 传 'ask' 仅列需审批工具。
+ * permission 过滤可选：省略则列出全部工具，传 'auto' / 'ask' 按工具声明精确过滤；
+ * 传 'deny' 视同不过滤（工具自身只会声明 'auto' / 'ask'，见 src/main/ipc/tool.handler.ts）。
  *
- * 注意：Req 类型 `ToolListReq` 在 ipc/payloads.ts 中通过 z.infer 派生，
+ * 注意：Req 类型 `ToolListReq` 在 packages/shared/src/ipc/payloads.ts 中通过 z.infer 派生，
  * 与其他域（agent/file/search/...）的惯例保持一致，避免类型多处定义冲突。
  */
 export const ToolListReqSchema = z.object({
+  /** 权限过滤（省略或 'deny' = 全部工具） */
   permission: ToolPermissionSchema.optional().transform((v) => v ?? undefined),
 });
 
 /**
  * tool:list 响应 payload：工具元数据清单
  *
- * 工具清单按 name 字母序排序，确保跨进程一致。
+ * 排序由主进程 ToolRegistry.list 保证（name 字母序），渲染层可直接按序渲染。
  */
 export interface ToolListRes {
   /** 工具元数据清单（按 name 字母序） */
   readonly tools: readonly ToolDescriptor[];
 }
 
-/** tool:list 响应 zod schema（R4：响应契约校验） */
+/** tool:list 响应 zod schema（主进程用它校验 handler 返回值防接口漂移；缺失会被 register 拒绝注册） */
 export const ToolListResSchema = z.object({
   tools: z.array(ToolDescriptorSchema),
 });

@@ -1,3 +1,6 @@
+// git-schema.test.ts：git 远程/引用参数 schema 的注入收口单测——锁死 remote / ref / refspec 的字符集边界
+// 覆盖两条攻击面：argv 位置上的选项形参数（会被 git 当选项解析）与 `ext::<cmd>` 传输串
+// （git 以 `git-remote-<transport>` helper 运行后者，ext:: 直接执行本地命令）
 import { describe, expect, it } from 'vitest';
 import {
   GitDiffReqSchema,
@@ -35,6 +38,7 @@ describe('isSafeGitRemote', () => {
     expect(isSafeGitRemote('ext::evil')).toBe(false);
     expect(isSafeGitRemote('EXT::evil')).toBe(false);
     expect(isSafeGitRemote('evil-helper::arg')).toBe(false);
+    // 与上方 file:///srv/git/r 构成对照：规则是「含 :: 即拒」而非 file:// 前缀白名单
     expect(isSafeGitRemote('file:://x')).toBe(false);
   });
 
@@ -75,6 +79,7 @@ describe('isSafeGitRefValue', () => {
   it('选项形参数拒绝（位置参数处的 --flag 会被 git 按选项解析）', () => {
     expect(isSafeGitRefValue('--upload-pack=evil')).toBe(false);
     expect(isSafeGitRefValue('-q')).toBe(false);
+    // `+` 强制前缀先剥离再逐段校验，故借前缀也豁免不了「段首不得为 -」
     expect(isSafeGitRefValue('+--upload-pack=evil')).toBe(false);
   });
 

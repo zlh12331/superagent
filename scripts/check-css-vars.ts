@@ -1,9 +1,14 @@
+// scripts/check-css-vars.ts：CSS 变量引用完整性门禁——扫描 var(--x) 引用，断言每个都有定义
+// 补 check:tokens 的盲区：它查裸色值/裸 z 数字，查不出「引用了不存在的令牌」，
+// 而后者会被浏览器静默丢弃（比裸色值更隐蔽）；判据与豁免规则在 scripts/lib/css-vars.ts，反例测试同目录。
+
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { findMissingVars, scanCssVars } from './lib/css-vars';
 
 const ROOT = join(import.meta.dirname, '..');
+// 只覆盖第一方源码：产物与依赖目录由 SKIP_DIRS 兜底，无需在此枚举
 const SCAN_DIRS = ['src'];
 
 /** 扫描时跳过的目录名 */
@@ -29,6 +34,7 @@ function main(): void {
   const files = SCAN_DIRS.flatMap((d) => collectFiles(join(ROOT, d)));
   let referenceCount = 0;
 
+  // 两遍扫描：先并集全仓定义（tokens.css 的定义对全组件生效），再判缺失
   const scans = files.map((file) => {
     const scan = scanCssVars(readFileSync(file, 'utf8'));
     for (const name of scan.defined) defined.add(name);

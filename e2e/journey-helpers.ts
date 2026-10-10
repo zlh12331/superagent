@@ -1,3 +1,7 @@
+// e2e/journey-helpers.ts：用户旅程 E2E 公共 helper——浏览器模式（vite dev + mock window.api，见 src/renderer/dev/mock-api.ts）
+// 依赖 mock 桩数据（会话标题等），不适用于 Electron 用例；顺序敏感：page.reload 会重建 window.api，
+// wrapAgentRun 打的桩随之失效，注入必须在 reload 之后（见 setupChatSession）
+
 import { expect, type Locator, type Page } from '@playwright/test';
 
 /** 聊天输入框（composer 区域——页面可能多个 textarea，精确限定） */
@@ -71,6 +75,7 @@ export async function waitSendReady(page: Page): Promise<void> {
       await expect(sendBtn).toBeEnabled({ timeout: 5_000 });
       return;
     } catch {
+      // React state 偶发脱节（vite 冷启动）——重填输入触发 onChange 重同步
       await chatInput(page).fill('重试同步');
       await page.waitForTimeout(500);
     }
@@ -81,6 +86,7 @@ export async function waitSendReady(page: Page): Promise<void> {
 /** 输入消息（fill 触发 input 事件；验证 value + React state 同步） */
 export async function typeMessage(page: Page, text: string): Promise<Locator> {
   const input = chatInput(page);
+  // 输入未生效/state 未同步——重试
   for (let attempt = 0; attempt < 3; attempt += 1) {
     await input.fill(text);
     try {
@@ -104,6 +110,7 @@ export async function sendAndWaitRun(page: Page, send: () => Promise<void>): Pro
     try {
       await send();
     } catch {
+      // 点击被 disabled 拦截（streaming 尾窗）——等按钮恢复后原样重发
       await waitSendReady(page);
       await send();
     }
@@ -117,6 +124,7 @@ export async function sendAndWaitRun(page: Page, send: () => Promise<void>): Pro
         .toBeGreaterThan(0);
       return;
     } catch {
+      // 发送未触发——重建会话完整重试（最后尝试除外，交给外层报错）
       if (attempt < 2) {
         await page.reload();
         await wrapAgentRun(page);
@@ -144,11 +152,13 @@ export async function setupChatSession(page: Page): Promise<void> {
 export async function sendAndWaitApproval(page: Page, send: () => Promise<void>): Promise<Locator> {
   for (let attempt = 0; attempt < 3; attempt += 1) {
     await sendAndWaitRun(page, send);
+    // 审批卡片按钮（批准/同意/执行——pending 状态）
     const btn = page.getByRole('button', { name: /批准|同意|执行/ }).first();
     try {
       await expect(btn).toBeVisible({ timeout: 12_000 });
       return btn;
     } catch {
+      // 卡片未出现：streaming 死锁风险——重建会话后重发（最后尝试除外，交给外层报错）
       if (attempt < 2) {
         await page.reload();
         await wrapAgentRun(page);

@@ -1,3 +1,8 @@
+// check-animations.ts：动画引用完整性门禁——animation 声明与组件里的 animate-[…] 任意值引用的名字，
+// 必须能在白名单样式文件里找到 @keyframes 定义（运行：pnpm check:animations）。
+// 为什么要单独设闸：keyframes 被删/改名后 CSS 依旧合法，浏览器不报错、元素只是默默不再动，而 lint /
+// typecheck 与组件测试（JSDOM 不执行动画，断言的是类名与 DOM 结构）都发现不了
+// ——与 check:css-vars 同属「防静默失效」家族。
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -10,7 +15,10 @@ import {
 } from './lib/animations';
 
 const ROOT = join(import.meta.dirname, '..');
+/** 受管辖的样式文件白名单：定义集与 CSS 侧引用集都只来自这些文件（新增样式文件须登记，否则本闸管不到） */
 const STYLE_FILES = [
+  // 渲染层根入口（Tailwind import + 少量全局规则）也在管辖内：.search-highlight 的 animation 引用
+  // 就在此文件，漏掉它则该引用对应的 keyframe 被删时无人报警
   'src/renderer/index.css',
   'src/renderer/styles/index.css',
   'src/renderer/styles/base.css',
@@ -43,6 +51,7 @@ function collectTsx(dir: string, acc: string[] = []): string[] {
   return acc;
 }
 
+/** 报错行的路径统一为相对 ROOT 的正斜杠形式（Windows 下 walk 出来的是反斜杠，需归一才跨平台一致） */
 function rel(file: string): string {
   return file.replace(`${ROOT}\\`, '').replace(`${ROOT}/`, '').split('\\').join('/');
 }
@@ -51,6 +60,7 @@ function main(): void {
   const refs: AnimationRef[] = [];
   const defined = new Set<string>();
 
+  // CSS 侧：样式文件既供定义（@keyframes 进 defined），也供引用（animation 声明进 refs）
   for (const stylePath of STYLE_FILES) {
     const css = readFileSync(join(ROOT, stylePath), 'utf8');
     for (const name of extractKeyframeNames(css)) defined.add(name);
@@ -59,6 +69,7 @@ function main(): void {
     }
   }
 
+  // 组件侧：只认 Tailwind 任意值动画类（animate-[…]）；逐行扫描以带出行号，报错可直接定位源文件
   let tsxCount = 0;
   for (const file of collectTsx(COMPONENT_DIR)) {
     tsxCount += 1;

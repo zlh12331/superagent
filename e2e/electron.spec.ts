@@ -1,3 +1,8 @@
+// e2e/electron.spec.ts：真实 Electron 实例的端到端用例——验证主窗口渲染、preload 注入的
+// window.api 与 IPC 全链路（非 mock 桩）。浏览器模式的纯前端用例（window.api 由
+// src/renderer/dev/mock-api.ts 模拟）不在此文件。
+// 运行 pnpm test:e2e:electron：webServer 由 e2e/playwright.electron.config.ts 先拉起 electron-vite dev。
+
 import { cpSync, existsSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -10,12 +15,19 @@ import { closeElectronApp } from './helpers/close-electron';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+// 主进程入口：electron-vite dev 的构建产物（webServer 先跑 electron-vite dev 才会生成）
 const MAIN_ENTRY = join(__dirname, '..', 'out', 'main', 'index.js');
 
+// E2E 专属 userData：与 dev 实例（.electron-user-data）隔离，避免共用数据库/扩展目录互相干扰
 const E2E_USER_DATA = join(__dirname, '..', '.e2e-user-data');
+// 独立调试端口：dev 实例占用的是 9222（src/main/index.ts 的默认值），复用会连错调试目标
 const DEBUG_PORT = '9223';
 
+// 桌面视口：宽度必须大于 BREAKPOINT_COMPACT（1200px，src/renderer/lib/constants.ts），
+// 否则右面板自动折叠、DevPanel 不挂载，「右面板默认视图」用例必失败（CI 虚拟屏可能更窄）
 const DESKTOP_VIEWPORT = { width: 1600, height: 1000 };
+
+// ───── 启动辅助：等出非 DevTools 的主窗口 + 带 E2E 环境变量的冷启动 ─────
 
 /**
  * 等待主窗口（过滤 devtools:// 窗口）
@@ -45,11 +57,16 @@ async function launchElectron(): Promise<{ app: ElectronApplication; page: Page 
     env: {
       ...process.env,
       NODE_ENV: 'development',
+      // 设了它就改走 loadURL 连 dev server，而非 loadFile 载生产产物（src/main/window.ts）；
+      // 端口须与 e2e/playwright.electron.config.ts 的 webServer 一致
       ELECTRON_RENDERER_URL: 'http://localhost:5173',
       CODE_AGENT_USER_DATA: E2E_USER_DATA,
       SENTRY_DSN: '',
       CODE_AGENT_DEBUG_PORT: DEBUG_PORT,
+      // 豁免关窗协商：仍有运行中回合时关闭会弹确认框（src/main/window.ts），测试环境会卡死
       CODE_AGENT_SKIP_CLOSE_GUARD: '1',
+      // 跳过记忆引擎预热：其子进程 CPU 密集且会干扰启动耗时断言与其他用例的时序，
+      // 而 E2E 并不验证记忆功能（另有单测覆盖）
       CODE_AGENT_SKIP_MEMORY_PREWARM: '1',
     },
   });
@@ -60,6 +77,7 @@ async function launchElectron(): Promise<{ app: ElectronApplication; page: Page 
     await page.setViewportSize(DESKTOP_VIEWPORT);
     return { app, page };
   } catch (err) {
+    // 启动半途失败也必须回收已拉起的实例，否则残留进程会拖到 worker teardown 超时
     await closeElectronApp(app);
     throw err;
   }
@@ -70,6 +88,8 @@ test.describe('Electron 应用 E2E 测试', () => {
   let page: Page;
 
   test.beforeAll(() => {
+    // 预置 React DevTools 扩展：electron-devtools-installer 首装需从 Chrome 商店下载，
+    // 受限网络环境会失败；从 dev 实例的 userData 复制已装扩展，离线也能加载
     const REACT_DEVTOOLS_ID = 'fmkadmapgofadopljbjfkapdkoienihi';
     const src = join(__dirname, '..', '.electron-user-data', 'extensions', REACT_DEVTOOLS_ID);
     const dstDir = join(E2E_USER_DATA, 'extensions');
@@ -82,6 +102,7 @@ test.describe('Electron 应用 E2E 测试', () => {
 
   test.afterEach(async () => {
     if (app) {
+      // e2e/helpers/close-electron.ts 内是「优雅关闭 + 超时强杀」兜底，防 app.close() 挂起
       await closeElectronApp(app);
     }
   });
@@ -171,6 +192,8 @@ test.describe('Electron 应用 E2E 测试', () => {
   test('React DevTools 扩展 hook 已注入', async () => {
     ({ app, page } = await launchElectron());
 
+    // 扩展在 React 挂载后才注册 renderer，立即断言会过早失败，故轮询等待；
+    // 扩展未加载（受限网络环境装不上）时显式跳过，环境问题不算应用缺陷
     let ready = true;
     try {
       await page.waitForFunction(
@@ -204,6 +227,7 @@ test.describe('Electron 应用 E2E 测试', () => {
   test('右面板默认视图 + 添加视图交互', async () => {
     ({ app, page } = await launchElectron());
 
+    // DevPanel 初始只常驻「会话详情」，终端/文件变更/文件/浏览器/开发者视图要靠「添加视图」加入
     const defaultTab = page.getByRole('tab', { name: /会话详情|Info/ });
     await expect(defaultTab).toBeVisible({ timeout: 30_000 });
 

@@ -1,8 +1,15 @@
+// agent.ts：Agent 域 IPC 契约单一真源——agent:run / agent:stop 的入参与响应、工具调用与审批、
+// 流式事件 payload 的 zod schema 与接口类型；入参判别类型另在 packages/shared/src/ipc/payloads.ts
+// 经 z.infer 派生。
+// 边界：工具入参 / 出参结构由 ToolRegistry 动态定义，此处一律 z.unknown()，只做 envelope 校验。
+
 import type { ModelMessage } from 'ai';
 import { z } from 'zod';
 
 import { ChatMessageSchema } from './chat';
 import { ThinkingLevelSchema } from './thinking';
+
+// ────────── 运行入参与响应 ──────────
 
 /**
  * Agent 运行模式（OpenCode 风格 plan/apply 分离）
@@ -23,35 +30,41 @@ export type AgentRunMode = z.infer<typeof AgentRunModeSchema>;
 /**
  * Agent 运行入参 zod schema
  *
- * 与 chat:send 的区别：
- * - chat:send 单轮流式响应（streamText 不带 tools）
- * - agent:run 多轮工具调用（streamText 带 tools + maxSteps，自动循环）
- *
- * workingDir 是 Code Agent 的核心约束：所有文件操作工具必须限制在 workingDir 内，
- * 防止 Agent 越权读写工作目录之外的文件。
- *
- * maxSteps 限制单次对话的最大工具调用轮数，避免无限循环消耗 token。
+ * 与 chat:send 的区别：chat:send 单轮流式响应（streamText 不带 tools），
+ * agent:run 多轮工具调用（streamText 带 tools + maxSteps，自动循环）。
  */
 export const AgentRunReqSchema = z.object({
+  // 完整对话历史（含 tool-call / tool-result 段），非仅本轮新增消息
   messages: z.array(ChatMessageSchema).min(1),
+  // 续传已有会话；省略则新建，新 sessionId 随 agent:run 响应返回。
+  // 用 .optional().transform 而非裸 .optional()：推断结果是「必填属性、值可为 undefined」，
+  // 在 exactOptionalPropertyTypes 下可直接喂给 StartAgentOptions
   sessionId: z
     .string()
     .optional()
     .transform((v) => v ?? undefined),
+  // 所有文件操作工具的根目录约束：越界读写被拒绝，防止 Agent 越权
   workingDir: z.string().min(1),
+  // 覆盖默认 system prompt；省略 = 走主进程默认解析（记忆召回可拼接 memory_context）
   systemPrompt: z
     .string()
     .optional()
     .transform((v) => v ?? undefined),
+  // 单回合最大工具调用轮数（默认 20，上限 50）；限制轮数避免无限循环消耗 token
   maxSteps: z.number().int().positive().max(50).default(20),
   mode: AgentRunModeSchema.default('build'),
+  // 覆盖模型级默认 reasoningEffort；省略 = 用模型自身配置
   thinking: ThinkingLevelSchema.optional().transform((v) => v ?? undefined),
+  // 采样温度 0–2，覆盖模型级默认；思考模型不传采样参数（上游限制），
+  // 是否生效由主进程按模型能力判定
   temperature: z
     .number()
     .min(0)
     .max(2)
     .optional()
     .transform((v) => v ?? undefined),
+  // 渲染层模型选择器的当前选择；省略 = 主进程回落 app_settings.ai.defaultModel，
+  // 仍无则用默认供应商的默认模型（IM / cron 等无头入口不带本字段）
   modelId: z
     .string()
     .min(1)
@@ -85,10 +98,12 @@ export interface AgentStopRes {
   readonly stopped: boolean;
 }
 
-/** agent:stop 响应 zod schema（R4：响应契约校验） */
+/** agent:stop 响应 zod schema（响应契约校验用） */
 export const AgentStopResSchema = z.object({
   stopped: z.boolean(),
 });
+
+// ────────── 工具调用与审批事件（主进程 → 渲染层） ──────────
 
 /**
  * 工具调用事件 payload（主进程 → 渲染层）
@@ -161,7 +176,7 @@ export interface AgentApprovalRequestPayload {
   readonly description: string;
 }
 
-/** agent:approval:request payload schema（R2：主进程发送侧 dev 校验；input 仅 envelope 校验） */
+/** agent:approval:request payload schema（主进程发送侧 dev 校验；input 仅 envelope 校验） */
 export const AgentApprovalRequestPayloadSchema = z.object({
   sessionId: z.string().min(1),
   approvalId: z.string().min(1),
@@ -176,8 +191,8 @@ export const AgentApprovalRequestPayloadSchema = z.object({
  *
  * 与 approval:request 配对的事件：任一审批条目最终都会走到一个决议
  * （用户批准/拒绝、超时、abort 中断、dispose 清理），渲染层据此把对应
- * 待审批条目移出队列——否则超时等非用户路径会让卡片永久残留在界面上
- * （2026-10-08 修复：此前决议只经进程内 lifecycle 传播，渲染层无从得知）。
+ * 待审批条目移出队列——决议若只走进程内 lifecycle、不推到这里，
+ * 超时/中断等非用户路径的卡片会永久残留在界面上。
  *
  * decision 语义与 ApprovalDecisionOutcome 一致：
  * - approved   用户批准
@@ -200,6 +215,8 @@ export const AgentApprovalResolvedPayloadSchema = z.object({
   decision: z.enum(['approved', 'denied', 'timed-out', 'aborted']),
 });
 
+// ────────── 审批响应（渲染层 → 主进程） ──────────
+
 /**
  * 审批响应 zod schema（渲染层 → 主进程，请求-响应）
  *
@@ -212,8 +229,11 @@ export const AgentApprovalResolvedPayloadSchema = z.object({
 export const AgentApprovalResponseReqSchema = z.object({
   approvalId: z.string().min(1),
   approved: z.boolean(),
+  // 勾选记住后，同「工具名 + 关键入参」的后续决定在 TTL 内自动套用，不再逐次弹窗
   rememberDecision: z.boolean(),
 });
+
+// ────────── 流式事件（agent:run 后的回合推送） ──────────
 
 /**
  * Agent 流式 part payload

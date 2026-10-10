@@ -1,3 +1,6 @@
+// zoom.test.ts：界面缩放纯函数单测（档位表 / clampZoom 归一 / stepZoom 步进 / overlayHeightFor 联动）
+// 测试名中的 V1/V7/V9 为 docs/design/35-ui-zoom-spec.md §1.3 验收项编号（本套件测试设计见该文 §2.7）
+
 import { describe, expect, it } from 'vitest';
 
 import { clampZoom, DEFAULT_ZOOM, overlayHeightFor, stepZoom, ZOOM_LEVELS } from './zoom';
@@ -32,6 +35,7 @@ describe('clampZoom', () => {
     expect(clampZoom(undefined as unknown as number)).toBe(1);
     expect(clampZoom(Number.NaN)).toBe(1);
     expect(clampZoom(Number.POSITIVE_INFINITY)).toBe(1);
+    // typeof 守卫路径：字符串等非 number 输入回落默认档，与缺失语义同落点
     expect(clampZoom('1.25' as unknown as number)).toBe(1);
   });
 });
@@ -49,6 +53,7 @@ describe('stepZoom', () => {
   });
 
   it('current 非法时先归一再步进', () => {
+    // 先归一得 0.9，再放大一档 → 1（不是"非法值直接回落默认档"）
     expect(stepZoom(0.93, 1)).toBe(1);
   });
 });
@@ -58,6 +63,6 @@ describe('overlayHeightFor', () => {
     expect(overlayHeightFor(1)).toBe(52);
     expect(overlayHeightFor(1.25)).toBe(65);
     expect(overlayHeightFor(2)).toBe(104);
-    expect(overlayHeightFor(0.67)).toBe(35);
+    expect(overlayHeightFor(0.67)).toBe(35); // 52 × 0.67 = 34.84（本组唯一非整数乘积：验证 round 而非截断）
   });
 });

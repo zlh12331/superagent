@@ -1,3 +1,7 @@
+// scripts/check-comments.ts：过期注释门禁——扫描 src/**/*.{ts,tsx} 与 docs/design/*.md，报告注释与代码已漂移的位置
+// 判据与规则实现在 scripts/lib/comments-rules.ts（反例测试同目录）；本文件只做收集、派发与退出码。
+// 与 check:tsdoc 互补：后者拦「缺失 TSDoc」，本脚本规则 A 拦「过期 @param」（注释与签名漂移）。
+
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 

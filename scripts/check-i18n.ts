@@ -1,3 +1,6 @@
+// check-i18n.ts：i18n 审计闸——t() 引用 ↔ 语言包 key 双向校验 + 中英双语一致性 + JSX 硬编码中文检测
+// 依据 docs/design/14-i18n-spec.md；运行 pnpm check:i18n（已带 --strict，check:static 已接入）
+// 边界：动态 key（t(`x.${y}`)）不做存在性校验；冗余 key 在 --strict 下卡关，默认仅告警
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 
@@ -6,6 +9,8 @@ import { scanHardcodedZh } from './lib/i18n-hardcoded-scan';
 const ROOT = join(import.meta.dirname, '..');
 const RENDERER = join(ROOT, 'src', 'renderer');
 const LOCALES = join(RENDERER, 'i18n', 'locales');
+
+// ── 文件遍历与 key 提取 ─────────────────────────────────────────
 
 function walk(dir: string, acc: string[] = []): string[] {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -48,13 +53,16 @@ function collectStaticKeys(file: string): { direct: string[]; used: string[] } {
     const t = line.trim();
     if (t.startsWith('//') || t.startsWith('*') || t.startsWith('/*')) return;
     for (const m of line.matchAll(re)) {
+      // 捕获组在正则命中时必然存在；显式判 undefined 仅为满足 noUncheckedIndexedAccess
       const captured = m[1];
       if (captured !== undefined) direct.push(captured);
     }
+    // 非字符串实参的 t() 调用：t(labelKey) / t(item.labelKey) 等
     if (/\bt\(\s*[a-zA-Z_$][\w$.]*\s*\)/.test(line)) hasIndirectT = true;
   });
   const used = [...direct];
   if (!hasIndirectT) return { direct, used };
+  // key 形状：小写字母开头，点分 1-4 段（排除 channel/错误码/URL 等含冒号连字符的串）
   const keyRe = /^[a-z][a-zA-Z0-9]*(\.[a-zA-Z0-9]+){1,4}$/;
   for (const line of lines) {
     const t = line.trim();
@@ -92,6 +100,7 @@ function collectDynamicPrefixes(files: string[]): Set<string> {
 function collectHardcodedZhText(file: string): string[] {
   if (!file.endsWith('.tsx')) return [];
   const rel = relative(ROOT, file).split('\\').join('/');
+  // 测试文件不参与硬编码文案审计（测试改为与源码同目录后，按路径/文件名判定）
   if (rel.includes('/test/') || rel.includes('.test.')) {
     return [];
   }
@@ -101,8 +110,11 @@ function collectHardcodedZhText(file: string): string[] {
   );
 }
 
+// ── 语言包加载 ─────────────────────────────────────────────────
+
 function loadLocale(lang: string): { common: Set<string>; errors: Set<string> } {
   const dir = join(LOCALES, lang);
+  // 语言包与命名空间一一对应、扁平无包装，与 i18next-cli / IDE 插件的扁平解析预期对齐
   const common = JSON.parse(readFileSync(join(dir, 'common.json'), 'utf8')) as Record<
     string,
     unknown
@@ -114,12 +126,16 @@ function loadLocale(lang: string): { common: Set<string>; errors: Set<string> } 
   return { common: new Set(flattenKeys(common)), errors: new Set(flattenKeys(errors)) };
 }
 
+// ── 审计主流程 ─────────────────────────────────────────────────
+
 function main(): number {
+  // --strict：冗余 key 也卡关（默认仅缺失/双语不一致卡关，存量冗余可渐进清理）
   const strict = process.argv.includes('--strict');
   const en = loadLocale('en');
   const zh = loadLocale('zh-CN');
   const problems: string[] = [];
 
+  // 1. 双语 key 集合一致性（common + errors）
   for (const [name, enSet, zhSet] of [
     ['common', en.common, zh.common],
     ['errors', en.errors, zh.errors],
