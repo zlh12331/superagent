@@ -642,8 +642,6 @@
     "experimental": {
       "title": "实验功能开关",
       "hint": "以下功能处于实验阶段，可能不稳定。启用后请关注可能的性能影响。",
-      "scanlines": "扫描线叠加",
-      "scanlinesDesc": "致敬终端 CRT 的扫描线视觉叠加",
       "reasoningCollapsed": "推理块默认折叠",
       "reasoningCollapsedDesc": "助手思考过程默认折叠展示（关闭 = 默认展开）",
       "autoCompact": "长会话自动压缩",

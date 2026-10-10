@@ -19,12 +19,6 @@ export function ExperimentalSection(): ReactElement {
       </p>
 
       <ToggleRow
-        name={t('settings.experimental.scanlines')}
-        description={t('settings.experimental.scanlinesDesc')}
-        checked={experimental.scanlines}
-        onChange={(checked) => updateExperimental({ scanlines: checked })}
-      />
-      <ToggleRow
         name={t('settings.experimental.reasoningCollapsed')}
         description={t('settings.experimental.reasoningCollapsedDesc')}
         checked={experimental.reasoningCollapsed}

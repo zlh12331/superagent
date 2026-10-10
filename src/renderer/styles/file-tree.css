@@ -577,18 +577,3 @@
   color: var(--success-text);
   border-color: var(--success-text);
 }
-
-.scanlines-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: var(--z-boundary);
-  pointer-events: none;
-  background: repeating-linear-gradient(
-    to bottom,
-    transparent 0,
-    transparent 3px,
-    var(--text) 3px,
-    var(--text) 4px
-  );
-  opacity: 0.04;
-}

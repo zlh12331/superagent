@@ -134,7 +134,6 @@ export function AppShell({ children }: AppShellProps): ReactElement {
 
   const setTheme = useSettingsStore((s) => s.setTheme);
   const theme = useSettingsStore((s) => s.theme);
-  const scanlines = useSettingsStore((s) => s.experimental.scanlines);
   const enterWelcomeMode = useWelcomeStore((s) => s.enterWelcomeMode);
   const openSettings = useUiStore((s) => s.openSettings);
 
@@ -283,7 +282,6 @@ export function AppShell({ children }: AppShellProps): ReactElement {
           <LazyShortcutHelpDialog open={shortcutHelpOpen} onClose={closeShortcutHelp} />
         </Suspense>
         <UpdateNotice />
-        {scanlines && <div className="scanlines-overlay" aria-hidden="true" />}
       </div>
     </MotionConfig>
   );

@@ -101,12 +101,12 @@ describe('stores 批次1 缺口补全', () => {
     it('updateEditor / updateShortcuts / updateExperimental：部分合并', () => {
       useSettingsStore.getState().updateEditor({ vimMode: true });
       useSettingsStore.getState().updateShortcuts({ saveFile: 'Ctrl+S' });
-      useSettingsStore.getState().updateExperimental({ scanlines: true });
+      useSettingsStore.getState().updateExperimental({ autoCompact: true });
       const s = useSettingsStore.getState();
       expect(s.editor).toMatchObject({ vimMode: true, fontSize: 14 });
       expect(s.shortcuts.saveFile).toBe('Ctrl+S');
       expect(s.shortcuts.commandPalette).toContain('Ctrl+');
-      expect(s.experimental).toMatchObject({ scanlines: true, reasoningCollapsed: true });
+      expect(s.experimental).toMatchObject({ autoCompact: true, reasoningCollapsed: true });
     });
 
     it('updateLsp：按语言命令行合并（默认空覆盖）', () => {
