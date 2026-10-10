@@ -1,3 +1,9 @@
+// scripts/lib/commit-header.ts
+// 提交标题严格结构校验（Conventional Commits）。为什么自研（2026-09-20 实证缺口）：
+// commitlint 用贪婪括号匹配，`fix(a)+build(b): …` 只触发 scope-enum（warning 级）
+// 即放行；而 release-please 的严格解析器对该 header 直接抛错并**跳过该提交**——
+// 若它是版本区间内唯一提交则「0 commits」、发版通道静默阻断（PR #56 实测）
+
 /** 允许的 type（须与 commitlint.config.js 的 type-enum 逐字一致） */
 export const ALLOWED_TYPES = [
   'build',

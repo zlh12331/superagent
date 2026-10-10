@@ -1,3 +1,8 @@
+// scripts/scaffold/scaffold-ipc.ts
+// IPC 脚手架：从定义表体系生成新域/新方法骨架，自动完成 meta.ts 插通道元数据、
+// definitions.ts 插 schema、handler 生成、测试骨架
+// 用法：pnpm scaffold:ipc --domain <name> --method <method> [--kind request|event]
+
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';

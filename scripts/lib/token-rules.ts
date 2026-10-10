@@ -1,3 +1,10 @@
+// scripts/lib/token-rules.ts
+// 设计令牌规则核（纯函数层，供 check-tokens.ts 调用；从 CLI 抽出以补测试——
+// 外部审计点名判据内联零测试）。覆盖铁律：裸色值（白/黑可按文件豁免）/ dark: 双写 /
+// space-x/y / w+h 双写 / 硬编码 hex/rgb（var(--x) 片段级豁免）/ 裸 z-* / 文字层 /
+// 字体栈 CJK 回退（font-cjk-fallback）。每条规则有「最小违规样本必命中 + 干净样本
+// 必放过」的双向 fixture 断言（token-rules.test.ts）
+
 const COLOR_PALETTE = [
   'red',
   'blue',

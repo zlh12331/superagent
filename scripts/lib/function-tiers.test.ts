@@ -1,3 +1,6 @@
+// scripts/lib/function-tiers.test.ts
+// 函数体净行分档单测（mild/heavy 阈值 + heavy 豁免登记校验）
+
 import { describe, expect, it } from 'vitest';
 import { type BodyTiers, countTiers, tierOf, validateHeavyExempt } from './function-tiers';
 

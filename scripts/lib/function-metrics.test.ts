@@ -1,3 +1,6 @@
+// scripts/lib/function-metrics.test.ts
+// 函数度量单测：形参计数（解构不再豁免）。体长度量已于 2026-09-15 随迁移退役
+
 import { describe, expect, it } from 'vitest';
 import { countParams, scanFunctions, splitTopLevelParams, stripGenerics } from './function-metrics';
 

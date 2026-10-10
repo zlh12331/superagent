@@ -1,3 +1,9 @@
+// scripts/lib/animations.ts
+// 动画引用完整性（纯函数）：断言 animation 引用的名字都有 @keyframes 定义。
+// 背景（2026-09 修复）：实测 3 处动画引用无对应 keyframes，浏览器静默丢弃声明
+// （元素退化为无动画）——与 check:css-vars 的 var(--x) 未定义同类「引用不存在
+// 的东西」，lint/测试都不覆盖，静态兜底
+
 /** 单条动画引用 */
 export interface AnimationRef {
   readonly name: string;

@@ -1,3 +1,11 @@
+// scripts/prepare-codegraph.mjs
+// 生成 resources/codegraph-{arch}/（@colbymchenry/codegraph 平台捆绑包）：codebase
+// 工具经 spawn 调用它；捆绑包以 optionalDependencies 分发（vendored Node + app）
+// ⚠️ 必须按架构分目录（2026-09-20 多架构发布）：包内是平台二进制（node.exe /
+// bin/codegraph），同名文件无法同目录共存——此前只部署 host 架构一份，交叉构建
+// 会把错误架构打进安装包（mac x64 用户 codebase 工具必败）；electron-builder 侧
+// 用 extraResources 的 ${arch} 宏按目标选取
+
 import { cpSync, existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 

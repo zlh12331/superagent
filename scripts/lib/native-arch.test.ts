@@ -1,3 +1,8 @@
+// scripts/lib/native-arch.test.ts
+// 二进制格式/架构识别单测：本模块是「架构错配」静默缺陷的唯一探针（构建日志
+// 不报错），三种格式、各架构、非二进制/截断输入都必须有确定行为；
+// 测试用合成头（按格式规范手工构造最小字节序列），不依赖真实二进制
+
 import { describe, expect, it } from 'vitest';
 
 import { archMatches, detectBinaryInfo, expectedArchFromDirName } from './native-arch';

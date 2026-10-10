@@ -1,3 +1,10 @@
+// scripts/lib/i18n-hardcoded-scan.ts
+// 硬编码中文扫描核（oxc-parser AST 版，供 check-i18n.ts 调用）。修旧正则三盲区：
+// 跨行 JSX 文本节点静默漏扫 / 字符串字面量属性（title="中文"）完全无匹配 /
+// 表达式容器（{cond ? '是' : '否'}）被显式排除。判据：JSXText→jsx-text、
+// JSXAttribute 字符串值→attribute、表达式容器内字符串/模板串→expression；
+// 非 JSX 上下文字符串（工具函数内文案）不在本扫描域
+
 import { parseSync } from 'oxc-parser';
 
 /** 单条命中：1-based 行号 + 命中类别 + 截断片段 */

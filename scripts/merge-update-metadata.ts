@@ -1,3 +1,9 @@
+// scripts/merge-update-metadata.ts
+// 合并 Windows/macOS 双架构更新元数据（CD merge job 步骤）：build 拆成每架构一个
+// job 后两 job 各产同名 latest*.yml，cp -n 只有一份生效、另一架构用户拿不到更新
+// 条目；Linux 元数据本就按架构分文件，不参与合并。合并语义见 lib/update-metadata.ts
+// 用法：tsx scripts/merge-update-metadata.ts（无路径参数，源/目标为脚本内常量）
+
 import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { pathToFileURL } from 'node:url';

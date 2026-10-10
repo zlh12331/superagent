@@ -1,3 +1,7 @@
+// scripts/merge-update-metadata.test.ts
+// 合并 CLI 的「双架构来源判定」单测——CD 回滚路径的关键：回滚到单 job 双架构后
+// merge job 仍在流水线里，必须识别「这份已是双架构」并原样透传，否则回滚后卡死
+
 import { isAlreadyDualArch } from './merge-update-metadata';
 
 /**

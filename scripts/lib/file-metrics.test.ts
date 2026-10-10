@@ -1,3 +1,7 @@
+// scripts/lib/file-metrics.test.ts
+// 体积度量与文件收集单测（棘轮门禁的口径基础）：跳过目录语义、净行口径、
+// 路径归一、目录不存在返回空集——fixture 建在系统临时目录，不依赖仓库布局
+
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';

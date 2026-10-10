@@ -1,3 +1,11 @@
+// scripts/check-coverage-floors.ts
+// 覆盖率门槛门禁：门槛唯一真源 scripts/coverage-floors.json，机械校验四件事——
+//   A config 必须从真源读 thresholds（不得再内联数字）/ B floor ≥ ratchet（不得静默下调）/
+//   C measured ≥ floor（实测必须支撑门槛，防数字是编的）/ D measuredAt 未过期（禁一次测量吃三年）
+// 背景（2026-08-30 审计）：三张 vitest.config.ts 各自内联数字且对外口径与实际不符
+// （注释声称实测 92.87、真实 64.06），这类漂移靠人盯注释防不住
+// 运行：pnpm exec tsx scripts/check-coverage-floors.ts [--tighten]
+
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {

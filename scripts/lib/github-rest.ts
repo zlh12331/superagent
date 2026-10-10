@@ -1,3 +1,10 @@
+// scripts/lib/github-rest.ts
+// GitHub REST 只读客户端（发版门禁脚本共享）。安全设计（Mimosa 门禁对齐）：
+// 零子进程（Node fetch 直连——动态参数 spawn 是 Mimosa 拦截高发形态且 Windows 不可靠）/
+// SSRF 三重防线：仅 https + host 白名单 + path 前缀锚定 / 动态值（版本号/PR 号）进 path
+// 前必须由调用方过语义白名单（SemVer RE / ^\d+$），本模块只做结构复核
+// fetchFn 依赖注入：单测以假 fetch 覆盖网络失败/404/正常三路（测试真实实现非 mock 模块）
+
 export const GH_API_HOST = 'api.github.com';
 
 /** SSRF 防线：仅 https + host 白名单 + path 前缀锚定（逐条复核，不用 else 链省略）。 */

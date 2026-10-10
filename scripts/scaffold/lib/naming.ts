@@ -1,3 +1,7 @@
+// scripts/scaffold/lib/naming.ts
+// 命名转换与校验，四种约定与现有代码一致：IPC domain=camelCase / tool name（LLM
+// 可见）=snake_case / tool 文件名=kebab-case / 工厂与类型=PascalCase
+
 const SNAKE_NAME_RE = /^[a-z][a-z0-9]*(_[a-z0-9]+)*$/;
 const DOMAIN_RE = /^[a-z][a-zA-Z0-9]*$/;
 

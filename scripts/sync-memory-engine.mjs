@@ -1,3 +1,10 @@
+// scripts/sync-memory-engine.mjs
+// 记忆引擎上游同步（事务性替换 + 补丁重放 + 完整性重生成）
+// ⚠️ 本脚本不访问网络：上游归档由人工/CI 预先取得（codeload.github.com 在部分
+// 环境不可达），经 --from 指定本地目录——同步流程离线可用、可复现
+// 用法：node scripts/sync-memory-engine.mjs --from <解压目录> --tag <tag>
+//       [--commit <sha>] [--archive <zip>] [--dry-run]
+
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';

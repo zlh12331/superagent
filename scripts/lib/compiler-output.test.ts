@@ -1,3 +1,6 @@
+// scripts/lib/compiler-output.test.ts
+// React Compiler 产物调用点统计核反例 fixture：三态（真失效/假阳性/正常）
+
 import { describe, expect, it } from 'vitest';
 
 import { countCompilerCallSites } from './compiler-output';

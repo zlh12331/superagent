@@ -1,3 +1,8 @@
+// scripts/lib/update-metadata.test.ts
+// 更新元数据合并纯函数单测。最强验证 = 等价性用例：以真实的 v1.3.2 发布元数据
+// （gh release download 取得）拆成两份单架构再合并回来，断言与原始文件逐字节相同——
+// 合并结果与 electron-builder 自身的多架构输出完全一致，而非「看起来对」
+
 import { load } from 'js-yaml';
 
 import { mergeUpdateMetadata, parseUpdateInfo } from './update-metadata';

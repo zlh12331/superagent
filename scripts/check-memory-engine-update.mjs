@@ -1,3 +1,8 @@
+// scripts/check-memory-engine-update.mjs
+// 检查上游记忆引擎是否有新版本（只读，不改文件）：GitHub API tags（未认证 60 次/h 足够）
+// ⚠️ 网络不可达不算失败（exit 0 优雅提示）——同步流程靠人工下载归档，不依赖本检查
+// 用法：node scripts/check-memory-engine-update.mjs
+
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -31,6 +36,7 @@ try {
   }
   tags = await res.json();
 } catch (err) {
+  // 网络不可用不算失败：同步流程不依赖本检查
   const reason = err instanceof Error ? err.message : String(err);
   console.warn(`[memory-engine:check] ⚠ 无法访问上游（${reason}）`);
   console.warn('  本检查仅用于提示新版本；请手动下载上游归档后运行 memory-engine:sync。');

@@ -1,3 +1,8 @@
+// scripts/scaffold/lib/text.ts
+// 文本插入工具：以锚点/块为目标的源码修改（零 AST 依赖；幂等校验由调用方负责）。
+// 适用：meta.ts/definitions.ts 对象块内追加方法行、tools/index.ts 字典序插行、
+// 函数体末尾追加注册行
+
 /** 转义正则特殊字符（防御外部输入进入 RegExp 构造） */
 export function escapeRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

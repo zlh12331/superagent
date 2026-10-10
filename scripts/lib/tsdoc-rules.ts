@@ -1,3 +1,10 @@
+// scripts/lib/tsdoc-rules.ts
+// TSDoc 覆盖门禁规则核（纯函数层）。判据（@babel/parser AST，零手写正则）：
+// 目标 = export 的 function/class/interface/type/enum；「有 TSDoc」= 声明前最近块注释
+// 以 /** 开头且到声明间只有空白（biome-ignore 指令行不算间隔）；不计重载签名
+// （TSDeclareFunction 由实现签名携带文档）与 export { x } / export * from
+// （文档责任在被指向的声明）；export const 规范未列、不强制（仅统计）
+
 import { parse } from '@babel/parser';
 
 /** 一处无 TSDoc 的 export 声明 */

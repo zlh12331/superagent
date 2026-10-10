@@ -1,3 +1,10 @@
+// scripts/check-test-boundary.ts
+// 测试边界门禁（设计文档 §3.6：边界 = 被测范围 × 替身位置 × 断言对象），三条规则均 error：
+//   ① 集成测试禁 vi.mock 同仓业务模块（IO 边界模块可替身：storage/logger/telemetry 等）
+//   ② 单测目录出现真实 IO 信号（真实 DB/HTTP server/WebSocket）= 准集成，须登记豁免表
+//   ③ 恒真断言（字面量自比 = 空跑）——2026-09-17 由 warning 升 error（存量已清零防回归）
+// 运行：pnpm check:test-boundary
+
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 

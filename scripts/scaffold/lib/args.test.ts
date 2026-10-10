@@ -1,3 +1,6 @@
+// scripts/scaffold/lib/args.test.ts
+// CLI 参数解析器单测：键值/flag/位置参数与未知参数拒绝
+
 import { describe, expect, it } from 'vitest';
 
 import { optionalValue, parseArgs, rejectPositionals, requireValue } from './args';

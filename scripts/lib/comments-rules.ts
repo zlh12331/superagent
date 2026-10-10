@@ -1,3 +1,9 @@
+// scripts/lib/comments-rules.ts
+// 注释一致性规则核（纯函数层，供 check-comments.ts 调用；从 CLI 抽出以补测试——
+// 外部审计点名判据内联零测试）。四条规则：A @param 与签名一致（error）/
+// B file:/// 引用存在 + 行号越界 / C TODO 过期（带日期 >90 天 error，无日期 warning）/
+// D pnpm 命令存在性。反例 fixture 见 comments-rules.test.ts
+
 import { readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 

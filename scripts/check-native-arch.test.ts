@@ -1,3 +1,9 @@
+// scripts/check-native-arch.test.ts
+// 产物 resources 路径推导单测（macOS 与其余平台）。覆盖动机（2026-09-20 首次 CD
+// 事故）：resourcesDirOf 曾对 macOS 返回 <dir>/resources（实际在
+// <dir>/<App>.app/Contents/Resources），macOS 报「已检查 0 个二进制」却通过——
+// 架构错配在 macOS 完全不被检测的静默漏洞；用真实临时目录树锚定该路径推导
+
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';

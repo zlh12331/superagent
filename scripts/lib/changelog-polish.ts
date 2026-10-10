@@ -1,3 +1,9 @@
+// scripts/lib/changelog-polish.ts
+// CHANGELOG 润色判定（纯逻辑，check-changelog-polish / changelog-draft 共用）。
+// 背景：release-please 按 commit 粒度产出 CHANGELOG，squash 合并后 PR 内的子提交
+// 明细全部丢失（只留标题）⇒「合并 Release PR 前人工润色为面向用户文案」是必需
+// 步骤（RELEASING.md），但此前无机制看守、漏做无人发现——放行标记 + 分段判定成闸
+
 /** 显式放行标记：写在版本段内即视为已确认（GitHub 渲染不可见） */
 export const POLISH_MARKER = '<!-- changelog:polished -->';
 

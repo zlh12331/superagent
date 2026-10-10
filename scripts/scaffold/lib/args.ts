@@ -1,3 +1,7 @@
+// scripts/scaffold/lib/args.ts
+// 极简 CLI 参数解析器（--key value / --key=value / --flag，零依赖）；
+// 未知参数报错（防拼写错误静默吞掉）；结果只读便于测试
+
 export interface ParsedArgs {
   /** 已解析的键值对（--key value） */
   readonly values: ReadonlyMap<string, string>;

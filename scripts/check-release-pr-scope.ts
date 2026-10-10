@@ -1,3 +1,13 @@
+// scripts/check-release-pr-scope.ts
+// Release PR 内容边界闸门（护栏 C）：release-please 分支 PR 只允许 CHANGELOG.md /
+// .release-please-manifest.json / package.json 的版本行——「Release PR 零代码」的
+// 口头不变量成闸。背景：#90 曾携 276 行代码借 Release PR 进 main 且未经任何 CI
+// （ci.yml 瘦身 if 只看分支名不看 diff，恰逢 #93 空 squash）
+// fail-closed：patch 缺失（GitHub 对超 ~400 行 diff 省略）时 package.json 按越界计
+// （内容约束无从执行，转人工复核）；任一越界 exit 1，代码改动须先走普通 PR
+// 接线：ci.yml quality「Release PR gates」（ruleset 必需检查）+ release.yml gate 兜底
+// 用法：pnpm check:release-pr-scope --pr N | --branch release-please--branches--main
+
 import { pathToFileURL } from 'node:url';
 
 import { createGhApiClient } from './lib/github-rest';

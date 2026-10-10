@@ -1,3 +1,8 @@
+// scripts/lib/function-metrics.ts
+// 函数形参计数纯函数（2026-09-15 起仅存此职：体长度量已迁 Biome
+// noExcessiveLinesPerFunction——正则启发式的体长边界随迁移消失，形参侧的
+// 「多层嵌套形参括号漏报」仍在）。迁移方向：Biome 无 max-params，届时评估 oxc-parser
+
 /** 单个函数的度量结果 */
 export interface FnMetric {
   readonly name: string;

@@ -1,3 +1,11 @@
+// scripts/postinstall-rebuild.mjs
+// postinstall：自动重编译原生模块（better-sqlite3/node-pty）为当前 Electron ABI——
+// 按 Node ABI 编译与 Electron 运行时不一致会 NODE_MODULE_VERSION 崩溃，此前每次
+// Electron 升级都要手动 electron-rebuild；失败仅告警不阻断 install（工具链缺失属
+// 环境问题），跳过：SKIP_ELECTRON_REBUILD=1
+// ⚠️ 直调 @electron/rebuild CLI（node + cli.js）而非 pnpm exec：后者经 pnpm.cmd
+// shell 包装在部分环境 spawnSync 必败，直调实测可成功
+
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 

@@ -1,3 +1,10 @@
+// scripts/scaffold/lib/ipc-snippets.ts
+// IPC 脚手架的代码片段生成与源码插入（零 AST 零依赖，可单测）。单独成模块的原因：
+// 原 scaffold-ipc 混「生成什么」与「写到哪」，resSchema 漏发（应用启动即崩）无测试
+// 可拦——register.ts 启动断言每个 request 必须有 resSchema，旧脚手架曾产出 3 参
+// withSchema(meta, null, …)（跑完 pnpm dev 直接崩）；本模块一律 4 参（第 4 参内联
+// z.object({ ok: z.boolean() }) 占位）
+
 import { escapeRegExp, insertSortedLine } from './text';
 
 /** 一个待脚手架的方法 */

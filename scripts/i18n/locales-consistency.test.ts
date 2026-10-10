@@ -1,3 +1,7 @@
+// scripts/i18n/locales-consistency.test.ts
+// i18n 资源一致性门禁：en / zh-CN 的 common.json 与 errors.json key 集合一致
+// （防漏翻译/防 key 漂移）+ errors.json 覆盖 shared 全部 ErrorCode（新增错误码必补文案）
+
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 

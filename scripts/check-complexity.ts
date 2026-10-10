@@ -1,3 +1,15 @@
+// scripts/check-complexity.ts
+// 认知复杂度门禁：函数认知复杂度 ≤15，按文件棘轮基线只允许收紧
+// 为什么不按行数卡关：行数分不清「92 行 JSX 平铺」（声明式、低风险）与
+// 「62 行控制流纠缠」（分支密集、真危险）——行数门槛放宽到 100 后后者会漏过，
+// 本门禁按嵌套深度加权补上这条红线
+// 为什么复用 Biome 而非自研（2026-09-11 决策）：首版手写度量（正则/AST 两版）
+// 一个函数内暴露多个 bug 且 else-if/catch 计分与 Biome 实测不符——语义权威性
+// 必须唯一，直接用内置规则 lint/complexity/noExcessiveCognitiveComplexity
+// 数据通路：check:complexity 先产出 Biome JSON 报告，本脚本从标准输入读取
+// （脚本内不起子进程；管道以末命令退出码为准，跨平台成立）
+// 运行：pnpm check:complexity [--update-baseline]
+
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
@@ -14,6 +26,7 @@ import {
 const LIMITS_PATH = join(import.meta.dirname, 'limits.json');
 const BASELINE_PATH = join(import.meta.dirname, 'check-complexity.baseline.json');
 const METRICS = ['count', 'max'] as const;
+// 以 --only 单独启用，不进 biome.json（否则 pnpm lint 会被 59 处存量一次性刷屏）；阈值取 Biome 默认 15
 const RULE = 'lint/complexity/noExcessiveCognitiveComplexity';
 
 function loadThreshold(): number {
@@ -87,6 +100,8 @@ function loadBaseline(): Record<string, Metrics> {
 function main(): number {
   const expected = loadThreshold();
   const diagnostics = readBiomeJson();
+  // 阈值自校验：诊断消息里含上游实际生效的阈值，与 limits.json 比对——
+  // 防 Biome 改默认值或本地改配置后门禁静默失真
   const actual = thresholdOf(diagnostics.find((d) => d.category === RULE)?.message);
   if (actual !== null && actual !== expected) {
     console.error(`阈值漂移：上游 ${actual} vs 真源 ${expected}`);

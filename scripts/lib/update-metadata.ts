@@ -1,3 +1,11 @@
+// scripts/lib/update-metadata.ts
+// 更新元数据（latest*.yml）双架构合并纯函数。背景：CD 每架构一个 build job 后，
+// Windows/macOS 两 job 各产一份**同名**元数据——electron-builder 只对 Linux 追加
+// 架构后缀，release job 的 cp -n 只有一份能生效 ⇒ 另一架构用户拿不到自己的条目
+// 合并语义对齐 electron-builder 自身多架构合并（writeUpdateInfoFiles）：files 排序
+// 先 zip 后 Arch 枚举序（MacUpdater 只下载 zip）；path/顶层 sha512/其余字段取首条；
+// 序列化 js-yaml.dump({lineWidth:8000, noRefs:true}) 与 builder-util 逐字一致
+
 import { dump, load } from 'js-yaml';
 
 /** 参与合并的架构（本项目只发布这两种） */

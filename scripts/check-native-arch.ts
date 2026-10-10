@@ -1,3 +1,13 @@
+// scripts/check-native-arch.ts
+// 打包产物原生模块架构断言：防「交叉构建静默产出错误架构二进制」
+// 为什么需要（2026-09-20 实测）：x64 runner 上为 arm64 打包时 @electron/rebuild 以
+// 0.4s「完成」编译（真实需 9s+），实际静默复用 host 架构、日志零报错——装上即崩；
+// 唯一可靠探针是读二进制头
+// 检查对象：node-pty / better-sqlite3 的 .node|.exe（@electron/rebuild 产物，主动加载路径）
+// + codegraph 平台捆绑包（extraResources 按 ${arch} 宏选取，错配必暴露）；
+// 包自带的多平台 prebuilds 目录不在本平台运行路径，不参与判定
+// 运行：pnpm check:native-arch（CI smoke job 与 release.yml build job 都跑）
+
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { basename, join, relative } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -43,6 +53,7 @@ function findUnpackedDirs(): string[] {
       dirs.push(join(RELEASE_DIR, entry));
       continue;
     }
+    // macOS：mac / mac-arm64 目录内是 <Product>.app（资源路径用其 Contents 推导）
     if (entry === 'mac' || entry === 'mac-x64' || entry === 'mac-arm64') {
       dirs.push(join(RELEASE_DIR, entry));
     }
@@ -102,6 +113,7 @@ export function resourcesDirOf(unpackedDir: string): string {
       }
     } catch {}
   }
+  // 回退：非 macOS 布局（Windows/Linux 的 <dir>/resources）；mac 目录找不到 .app 时也落到这里
   return join(unpackedDir, 'resources');
 }
 
@@ -110,6 +122,8 @@ function targetsFor(unpackedDir: string, expected: 'x64' | 'arm64'): CheckTarget
   const dirName = basename(unpackedDir);
   const label = (p: string): string => relative(ROOT, p).replace(/\\/g, '/');
   const targets: CheckTarget[] = [];
+  // ⚠️ 必须经 resourcesDirOf 而非硬编码 unpackedDir/resources：macOS 资源在
+  // <dir>/<Product>.app/Contents/Resources，硬编码会让 macOS 上一个都查不到
   const resourcesDir = resourcesDirOf(unpackedDir);
   const asarUnpacked = join(resourcesDir, 'app.asar.unpacked', 'node_modules');
 
@@ -120,6 +134,8 @@ function targetsFor(unpackedDir: string, expected: 'x64' | 'arm64'): CheckTarget
     }
   }
 
+  // better-sqlite3：优先查本地编译产物，缺失才查 prebuilds/<platform>-<arch>.node
+  // （后者是多平台分发包的兜底路径，本平台运行时真正加载的就是它）
   const sqliteBase = join(asarUnpacked, 'better-sqlite3');
   const sqliteRelease = collectFiles(
     join(sqliteBase, 'build', 'Release'),
@@ -131,6 +147,7 @@ function targetsFor(unpackedDir: string, expected: 'x64' | 'arm64'): CheckTarget
       targets.push({ label: label(file), path: file, expected });
     }
   } else {
+    // 产物目录名（win-arm64-unpacked 等）→ prebuilds 的平台目录名
     const platformDir = dirName.startsWith('win')
       ? 'win32'
       : dirName.startsWith('linux')

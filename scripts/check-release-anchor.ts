@@ -1,3 +1,17 @@
+// scripts/check-release-anchor.ts
+// 发版锚点自洽检查（护栏 B）：tag ↔ 已收尾 Release PR ↔ 待合并版本方向三态自洽
+// 背景：1.6.x 发版连环事故（2026-10-05）——Release PR 合并时 CD 失败 → tag 缺失但
+// manifest/label 已推进 → release-please 版本推导回退全量历史（1.6.0 被消费跳号）
+// 两阶段：pre-merge（默认，合并 Release PR 前）= 最近已收尾 PR 的 tag 必须存在、
+// open PR 版本须严格大于 lastReleased；post-merge（release.yml 打 tag 前）= manifest
+// 已推进且 tag 尚不存在（防重跑挪 tag）。刚合并 PR 停在 pending 属合法（label 收尾
+// 在 release job 末尾），故 gate 不能用 pre-merge 模式（会对每次发版误报）
+// 网络失败一律 fail-closed 计 ❌（2026-10-06 收口：发版事故场景恰是 GitHub API 抖动
+// 之时，静默跳过与 fail-closed 宣称矛盾；404→null 的「不存在」合法路径不受影响）
+// 实现：零子进程，Node fetch 直连 REST API；SSRF 防线在 scripts/lib/github-rest.ts；
+// 认证走 GITHUB_TOKEN（匿名可但低限流，CI 必配）
+// 用法：pnpm check:release-anchor [--phase pre-merge|post-merge] [--version X.Y.Z]
+
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';

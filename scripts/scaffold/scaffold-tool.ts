@@ -1,3 +1,8 @@
+// scripts/scaffold/scaffold-tool.ts
+// Tool 脚手架：生成 AI 工具骨架（工厂函数 + zod schema）并接入注册表三处
+// （import / export / registerBuiltinTools）
+// 用法：pnpm scaffold:tool --name <snake_case> [--permission auto|ask] [--desc <描述>]
+
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';

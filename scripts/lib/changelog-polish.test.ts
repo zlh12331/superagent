@@ -1,3 +1,6 @@
+// scripts/lib/changelog-polish.test.ts
+// CHANGELOG 润色判定单测（fixture 取自真实 CHANGELOG.md 的机器原文形态）
+
 import { describe, expect, it } from 'vitest';
 
 import {

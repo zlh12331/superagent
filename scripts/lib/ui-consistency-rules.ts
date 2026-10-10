@@ -1,3 +1,10 @@
+// scripts/lib/ui-consistency-rules.ts
+// 渲染层写法一致性规则核（纯函数层，供 check-ui-consistency.ts 调用；从 CLI 抽出
+// 以补测试——外部审计点名判据内联零测试）。relFile 口径为 posix 相对路径（CLI 侧
+// relative() 结果须统一转 '/'），fileFilter 与平台无关。豁免语义：纯注释行跳过 /
+// 上一行 noArrayIndexKey 豁免 index-key / raw-button 看前后 ±3 行内的归属类名或
+// aria 语义 / mutation-on-error 看选项块内有无 onError
+
 export interface UiRule {
   readonly id: string;
   readonly desc: string;

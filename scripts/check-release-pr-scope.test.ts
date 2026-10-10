@@ -1,3 +1,7 @@
+// scripts/check-release-pr-scope.test.ts
+// Release PR 内容边界闸门单测：白名单判定 + package.json 版本行约束 + #90 越界
+// 形态 / #98 干净形态的最小重放（files 注入，不发真实网络请求）
+
 import { describe, expect, it } from 'vitest';
 
 import { findScopeViolations } from './check-release-pr-scope';

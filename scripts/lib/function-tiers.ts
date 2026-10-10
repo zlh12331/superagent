@@ -1,3 +1,10 @@
+// scripts/lib/function-tiers.ts
+// 函数体净行分档（mild/heavy 阈值真源在 limits.json 的 functionSize.bodyTiers，
+// 禁止在此硬编码）。为什么分档：check-functions 超限条目大量轻度超标、极少数巨大，
+// 混在一个数字里看不出重构优先级；超 heavy 档须显式登记理由（防「暂时容忍」静默
+// 变「永久合法」）。边界：分档只影响输出分级与登记校验，不改变棘轮判定；「该不该
+// 拆」由 check:complexity 的认知复杂度承担（行数判不出平铺 vs 纠缠）
+
 /** 体长分档阈值 */
 export interface BodyTiers {
   /** 轻度档上界（如 100） */

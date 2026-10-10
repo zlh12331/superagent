@@ -1,3 +1,11 @@
+// scripts/check-ui-consistency.ts
+// 渲染层写法一致性门禁（2026-09 一致性审计收敛项）：标准设施（unwrap/confirm store/
+// useCopy/AsyncSection）建成后，用静态信号阻止「离群写法回潮」——直接 IPC、手写
+// 解包、裸 button、try/finally bail-out 等十一条规则（判据核在 scripts/lib/ui-consistency-rules.ts）
+// 双向棘轮：违规基线管下限（只许下降），设施采用率基线管上限（推标准设施落地，
+// 当前 < 历史最高 = 设施被拆除，卡关）
+// 运行：pnpm check:ui-consistency [--update-baseline | --update-adoption]
+
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import {

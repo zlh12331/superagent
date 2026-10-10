@@ -1,3 +1,7 @@
+// scripts/lib/comments-rules.test.ts
+// 注释规则核反例 fixture 测试：每条规则「最小违规样本必须命中 + 干净样本必须放过」
+// （外部审计点名 check-comments 判据内联零测试，本文件补齐）
+
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';

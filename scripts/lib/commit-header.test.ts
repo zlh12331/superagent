@@ -1,3 +1,7 @@
+// scripts/lib/commit-header.test.ts
+// 提交标题严格校验单测。覆盖动机：本模块是「发版通道静默阻断」的唯一防线
+// （commitlint 放行双 type、release-please 拒绝并跳过提交）；含真实事故标题回归锚
+
 import { describe, expect, it } from 'vitest';
 
 import commitlintConfig from '../../commitlint.config.js';

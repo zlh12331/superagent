@@ -1,3 +1,7 @@
+// scripts/lib/ratchet.test.ts
+// 棘轮基线工具单测：三类违规（新增/变大/陈旧）+ 单向收紧 + 基线解析语义
+// （缺指标=该维度未超限合法；未知指标=配置错误必须报错；空指标对象同）
+
 import { describe, expect, it } from 'vitest';
 import {
   evaluateRatchet,

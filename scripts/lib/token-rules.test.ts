@@ -1,3 +1,7 @@
+// scripts/lib/token-rules.test.ts
+// 设计令牌规则核反例 fixture：每条铁律「最小违规样本必须命中 + 干净样本必须放过」
+// （外部审计点名 check-tokens 判据内联零测试，本文件补齐）
+
 import { describe, expect, it } from 'vitest';
 
 import { scanCss, scanTsLike } from './token-rules';

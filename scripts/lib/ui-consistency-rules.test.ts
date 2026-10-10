@@ -1,3 +1,7 @@
+// scripts/lib/ui-consistency-rules.test.ts
+// 写法一致性规则核反例 fixture：每条规则「违规样本必须命中 + 干净/豁免样本必须
+// 放过」（外部审计点名判据内联零测试，本文件补齐）
+
 import { describe, expect, it } from 'vitest';
 
 import {

@@ -1,3 +1,7 @@
+// scripts/lib/css-vars.ts
+// CSS 变量引用完整性规则核（纯函数层，供 check-css-vars.ts 调用）——判据从 CLI
+// 抽出以补测试（外部审计点名判据内联零测试）；反例 fixture 见 css-vars.test.ts
+
 /**
  * 允许「被引用但不在本仓定义」的变量前缀（运行时注入，静态扫描必然看不到定义）：
  * - --radix-：Radix UI 运行时注入尺寸（如 --radix-select-trigger-width）

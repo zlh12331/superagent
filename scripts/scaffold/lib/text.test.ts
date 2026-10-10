@@ -1,3 +1,6 @@
+// scripts/scaffold/lib/text.test.ts
+// 文本插入工具单测：锚点插入/块内追加/字典序插入的行为与错锚点报错
+
 import { describe, expect, it } from 'vitest';
 
 import {

@@ -1,3 +1,8 @@
+// scripts/generate-build-info.mjs
+// 生成构建信息 resources/build-info.json（「关于」页的渠道/构建时间/Commit 数据源）：
+// 发布构建前置，electron-builder extraResources 打进安装包，主进程 app:getInfo 读取；
+// dev 直跑不执行（主进程 readBuildInfo 回退 channel='dev'）；失败仅告警不阻断
+
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';

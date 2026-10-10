@@ -1,3 +1,7 @@
+// scripts/lib/animations.test.ts
+// 动画引用完整性单测：守「引用不存在的 keyframes」类静默失效——浏览器丢弃整条
+// animation 声明，而 lint/typecheck/组件测试全绿
+
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {

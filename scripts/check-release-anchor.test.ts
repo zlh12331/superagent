@@ -1,3 +1,9 @@
+// scripts/check-release-anchor.test.ts
+// 锚点检查单测（fetch 注入，不发真实网络请求）：fail-closed 回归（2026-10-06——
+// 首版两处 catch 曾把 API 抖动当「近期无 Release PR」放过）+ 404→null 合法路径 +
+// post-merge 模式（manifest 一致 + tag 不存在；刚合并 PR 停 pending 不参与判定）+
+// compareVersions 方向性判定（含 prerelease 序）
+
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';

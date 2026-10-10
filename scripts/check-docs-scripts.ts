@@ -1,3 +1,10 @@
+// scripts/check-docs-scripts.ts
+// 文档脚本表 ↔ package.json 一致性闸：文档里的脚本表随演进静默腐化
+// （2026-09-22 实测 10 处：不存在的脚本、漏参数、复合命令不同步），机器拦而非人工扫
+// 判据：只校验「表头首列恰为 脚本」的表格——不限则协议消息表/CI job 名表/依赖表
+// 会大量误报；第二列恰为「命令」时才逐字比对（转义还原后），其余只查脚本名存在
+// 运行：pnpm exec tsx scripts/check-docs-scripts.ts
+
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 

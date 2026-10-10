@@ -1,3 +1,11 @@
+// scripts/check-schema-drift.ts
+// schema.ts ↔ drizzle/ 迁移一致性闸：① 漂移（改了 schema 没跑 drizzle-kit generate）
+// ② 快照链完整性（drizzle-kit check）
+// 判据与提交状态无关：跑 generate 前后对比 drizzle/ 文件集合，出新文件即漂移。
+// 不用 `git diff --quiet -- drizzle/`（原 CI 实现）——本地「已 generate 未提交」必然
+// 误报；且 git diff 只看已跟踪文件、漏检新增迁移（CI 生效全靠 _journal.json 恰好
+// 被改的间接信号）。漂移时保留已生成的迁移文件（它们就是修复物），提示提交
+
 import { execSync } from 'node:child_process';
 import { readdirSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';

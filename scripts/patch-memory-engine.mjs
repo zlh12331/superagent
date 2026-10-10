@@ -1,3 +1,9 @@
+// scripts/patch-memory-engine.mjs
+// 上游补丁通道（export/apply/reset）：MemoryCore 是 vendored 源码，手改被
+// memory-engine:integrity 拦下，改动必须走 patches/——export 把当前相对锚点的
+// 改动导出为 NNNN-<name>.patch；apply 重放全部补丁（sync 自动调用）；reset 恢复锚点
+// 实现：git diff --no-index 产出 + git apply 重放（复用仓库已有 git，零新依赖）
+
 import { spawnSync } from 'node:child_process';
 import { cpSync, existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';

@@ -1,3 +1,9 @@
+// scripts/measure-settings-coverage.ts
+// settings 目录覆盖率单列聚合（renderer-settings 层 measured 回填）：渲染层汇总
+// 覆盖率把 settings 洼地（自记约 21%）平均掉了——债不可见就没人还。从 renderer
+// coverage 产物（coverage-summary.json per-file 计数）按 components/settings 前缀
+// 聚合四指标，回填 coverage-floors.json；与 test:coverage 同一次产出双口径，不重复跑测试
+
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { loadCoverageFloors, METRIC_KEYS } from './lib/coverage-floors';

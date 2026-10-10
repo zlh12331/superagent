@@ -1,3 +1,12 @@
+// scripts/check-packaged-engine.ts
+// 打包产物记忆引擎可运行性断言（release.yml 卡关）：产物缺引擎的表现是用户侧
+// 记忆功能静默降级，构建不报错——五项检查：目录存在 / 入口在位（dist 优先，src 回退）/
+// node_modules 已装 / 无占位标记 / 关键运行依赖在（防裁剪误删必需包）
+// 数据文件单独设哨兵（仅 dist 模式）：bundle 内联 JS 后，__dirname 相对读取的散装
+// 数据不再跟随源码，prepare-memory-hub.mjs 必须显式补拷（#92 tcvdb-text 词典、
+// param-registry JSON 两起同类事故的收口）
+// 产物不存在即失败（CI 在打包后运行；本地产物缺失说明未先打包）
+
 import { existsSync, readdirSync } from 'node:fs';
 import { basename, join } from 'node:path';
 
@@ -109,6 +118,7 @@ function checkEngineDir(dir: string): CheckResult[] {
   });
 
   if (existsSync(distEntry)) {
+    // 1.5 数据文件哨兵：缺失的表现是运行时静默降级或抛错（见文件头）
     const registryJson = join(dir, 'dist', 'gateway', 'metadata_config_params.json');
     results.push({
       ok: existsSync(registryJson),

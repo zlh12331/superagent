@@ -1,3 +1,9 @@
+// scripts/check-memory-engine-integrity.mjs
+// 记忆引擎 vendored 源码完整性校验（接 check:static）：MemoryCore 是第三方源码，
+// 任何手改都会让「上游改了什么」与「我们改了什么」混淆——比对源码树聚合 sha256
+// 与 integrity.lock.json 记录，发现手改即失败，强制走 patches/ 补丁通道
+// 用法：node scripts/check-memory-engine-integrity.mjs [--update]（--update 仅 sync 后使用）
+
 import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';

@@ -1,3 +1,6 @@
+// scripts/lib/coverage-floors.test.ts
+// 覆盖率门槛真源读取与校验单测（config 接线 / floor≥ratchet / measured≥floor /
+// 实测过期四条判据的红绿 fixture）
 
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';

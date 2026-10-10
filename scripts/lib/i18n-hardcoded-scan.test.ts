@@ -1,3 +1,8 @@
+// scripts/lib/i18n-hardcoded-scan.test.ts
+// 硬编码中文扫描核反例 fixture：AST 主路径「违规样本必须命中 + 干净/豁免样本必须
+// 放过」+ 正则兜底路径行为锚定。盲区修复（2026-09-27）三类覆盖各一组正反样本：
+// 多行 JSX 文本 / 字符串字面量属性 / 表达式容器（旧逐行正则对三者均静默漏扫）
+
 import { describe, expect, it } from 'vitest';
 
 import {

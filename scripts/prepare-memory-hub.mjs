@@ -1,3 +1,15 @@
+// scripts/prepare-memory-hub.mjs
+// 生成 resources/memory-hub/（记忆引擎 sidecar 运行目录，extraResources 部署到
+// process.resourcesPath/memory-hub）。策略=esbuild 单入口 bundle：src/gateway/server.ts
+// 打成 dist/gateway/server.js（非 external 依赖全内联），转译后删 src、只留 dist +
+// external 原生子树（先落过逐文件转译，因 NSIS 海量小文件瓶颈升级为 bundle）
+// ⚠️ 不再 tsx 直跑（1.4.0/1.5.0 真机实证启动失败）：打包环境 Electron 剥掉
+// NODE_OPTIONS → tsx loader 挂不上；Node 24 原生类型剥离不做 .js→.ts 导入映射 →
+// ERR_MODULE_NOT_FOUND → sidecar 100% 失败、记忆静默降级。dev 模式不受影响
+// 源码已 vendoring 进仓（2026-09-13）：此前依赖本地解压目录 + TAM_SRC 环境变量，
+// CI 拿不到引擎、产物缺记忆功能；现禁「缺引擎生成占位产物」的静默降级
+// node_modules 在目标目录原地 pnpm install（保证 pnpm 符号链接正确）
+
 import { spawnSync } from 'node:child_process';
 import {
   cpSync,

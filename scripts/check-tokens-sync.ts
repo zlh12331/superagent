@@ -1,3 +1,9 @@
+// scripts/check-tokens-sync.ts
+// 令牌生成物 ↔ 令牌源一致性闸：tokens.css 必须就是 aurora.json 的产物
+// 判据与提交状态无关：快照磁盘 → 重新生成 → 前后比对。不用 git diff 对 HEAD
+// （原实现）：本地「已重新生成未提交」必然误报，且漏检手改（build 会覆盖手改、
+// 与 HEAD 相同即放行——恰是该闸该拦的场景）；CI 干净检出下两判据等价
+
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 

@@ -1,3 +1,10 @@
+// scripts/check-tsdoc.ts
+// TSDoc 覆盖门禁（规则 18.1）：export 的函数/类/接口/类型/enum 必须有 /** */ 文档块；
+// 判据核在 scripts/lib/tsdoc-rules.ts（@babel/parser AST，export 节点锚定——首版
+// 量化 1126 系误判，修正后 75 为真值并全部补写、基线清零）
+// 棘轮：per-file 基线只允许下降；新代码即写即 100% 覆盖
+// 运行：pnpm check:tsdoc [--update-baseline]
+
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import {
@@ -25,6 +32,8 @@ function collectFiles(dir: string, acc: string[] = []): string[] {
     if (SKIP_DIRS.has(entry.name)) continue;
     const full = join(dir, entry.name);
     if (entry.isDirectory()) collectFiles(full, acc);
+    // 测试文件不参与（file:/// 引用等测试数据非产线文档）；index.ts 为 barrel
+    // （export * from 形态，文档责任在被指向的声明）
     else if (
       (entry.name.endsWith('.ts') || entry.name.endsWith('.tsx')) &&
       !entry.name.includes('.test.') &&

@@ -1,3 +1,10 @@
+// scripts/lib/native-arch.ts
+// 本机二进制格式与架构识别（ELF / PE / Mach-O），供 check-native-arch.ts 用——
+// 2026-09-20 实测「x64 机器为 arm64 打包」时 @electron/rebuild 以 0.4s 假成功
+// （静默复用 host 架构、日志零报错），装上即崩；唯一可靠探针是读二进制头
+// 识别依据均为官方格式规范最小字段：ELF magic+e_machine@18 / PE MZ+PE 偏移@0x3C+
+// Machine / Mach-O magic FEEDFACF(64)+cputype@4（fat=CAFEBABE）
+
 /** 支持的架构标识（与 electron-builder 的 Arch 名称一致） */
 export type BinaryArch = 'x64' | 'arm64' | 'ia32' | 'armv7l' | 'universal';
 

@@ -1,3 +1,11 @@
+// scripts/check-secrets-git.ts
+// 密钥扫描闸（gitleaks git 模式）：默认扫 origin/main..HEAD——正好是「即将推送/
+// 并入 main 的内容」，实测 ~1.4s。不用 `gitleaks dir .`：那会连 .pnpm-store/
+// .electron-user-data 等非版本库内容一起扫（实测 3.21GB/191s/451 条噪音）
+// 基线缺失（全新克隆）回退全历史——慢但不漏，fail-closed
+// ⚠️ 配置前提：.gitleaks.toml 必须有 [extend] useDefault = true，否则内置规则集
+// 被替代、有效规则数为 0、恒报 no leaks found（2026-09-22 前三道闸全空转）
+
 import { spawnSync } from 'node:child_process';
 
 /** 默认基线：远端主分支名（可用首个参数覆盖，如 `tsx … origin/beta`） */

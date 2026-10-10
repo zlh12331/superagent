@@ -1,3 +1,8 @@
+// scripts/lib/coverage-floors.ts
+// 覆盖率门槛「单一真源」读取与校验（对应 check-coverage-floors.ts）。背景：各层
+// vitest.config 内联互不一致的数字且对外自称按规范值卡关，任何人可悄悄调低。
+// 四字段分离并保持可校验：specTarget 规范目标 / floor 真正强制值（vitest 直读 JSON）/
+// ratchet 历史最高门槛（floor 只能 ≥ 它）/ measured 最近实测（≥ floor 且不过期）
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
