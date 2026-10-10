@@ -1,7 +1,3 @@
-# pnpm-workspace.yaml
-# pnpm 11 起所有非 auth/registry 配置统一在本文件声明（不再读 package.json#pnpm）
-# 参考 https://pnpm.io/settings
-
 packages:
   - 'packages/*'
   - 'tools/*'
@@ -86,7 +82,7 @@ overrides:
   'brace-expansion@>=2.0.0 <3': ^2.1.7
   'brace-expansion@>=4.0.0': ^5.0.12
   # Dependabot GHSA-67mh-4wv8-2f99：dev server 请求伪造，命中 drizzle-kit→@esbuild-kit 的 0.18.x
-  'esbuild@<0.25.0': ^0.25.12
+  'esbuild@<0.25.0': ^0.28.0
 
 # ── 供应链策略 ──────────────────────────────────────────────────────────────
 # 发布年龄闸（supply-chain age gate）：拒绝安装「发布不足 24h」的包版本。
