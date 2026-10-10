@@ -1,3 +1,5 @@
+// config.test.ts：config 模块契约测试——环境判定三层优先级（APP_ENV > NODE_ENV=test > app.isPackaged）、
+// env 覆盖默认值、环境分级 logLevel、单例/重置语义
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getAppConfig, resetConfigCache } from './index';
 
