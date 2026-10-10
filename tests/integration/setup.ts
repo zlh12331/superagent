@@ -1,3 +1,12 @@
+// setup.ts：集成测试全局 setup——只替身 Electron SDK 边界（真实协作原则）。
+// 替身范围即业界「简化环境 Medium Test」的标准边界：app.getPath（userData → 系统临时
+// 目录，落库/文件全走真实 SQLite 与文件系统）、dialog（保存/打开路径由各用例经
+// __itState 注入）、shell（不做真实系统调用）、safeStorage（假加密，加解密可逆且
+// 带 enc: 前缀；真实 DPAPI 由 Electron 提供，平台相关不可在 CI 复现）。
+// 被测业务模块（service/handler/存储层）一律真实实例，禁 vi.mock（check-test-boundary 卡关）。
+// __itState 挂 globalThis：vitest 的 setup 与测试文件不在同一模块实例，
+// with-db helper 经它读写共享状态（临时 userData 路径、dialog 返回值）。
+
 import { tmpdir } from 'node:os';
 import { vi } from 'vitest';
 

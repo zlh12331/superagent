@@ -1,3 +1,7 @@
+// fake-webcontents.ts：集成测试共享基建——fake WebContents（IPC 推送目标替身）。
+// 主进程 handler 经 ctx.sender.send 推流式事件，测试从 sent 数组断言事件序列与
+// payload；emitDestroyed 模拟窗口销毁（验证服务对 destroyed 的监听清理）。
+
 /** 收集的 IPC 事件 */
 export interface SentEvent {
   readonly channel: string;

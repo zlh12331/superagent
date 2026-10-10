@@ -1,3 +1,8 @@
+// with-db.ts：集成测试共享基建——真实 db.ts + 每用例独立临时 userData。
+// db 模块是进程级单例（initDb 缓存连接），故每个用例前必须 closeDb + resetDb 再
+// initDb，否则上一用例的库文件句柄与缓存连接会串场；finally 里同序清理并删临时目录
+// （maxRetries 兜 Windows 句柄释放滞后）。
+
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';

@@ -1,3 +1,10 @@
+// fake-model.ts：集成测试共享基建——脚本化 fake LLM（AI SDK LanguageModel v2 外部
+// 边界替身）。不 mock SDK 模块：AgentService→streamText 走真实 AI SDK 管线，只有
+// 模型这一外部边界是假的。rounds 按调用次数取脚本（超出取最后一条，便于测多轮工具
+// 循环）；text-delta 自动前置 text-start（SDK 流协议要求配对，写脚本时省样板）；
+// holdOpen 供中断用例——流不主动关闭，等 abortSignal 触发才 close（模拟真实 LLM
+// 迟迟不结束、用户点停止的场景）。
+
 import type { LanguageModel } from 'ai';
 
 /**
