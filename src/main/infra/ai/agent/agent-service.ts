@@ -13,7 +13,6 @@ import type {
 } from '@code-agent/shared/main';
 import {
   IPC_DEFINITIONS,
-  ModelRetryReason,
   TurnEventType,
   turnEndInvalidationDomains,
 } from '@code-agent/shared/main';
@@ -41,7 +40,7 @@ import type { LlmClient } from '../llm-client/llm-client';
 import { modelRegistry } from '../models';
 import type { ResolvedModel } from '../models/types';
 import type { IPromptService, ResolvedPrompt } from '../prompt/prompt-service';
-import { classifyError, classifyModelFailure } from '../tools/error-classifier';
+import { classifyError } from '../tools/error-classifier';
 import type { IPermissionService } from '../tools/permission-service';
 import type { Tool, ToolContext } from '../tools/tool';
 import type { IToolExecutor } from '../tools/tool-executor';
@@ -414,7 +413,6 @@ export class AgentService implements IAgentService {
               sessionId,
               turnId,
               modelId: resolvedModel?.modelId ?? 'unknown',
-              ...(resolvedModel !== undefined ? { providerKind: resolvedModel.providerKind } : {}),
               error: error ?? new Error('回合异常终止（错误对象缺失）'),
               turnStartTime,
               turnEmitter,
@@ -498,7 +496,6 @@ export class AgentService implements IAgentService {
       { sessionId, modelId: resolvedModel.modelId, usage },
     );
 
-    this.reportAimdOutcome(resolvedModel.providerKind, 'succeeded');
     this.completeTurn({
       sessionId,
       turnId,
@@ -525,7 +522,6 @@ export class AgentService implements IAgentService {
     readonly sessionId: string;
     readonly turnId: string;
     readonly modelId: string;
-    readonly providerKind?: string;
     readonly error: unknown;
     readonly turnStartTime: number;
     readonly turnEmitter: TurnEventEmitter;
@@ -537,7 +533,6 @@ export class AgentService implements IAgentService {
       sessionId,
       turnId,
       modelId,
-      providerKind,
       error,
       turnStartTime,
       turnEmitter,
@@ -546,8 +541,6 @@ export class AgentService implements IAgentService {
       transcriptEntries,
     } = args;
     const appError = classifyError(error);
-    // AIMD 学习信号：三轴分类的处置理由喂回所属 provider 桶（rate_limited→throttled 评价 cap）
-    this.reportAimdOutcome(providerKind, classifyModelFailure(error).retryReason);
     if (options.webContents !== undefined && !options.webContents.isDestroyed()) {
       const errorPayload: AgentStreamErrorPayload = {
         sessionId,
@@ -665,23 +658,6 @@ export class AgentService implements IAgentService {
     };
   }
 
-  /** AIMD 学习信号（回合级）：succeeded 计 streak；rate_limited → throttled 评价 cap；
-   * NotRetryable/中止/模型未解析不上报（重试决策不在并发层，不污染 cap 学习） */
-  private reportAimdOutcome(
-    providerKind: string | undefined,
-    outcome: 'succeeded' | ModelRetryReason,
-  ): void {
-    if (providerKind === undefined || outcome === ModelRetryReason.NotRetryable) {
-      return;
-    }
-    if (outcome === 'succeeded') {
-      this.concurrencyGate?.reportAttemptOutcome(providerKind, { kind: 'succeeded' });
-    } else if (outcome === ModelRetryReason.RateLimited) {
-      this.concurrencyGate?.reportAttemptOutcome(providerKind, { kind: 'throttled' });
-    } else {
-      this.concurrencyGate?.reportAttemptOutcome(providerKind, { kind: 'failed' });
-    }
-  }
 
   private completeTurn(params: {
     readonly sessionId: string;
