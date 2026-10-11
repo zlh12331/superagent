@@ -1,7 +1,13 @@
-import { AppError, ErrorCode } from '@code-agent/shared/main';
+import {
+  AppError,
+  ErrorCode,
+  ModelErrorCode,
+  ModelFailureReason,
+  ModelRetryReason,
+} from '@code-agent/shared/main';
 import { APICallError, LoadAPIKeyError } from 'ai';
 import { describe, expect, it } from 'vitest';
-import { classifyError, isAbortError } from './error-classifier';
+import { classifyError, classifyModelFailure, isAbortError } from './error-classifier';
 
 function createApiError(statusCode: number | undefined, isRetryable: boolean): APICallError {
   return new APICallError({
@@ -160,5 +166,61 @@ describe('classifyError', () => {
   it('未知错误：→ INTERNAL_ERROR', () => {
     expect(classifyError(new Error('weird')).code).toBe(ErrorCode.INTERNAL_ERROR);
     expect(classifyError('string error').code).toBe(ErrorCode.INTERNAL_ERROR);
+  });
+});
+
+describe('classifyModelFailure（三轴分类）', () => {
+  it('429：rate_limited 三轴齐活 + Retry-After 透传', () => {
+    const error = createApiError(429, true);
+    Object.assign(error, { responseHeaders: { 'retry-after': '30' } });
+    const result = classifyModelFailure(error);
+    expect(result.code).toBe(ModelErrorCode.ModelRateLimited);
+    expect(result.reason).toBe(ModelFailureReason.Provider);
+    expect(result.retryReason).toBe(ModelRetryReason.RateLimited);
+    expect(result.retryable).toBe(true);
+    expect(result.retryAfterMs).toBe(30_000);
+  });
+
+  it('400 + 超限文案：context_exceeded + 不可重试（重试必然再失败）', () => {
+    const error = createApiError(400, false);
+    Object.assign(error, {
+      responseBody: JSON.stringify({ error: { code: 'context_length_exceeded' } }),
+    });
+    const result = classifyModelFailure(error);
+    expect(result.code).toBe(ModelErrorCode.ModelContextExceeded);
+    expect(result.retryReason).toBe(ModelRetryReason.NotRetryable);
+    expect(result.retryable).toBe(false);
+  });
+
+  it('TypeError + cause ECONNRESET：network_error 归因（非 provider——降级路由不看它）', () => {
+    const error = new TypeError('fetch failed', {
+      cause: Object.assign(new Error('connect ECONNRESET'), { code: 'ECONNRESET' }),
+    });
+    const result = classifyModelFailure(error);
+    expect(result.code).toBe(ModelErrorCode.ModelNetworkError);
+    expect(result.reason).toBe(ModelFailureReason.NetworkError);
+    expect(result.retryReason).toBe(ModelRetryReason.NetworkError);
+    expect(result.retryable).toBe(true);
+  });
+
+  it('TypeError（编程错误形态）：runtime 归因 + 不可重试（不伪装网络抖动）', () => {
+    const result = classifyModelFailure(new TypeError('Cannot read properties of undefined'));
+    expect(result.reason).toBe(ModelFailureReason.Runtime);
+    expect(result.retryable).toBe(false);
+    expect(result.code).toBe(ModelErrorCode.ModelUnknown);
+  });
+
+  it('AbortError：cancelled 归因（供应商失败率统计不含取消）', () => {
+    const result = classifyModelFailure(new DOMException('aborted', 'AbortError'));
+    expect(result.code).toBe(ModelErrorCode.ModelRequestCancelled);
+    expect(result.reason).toBe(ModelFailureReason.Cancelled);
+    expect(result.retryable).toBe(false);
+  });
+
+  it('5xx：server_error 处置（指数退避一档，与限流区分）', () => {
+    const result = classifyModelFailure(createApiError(502, false));
+    expect(result.retryReason).toBe(ModelRetryReason.ServerError);
+    expect(result.retryable).toBe(true);
+    expect(result.retryReason).not.toBe(ModelRetryReason.RateLimited);
   });
 });
