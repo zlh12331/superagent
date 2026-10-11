@@ -16,7 +16,7 @@ import { modelObservabilityMiddleware } from '../middleware/model-observability'
 import type { ModelRegistry } from '../models';
 import { buildGenerationOptions } from '../models/generation-options';
 import type { ProviderKind } from '../providers/types';
-import { getErrorCode, getErrorStatus, retryWithBackoff } from './retry';
+import { getErrorCode, getErrorStatus, resolveEnvRetryMaxRetries, retryWithBackoff } from './retry';
 
 const DEFAULT_MODEL_TIMEOUT_MS = 60_000;
 
@@ -240,7 +240,10 @@ export class LlmClient {
       generationConfig?.timeoutMs ?? this.deps.defaultTimeoutMs ?? DEFAULT_MODEL_TIMEOUT_MS,
     );
     const effectiveSignal = combineAbortSignals([options.signal, timeout?.signal]);
-    const maxAttempts = options.maxAttempts ?? (generationConfig?.maxRetries ?? 2) + 1;
+    // 重试次数优先级：调用方显式 > 模型 generationConfig > 环境变量 > 默认 2（尝试数 = 次数 + 1）
+    const maxAttempts =
+      options.maxAttempts ??
+      (generationConfig?.maxRetries ?? resolveEnvRetryMaxRetries(process.env)) + 1;
 
     try {
       return await retryWithBackoff(() => fn(model, effectiveSignal), {

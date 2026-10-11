@@ -1,6 +1,13 @@
 import { APICallError } from 'ai';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getErrorStatus, getRetryAfterDelayMs, isRetryableError, retryWithBackoff } from './retry';
+import {
+  getErrorStatus,
+  getRetryAfterDelayMs,
+  isRetryableError,
+  resolveEnvRetryMaxRetries,
+  resolveRetryOptions,
+  retryWithBackoff,
+} from './retry';
 
 function createApiError(
   statusCode: number | undefined,
@@ -192,6 +199,7 @@ describe('retryWithBackoff（重试执行器）', () => {
       maxAttempts: 4,
       initialDelayMs: 100,
       maxDelayMs: 250,
+      jitter: false,
       onRetry,
     });
     const assertion = expect(promise).rejects.toBeInstanceOf(APICallError);
@@ -201,5 +209,129 @@ describe('retryWithBackoff（重试执行器）', () => {
 
     const delays = onRetry.mock.calls.map((call) => call[0].delayMs);
     expect(delays).toEqual([100, 200, 250]);
+  });
+
+  it('jitter 默认开启：延迟落入 [0.5×, 1.0×) 区间且 jittered 标记为真', async () => {
+    const onRetry = vi.fn();
+    const fn = vi.fn().mockRejectedValue(createApiError(500));
+    const promise = retryWithBackoff(fn, {
+      maxAttempts: 3,
+      initialDelayMs: 100,
+      onRetry,
+    });
+    const assertion = expect(promise).rejects.toBeInstanceOf(APICallError);
+
+    await vi.advanceTimersByTimeAsync(2000);
+    await assertion;
+
+    expect(onRetry).toHaveBeenCalledTimes(2);
+    // attempt 1 指数值 100 → [50,100]；attempt 2 指数值 200 → [100,200]
+    const expectedBases = [100, 200];
+    onRetry.mock.calls.forEach((call, i) => {
+      const info = call[0] as { delayMs: number; jittered: boolean };
+      const base = expectedBases[i] ?? 0;
+      expect(info.delayMs).toBeGreaterThanOrEqual(Math.round(base * 0.5));
+      expect(info.delayMs).toBeLessThanOrEqual(base);
+      expect(info.jittered).toBe(true);
+    });
+  });
+
+  it('Retry-After 优先：显式等待指示不被抖动缩短', async () => {
+    const onRetry = vi.fn();
+    const fn = vi
+      .fn()
+      .mockRejectedValueOnce(createApiError(429, { responseHeaders: { 'retry-after': '2' } }))
+      .mockResolvedValueOnce('ok');
+    const promise = retryWithBackoff(fn, {
+      maxAttempts: 3,
+      initialDelayMs: 1000,
+      onRetry,
+    });
+
+    await vi.advanceTimersByTimeAsync(2500);
+    await expect(promise).resolves.toBe('ok');
+
+    expect(onRetry).toHaveBeenCalledWith(
+      expect.objectContaining({ delayMs: 2000, jittered: false }),
+    );
+  });
+
+  it('jitter 显式关闭：延迟回到确定性指数曲线（jittered=false）', async () => {
+    const onRetry = vi.fn();
+    const fn = vi.fn().mockRejectedValue(createApiError(500));
+    const promise = retryWithBackoff(fn, {
+      maxAttempts: 3,
+      initialDelayMs: 100,
+      jitter: false,
+      onRetry,
+    });
+    const assertion = expect(promise).rejects.toBeInstanceOf(APICallError);
+
+    await vi.advanceTimersByTimeAsync(2000);
+    await assertion;
+
+    for (const call of onRetry.mock.calls) {
+      expect((call[0] as { jittered: boolean }).jittered).toBe(false);
+    }
+  });
+});
+
+describe('resolveRetryOptions / resolveEnvRetryMaxRetries（退避参数解析）', () => {
+  it('无 options 无 env：默认值（7 次 / 1.5s / 30s / jitter 开）', () => {
+    expect(resolveRetryOptions(undefined, {})).toEqual({
+      maxAttempts: 7,
+      initialDelayMs: 1500,
+      maxDelayMs: 30_000,
+      jitter: true,
+    });
+  });
+
+  it('options 显式值优先于 env', () => {
+    const env: Record<string, string> = {};
+    env['CODE_AGENT_MODEL_RETRY_MAX_ATTEMPTS'] = '11';
+    env['CODE_AGENT_MODEL_RETRY_INITIAL_DELAY_MS'] = '5000';
+    const resolved = resolveRetryOptions({ maxAttempts: 3, initialDelayMs: 100 }, env);
+    expect(resolved.maxAttempts).toBe(3);
+    expect(resolved.initialDelayMs).toBe(100);
+  });
+
+  it('env 值在 options 缺席时生效', () => {
+    const env: Record<string, string> = {};
+    env['CODE_AGENT_MODEL_RETRY_MAX_ATTEMPTS'] = '11';
+    env['CODE_AGENT_MODEL_RETRY_INITIAL_DELAY_MS'] = '5000';
+    env['CODE_AGENT_MODEL_RETRY_MAX_DELAY_MS'] = '60000';
+    const resolved = resolveRetryOptions(undefined, env);
+    expect(resolved.maxAttempts).toBe(11);
+    expect(resolved.initialDelayMs).toBe(5000);
+    expect(resolved.maxDelayMs).toBe(60_000);
+  });
+
+  it('env 非法值（非数字/负数/空串）：静默忽略落默认', () => {
+    for (const bad of ['abc', '-5', '', '  ']) {
+      const env: Record<string, string> = {};
+      env['CODE_AGENT_MODEL_RETRY_MAX_ATTEMPTS'] = bad;
+      const resolved = resolveRetryOptions(undefined, env);
+      expect(resolved.maxAttempts).toBe(7);
+    }
+  });
+
+  it('env 小数：向下取整', () => {
+    const env: Record<string, string> = {};
+    env['CODE_AGENT_MODEL_RETRY_MAX_ATTEMPTS'] = '3.9';
+    const resolved = resolveRetryOptions(undefined, env);
+    expect(resolved.maxAttempts).toBe(3);
+  });
+
+  it('resolveEnvRetryMaxRetries：尝试数换算为重试次数；未配置回落 2', () => {
+    const envFive: Record<string, string> = {};
+    envFive['CODE_AGENT_MODEL_RETRY_MAX_ATTEMPTS'] = '5';
+    expect(resolveEnvRetryMaxRetries(envFive)).toBe(4);
+    const envOne: Record<string, string> = {};
+    envOne['CODE_AGENT_MODEL_RETRY_MAX_ATTEMPTS'] = '1';
+    expect(resolveEnvRetryMaxRetries(envOne)).toBe(0);
+    const envBad: Record<string, string> = {};
+    envBad['CODE_AGENT_MODEL_RETRY_MAX_ATTEMPTS'] = 'abc';
+    expect(resolveEnvRetryMaxRetries(envBad)).toBe(2);
+    expect(resolveEnvRetryMaxRetries({})).toBe(2);
   });
 });

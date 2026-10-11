@@ -5,5 +5,12 @@ export type {
   LlmGenerateTextResult,
 } from './llm-client';
 export { LlmClient } from './llm-client';
-export type { RetryAttemptInfo, RetryOptions } from './retry';
-export { getErrorStatus, getRetryAfterDelayMs, isRetryableError, retryWithBackoff } from './retry';
+export type { ResolvedRetryOptions, RetryAttemptInfo, RetryOptions } from './retry';
+export {
+  getErrorStatus,
+  getRetryAfterDelayMs,
+  isRetryableError,
+  resolveEnvRetryMaxRetries,
+  resolveRetryOptions,
+  retryWithBackoff,
+} from './retry';
