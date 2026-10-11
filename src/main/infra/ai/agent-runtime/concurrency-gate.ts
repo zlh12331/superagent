@@ -21,6 +21,8 @@ export interface ConcurrencyGate {
   coolDown(durationMs: number): void;
   /** 是否处于冷却期（诊断/测试用） */
   isCoolingDown(): boolean;
+  /** 等待冷却结束（不占闸位；冷却中 sleep 剩余时间，已结束立即返回）——side query 经 modelGate 调用 */
+  waitCooldown(): Promise<void>;
   getStats(): { readonly running: number; readonly queued: number };
 }
 
@@ -134,6 +136,11 @@ export function createConcurrencyGate(maxConcurrent: number): ConcurrencyGate {
       }
     },
     isCoolingDown: () => Date.now() < cooldownUntil,
+    async waitCooldown() {
+      while (Date.now() < cooldownUntil) {
+        await new Promise((resolve) => setTimeout(resolve, cooldownUntil - Date.now()));
+      }
+    },
     getStats: () => ({ running, queued: queue.length }),
   };
 }

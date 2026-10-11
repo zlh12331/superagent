@@ -56,22 +56,22 @@ export async function getAIProvider(
   return factory;
 }
 
-/** 限流冷却接缝：由 ServiceContainer 注入并发门引用（注入后 429 观测会喂 gate.coolDown） */
-let rateLimitedSink: ((durationMs: number) => void) | undefined;
-/** 冷却等待接缝：由 ServiceContainer 注入（modelGate 在冷却期等待，side query 与主回合共享冷却） */
-let cooldownWaiter: (() => Promise<void>) | undefined;
+/** 限流接缝窄接口：只需 gate 的冷却两面（喂入 + 等待），结构化匹配 ConcurrencyGate 无需适配对象 */
+export interface RateLimitGate {
+  coolDown(durationMs: number): void;
+  waitCooldown(): Promise<void>;
+}
+
+/** 注入的限流闸（ServiceContainer 构造 gate 后调用；未注入时 429 观测不上报、冷却不等待） */
+let rateLimitGate: RateLimitGate | undefined;
 
 /**
- * 注入限流接缝（ServiceContainer 构造 gate 后调用）。
+ * 注入限流闸（ServiceContainer 构造 gate 后调用）。
  *
  * 接缝模式而非直接 import：ai-provider 是模块级单例，直接引容器会造出容器→单例→容器环。
  */
-export function setRateLimitBridge(bridge: {
-  readonly onRateLimited: (durationMs: number) => void;
-  readonly waitCooldown: () => Promise<void>;
-}): void {
-  rateLimitedSink = bridge.onRateLimited;
-  cooldownWaiter = bridge.waitCooldown;
+export function setRateLimitBridge(gate: RateLimitGate): void {
+  rateLimitGate = gate;
 }
 
 async function ensureModelConfigured(): Promise<void> {
@@ -80,7 +80,7 @@ async function ensureModelConfigured(): Promise<void> {
     throw new AppError(ErrorCode.AI_MODEL_NOT_CONFIGURED, '请先在设置中配置模型');
   }
   // 冷却等待放在配置检查之后：未配置模型的报错优先于排队等待（排队前先确认能打）
-  await cooldownWaiter?.();
+  await rateLimitGate?.waitCooldown();
 }
 
 export const llmClient = new LlmClient({
@@ -102,7 +102,7 @@ export const llmClient = new LlmClient({
   },
   modelGate: ensureModelConfigured,
   notifyRateLimited: (durationMs) => {
-    rateLimitedSink?.(durationMs);
+    rateLimitGate?.coolDown(durationMs);
   },
 });
 

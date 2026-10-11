@@ -19,7 +19,6 @@ import { cronService } from './infra/ai/agent/cron-service';
 import { initSubagentManager } from './infra/ai/agent/subagent-manager';
 import { taskService } from './infra/ai/agent/task-service';
 import {
-  type ConcurrencyGate,
   createConcurrencyGate,
   DEFAULT_MAX_CONCURRENT_TURNS,
 } from './infra/ai/agent-runtime/concurrency-gate';
@@ -90,24 +89,12 @@ function resolveMemoryHubRoot(): string | undefined {
 
 class ServiceContainer {
   // ConcurrencyGate 不做 accessor：无重依赖、构造廉价，直接初始化为 readonly 字段
-  private readonly concurrencyGate: ConcurrencyGate = createConcurrencyGate(
-    DEFAULT_MAX_CONCURRENT_TURNS,
-  );
+  private readonly concurrencyGate = createConcurrencyGate(DEFAULT_MAX_CONCURRENT_TURNS);
 
   constructor() {
     // 限流接缝：llmClient（模块级单例）观测到 429 → gate 冷却；side query 经 modelGate 等冷却。
-    // gate 在容器构造期就绪，单例不反向 import 容器（防环），经 ai-provider 的 setRateLimitBridge 桥接
-    setRateLimitBridge({
-      onRateLimited: (durationMs) => {
-        this.concurrencyGate.coolDown(durationMs);
-      },
-      waitCooldown: async () => {
-        // 冷却期自旋等待（500ms 粒度足够——冷却时长以秒计）；无冷却即过
-        while (this.concurrencyGate.isCoolingDown()) {
-          await new Promise((resolve) => setTimeout(resolve, 500));
-        }
-      },
-    });
+    // 窄接口结构化匹配（ConcurrencyGate ⊇ RateLimitGate），单例不反向 import 容器（防环）
+    setRateLimitBridge(this.concurrencyGate);
   }
 
   private cronUnsubscribe: (() => void) | null = null;

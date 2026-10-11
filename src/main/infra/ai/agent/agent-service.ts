@@ -374,9 +374,7 @@ export class AgentService implements IAgentService {
               systemPrompt,
               tools,
               llmClient: this.llmClient,
-              onRateLimited: (durationMs) => {
-                this.concurrencyGate?.coolDown(durationMs);
-              },
+              onRateLimited: (ms) => this.concurrencyGate?.coolDown(ms),
               span,
             });
             return {
