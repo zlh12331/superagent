@@ -41,6 +41,8 @@ export interface TurnAssemblyArgs {
   readonly tools: Record<string, unknown>;
   readonly systemPrompt: string | undefined;
   readonly llmClient: LlmClient | undefined;
+  /** 已产出的 assistant 部分文本（流恢复锚点的数据源；随 text delta 实时更新） */
+  readonly getAssistantPartialText: () => string;
   /** 限流上报：重试观测到 429 时回调（定向本回合 provider 桶冷却） */
   readonly onRateLimited?: (durationMs: number) => void;
   /** 尝试级准入：每次模型流尝试前 acquire（拿票）、终态 release + 学习信号上报（方案 A——
@@ -58,6 +60,114 @@ export interface SpanLike {
   setAttribute(key: string, value: string | number | boolean): void;
 }
 
+/** 尝试级准入端口形状（TurnDeps.gateAdmission / RecoveryContext 共用） */
+interface GateAdmissionPort {
+  acquire(): Promise<() => void>;
+  reportOutcome(outcome: 'succeeded' | 'throttled' | 'failed'): void;
+}
+
+/** 流恢复独立预算：与首读重试/限流重试互不占用 */
+const STREAM_RECOVERY_MAX = 3;
+
+/** 恢复判定：可重试失败 + 已产出部分内容 + 预算未尽 + 未中止 → 允许从对话锚点重开 */
+function shouldAttemptRecovery(
+  appError: ReturnType<typeof classifyModelFailure>,
+  signal: AbortSignal,
+  recoveryCount: number,
+  getAssistantPartialText: () => string,
+): boolean {
+  return (
+    !signal.aborted &&
+    appError.retryable &&
+    recoveryCount < STREAM_RECOVERY_MAX &&
+    getAssistantPartialText().length > 0
+  );
+}
+
+/** 失败学习信号分流：rate_limited → throttled（评价 cap）/ 其余可重试 → failed 只释放 */
+function reportFailureToGate(
+  gate: GateAdmissionPort | undefined,
+  appError: ReturnType<typeof classifyModelFailure>,
+): void {
+  if (gate === undefined) {
+    return;
+  }
+  if (appError.retryReason === ModelRetryReason.RateLimited) {
+    gate.reportOutcome('throttled');
+  } else if (appError.retryable) {
+    gate.reportOutcome('failed');
+  }
+}
+
+function logRecoveryStart(fields: {
+  readonly sessionId: string;
+  readonly turnId: string;
+  readonly callId: string;
+  readonly attempt: number;
+  readonly max: number;
+  readonly discardedChars: number;
+  readonly error: unknown;
+}): void {
+  logger.warn(
+    {
+      sessionId: fields.sessionId,
+      turnId: fields.turnId,
+      callId: fields.callId,
+      recoveryAttempt: fields.attempt,
+      recoveryMax: fields.max,
+      discardedChars: fields.discardedChars,
+      error: fields.error instanceof Error ? fields.error.message : String(fields.error),
+    },
+    '流中断恢复：从对话锚点重开',
+  );
+}
+
+/** streamText 参数装配（create: 闭包的载荷——复杂度热点提取；callId 每轮经重读 latest 拿新值） */
+function buildStreamTextParams(parts: {
+  readonly model: string;
+  readonly attemptMessages: ChatMessage[];
+  readonly systemPrompt: string | undefined;
+  readonly genOptions: GenerationOptions;
+  readonly callIdGetter: () => string;
+  readonly tools: Record<string, unknown>;
+  readonly maxSteps: number;
+  readonly maxRetries: number;
+  readonly effectiveAbortSignal: AbortSignal | undefined;
+  readonly llmClient: LlmClient | undefined;
+}): Parameters<typeof streamText>[0] {
+  return {
+    model: parts.model,
+    messages: parts.attemptMessages,
+    allowSystemInMessages: true,
+    ...(parts.systemPrompt !== undefined ? { system: parts.systemPrompt } : {}),
+    ...parts.genOptions.samplingOptions,
+    ...(parts.genOptions.maxOutputTokens !== undefined
+      ? { maxOutputTokens: parts.genOptions.maxOutputTokens }
+      : {}),
+    providerOptions: {
+      ...(parts.genOptions.providerOptions ?? {}),
+      codeagent: { callId: parts.callIdGetter() },
+    },
+    tools: parts.tools as Record<string, never>,
+    stopWhen: isStepCount(parts.maxSteps),
+    maxRetries: parts.maxRetries,
+    ...(parts.effectiveAbortSignal !== undefined
+      ? { abortSignal: parts.effectiveAbortSignal }
+      : {}),
+    ...(parts.llmClient !== undefined
+      ? {
+          repairToolCall: createRepairToolCall({
+            llmClient: parts.llmClient,
+            ...(parts.effectiveAbortSignal !== undefined
+              ? { signal: parts.effectiveAbortSignal }
+              : {}),
+          }),
+        }
+      : {}),
+    telemetry: { integrations: [createSdkTelemetryIntegration()] },
+  };
+}
+
 export async function assembleAndRunTurn(args: TurnAssemblyArgs): Promise<TurnRunOutputLike> {
   const {
     sessionId,
@@ -72,128 +182,248 @@ export async function assembleAndRunTurn(args: TurnAssemblyArgs): Promise<TurnRu
     systemPrompt,
     tools,
     llmClient,
+    getAssistantPartialText,
     onRateLimited,
     gateAdmission,
     span,
   } = args;
-  const model = await getModel(resolvedModel.modelId);
-
-  let modelTimeout: ReturnType<typeof createTimeoutSignal> | undefined;
-  if (resolvedModel.generationConfig?.timeoutMs !== undefined) {
-    modelTimeout = createTimeoutSignal(resolvedModel.generationConfig.timeoutMs);
-  }
-  const effectiveAbortSignal = combineAbortSignals([controller.signal, modelTimeout?.signal]);
+  await getModel(resolvedModel.modelId); // modelGate 校验 + 模型实例缓存预热（streamText 每 providerOptions 重新路由）
 
   const { compressedMessages, genOptions } = resolveGeneration(systemPrompt ?? '', span);
   let rawParts = 0;
 
+  const recovery = await runRecoveryLoop({
+    sessionId,
+    turnId,
+    resolvedModel,
+    options,
+    controller,
+    turnEmitter,
+    transcriptEntries,
+    pushPart,
+    compressedMessages,
+    genOptions,
+    systemPrompt,
+    tools,
+    llmClient,
+    getAssistantPartialText,
+    onRateLimited,
+    gateAdmission,
+    span,
+    onRawPart: () => {
+      rawParts += 1;
+    },
+  });
+
+  return {
+    reason: recovery.runResult.reason,
+    durationMs: recovery.runResult.durationMs,
+    rawPartCount: rawParts,
+    usage: recovery.usage,
+    timeoutSignalAborted: recovery.modelTimeoutAborted,
+  };
+}
+
+interface RecoveryContext {
+  readonly sessionId: string;
+  readonly turnId: string;
+  readonly resolvedModel: ResolvedModel;
+  readonly options: StartAgentOptions;
+  readonly controller: AbortController;
+  readonly turnEmitter: TurnEventEmitter;
+  readonly transcriptEntries: TurnTranscriptEntry[];
+  readonly pushPart: (part: unknown) => void;
+  readonly compressedMessages: ChatMessage[];
+  readonly genOptions: GenerationOptions;
+  readonly systemPrompt: string | undefined;
+  readonly tools: Record<string, unknown>;
+  readonly llmClient: LlmClient | undefined;
+  readonly getAssistantPartialText: () => string;
+  readonly onRateLimited: ((durationMs: number) => void) | undefined;
+  readonly gateAdmission:
+    | {
+        acquire(): Promise<() => void>;
+        reportOutcome(outcome: 'succeeded' | 'throttled' | 'failed'): void;
+      }
+    | undefined;
+  readonly span: SpanLike;
+  readonly onRawPart: () => void;
+}
+
+/**
+ * 恢复循环（core 级）：边界后断流且可重试时，把已产出的 assistant 部分文本并入对话重开流；
+ * 独立预算（STREAM_RECOVERY_MAX），中止/timeout/恢复耗尽后原样上抛。
+ */
+async function runRecoveryLoop(ctx: RecoveryContext): Promise<{
+  runResult: TurnRunResult;
+  usage: unknown;
+  modelTimeoutAborted: boolean;
+}> {
   let runResult: TurnRunResult;
   let usage: SdkTotalUsageLike | null = null;
   let releaseGate: (() => void) | undefined;
   // 逻辑调用 ID：middleware 的 Attempt span 与 telemetry integration 的 model.call 父 span
   // 以同键 join（Attempt 经 providerOptions.codeagent 读，Call 由 streamText telemetry 回调自带）
-  const callId = randomUUID();
+  let callId = randomUUID();
+  let streamRecoveryCount = 0;
+  let recoveredDiscardedChars = 0;
+  let modelTimeout: ReturnType<typeof createTimeoutSignal> | undefined;
+
   try {
-    // 尝试级准入：流尝试前等槽位（AbortSignal 取消排队）——acquire 后才算闸内
-    if (gateAdmission !== undefined) {
-      releaseGate = await gateAdmission.acquire();
-    }
-    const created = await createStreamWithRetry({
-      create: () =>
-        streamText({
-          model,
-          messages: compressedMessages,
-          allowSystemInMessages: true,
-          ...(systemPrompt !== undefined ? { system: systemPrompt } : {}),
-          ...genOptions.samplingOptions,
-          ...(genOptions.maxOutputTokens !== undefined
-            ? { maxOutputTokens: genOptions.maxOutputTokens }
-            : {}),
-          providerOptions: {
-            ...(genOptions.providerOptions ?? {}),
-            codeagent: { callId },
-          },
-          tools: tools as Record<string, never>,
-          stopWhen: isStepCount(options.maxSteps),
-          maxRetries: resolvedModel.generationConfig?.maxRetries ?? 2,
-          ...(effectiveAbortSignal !== undefined ? { abortSignal: effectiveAbortSignal } : {}),
-          ...(llmClient !== undefined
-            ? {
-                repairToolCall: createRepairToolCall({
-                  llmClient,
-                  modelId: resolvedModel.modelId,
-                  ...(effectiveAbortSignal !== undefined ? { signal: effectiveAbortSignal } : {}),
-                }),
-              }
-            : {}),
-          telemetry: { integrations: [createSdkTelemetryIntegration()] },
-        }),
-      controller,
-      ...(onRateLimited !== undefined ? { onRateLimited } : {}),
-    });
+    // 恢复循环：正常完成/中止/超时跳出；可重试流错误且预算未尽 → 记账后重开
+    for (;;) {
+      // 尝试级准入：流尝试前等槽位（AbortSignal 取消排队）——acquire 后才算闸内
+      if (ctx.gateAdmission !== undefined) {
+        releaseGate = await ctx.gateAdmission.acquire();
+      }
+      // 恢复轮的对话锚点：已产出的 assistant 部分文本并入 messages（provider 收到完整上下文）。
+      // ⚠ 恢复语义是「追加续写」不是「重答」：assistantText 渲染层/入库继续 += 累积，
+      // 恢复指令要求从中断处继续——provider 不遵守时最多出现重复段落，不会丢内容
+      // （零协议改动；替换式恢复需要 turn-reset 事件 + 消费面重置，代价不成比例）
+      const attemptMessages =
+        streamRecoveryCount > 0 && ctx.getAssistantPartialText().length > 0
+          ? [
+              ...ctx.compressedMessages,
+              {
+                role: 'assistant' as const,
+                content: ctx.getAssistantPartialText(),
+              },
+              {
+                role: 'user' as const,
+                content:
+                  '（你上面的回复因连接中断被截断，已有内容用户已收到。请直接从中断处继续输出剩余内容，不要重复已有部分。）',
+              },
+            ]
+          : ctx.compressedMessages;
 
-    // 断流观测出口（core 流恢复拍板的数据源）：
-    // preludeBufferedCount>0 = 无感重试窗口真实覆盖过；attemptsToBoundary>1 = 前奏窗口内重建过流
-    logger.info(
-      {
-        sessionId,
-        turnId,
-        callId,
-        preludeBufferedCount: created.preludeBufferedCount,
-        attemptsToBoundary: created.attemptsToBoundary,
-      },
-      '流边界观测',
-    );
-    span?.setAttribute('stream.preludeBufferedCount', created.preludeBufferedCount);
-    span?.setAttribute('stream.attemptsToBoundary', created.attemptsToBoundary);
-
-    const runner = new TurnRunner({
-      sessionId,
-      turnId,
-      modelId: resolvedModel.modelId,
-      controller,
-      emitter: turnEmitter,
-      idleTimeoutMs: DEFAULT_STREAM_IDLE_TIMEOUT_MS,
-      firstPart: created.firstPart,
-      ...(modelTimeout !== undefined
-        ? { isTimeout: (): boolean => modelTimeout?.signal.aborted === true }
-        : {}),
-      onPart: (part) => {
-        rawParts += 1;
-        if (part.type === 'reasoning-delta' && typeof part.delta === 'string') {
-          transcriptEntries.push({ kind: 'reasoning', text: part.delta });
+      try {
+        callId = randomUUID();
+        // 每轮重建模型超时信号（重开流需要新的完整超时窗口）
+        const attempt = await runSingleAttempt({ ctx, callId, attemptMessages });
+        runResult = attempt.runResult;
+        usage = attempt.usage;
+        modelTimeout = attempt.modelTimeout;
+        ctx.gateAdmission?.reportOutcome('succeeded');
+        break;
+      } catch (error: unknown) {
+        const appError = classifyModelFailure(error);
+        // 失败分类：可重试错误里限流是唯一的 cap 学习信号；其余失败只释放
+        reportFailureToGate(ctx.gateAdmission, appError);
+        // 恢复判定：可重试失败 + 已产出部分内容 + 预算未尽 + 未中止 → 从对话锚点重开
+        if (
+          !shouldAttemptRecovery(
+            appError,
+            ctx.controller.signal,
+            streamRecoveryCount,
+            ctx.getAssistantPartialText,
+          )
+        ) {
+          throw error;
         }
-        pushPart(part);
-      },
-    });
-    runResult = await runner.run(created.stream as ReadableStream<unknown>, created.reader);
-    usage = await Promise.resolve(created.result.totalUsage).catch(() => null);
-    // 尝试级学习信号：runner 正常走完 = 成功（cap streak；限流/错误路径在异常分支上报）
-    gateAdmission?.reportOutcome('succeeded');
-  } catch (error: unknown) {
-    // 失败分类：可重试错误里限流是唯一的 cap 学习信号；其余失败只释放
-    if (gateAdmission !== undefined) {
-      const appError = classifyModelFailure(error);
-      if (appError.retryReason === ModelRetryReason.RateLimited) {
-        gateAdmission.reportOutcome('throttled');
-      } else if (appError.retryable) {
-        gateAdmission.reportOutcome('failed');
+        streamRecoveryCount += 1;
+        recoveredDiscardedChars = ctx.getAssistantPartialText().length;
+        logRecoveryStart({
+          sessionId: ctx.sessionId,
+          turnId: ctx.turnId,
+          callId,
+          attempt: streamRecoveryCount,
+          max: STREAM_RECOVERY_MAX,
+          discardedChars: recoveredDiscardedChars,
+          error,
+        });
+        ctx.span?.setAttribute('stream.recoveryCount', streamRecoveryCount);
+        ctx.span?.setAttribute('stream.discardedChars', recoveredDiscardedChars);
+      } finally {
+        // 计数释放幂等兜底——学习信号先走（throttled/succeeded 已回减），这里防漏减
+        releaseGate?.();
+        releaseGate = undefined;
       }
     }
-    throw error;
   } finally {
-    // 计数释放幂等兜底——学习信号先走（throttled/succeeded 已回减），这里防漏减
-    releaseGate?.();
     modelTimeout?.clear();
   }
 
   return {
-    reason: runResult.reason,
-    durationMs: runResult.durationMs,
-    rawPartCount: rawParts,
+    runResult,
     usage,
-    timeoutSignalAborted: modelTimeout?.signal.aborted === true,
+    modelTimeoutAborted: modelTimeout?.signal.aborted === true,
   };
+}
+
+/** 单次流尝试：模型超时信号重建 → createStreamWithRetry（首读重试）→ TurnRunner 消费；
+ * 错误原样上抛给恢复循环裁决（首 part 经 created.reader 首读，调用方接力消费） */
+async function runSingleAttempt(args: {
+  readonly ctx: RecoveryContext;
+  readonly callId: string;
+  readonly attemptMessages: ChatMessage[];
+}): Promise<{
+  runResult: TurnRunResult;
+  usage: SdkTotalUsageLike | null;
+  modelTimeout: ReturnType<typeof createTimeoutSignal> | undefined;
+}> {
+  const { ctx, callId, attemptMessages } = args;
+  const modelTimeout =
+    ctx.resolvedModel.generationConfig?.timeoutMs !== undefined
+      ? createTimeoutSignal(ctx.resolvedModel.generationConfig.timeoutMs)
+      : undefined;
+  const effectiveAbortSignal = combineAbortSignals([ctx.controller.signal, modelTimeout?.signal]);
+  const created = await createStreamWithRetry({
+    create: () =>
+      streamText(
+        buildStreamTextParams({
+          model: ctx.resolvedModel.modelId,
+          attemptMessages,
+          systemPrompt: ctx.systemPrompt,
+          genOptions: ctx.genOptions,
+          callIdGetter: () => callId,
+          tools: ctx.tools,
+          maxSteps: ctx.options.maxSteps,
+          maxRetries: ctx.resolvedModel.generationConfig?.maxRetries ?? 2,
+          effectiveAbortSignal,
+          llmClient: ctx.llmClient,
+        }),
+      ),
+    controller: ctx.controller,
+    ...(ctx.onRateLimited !== undefined ? { onRateLimited: ctx.onRateLimited } : {}),
+  });
+
+  // 断流观测出口（core 流恢复拍板的数据源）：
+  // preludeBufferedCount>0 = 无感重试窗口真实覆盖过；attemptsToBoundary>1 = 前奏窗口内重建过流
+  logger.info(
+    {
+      sessionId: ctx.sessionId,
+      turnId: ctx.turnId,
+      callId,
+      preludeBufferedCount: created.preludeBufferedCount,
+      attemptsToBoundary: created.attemptsToBoundary,
+    },
+    '流边界观测',
+  );
+  ctx.span?.setAttribute('stream.preludeBufferedCount', created.preludeBufferedCount);
+  ctx.span?.setAttribute('stream.attemptsToBoundary', created.attemptsToBoundary);
+
+  const runner = new TurnRunner({
+    sessionId: ctx.sessionId,
+    turnId: ctx.turnId,
+    modelId: ctx.resolvedModel.modelId,
+    controller: ctx.controller,
+    emitter: ctx.turnEmitter,
+    idleTimeoutMs: DEFAULT_STREAM_IDLE_TIMEOUT_MS,
+    firstPart: created.firstPart,
+    ...(modelTimeout !== undefined
+      ? { isTimeout: (): boolean => modelTimeout?.signal.aborted === true }
+      : {}),
+    onPart: (part) => {
+      ctx.onRawPart();
+      if (part.type === 'reasoning-delta' && typeof part.delta === 'string') {
+        ctx.transcriptEntries.push({ kind: 'reasoning', text: part.delta });
+      }
+      ctx.pushPart(part);
+    },
+  });
+  const runResult = await runner.run(created.stream as ReadableStream<unknown>, created.reader);
+  const usage = await Promise.resolve(created.result.totalUsage).catch(() => null);
+  return { runResult, usage, modelTimeout };
 }
 
 export interface TurnRunOutputLike {

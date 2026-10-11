@@ -233,14 +233,7 @@ export class LlmClient {
       const usage = result.usage;
       return {
         text: result.text,
-        usage:
-          usage !== undefined && usage !== null && Object.keys(usage).length > 0
-            ? {
-                ...(usage.inputTokens !== undefined ? { inputTokens: usage.inputTokens } : {}),
-                ...(usage.outputTokens !== undefined ? { outputTokens: usage.outputTokens } : {}),
-                ...(usage.totalTokens !== undefined ? { totalTokens: usage.totalTokens } : {}),
-              }
-            : undefined,
+        usage: normalizeUsage(usage),
       };
     });
   }
@@ -315,4 +308,25 @@ export class LlmClient {
   getModelCacheSize(): number {
     return this.modelCache.size;
   }
+}
+
+/** SDK usage → 归一形状（空对象/缺字段宽容；三轴条件展开） */
+function normalizeUsage(
+  usage:
+    | {
+        inputTokens?: number | undefined;
+        outputTokens?: number | undefined;
+        totalTokens?: number | undefined;
+      }
+    | null
+    | undefined,
+): LlmGenerateTextResult['usage'] {
+  if (usage === undefined || usage === null || Object.keys(usage).length === 0) {
+    return undefined;
+  }
+  return {
+    ...(usage.inputTokens !== undefined ? { inputTokens: usage.inputTokens } : {}),
+    ...(usage.outputTokens !== undefined ? { outputTokens: usage.outputTokens } : {}),
+    ...(usage.totalTokens !== undefined ? { totalTokens: usage.totalTokens } : {}),
+  };
 }
