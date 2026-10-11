@@ -749,7 +749,9 @@ describe('LlmClient 批次2 缺口补全（降级链/覆盖透传/参数展开/�
         mocks.mockGenerateText.mockRejectedValue(apiError(429));
 
         const promise = client.generateText({ prompt: 'hi' });
-        const assertion = expect(promise).rejects.toBeInstanceOf(APICallError);
+        // 超时中止在退避 sleep 期间触发：reject 超时信号的 AbortError（语义诚实——
+        // 失败原因是超时，不是最后一次的 429），且不再发起下一次请求
+        const assertion = expect(promise).rejects.toMatchObject({ name: 'AbortError' });
         await vi.advanceTimersByTimeAsync(200);
 
         await assertion;
@@ -771,7 +773,8 @@ describe('LlmClient 批次2 缺口补全（降级链/覆盖透传/参数展开/�
         mocks.mockGenerateText.mockRejectedValue(apiError(429));
 
         const promise = clientWithDefault.generateText({ prompt: 'hi' });
-        const assertion = expect(promise).rejects.toBeInstanceOf(APICallError);
+        // 同上：超时中止 reject AbortError（不再伪装成最后一次 API 错误）
+        const assertion = expect(promise).rejects.toMatchObject({ name: 'AbortError' });
         await vi.advanceTimersByTimeAsync(200);
 
         await assertion;

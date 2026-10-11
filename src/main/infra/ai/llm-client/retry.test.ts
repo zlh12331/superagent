@@ -287,6 +287,27 @@ describe('retryWithBackoff（重试执行器）', () => {
     expect(fn).toHaveBeenCalledTimes(1);
   });
 
+  it('退避等待期间 abort：以中止原因 reject，不再发起下一次请求', async () => {
+    const controller = new AbortController();
+    const error = createApiError(500);
+    const fn = vi.fn().mockRejectedValue(error);
+    const promise = retryWithBackoff(fn, {
+      maxAttempts: 5,
+      initialDelayMs: 1000,
+      jitter: false,
+      signal: controller.signal,
+    });
+
+    await vi.advanceTimersByTimeAsync(1);
+    controller.abort();
+
+    const assertion = expect(promise).rejects.toMatchObject({ name: 'AbortError' });
+    await vi.advanceTimersByTimeAsync(5000);
+    await assertion;
+    // 1 次失败 + 退避等待中被中止：不再有第二次请求
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
   it('onRetry 遥测回调：携带 attempt / errorStatus / delayMs', async () => {
     const onRetry = vi.fn();
     const fn = vi

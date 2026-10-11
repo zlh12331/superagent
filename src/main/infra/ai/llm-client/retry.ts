@@ -396,17 +396,24 @@ function applyJitter(baseMs: number, jitter: boolean): { delayMs: number; jitter
   return { delayMs: Math.round(baseMs * (0.5 + Math.random() * 0.5)), jittered: true };
 }
 
+/**
+ * 退避等待。中止信号触发时**抛中止原因**而非静默 resolve——
+ * 等待被打断意味着调用方已放弃，重试循环必须终止，不该再发起下一次请求。
+ */
 function sleep(ms: number, signal: AbortSignal | undefined): Promise<void> {
   if (signal === undefined) {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
-  return new Promise((resolve) => {
+  if (signal.aborted) {
+    return Promise.reject(signal.reason);
+  }
+  return new Promise((resolve, reject) => {
     const timeoutId = setTimeout(resolve, ms);
     signal.addEventListener(
       'abort',
       () => {
         clearTimeout(timeoutId);
-        resolve();
+        reject(signal.reason);
       },
       { once: true },
     );
