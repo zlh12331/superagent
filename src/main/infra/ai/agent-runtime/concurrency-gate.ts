@@ -28,6 +28,15 @@ export interface ConcurrencyGate {
   isCoolingDown(providerKey: string): boolean;
   /** 等待该 provider 冷却结束（不占闸位；side query 经 modelGate 调用） */
   waitCooldown(providerKey: string): Promise<void>;
+  /** 回合级学习信号上报：该 provider 桶上一次 acquire 的尝试结果喂回 AIMD
+   * （rate_limited → throttled 评价 cap；其余失败 → failed 只释放；成功 → succeeded 计 streak） */
+  reportAttemptOutcome(
+    providerKey: string,
+    outcome:
+      | { readonly kind: 'succeeded' }
+      | { readonly kind: 'throttled'; readonly cooldownMs?: number }
+      | { readonly kind: 'failed' },
+  ): void;
   /** 该 provider 桶的控制器快照（观测/测试用；桶未创建返回 undefined） */
   bucketSnapshot(providerKey: string): ReturnType<ConcurrencyController['snapshot']> | undefined;
   getStats(): { running: number; queued: number };
@@ -192,6 +201,22 @@ export function createConcurrencyGate(maxConcurrentPerProvider: number): Concurr
           return;
         }
         await new Promise((resolve) => setTimeout(resolve, waitMs));
+      }
+    },
+    reportAttemptOutcome(providerKey, outcome) {
+      const bucket = buckets.get(providerKey);
+      if (bucket === undefined) {
+        return;
+      }
+      const now = Date.now();
+      if (outcome.kind === 'succeeded') {
+        bucket.controller.succeeded(now);
+      } else if (outcome.kind === 'throttled') {
+        bucket.controller.throttled(now, {
+          ...(outcome.cooldownMs !== undefined ? { cooldownMs: outcome.cooldownMs } : {}),
+        });
+      } else {
+        bucket.controller.failed(now);
       }
     },
     bucketSnapshot(providerKey) {
