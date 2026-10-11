@@ -34,8 +34,47 @@ export function classifyError(error: unknown): AppError {
   return new AppError(ErrorCode.INTERNAL_ERROR, 'AI 调用失败', error);
 }
 
+/**
+ * 供应商 context 超限的错误文案形态（各家措辞归一）：
+ * OpenAI/DeepSeek `context_length_exceeded` / `maximum context length`，
+ * Anthropic `prompt is too long`，另有 `too many input tokens` 变体。
+ * 刻意不含孤词 `context window`——部分 provider 的定价/参数说明错误也带这个词，太宽会误判。
+ */
+const CONTEXT_EXCEEDED_MESSAGE_PATTERN =
+  /context[_ ]length[_ ]exceeded|prompt is too long|maximum context length|too many (input )?tokens|input length exceeds/i;
+
+/** 从 APICallError 提取可供文案匹配的文本（message + responseBody） */
+function extractErrorText(error: APICallError): string {
+  const body =
+    typeof error.responseBody === 'string'
+      ? error.responseBody
+      : error.responseBody !== undefined
+        ? JSON.stringify(error.responseBody)
+        : '';
+  return `${error.message}\n${body}`;
+}
+
 function classifyAPICallError(error: APICallError): AppError {
   const { statusCode, isRetryable } = error;
+  const errorText = extractErrorText(error);
+
+  // 供应商 context 超限：文案形态优先（多数 provider 用 400 + `context_length_exceeded`
+  // 等文案，413 状态码是少数派且同样命中文案）——让用户看到「上下文过长」的明确引导
+  // 而非误导性的「模型服务异常」；裸 413（无文案）仍按状态码归类
+  if (
+    CONTEXT_EXCEEDED_MESSAGE_PATTERN.test(errorText) ||
+    (statusCode === 413 && errorText.trim().length === 0)
+  ) {
+    return new AppError(
+      ErrorCode.AI_CONTEXT_TOO_LARGE,
+      '上下文超出模型窗口，请精简对话或新建会话',
+      error,
+    );
+  }
+
+  if (statusCode === 413) {
+    return new AppError(ErrorCode.AI_CONTEXT_TOO_LARGE, '上下文过长', error);
+  }
 
   if (statusCode === 401 || statusCode === 403) {
     return new AppError(ErrorCode.AI_API_KEY_INVALID, 'API Key 无效或已过期', error);

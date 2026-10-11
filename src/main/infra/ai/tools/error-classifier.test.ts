@@ -62,6 +62,62 @@ describe('classifyError', () => {
     expect(classifyError(createApiError(413, false)).code).toBe(ErrorCode.AI_CONTEXT_TOO_LARGE);
   });
 
+  it('APICallError 400 + context_length_exceeded 文案：→ AI_CONTEXT_TOO_LARGE（供应商主形态）', () => {
+    const error = createApiError(400, false);
+    // OpenAI/DeepSeek 形态：400 + 错误体带 context_length_exceeded
+    Object.assign(error, {
+      responseBody: JSON.stringify({
+        error: {
+          code: 'context_length_exceeded',
+          message: "This model's maximum context length is 65536 tokens",
+        },
+      }),
+    });
+    const result = classifyError(error);
+    expect(result.code).toBe(ErrorCode.AI_CONTEXT_TOO_LARGE);
+    expect(result.message).toContain('精简对话');
+  });
+
+  it('APICallError 400 + Anthropic prompt is too long 文案：→ AI_CONTEXT_TOO_LARGE', () => {
+    const error = createApiError(400, false);
+    Object.assign(error, {
+      responseBody: JSON.stringify({
+        error: { message: 'prompt is too long: 200000 tokens > 180000 maximum' },
+      }),
+    });
+    expect(classifyError(error).code).toBe(ErrorCode.AI_CONTEXT_TOO_LARGE);
+  });
+
+  it('APICallError message 含 maximum context length（无 responseBody）：→ AI_CONTEXT_TOO_LARGE', () => {
+    const error = new APICallError({
+      url: 'https://api.example.com/v1/chat/completions',
+      statusCode: 400,
+      responseHeaders: {},
+      requestBodyValues: {},
+      message: '400 This model maximum context length is exceeded',
+      isRetryable: false,
+    });
+    expect(classifyError(error).code).toBe(ErrorCode.AI_CONTEXT_TOO_LARGE);
+  });
+
+  it('APICallError 400 无超限文案（普通参数错）：→ AI_MODEL_ERROR（不误判）', () => {
+    const error = createApiError(400, false);
+    Object.assign(error, {
+      responseBody: JSON.stringify({ error: { message: 'Invalid parameter: temperature' } }),
+    });
+    expect(classifyError(error).code).toBe(ErrorCode.AI_MODEL_ERROR);
+  });
+
+  it('APICallError 400 文案含孤词 context window（定价/参数说明类）：不误判', () => {
+    const error = createApiError(400, false);
+    Object.assign(error, {
+      responseBody: JSON.stringify({
+        error: { message: 'Invalid parameter: context window size must be positive' },
+      }),
+    });
+    expect(classifyError(error).code).toBe(ErrorCode.AI_MODEL_ERROR);
+  });
+
   it('APICallError 429：→ AI_RATE_LIMITED', () => {
     expect(classifyError(createApiError(429, true)).code).toBe(ErrorCode.AI_RATE_LIMITED);
   });
