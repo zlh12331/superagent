@@ -3,22 +3,21 @@ import type { ApiKeyProvider } from '@code-agent/shared/renderer';
 /** t() 的最小结构签名（避免本数据模块依赖 i18next 实例） */
 type TranslateFn = (key: string) => string;
 
-/** 内置提供商列表（kind + API Key 官网地址；显示名经 i18n key 解析） */
+/**
+ * 预设厂商列表（kind + API Key 官网地址；显示名经 i18n key 解析）。
+ *
+ * ⚠ 只收录**深度适配**的厂商——预设网格的语义是「适配好的开箱即用」，
+ * 协议通但无精细适配的厂商走「自定义模型」入口（baseUrl/apiFormat 自填）。
+ * 新厂商完成深度适配（thinking 契约/usage 归一/模型清单核对官方文档）后再加回。
+ */
 export const PROVIDER_LABELS: readonly {
   readonly kind: ApiKeyProvider;
   /** API Key 申请页官网地址（「获取 API 密钥」链接跳转） */
   readonly apiKeyUrl: string;
 }[] = [
   { kind: 'deepseek', apiKeyUrl: 'https://platform.deepseek.com' },
-  { kind: 'openai', apiKeyUrl: 'https://platform.openai.com/api-keys' },
-  { kind: 'anthropic', apiKeyUrl: 'https://console.anthropic.com' },
-  { kind: 'ollama', apiKeyUrl: 'https://ollama.com' },
-  { kind: 'moonshot', apiKeyUrl: 'https://platform.moonshot.cn' },
   { kind: 'zhipu', apiKeyUrl: 'https://open.bigmodel.cn' },
-  { kind: 'qwen', apiKeyUrl: 'https://bailian.console.aliyun.com' },
-  { kind: 'doubao', apiKeyUrl: 'https://console.volcengine.com/ark' },
-  { kind: 'siliconflow', apiKeyUrl: 'https://cloud.siliconflow.cn' },
-  { kind: 'openrouter', apiKeyUrl: 'https://openrouter.ai' },
+  { kind: 'mimo', apiKeyUrl: 'https://mimo.mi.com' },
 ];
 
 /**

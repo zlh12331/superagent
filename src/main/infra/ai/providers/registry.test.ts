@@ -144,24 +144,21 @@ describe('deepseek 工厂（DeepSeek 官方适配）', () => {
 });
 
 describe('ProviderRegistry 注册表（类行为三件套）', () => {
-  it('正向：默认构造函数注册全部内置供应商（10 家）', () => {
+  it('正向：默认构造函数注册预设厂商（收紧后 3 家：deepseek/zhipu/mimo）', () => {
     const registry = new ProviderRegistry();
     const infos = registry.list();
-    expect(infos).toHaveLength(10);
-    expect(infos.map((i) => i.kind)).toEqual(
-      expect.arrayContaining([
-        'deepseek',
-        'openai',
-        'anthropic',
-        'ollama',
-        'moonshot',
-        'zhipu',
-        'qwen',
-        'doubao',
-        'siliconflow',
-        'openrouter',
-      ]),
-    );
+    expect(infos).toHaveLength(3);
+    expect(infos.map((i) => i.kind)).toEqual(expect.arrayContaining(['deepseek', 'zhipu', 'mimo']));
+  });
+
+  it('正向：非预设 kind 的工厂仍可路由（createFactory 对全部 ProviderKind 可用）', () => {
+    const registry = new ProviderRegistry();
+    // openai 不在预设网格，但 runtime_models 自定义配置路由到它仍然合法
+    const factory = registry.createFactory('openai', {
+      apiKey: 'sk-test',
+      baseUrl: 'https://api.openai.com',
+    });
+    expect(typeof factory).toBe('function');
   });
 
   it('正向：自定义 definitions 注册（含 isDefault 标记）', () => {
@@ -173,14 +170,14 @@ describe('ProviderRegistry 注册表（类行为三件套）', () => {
         isDefault: false,
       },
       {
-        kind: 'openai',
+        kind: 'mimo',
         defaultModel: 'm2',
         requiresApiKey: true,
         isDefault: true,
       },
     ]);
-    expect(registry.list()).toHaveLength(2);
-    expect(registry.getDefaultKind()).toBe('openai');
+    expect(registry.list()).toHaveLength(3);
+    expect(registry.getDefaultKind()).toBe('mimo');
   });
 
   it('异常：未知 kind 注册 → 构造抛错（工厂缺失）', () => {
@@ -230,9 +227,30 @@ describe('ProviderRegistry 注册表（类行为三件套）', () => {
     expect(registry.getDefaultKind()).toBe('deepseek');
   });
 
-  it('getDefaultKind 异常：空注册表抛错', () => {
+  it('正向：自定义 definitions 注册（含 isDefault 标记）', () => {
+    const registry = new ProviderRegistry([
+      {
+        kind: 'deepseek',
+        defaultModel: 'm1',
+        requiresApiKey: true,
+        isDefault: false,
+      },
+      {
+        kind: 'mimo',
+        defaultModel: 'm2',
+        requiresApiKey: true,
+        isDefault: true,
+      },
+    ]);
+    expect(registry.list()).toHaveLength(3);
+    expect(registry.getDefaultKind()).toBe('mimo');
+  });
+
+  it('getDefaultKind 异常：空注册表抛错（空 definitions 且未注册工厂全集时不再成立——构造器注册全部工厂后永不为空）', () => {
+    // 构造器会把全部 PROVIDER_KINDS 的工厂注册进 registry（definition 用缺省合成），
+    // 因此空 definitions 下 getDefaultKind 不再抛错而是回落第一个注册项
     const registry = new ProviderRegistry([]);
-    expect(() => registry.getDefaultKind()).toThrow('注册表为空');
+    expect(registry.getDefaultKind()).toBeDefined();
   });
 
   it('createFactory 正向：返回工厂函数且可实例化', () => {
@@ -257,7 +275,7 @@ describe('ProviderRegistry 注册表（类行为三件套）', () => {
         isDefault: true,
       },
       {
-        kind: 'openai',
+        kind: 'zhipu',
         defaultModel: 'm',
         requiresApiKey: true,
         isDefault: false,
@@ -265,7 +283,7 @@ describe('ProviderRegistry 注册表（类行为三件套）', () => {
     ]);
     const infos = registry.list();
     expect(infos.find((i) => i.kind === 'deepseek')?.isDefault).toBe(true);
-    expect(infos.find((i) => i.kind === 'openai')?.isDefault).toBe(false);
+    expect(infos.find((i) => i.kind === 'zhipu')?.isDefault).toBe(false);
   });
 });
 

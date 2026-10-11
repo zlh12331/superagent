@@ -6,7 +6,7 @@ export function mockUsageSummary(): UsageSummaryRes {
     total: { calls: 12, inputTokens: 12_000, outputTokens: 28_000, totalTokens: 40_000 },
     byModel: [
       {
-        modelId: 'deepseek-v4-flash',
+        modelId: 'deepseek-flash',
         calls: 8,
         inputTokens: 8_000,
         outputTokens: 20_000,
@@ -60,7 +60,7 @@ export function mockModels(): ModelsListRes {
   return {
     models: [
       {
-        id: 'deepseek-v4-flash',
+        id: 'deepseek-flash',
         label: 'DeepSeek V4 Flash',
         providerKind: 'deepseek',
         isRuntime: false,

@@ -8,7 +8,7 @@ const identityT = (key: string): string => key;
 describe('providerLabel', () => {
   it('已收录 kind → 返回 i18n key（providers 顶层组）', () => {
     expect(providerLabel('deepseek', identityT)).toBe('providers.deepseek');
-    expect(providerLabel('anthropic', identityT)).toBe('providers.anthropic');
+    expect(providerLabel('mimo', identityT)).toBe('providers.mimo');
     expect(providerLabel('zhipu', identityT)).toBe('providers.zhipu');
   });
 
@@ -25,7 +25,7 @@ describe('providerLabel', () => {
 describe('providerApiKeyUrl', () => {
   it('已收录 kind → 官网地址', () => {
     expect(providerApiKeyUrl('deepseek')).toBe('https://platform.deepseek.com');
-    expect(providerApiKeyUrl('openai')).toBe('https://platform.openai.com/api-keys');
+    expect(providerApiKeyUrl('mimo')).toBe('https://mimo.mi.com');
   });
 
   it('未收录 kind → 回退空串', () => {
@@ -38,5 +38,11 @@ describe('PROVIDER_LABELS', () => {
     for (const item of PROVIDER_LABELS) {
       expect(item.apiKeyUrl.startsWith('https://')).toBe(true);
     }
+  });
+
+  // ⚠ 预设=深度适配契约：收录即承诺 thinking 契约/usage 归一/模型清单经官方文档核对
+  it('只收录深度适配厂商（预设语义守卫——新厂商完成适配后在此登记）', () => {
+    const kinds = PROVIDER_LABELS.map((p) => p.kind).sort();
+    expect(kinds).toEqual(['deepseek', 'mimo', 'zhipu']);
   });
 });

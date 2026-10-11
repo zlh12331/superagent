@@ -1,5 +1,6 @@
-// registry.ts：供应商注册表——10 家供应商定义（默认模型/API Key 要求）+ SDK 工厂构建
-//（openai-compatible 系走 createOpenAICompatible + proxiedFetch，anthropic 用官方 SDK）
+// registry.ts：供应商注册表——预设厂商定义（深度适配三厂商）+ 全量 SDK 工厂构建
+//（openai-compatible 系走 createOpenAICompatible + proxiedFetch，anthropic 用官方 SDK；
+// 非预设 kind 的工厂仍注册——runtime_models 自定义配置可路由到任意 kind）
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
@@ -10,13 +11,14 @@ import { getAppConfig } from '../../../config';
 import { proxiedFetch } from '../../network/proxied-fetch';
 import { DEFAULT_KIND, DEFAULT_MODEL_BY_KIND } from '../models/builtin-models';
 import { defaultApiFormat, resolveProviderBaseUrl } from './endpoint';
-import type {
-  ProviderCreateContext,
-  ProviderDefinition,
-  ProviderFactory,
-  ProviderInfo,
-  ProviderKind,
-  RegisteredProvider,
+import {
+  PROVIDER_KINDS,
+  type ProviderCreateContext,
+  type ProviderDefinition,
+  type ProviderFactory,
+  type ProviderInfo,
+  type ProviderKind,
+  type RegisteredProvider,
 } from './types';
 
 /** 供应商 keychain 键（<kind>-api-key） */
@@ -30,66 +32,28 @@ export function getProviderName(kind: ProviderKind): string {
 }
 
 // 内置定义：defaultModel 与 requiresApiKey 是设置面表单依据；isDefault 标记全局默认供应商
+/**
+ * 预设厂商定义（设置面「添加模型」网格数据源）——只登记**深度适配**的厂商。
+ * 协议通但无精细适配的厂商（openai/anthropic/kimi/qwen/doubao/siliconflow/
+ * openrouter/ollama）不进预设：用户走「自定义模型」入口（baseUrl/apiFormat 自填），
+ * 其工厂仍保留在 BUILTIN_FACTORIES（runtime_models 自定义配置可路由到任意 kind）。
+ */
 const BUILTIN_DEFINITIONS: readonly ProviderDefinition[] = [
   {
     kind: 'deepseek',
-    defaultModel: DEFAULT_MODEL_BY_KIND.deepseek,
+    defaultModel: DEFAULT_MODEL_BY_KIND.deepseek as string,
     requiresApiKey: true,
     isDefault: DEFAULT_KIND === 'deepseek',
   },
   {
-    kind: 'openai',
-    defaultModel: DEFAULT_MODEL_BY_KIND.openai,
-    requiresApiKey: true,
-    isDefault: DEFAULT_KIND === 'openai',
-  },
-  {
-    kind: 'anthropic',
-    defaultModel: DEFAULT_MODEL_BY_KIND.anthropic,
-    requiresApiKey: true,
-    isDefault: DEFAULT_KIND === 'anthropic',
-  },
-  {
-    kind: 'ollama',
-    defaultModel: DEFAULT_MODEL_BY_KIND.ollama,
-    requiresApiKey: false,
-    isDefault: DEFAULT_KIND === 'ollama',
-  },
-  {
-    kind: 'moonshot',
-    defaultModel: DEFAULT_MODEL_BY_KIND.moonshot,
-    requiresApiKey: true,
-    isDefault: DEFAULT_KIND === 'moonshot',
-  },
-  {
     kind: 'zhipu',
-    defaultModel: DEFAULT_MODEL_BY_KIND.zhipu,
+    defaultModel: DEFAULT_MODEL_BY_KIND.zhipu as string,
     requiresApiKey: true,
-    isDefault: DEFAULT_KIND === 'zhipu',
   },
   {
-    kind: 'qwen',
-    defaultModel: DEFAULT_MODEL_BY_KIND.qwen,
+    kind: 'mimo',
+    defaultModel: DEFAULT_MODEL_BY_KIND.mimo as string,
     requiresApiKey: true,
-    isDefault: DEFAULT_KIND === 'qwen',
-  },
-  {
-    kind: 'doubao',
-    defaultModel: DEFAULT_MODEL_BY_KIND.doubao,
-    requiresApiKey: true,
-    isDefault: DEFAULT_KIND === 'doubao',
-  },
-  {
-    kind: 'siliconflow',
-    defaultModel: DEFAULT_MODEL_BY_KIND.siliconflow,
-    requiresApiKey: true,
-    isDefault: DEFAULT_KIND === 'siliconflow',
-  },
-  {
-    kind: 'openrouter',
-    defaultModel: DEFAULT_MODEL_BY_KIND.openrouter,
-    requiresApiKey: true,
-    isDefault: DEFAULT_KIND === 'openrouter',
   },
 ];
 
@@ -320,6 +284,10 @@ function createFactoryByFormat(
 export class ProviderRegistry {
   private readonly providers: Map<ProviderKind, RegisteredProvider>;
 
+  /**
+   * @param definitions 预设厂商（设置面网格展示范围）；工厂注册覆盖全部 ProviderKind——
+   * runtime_models 自定义配置可路由到任意已实现 kind（未进预设 ≠ 不可用）
+   */
   constructor(definitions: readonly ProviderDefinition[] = BUILTIN_DEFINITIONS) {
     this.providers = new Map();
     for (const definition of definitions) {
@@ -328,6 +296,22 @@ export class ProviderRegistry {
         throw new Error(`未注册供应商工厂：${definition.kind}`);
       }
       this.providers.set(definition.kind, { definition, factory });
+    }
+    // 工厂注册全集：预设之外的可路由 kind 也注册（definition 用缺省合成；
+    // ollama 特例 requiresApiKey=false——本地服务无 Key。defaultModel 缺省=空串，
+    // 真实默认经 DEFAULT_MODEL_BY_KIND 查询方负责）
+    for (const kind of PROVIDER_KINDS) {
+      if (this.providers.has(kind)) continue;
+      const factory = BUILTIN_FACTORIES[kind];
+      const fallbackDefinition: ProviderDefinition = {
+        kind,
+        defaultModel: DEFAULT_MODEL_BY_KIND[kind] ?? '',
+        requiresApiKey: kind !== 'ollama',
+      };
+      if (factory === undefined) {
+        throw new Error(`未注册供应商工厂：${kind}`);
+      }
+      this.providers.set(kind, { definition: fallbackDefinition, factory });
     }
   }
 
@@ -369,10 +353,11 @@ export class ProviderRegistry {
       : entry.factory(context);
   }
 
+  /** 预设厂商清单（设置面网格数据源）——只含深度适配厂商，工厂全集经 createFactory 路由 */
   list(): ProviderInfo[] {
     const defaultKind = this.getDefaultKind();
     const infos: ProviderInfo[] = [];
-    for (const { definition } of this.providers.values()) {
+    for (const definition of BUILTIN_DEFINITIONS) {
       infos.push({
         kind: definition.kind,
         defaultModel: definition.defaultModel,

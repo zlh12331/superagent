@@ -60,7 +60,7 @@ export function nextTheme(theme: Theme): Theme {
 export interface AiSettings {
   /** 默认 API 提供商（如 'deepseek'、'openai'） */
   readonly defaultProvider: ApiKeyProvider;
-  /** 默认聊天模型（如 'deepseek-v4-flash'） */
+  /** 默认聊天模型（如 'deepseek-flash'） */
   readonly defaultModel: string;
   /** 温度（0-2，默认 0.7） */
   readonly temperature: number;

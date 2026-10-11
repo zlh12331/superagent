@@ -22,14 +22,14 @@ function mergeSnapshotGenerationConfig(
 /** 注册表选项：内置条目 + 各供应商默认模型 + 全局默认供应商 */
 export interface ModelRegistryOptions {
   readonly entries: readonly ModelEntry[];
-  readonly defaultModelByKind: Record<ProviderKind, string>;
+  readonly defaultModelByKind: Partial<Record<ProviderKind, string>>;
   readonly defaultKind: ProviderKind;
 }
 
 /** 模型注册表：内置索引 + 运行时快照/停用集（settings 侧写入后同步进来） */
 export class ModelRegistry {
   private readonly modelIndex: Map<string, ModelEntry>;
-  private readonly defaultModelByKind: Record<ProviderKind, string>;
+  private readonly defaultModelByKind: Partial<Record<ProviderKind, string>>;
   private readonly defaultKind: ProviderKind;
   private readonly runtimeSnapshots = new Map<string, RuntimeModelSnapshot>();
   private readonly disabledModels = new Set<string>();
@@ -60,7 +60,10 @@ export class ModelRegistry {
   }
 
   resolve(modelId: string | undefined): ResolvedModel {
-    const target = modelId ?? this.defaultModelByKind[this.defaultKind];
+    // 默认模型缺省（未登记 kind）时回退显式解析或 unknown 透传——
+    // 收紧预设后部分厂商无内置默认模型，运行时模型/显式 id 仍是有效路径
+    const defaultForKind = this.defaultModelByKind[this.defaultKind];
+    const target = modelId ?? defaultForKind ?? 'unknown';
     if (this.disabledModels.has(target)) {
       const entry = this.modelIndex.get(target);
       return {
@@ -81,10 +84,9 @@ export class ModelRegistry {
       return explicit;
     }
 
-    const defaultModelId = this.defaultModelByKind[this.defaultKind];
-    const entry = this.modelIndex.get(defaultModelId);
+    const entry = defaultForKind !== undefined ? this.modelIndex.get(defaultForKind) : undefined;
     return {
-      modelId: modelId ?? defaultModelId,
+      modelId: modelId ?? defaultForKind ?? 'unknown',
       providerKind: this.defaultKind,
       capabilities: entry?.capabilities ?? {},
       generationConfig: entry?.generationConfig,

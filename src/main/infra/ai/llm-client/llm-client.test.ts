@@ -66,22 +66,22 @@ describe('LlmClient', () => {
   });
 
   describe('getModel（模型级路由）', () => {
-    it('未传 modelId：解析为默认供应商默认模型（deepseek-v4-flash）', async () => {
+    it('未传 modelId：解析为默认供应商默认模型（deepseek-flash）', async () => {
       const { client, createProviderFactory } = createClient();
 
       const model = await client.getModel();
 
       expect(createProviderFactory).toHaveBeenCalledWith('deepseek');
-      expect(model).toMatchObject({ modelId: 'deepseek-v4-flash' });
+      expect(model).toMatchObject({ modelId: 'deepseek-flash' });
     });
 
-    it('显式模型 id：跨供应商解析（gpt-4o-mini → openai）', async () => {
+    it('显式模型 id：跨供应商解析（mimo-v2.6-pro → mimo）', async () => {
       const { client, createProviderFactory } = createClient();
 
-      const model = await client.getModel('gpt-4o-mini');
+      const model = await client.getModel('mimo-v2.6-pro');
 
-      expect(createProviderFactory).toHaveBeenCalledWith('openai');
-      expect(model).toMatchObject({ modelId: 'gpt-4o-mini' });
+      expect(createProviderFactory).toHaveBeenCalledWith('mimo');
+      expect(model).toMatchObject({ modelId: 'mimo-v2.6-pro' });
     });
 
     it('per-model 缓存：同模型第二次调用不重复创建工厂', async () => {
@@ -148,15 +148,15 @@ describe('LlmClient', () => {
     it('invalidateModel：只失效指定模型，其他缓存保留', async () => {
       const { client, createProviderFactory } = createClient();
 
-      await client.getModel('deepseek-v4-flash');
-      await client.getModel('gpt-4o');
+      await client.getModel('deepseek-flash');
+      await client.getModel('glm-5.3');
       expect(client.getModelCacheSize()).toBe(2);
 
-      client.invalidateModel('deepseek-v4-flash');
+      client.invalidateModel('deepseek-flash');
 
       expect(client.getModelCacheSize()).toBe(1);
-      await client.getModel('deepseek-v4-flash');
-      await client.getModel('gpt-4o');
+      await client.getModel('deepseek-flash');
+      await client.getModel('glm-5.3');
       expect(createProviderFactory).toHaveBeenCalledTimes(3);
     });
   });
@@ -236,7 +236,7 @@ describe('LlmClient', () => {
       try {
         const registry = new ModelRegistry({
           entries: BUILTIN_MODELS.map((entry) =>
-            entry.id === 'deepseek-v4-flash'
+            entry.id === 'deepseek-flash'
               ? { ...entry, generationConfig: { reasoningEffort: 'max', maxRetries: 1 } }
               : entry,
           ),
@@ -329,7 +329,7 @@ describe('LlmClient', () => {
       const result = await client.generateJson({
         schema: z.object({ ok: z.boolean() }),
         prompt: 'hi',
-        model: 'gpt-4o',
+        model: 'deepseek-chat',
         maxAttempts: 1,
       });
 
@@ -338,9 +338,9 @@ describe('LlmClient', () => {
       const secondArgs = mocks.mockGenerateText.mock.calls[1]?.[0] as
         | { model: { modelId: string } }
         | undefined;
-      expect(secondArgs?.model.modelId).toBe('deepseek-v4-flash');
+      expect(secondArgs?.model.modelId).toBe('deepseek-flash');
       expect(mocks.mockLogger.warn).toHaveBeenCalledWith(
-        expect.objectContaining({ model: 'gpt-4o', fallbackModel: 'deepseek-v4-flash' }),
+        expect.objectContaining({ model: 'deepseek-chat', fallbackModel: 'deepseek-flash' }),
         expect.stringContaining('ModelFallback'),
       );
     });
@@ -359,7 +359,7 @@ describe('LlmClient', () => {
         client.generateJson({
           schema: z.object({ ok: z.boolean() }),
           prompt: 'hi',
-          model: 'gpt-4o',
+          model: 'deepseek-chat',
           maxAttempts: 1,
         }),
       ).rejects.toBe(err);
@@ -408,7 +408,7 @@ describe('LlmClient', () => {
       const { client } = createClient();
       mocks.mockGenerateText.mockResolvedValue({ text: 'ok', usage: {} });
 
-      await client.generateText({ model: 'deepseek-v4-flash', prompt: 'hi' });
+      await client.generateText({ model: 'deepseek-flash', prompt: 'hi' });
 
       const args = getLastGenerateTextArgs();
       expect(args['maxOutputTokens']).toBe(384_000);
@@ -417,7 +417,7 @@ describe('LlmClient', () => {
     it('非 reasoning 模型配置采样参数：应用 temperature / topP / maxTokens', async () => {
       const registry = new ModelRegistry({
         entries: BUILTIN_MODELS.map((entry) =>
-          entry.id === 'gpt-4o'
+          entry.id === 'deepseek-chat'
             ? {
                 ...entry,
                 generationConfig: { temperature: 0.7, topP: 0.9, maxTokens: 100 },
@@ -435,7 +435,7 @@ describe('LlmClient', () => {
       const client = new LlmClient({ modelRegistry: registry, createProviderFactory });
       mocks.mockGenerateText.mockResolvedValue({ text: 'ok', usage: {} });
 
-      await client.generateText({ model: 'gpt-4o', prompt: 'hi' });
+      await client.generateText({ model: 'deepseek-chat', prompt: 'hi' });
 
       const args = getLastGenerateTextArgs();
       expect(args['temperature']).toBe(0.7);
@@ -478,16 +478,20 @@ describe('LlmClient 批次2 缺口补全（降级链/覆盖透传/参数展开/�
         .mockRejectedValueOnce(apiError(502))
         .mockResolvedValueOnce({ text: 'fallback ok', usage: {} });
 
-      const result = await client.generateText({ model: 'gpt-4o', prompt: 'hi', maxAttempts: 1 });
+      const result = await client.generateText({
+        model: 'deepseek-chat',
+        prompt: 'hi',
+        maxAttempts: 1,
+      });
 
       expect(result.text).toBe('fallback ok');
       expect(mocks.mockGenerateText).toHaveBeenCalledTimes(2);
       const secondArgs = mocks.mockGenerateText.mock.calls[1]?.[0] as
         | { model: { modelId: string } }
         | undefined;
-      expect(secondArgs?.model.modelId).toBe('deepseek-v4-flash');
+      expect(secondArgs?.model.modelId).toBe('deepseek-flash');
       expect(mocks.mockLogger.warn).toHaveBeenCalledWith(
-        expect.objectContaining({ model: 'gpt-4o', fallbackModel: 'deepseek-v4-flash' }),
+        expect.objectContaining({ model: 'deepseek-chat', fallbackModel: 'deepseek-flash' }),
         expect.stringContaining('ModelFallback'),
       );
     });
@@ -498,7 +502,7 @@ describe('LlmClient 批次2 缺口补全（降级链/覆盖透传/参数展开/�
         .mockRejectedValueOnce(networkError('ECONNRESET'))
         .mockResolvedValueOnce({ text: 'ok', usage: {} });
 
-      await client.generateText({ model: 'gpt-4o', prompt: 'hi', maxAttempts: 1 });
+      await client.generateText({ model: 'deepseek-chat', prompt: 'hi', maxAttempts: 1 });
 
       expect(mocks.mockGenerateText).toHaveBeenCalledTimes(2);
     });
@@ -517,7 +521,7 @@ describe('LlmClient 批次2 缺口补全（降级链/覆盖透传/参数展开/�
           .mockRejectedValueOnce(networkError(code))
           .mockResolvedValueOnce({ text: 'ok', usage: {} });
         const result = await client.generateText({
-          model: 'gpt-4o',
+          model: 'deepseek-chat',
           prompt: `p-${code}`,
           maxAttempts: 1,
         });
@@ -532,7 +536,7 @@ describe('LlmClient 批次2 缺口补全（降级链/覆盖透传/参数展开/�
       mocks.mockGenerateText.mockRejectedValue(err);
 
       await expect(
-        client.generateText({ model: 'gpt-4o', prompt: 'hi', maxAttempts: 1 }),
+        client.generateText({ model: 'deepseek-chat', prompt: 'hi', maxAttempts: 1 }),
       ).rejects.toBe(err);
       expect(mocks.mockGenerateText).toHaveBeenCalledTimes(1);
     });
@@ -543,7 +547,7 @@ describe('LlmClient 批次2 缺口补全（降级链/覆盖透传/参数展开/�
         .mockRejectedValueOnce(apiError(undefined, { isRetryable: true }))
         .mockResolvedValueOnce({ text: 'ok', usage: {} });
 
-      await client.generateText({ model: 'gpt-4o', prompt: 'hi', maxAttempts: 1 });
+      await client.generateText({ model: 'deepseek-chat', prompt: 'hi', maxAttempts: 1 });
 
       expect(mocks.mockGenerateText).toHaveBeenCalledTimes(2);
     });
@@ -554,7 +558,7 @@ describe('LlmClient 批次2 缺口补全（降级链/覆盖透传/参数展开/�
       mocks.mockGenerateText.mockRejectedValue(err);
 
       await expect(
-        client.generateText({ model: 'gpt-4o', prompt: 'hi', maxAttempts: 1 }),
+        client.generateText({ model: 'deepseek-chat', prompt: 'hi', maxAttempts: 1 }),
       ).rejects.toBe(err);
       expect(mocks.mockGenerateText).toHaveBeenCalledTimes(1);
     });
@@ -565,7 +569,7 @@ describe('LlmClient 批次2 缺口补全（降级链/覆盖透传/参数展开/�
       mocks.mockGenerateText.mockRejectedValue(err);
 
       await expect(
-        client.generateText({ model: 'gpt-4o', prompt: 'hi', maxAttempts: 1 }),
+        client.generateText({ model: 'deepseek-chat', prompt: 'hi', maxAttempts: 1 }),
       ).rejects.toBe(err);
       expect(mocks.mockGenerateText).toHaveBeenCalledTimes(1);
     });
@@ -576,7 +580,7 @@ describe('LlmClient 批次2 缺口补全（降级链/覆盖透传/参数展开/�
       mocks.mockGenerateText.mockRejectedValue(err);
 
       await expect(
-        client.generateText({ model: 'gpt-4o', prompt: 'hi', maxAttempts: 1 }),
+        client.generateText({ model: 'deepseek-chat', prompt: 'hi', maxAttempts: 1 }),
       ).rejects.toBe(err);
       expect(mocks.mockGenerateText).toHaveBeenCalledTimes(1);
     });
@@ -596,7 +600,7 @@ describe('LlmClient 批次2 缺口补全（降级链/覆盖透传/参数展开/�
       mocks.mockGenerateText.mockRejectedValue(err);
 
       await expect(
-        client.generateText({ model: 'deepseek-v4-flash', prompt: 'hi', maxAttempts: 1 }),
+        client.generateText({ model: 'deepseek-flash', prompt: 'hi', maxAttempts: 1 }),
       ).rejects.toBe(err);
       expect(mocks.mockGenerateText).toHaveBeenCalledTimes(1);
     });
@@ -608,7 +612,7 @@ describe('LlmClient 批次2 缺口补全（降级链/覆盖透传/参数展开/�
       mocks.mockGenerateText.mockRejectedValueOnce(err).mockRejectedValueOnce(err2);
 
       await expect(
-        client.generateText({ model: 'gpt-4o', prompt: 'hi', maxAttempts: 1 }),
+        client.generateText({ model: 'deepseek-chat', prompt: 'hi', maxAttempts: 1 }),
       ).rejects.toBe(err2);
       expect(mocks.mockGenerateText).toHaveBeenCalledTimes(2);
     });
@@ -782,7 +786,7 @@ describe('LlmClient 批次2 缺口补全（降级链/覆盖透传/参数展开/�
       try {
         const registry = new ModelRegistry({
           entries: BUILTIN_MODELS.map((entry) =>
-            entry.id === 'deepseek-v4-flash'
+            entry.id === 'deepseek-flash'
               ? { ...entry, generationConfig: { timeoutMs: 50 } }
               : entry,
           ),

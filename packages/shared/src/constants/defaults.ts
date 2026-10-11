@@ -4,8 +4,8 @@
 /** 默认 AI 供应商（未指定模型/供应商时的全局回退） */
 export const DEFAULT_PROVIDER = 'deepseek' as const;
 
-/** 默认聊天 / Agent 模型 id */
-export const DEFAULT_MODEL = 'deepseek-v4-flash' as const;
+/** 默认聊天 / Agent 模型 id（DeepSeek V4.1-Flash，官方模型名 deepseek-flash） */
+export const DEFAULT_MODEL = 'deepseek-flash' as const;
 
 // ── 消息/附件/终端上限：渲染层 UX 拦截的权威数值 ──────────────────────────
 // 供 ChatInput / attachments / TerminalPanel 引用，避免魔法值双写；上限只作用于渲染层入口，

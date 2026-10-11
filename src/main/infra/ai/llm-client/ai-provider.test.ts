@@ -195,11 +195,11 @@ describe('ai-provider', () => {
 
       const model = await getModel();
 
-      expect(providerFactory).toHaveBeenCalledWith('deepseek-v4-flash');
+      expect(providerFactory).toHaveBeenCalledWith('deepseek-flash');
       expect(model).toMatchObject({
         specificationVersion: 'v4',
         provider: 'test-provider',
-        modelId: 'deepseek-v4-flash',
+        modelId: 'deepseek-flash',
       });
     });
 
@@ -245,25 +245,19 @@ describe('ai-provider', () => {
   });
 
   describe('ProviderRegistry', () => {
-    it('内置 10 个供应商，默认 kind 为 deepseek', () => {
+    it('预设 3 家（深度适配），默认 kind 为 deepseek；工厂全集仍可路由', () => {
       const registry = new ProviderRegistry();
       const infos = registry.list();
 
-      expect(infos).toHaveLength(10);
+      expect(infos.map((i) => i.kind).sort()).toEqual(['deepseek', 'mimo', 'zhipu'].sort());
       expect(registry.getDefaultKind()).toBe('deepseek');
-      expect(infos.map((i) => i.kind).sort()).toEqual(
-        [
-          'anthropic',
-          'deepseek',
-          'ollama',
-          'openai',
-          'moonshot',
-          'zhipu',
-          'qwen',
-          'doubao',
-          'siliconflow',
-          'openrouter',
-        ].sort(),
+      // 非预设 kind 的工厂仍注册（runtime_models 自定义路由）——openai 工厂返回
+      // provider.chat，mock 的 createOpenAI 返回 mockProviderFactory（函数无 chat 属性），
+      // 结果为 undefined 是 mock 形态所致；断言「createFactory 被调用且未抛错」即证明路由
+      const factory = registry.createFactory('openai', { apiKey: 'sk' });
+      void factory;
+      expect(mocks.mockCreateOpenAI).toHaveBeenCalledWith(
+        expect.objectContaining({ apiKey: 'sk' }),
       );
     });
 
@@ -273,18 +267,18 @@ describe('ai-provider', () => {
 
       expect(deepseek).toMatchObject({
         kind: 'deepseek',
-        defaultModel: 'deepseek-v4-flash',
+        defaultModel: 'deepseek-flash',
         requiresApiKey: true,
         isDefault: true,
       });
     });
 
-    it('ollama 不需要 API Key 且非默认', () => {
+    it('mimo 需要 API Key 且非默认（预设第二家）', () => {
       const registry = new ProviderRegistry();
-      const ollama = registry.list().find((i) => i.kind === 'ollama');
+      const mimo = registry.list().find((i) => i.kind === 'mimo');
 
-      expect(ollama).toMatchObject({
-        requiresApiKey: false,
+      expect(mimo).toMatchObject({
+        requiresApiKey: true,
         isDefault: false,
       });
     });

@@ -6,7 +6,7 @@ export interface MockTurnSourceMessage {
 
 /** 回合 mock 的公共摘要字段（tokens/耗时/状态） */
 const MOCK_TURN_BASE = {
-  modelId: 'deepseek-v4-flash',
+  modelId: 'deepseek-flash',
   status: 'completed',
   inputTokens: 120,
   outputTokens: 320,

@@ -32,7 +32,7 @@ function setupTempEnvironment(): void {
   mocks.mockGetPath.mockReturnValue(tempUserData);
   initDb();
   writeSetting('theme', 'dark');
-  writeSetting('model', 'deepseek-v4-flash');
+  writeSetting('model', 'deepseek-flash');
   writeSetting('credentials', { apiKey: 'sk-super-secret', baseUrl: 'https://api.example.com' });
   writeSetting('tokens', ['t-1', 't-2']);
 }
@@ -64,11 +64,11 @@ describe('redactSensitive', () => {
 
   it('嵌套对象：逐层脱敏且不修改原对象（纯函数）', () => {
     const input = {
-      model: 'deepseek-v4-flash',
+      model: 'deepseek-flash',
       credentials: { apiKey: 'sk-secret', baseUrl: 'https://api.example.com' },
     };
     const result = redactSensitive(input) as Record<string, unknown>;
-    expect(result['model']).toBe('deepseek-v4-flash');
+    expect(result['model']).toBe('deepseek-flash');
     expect((result['credentials'] as Record<string, unknown>)['apiKey']).toBe('[REDACTED]');
     expect((result['credentials'] as Record<string, unknown>)['baseUrl']).toBe(
       'https://api.example.com',
@@ -111,7 +111,7 @@ describe('exportDiagnosticsPackage', () => {
 
     const settings = JSON.parse(zip.readAsText('settings.json')) as Record<string, unknown>;
     expect(settings['theme']).toBe('dark');
-    expect(settings['model']).toBe('deepseek-v4-flash');
+    expect(settings['model']).toBe('deepseek-flash');
     expect((settings['credentials'] as { apiKey: string }).apiKey).toBe('[REDACTED]');
     expect((settings['credentials'] as { baseUrl: string }).baseUrl).toBe(
       'https://api.example.com',
