@@ -2,6 +2,7 @@ export * from './constants/approval';
 export * from './constants/defaults';
 export * from './constants/editor';
 export * from './constants/errors';
+export * from './constants/model-failure';
 export * from './constants/protocol';
 export * from './constants/terminal-shell';
 export * from './constants/zoom';
