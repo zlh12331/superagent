@@ -24,6 +24,7 @@ const ENDPOINT_POLICIES: Record<ProviderKind, EndpointPolicy> = {
   doubao: { fillVersionSuffix: null },
   siliconflow: { fillVersionSuffix: null },
   openrouter: { fillVersionSuffix: null },
+  mimo: { fillVersionSuffix: null },
 };
 
 function trimTrailingSlash(baseUrl: string): string {
@@ -59,6 +60,7 @@ const DEFAULT_API_FORMAT_BY_KIND: Record<ProviderKind, ModelApiFormat> = {
   doubao: 'openai-chat',
   siliconflow: 'openai-chat',
   openrouter: 'openai-chat',
+  mimo: 'openai-chat',
   anthropic: 'anthropic-messages',
 };
 

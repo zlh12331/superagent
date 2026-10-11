@@ -13,6 +13,7 @@ export const PROVIDER_KINDS = [
   'doubao',
   'siliconflow',
   'openrouter',
+  'mimo',
 ] as const;
 
 export type ProviderKind = (typeof PROVIDER_KINDS)[number];

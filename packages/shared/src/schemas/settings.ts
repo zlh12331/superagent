@@ -65,6 +65,7 @@ export const ApiKeyProviderSchema = z.enum([
   'doubao',
   'siliconflow',
   'openrouter',
+  'mimo',
 ]);
 
 /** API Key 提供商标识 TypeScript 类型 */

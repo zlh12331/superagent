@@ -51,6 +51,10 @@ const ProviderBaseUrlSchema = z.object({
     (v) => process.env['OPENROUTER_API_BASE'] ?? v,
     z.string().url().default('https://openrouter.ai/api/v1'),
   ),
+  mimo: z.preprocess(
+    (v) => process.env['MIMO_API_BASE'] ?? v,
+    z.string().url().default('https://api.xiaomimimo.com/v1'),
+  ),
 });
 
 // 全局模型超时兜底（模型自带 timeoutMs 优先，消费方 llm-client → AbortSignal.timeout）。

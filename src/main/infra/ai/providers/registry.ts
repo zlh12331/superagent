@@ -104,10 +104,27 @@ const BUILTIN_FACTORIES: Record<ProviderKind, ProviderFactory> = {
       ...(apiKey !== undefined ? { apiKey } : {}),
       includeUsage: true,
       ...sdkFetch,
-      transformRequestBody: (args) => ({
-        ...args,
-        ...(args['thinking'] === undefined ? { thinking: { type: 'enabled' as const } } : {}),
-      }),
+      transformRequestBody: (args) => {
+        // DeepSeek 官方契约（thinking_mode 文档）：thinking 对象含 type（enabled/disabled，
+        // 默认 enabled）与 reasoning_effort（none/low/high/max，默认 high）两个子字段；
+        // 思考模式下 temperature/top_p 无效。SDK 标准键 reasoningEffort 会注入顶层
+        // reasoning_effort——官方嵌套形态优先（thinking.reasoning_effort），顶层保留兼容
+        const thinking = (args['thinking'] as Record<string, unknown> | undefined) ?? {
+          type: 'enabled',
+        };
+        return {
+          ...args,
+          thinking: {
+            ...thinking,
+            type: thinking['type'] ?? 'enabled',
+            ...(thinking['reasoning_effort'] !== undefined
+              ? {}
+              : typeof args['reasoning_effort'] === 'string'
+                ? { reasoning_effort: args['reasoning_effort'] }
+                : {}),
+          },
+        };
+      },
       convertUsage: (usage) => {
         const raw = usage as Record<string, unknown> | null | undefined;
         const promptDetails = (raw?.['prompt_tokens_details'] ?? {}) as Record<string, unknown>;
@@ -173,6 +190,17 @@ const BUILTIN_FACTORIES: Record<ProviderKind, ProviderFactory> = {
       ...(apiKey !== undefined ? { apiKey } : {}),
       includeUsage: true,
       ...sdkFetch,
+      // GLM 官方契约（thinking-mode 文档）：thinking:{type:enabled/disabled}，GLM-5.x/4.7
+      // 默认混合思考（自动开启）；temperature 官方区间 (0,1) 默认 0.6（与 OpenAI 不同）
+      transformRequestBody: (args) => {
+        const thinking = (args['thinking'] as Record<string, unknown> | undefined) ?? {
+          type: 'enabled',
+        };
+        return {
+          ...args,
+          thinking: { ...thinking, type: thinking['type'] ?? 'enabled' },
+        };
+      },
     });
   },
   qwen: ({ apiKey, baseUrl }) => {
@@ -193,6 +221,17 @@ const BUILTIN_FACTORIES: Record<ProviderKind, ProviderFactory> = {
       ...(apiKey !== undefined ? { apiKey } : {}),
       includeUsage: true,
       ...sdkFetch,
+      // Doubao（火山方舟）契约：doubao-seed-1.6 用 thinking:{type:enabled/disabled/auto}
+      // 控制思考模式（与 DeepSeek 同形；auto=模型自适应）
+      transformRequestBody: (args) => {
+        const thinking = (args['thinking'] as Record<string, unknown> | undefined) ?? {
+          type: 'auto',
+        };
+        return {
+          ...args,
+          thinking: { ...thinking, type: thinking['type'] ?? 'auto' },
+        };
+      },
     });
   },
   siliconflow: ({ apiKey, baseUrl }) => {
@@ -223,6 +262,29 @@ const BUILTIN_FACTORIES: Record<ProviderKind, ProviderFactory> = {
       apiKey: 'ollama',
       includeUsage: false,
       ...sdkFetch,
+    }) as unknown as (modelId: string) => LanguageModel;
+  },
+  // MiMo（小米）：OpenAI 兼容（api-key 或 Bearer 均可），thinking:{type} 默认 enabled；
+  // 官方契约 mimo.mi.com/docs —— V2.6 系列默认 max_completion_tokens 131072
+  mimo: ({ apiKey, baseUrl }) => {
+    const resolvedBaseUrl = baseUrl ?? getAppConfig().providers.mimo;
+    return createOpenAICompatible({
+      name: 'mimo',
+      baseURL: resolveProviderBaseUrl('mimo', resolvedBaseUrl),
+      ...(apiKey !== undefined ? { apiKey } : {}),
+      includeUsage: true,
+      ...sdkFetch,
+      transformRequestBody: (args) => {
+        // MiMo 官方契约：thinking:{type:enabled/disabled}，全部模型默认 enabled；
+        // 思考模式下 temperature/top_p 被强制 1.0/0.95（不注入默认采样，留给思考生效）
+        const thinking = (args['thinking'] as Record<string, unknown> | undefined) ?? {
+          type: 'enabled',
+        };
+        return {
+          ...args,
+          thinking: { ...thinking, type: thinking['type'] ?? 'enabled' },
+        };
+      },
     }) as unknown as (modelId: string) => LanguageModel;
   },
 };

@@ -104,9 +104,55 @@ export const BUILTIN_MODELS: readonly ModelEntry[] = [
     providerKind: 'zhipu',
     displayName: 'GLM-4.6',
     capabilities: {
+      reasoning: true,
       contextWindowSize: 200000,
       maxOutputTokens: 8192,
     },
+    generationConfig: { reasoningEffort: 'high' },
+  },
+  {
+    id: 'glm-5.1',
+    providerKind: 'zhipu',
+    displayName: 'GLM-5.1',
+    capabilities: {
+      reasoning: true,
+      contextWindowSize: 200_000,
+      maxOutputTokens: 128_000,
+    },
+    generationConfig: { reasoningEffort: 'high' },
+  },
+  {
+    id: 'mimo-v2.6-flash',
+    providerKind: 'mimo',
+    displayName: 'MiMo V2.6 Flash',
+    capabilities: {
+      reasoning: true,
+      contextWindowSize: 131072,
+      maxOutputTokens: 131072,
+    },
+    generationConfig: { reasoningEffort: 'high' },
+  },
+  {
+    id: 'mimo-v2.6-pro',
+    providerKind: 'mimo',
+    displayName: 'MiMo V2.6 Pro',
+    capabilities: {
+      reasoning: true,
+      contextWindowSize: 131072,
+      maxOutputTokens: 131072,
+    },
+    generationConfig: { reasoningEffort: 'high' },
+  },
+  {
+    id: 'mimo-v2.6-pro-ultraspeed',
+    providerKind: 'mimo',
+    displayName: 'MiMo V2.6 Pro UltraSpeed',
+    capabilities: {
+      reasoning: true,
+      contextWindowSize: 131072,
+      maxOutputTokens: 131072,
+    },
+    generationConfig: { reasoningEffort: 'high' },
   },
   {
     id: 'qwen3-coder-plus',
@@ -157,6 +203,7 @@ export const DEFAULT_MODEL_BY_KIND: Record<ProviderKind, string> = {
   doubao: 'doubao-seed-1-6-250615',
   siliconflow: 'deepseek-ai/DeepSeek-V3.1',
   openrouter: 'deepseek/deepseek-chat',
+  mimo: 'mimo-v2.6-pro',
 };
 
 export const DEFAULT_KIND: ProviderKind = DEFAULT_PROVIDER;
