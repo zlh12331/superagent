@@ -78,23 +78,23 @@ function parseRetryAfterSeconds(error: APICallError): number | undefined {
 export function classifyModelFailure(error: unknown): ModelFailure {
   // ── 取消：对照 AbortError 名，非供应商失败 ──
   if (isAbortError(error)) {
-    return failure(
-      ModelErrorCode.ModelRequestCancelled,
-      ModelFailureReason.Cancelled,
-      ModelRetryReason.NotRetryable,
-      false,
-      '请求已取消',
-    );
+    return failure({
+      code: ModelErrorCode.ModelRequestCancelled,
+      reason: ModelFailureReason.Cancelled,
+      retryReason: ModelRetryReason.NotRetryable,
+      retryable: false,
+      message: '请求已取消',
+    });
   }
 
   if (error instanceof LoadAPIKeyError) {
-    return failure(
-      ModelErrorCode.ModelAuthFailed,
-      ModelFailureReason.Runtime,
-      ModelRetryReason.NotRetryable,
-      false,
-      'API Key 未配置',
-    );
+    return failure({
+      code: ModelErrorCode.ModelAuthFailed,
+      reason: ModelFailureReason.Runtime,
+      retryReason: ModelRetryReason.NotRetryable,
+      retryable: false,
+      message: 'API Key 未配置',
+    });
   }
 
   if (error instanceof APICallError) {
@@ -106,177 +106,217 @@ export function classifyModelFailure(error: unknown): ModelFailure {
   }
 
   if (error instanceof DOMException && error.name === 'TimeoutError') {
-    return failure(
-      ModelErrorCode.ModelRequestTimeout,
-      ModelFailureReason.NetworkError,
-      ModelRetryReason.Timeout,
-      true,
-      '请求超时',
-    );
+    return failure({
+      code: ModelErrorCode.ModelRequestTimeout,
+      reason: ModelFailureReason.NetworkError,
+      retryReason: ModelRetryReason.Timeout,
+      retryable: true,
+      message: '请求超时',
+    });
   }
 
   // 兜底：非 Error 值或未识别 Error——按不可重试处理（编程错误伪装成网络抖动比少试一次更糟）
   const message = error instanceof Error ? error.message : String(error);
-  return failure(
-    ModelErrorCode.ModelUnknown,
-    ModelFailureReason.Runtime,
-    ModelRetryReason.NotRetryable,
-    false,
+  return failure({
+    code: ModelErrorCode.ModelUnknown,
+    reason: ModelFailureReason.Runtime,
+    retryReason: ModelRetryReason.NotRetryable,
+    retryable: false,
     message,
-  );
+  });
 }
+
+/**
+ * 纯状态码 → 三轴查表（无需消息形态判断的固定映射；context 超限/5xx/SDK 标记
+ * 因带额外逻辑不在此表，见 classifyApiCallFailure 的优先级链）。
+ */
+const STATUS_AXES: ReadonlyMap<
+  number,
+  Omit<ModelFailure, 'message' | 'statusCode' | 'retryAfterMs'>
+> = new Map([
+  [
+    401,
+    {
+      code: ModelErrorCode.ModelAuthFailed,
+      reason: ModelFailureReason.Provider,
+      retryReason: ModelRetryReason.NotRetryable,
+      retryable: false,
+    },
+  ],
+  [
+    403,
+    {
+      code: ModelErrorCode.ModelAuthFailed,
+      reason: ModelFailureReason.Provider,
+      retryReason: ModelRetryReason.NotRetryable,
+      retryable: false,
+    },
+  ],
+  [
+    402,
+    {
+      code: ModelErrorCode.ModelBalanceInsufficient,
+      reason: ModelFailureReason.Provider,
+      retryReason: ModelRetryReason.NotRetryable,
+      retryable: false,
+    },
+  ],
+  [
+    404,
+    {
+      code: ModelErrorCode.ModelNotFound,
+      reason: ModelFailureReason.Provider,
+      retryReason: ModelRetryReason.NotRetryable,
+      retryable: false,
+    },
+  ],
+  [
+    408,
+    {
+      code: ModelErrorCode.ModelRequestTimeout,
+      reason: ModelFailureReason.Provider,
+      retryReason: ModelRetryReason.Timeout,
+      retryable: true,
+    },
+  ],
+  [
+    413,
+    {
+      code: ModelErrorCode.ModelContextExceeded,
+      reason: ModelFailureReason.Provider,
+      retryReason: ModelRetryReason.NotRetryable,
+      retryable: false,
+    },
+  ],
+  [
+    429,
+    {
+      code: ModelErrorCode.ModelRateLimited,
+      reason: ModelFailureReason.Provider,
+      retryReason: ModelRetryReason.RateLimited,
+      retryable: true,
+    },
+  ],
+  [
+    422,
+    {
+      code: ModelErrorCode.ModelInvalidRequest,
+      reason: ModelFailureReason.Provider,
+      retryReason: ModelRetryReason.NotRetryable,
+      retryable: false,
+    },
+  ],
+  [
+    400,
+    {
+      code: ModelErrorCode.ModelInvalidRequest,
+      reason: ModelFailureReason.Provider,
+      retryReason: ModelRetryReason.NotRetryable,
+      retryable: false,
+    },
+  ],
+]);
 
 function classifyApiCallFailure(error: APICallError): ModelFailure {
   const { statusCode, isRetryable } = error;
   const errorText = extractErrorText(error);
   const retryAfterMs = parseRetryAfterSeconds(error);
+  const withStatus = <T extends object>(axes: T): T & { readonly statusCode: number } => ({
+    ...axes,
+    statusCode: statusCode as number,
+  });
+  // Retry-After 透传为条件字段（exactOptionalPropertyTypes 下不能显式 undefined）
+  const retryAfterField = (): { readonly retryAfterMs: number } | Record<string, never> =>
+    retryAfterMs !== undefined ? { retryAfterMs } : {};
 
-  // ── context 超限：文案形态优先（多数 provider 用 400 + 文案；413 少数派且同样命中）──
-  if (
-    CONTEXT_EXCEEDED_MESSAGE_PATTERN.test(errorText) ||
-    (statusCode === 413 && errorText.trim().length === 0)
-  ) {
-    return failure(
-      ModelErrorCode.ModelContextExceeded,
-      ModelFailureReason.Provider,
-      ModelRetryReason.NotRetryable,
-      false,
-      '上下文超出模型窗口，请精简对话或新建会话',
-      ...(statusCode !== undefined ? [{ statusCode }] : []),
-    );
+  // ── context 超限：文案形态优先（多数 provider 用 400 + 文案；裸 413 落查表）──
+  if (CONTEXT_EXCEEDED_MESSAGE_PATTERN.test(errorText)) {
+    return failure({
+      code: ModelErrorCode.ModelContextExceeded,
+      reason: ModelFailureReason.Provider,
+      retryReason: ModelRetryReason.NotRetryable,
+      retryable: false,
+      message: '上下文超出模型窗口，请精简对话或新建会话',
+      ...(statusCode !== undefined ? { statusCode } : {}),
+    });
   }
 
-  // ── 认证：401/403（不可重试——重试前需用户换 Key）──
-  if (statusCode === 401 || statusCode === 403) {
-    return failure(
-      ModelErrorCode.ModelAuthFailed,
-      ModelFailureReason.Provider,
-      ModelRetryReason.NotRetryable,
-      false,
-      'API Key 无效或已过期',
-      { statusCode },
-    );
-  }
-
-  // ── 余额：402 ──
-  if (statusCode === 402) {
-    return failure(
-      ModelErrorCode.ModelBalanceInsufficient,
-      ModelFailureReason.Provider,
-      ModelRetryReason.NotRetryable,
-      false,
-      '账户余额不足',
-      { statusCode },
-    );
-  }
-
-  // ── 不存在：404 ──
-  if (statusCode === 404) {
-    return failure(
-      ModelErrorCode.ModelNotFound,
-      ModelFailureReason.Provider,
-      ModelRetryReason.NotRetryable,
-      false,
-      '模型不存在',
-      { statusCode },
-    );
-  }
-
-  // ── 超时：408 ──
-  if (statusCode === 408) {
-    return failure(
-      ModelErrorCode.ModelRequestTimeout,
-      ModelFailureReason.Provider,
-      ModelRetryReason.Timeout,
-      true,
-      '请求超时',
-      { statusCode },
-    );
-  }
-
-  // ── 裸 413（无超限文案）：仍按 context 超限归类 ──
-  if (statusCode === 413) {
-    return failure(
-      ModelErrorCode.ModelContextExceeded,
-      ModelFailureReason.Provider,
-      ModelRetryReason.NotRetryable,
-      false,
-      '上下文过长',
-      { statusCode },
-    );
-  }
-
-  // ── 限流：429（唯一携带 retryAfterMs 的常规路径）──
+  // ── 限流（唯一携带 retryAfterMs 的常规路径，先于查表）──
   if (statusCode === 429) {
-    return failure(
-      ModelErrorCode.ModelRateLimited,
-      ModelFailureReason.Provider,
-      ModelRetryReason.RateLimited,
-      true,
-      '请求过于频繁',
-      { ...(retryAfterMs !== undefined ? { retryAfterMs } : {}), statusCode },
-    );
+    return failure({
+      ...withStatus(
+        STATUS_AXES.get(429) as Omit<ModelFailure, 'message' | 'statusCode' | 'retryAfterMs'>,
+      ),
+      message: '请求过于频繁',
+      ...retryAfterField(),
+    });
   }
 
-  // ── 参数错：422（400 无超限文案也归此类）──
-  if (statusCode === 422 || statusCode === 400) {
-    return failure(
-      ModelErrorCode.ModelInvalidRequest,
-      ModelFailureReason.Provider,
-      ModelRetryReason.NotRetryable,
-      false,
-      '请求参数错误',
-      { statusCode },
-    );
+  // ── 状态码查表 ──
+  const fromTable = statusCode !== undefined ? STATUS_AXES.get(statusCode) : undefined;
+  if (fromTable !== undefined) {
+    return failure({
+      ...withStatus(fromTable),
+      message: STATUS_MESSAGES[fromTable.code] ?? error.message,
+    });
   }
 
-  // ── 服务端错：5xx ──
+  // ── 服务端错：5xx（带 Retry-After 透传）──
   if (statusCode !== undefined && statusCode >= 500) {
-    return failure(
-      ModelErrorCode.ModelServerError,
-      ModelFailureReason.Provider,
-      ModelRetryReason.ServerError,
-      true,
-      '模型服务异常',
-      {
-        ...(retryAfterMs !== undefined ? { retryAfterMs } : {}),
-        ...(statusCode !== undefined ? { statusCode } : {}),
-      },
-    );
+    return failure({
+      code: ModelErrorCode.ModelServerError,
+      reason: ModelFailureReason.Provider,
+      retryReason: ModelRetryReason.ServerError,
+      retryable: true,
+      message: '模型服务异常',
+      statusCode,
+      ...retryAfterField(),
+    });
   }
 
   // ── SDK 可重试标记（无状态码的连接类失败）──
   if (isRetryable) {
-    return failure(
-      ModelErrorCode.ModelNetworkError,
-      ModelFailureReason.NetworkError,
-      ModelRetryReason.NetworkError,
-      true,
-      '网络连接中断',
-      { ...(retryAfterMs !== undefined ? { retryAfterMs } : {}) },
-    );
+    return failure({
+      code: ModelErrorCode.ModelNetworkError,
+      reason: ModelFailureReason.NetworkError,
+      retryReason: ModelRetryReason.NetworkError,
+      retryable: true,
+      message: '网络连接中断',
+      ...retryAfterField(),
+    });
   }
 
-  // ── 其余带状态码的未匹配形态（418 等 4xx 零散码）：归参数错，不落 Unknown ──
+  // ── 其余带状态码的未匹配形态（418 等零散码）：归参数错，不落 Unknown ──
   if (statusCode !== undefined) {
-    return failure(
-      ModelErrorCode.ModelInvalidRequest,
-      ModelFailureReason.Provider,
-      ModelRetryReason.NotRetryable,
-      false,
-      error.message,
-      { statusCode },
-    );
+    return failure({
+      code: ModelErrorCode.ModelInvalidRequest,
+      reason: ModelFailureReason.Provider,
+      retryReason: ModelRetryReason.NotRetryable,
+      retryable: false,
+      message: error.message,
+      statusCode,
+    });
   }
 
-  return failure(
-    ModelErrorCode.ModelUnknown,
-    ModelFailureReason.Provider,
-    ModelRetryReason.NotRetryable,
-    false,
-    error.message,
-  );
+  return failure({
+    code: ModelErrorCode.ModelUnknown,
+    reason: ModelFailureReason.Provider,
+    retryReason: ModelRetryReason.NotRetryable,
+    retryable: false,
+    message: error.message,
+  });
 }
+
+/** 查表码的固定用户可读消息（与旧 if 链文案逐字一致） */
+const STATUS_MESSAGES: Readonly<Partial<Record<ModelErrorCode, string>>> = {
+  [ModelErrorCode.ModelAuthFailed]: 'API Key 无效或已过期',
+  [ModelErrorCode.ModelBalanceInsufficient]: '账户余额不足',
+  [ModelErrorCode.ModelNotFound]: '模型不存在',
+  [ModelErrorCode.ModelRequestTimeout]: '请求超时',
+  [ModelErrorCode.ModelContextExceeded]: '上下文过长',
+  [ModelErrorCode.ModelRateLimited]: '请求过于频繁',
+  [ModelErrorCode.ModelInvalidRequest]: '请求参数错误',
+};
 
 /** TypeError 网络形态：cause 链错误码裁决（ECONNRESET 可重试 / EACCES 不可），无码回退 message 形态 */
 function classifyNetworkTypeError(error: TypeError): ModelFailure {
@@ -286,51 +326,52 @@ function classifyNetworkTypeError(error: TypeError): ModelFailure {
 
   if (causeCode !== undefined && !networked) {
     // 真实根因明确不可重试（EACCES 等系统错）
-    return failure(
-      ModelErrorCode.ModelUnknown,
-      ModelFailureReason.Runtime,
-      ModelRetryReason.NotRetryable,
-      false,
-      error.message,
-    );
+    return failure({
+      code: ModelErrorCode.ModelUnknown,
+      reason: ModelFailureReason.Runtime,
+      retryReason: ModelRetryReason.NotRetryable,
+      retryable: false,
+      message: error.message,
+    });
   }
 
   if (networked || messageShape) {
-    return failure(
-      ModelErrorCode.ModelNetworkError,
-      ModelFailureReason.NetworkError,
-      ModelRetryReason.NetworkError,
-      true,
-      '网络连接中断',
-    );
+    return failure({
+      code: ModelErrorCode.ModelNetworkError,
+      reason: ModelFailureReason.NetworkError,
+      retryReason: ModelRetryReason.NetworkError,
+      retryable: true,
+      message: '网络连接中断',
+    });
   }
 
   // 编程错误形态的 TypeError：不伪装成网络抖动
-  return failure(
-    ModelErrorCode.ModelUnknown,
-    ModelFailureReason.Runtime,
-    ModelRetryReason.NotRetryable,
-    false,
-    error.message,
-  );
+  return failure({
+    code: ModelErrorCode.ModelUnknown,
+    reason: ModelFailureReason.Runtime,
+    retryReason: ModelRetryReason.NotRetryable,
+    retryable: false,
+    message: error.message,
+  });
 }
 
-function failure(
-  code: ModelErrorCode,
-  reason: ModelFailureReason,
-  retryReason: ModelRetryReason,
-  retryable: boolean,
-  message: string,
-  extra?: { readonly statusCode?: number; readonly retryAfterMs?: number },
-): ModelFailure {
+function failure(axes: {
+  readonly code: ModelErrorCode;
+  readonly reason: ModelFailureReason;
+  readonly retryReason: ModelRetryReason;
+  readonly retryable: boolean;
+  readonly message: string;
+  readonly statusCode?: number;
+  readonly retryAfterMs?: number;
+}): ModelFailure {
   return {
-    code,
-    reason,
-    retryReason,
-    retryable,
-    message,
-    ...(extra?.statusCode !== undefined ? { statusCode: extra.statusCode } : {}),
-    ...(extra?.retryAfterMs !== undefined ? { retryAfterMs: extra.retryAfterMs } : {}),
+    code: axes.code,
+    reason: axes.reason,
+    retryReason: axes.retryReason,
+    retryable: axes.retryable,
+    message: axes.message,
+    ...(axes.statusCode !== undefined ? { statusCode: axes.statusCode } : {}),
+    ...(axes.retryAfterMs !== undefined ? { retryAfterMs: axes.retryAfterMs } : {}),
   };
 }
 

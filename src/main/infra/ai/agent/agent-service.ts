@@ -12,8 +12,6 @@ import type {
   TurnUsage,
 } from '@code-agent/shared/main';
 import {
-  AppError,
-  ErrorCode,
   IPC_DEFINITIONS,
   ModelRetryReason,
   TurnEventType,
@@ -40,8 +38,7 @@ import {
   lastUserMessageText,
 } from '../knowledge/session-title';
 import type { LlmClient } from '../llm-client/llm-client';
-import { buildGenerationOptions, modelRegistry } from '../models';
-import type { GenerationOptions } from '../models/generation-options';
+import { modelRegistry } from '../models';
 import type { ResolvedModel } from '../models/types';
 import type { IPromptService, ResolvedPrompt } from '../prompt/prompt-service';
 import { classifyError, classifyModelFailure } from '../tools/error-classifier';
@@ -50,15 +47,9 @@ import type { Tool, ToolContext } from '../tools/tool';
 import type { IToolExecutor } from '../tools/tool-executor';
 import type { IToolRegistry } from '../tools/tool-registry';
 import { agentAskService } from './agent-ask-service';
-import {
-  compressByTokenBudget,
-  estimateMessagesTokens,
-  getCompactionBudget,
-  getTokenBudgetDecision,
-} from './context-compression';
 import { createTurnPartForwarder } from './stream-part-forward';
-import { resolveTokenBudgetBasis } from './token-overhead';
 import { assembleAndRunTurn } from './turn-assembly';
+import { resolveTurnGeneration } from './turn-generation-resolver';
 import {
   subscribeApprovalLifecycle,
   subscribeAskLifecycle,
@@ -368,7 +359,7 @@ export class AgentService implements IAgentService {
                 partForwarder.push(part);
               },
               resolveGeneration: (prompt, spanRef) =>
-                this.resolveTurnGeneration({
+                resolveTurnGeneration({
                   sessionId,
                   messages: options.messages,
                   thinking: options.thinking,
@@ -376,6 +367,7 @@ export class AgentService implements IAgentService {
                   resolvedModel: resolved,
                   systemPrompt: prompt,
                   span: spanRef as import('@opentelemetry/api').Span | undefined,
+                  toolRegistry: this.toolRegistry,
                 }),
               systemPrompt,
               tools,
@@ -484,65 +476,6 @@ export class AgentService implements IAgentService {
         await done;
       },
     );
-  }
-
-  private resolveTurnGeneration(args: {
-    readonly sessionId: string;
-    readonly messages: ChatMessage[];
-    readonly thinking: StartAgentOptions['thinking'];
-    readonly temperature: StartAgentOptions['temperature'];
-    readonly resolvedModel: ResolvedModel;
-    readonly systemPrompt: string;
-    readonly span: import('@opentelemetry/api').Span | undefined;
-  }): { readonly compressedMessages: ChatMessage[]; readonly genOptions: GenerationOptions } {
-    const { sessionId, messages, thinking, temperature, resolvedModel, systemPrompt, span } = args;
-    const contextWindowSize = resolvedModel.capabilities.contextWindowSize ?? 128_000;
-    const budget = resolveTokenBudgetBasis(contextWindowSize, systemPrompt, this.toolRegistry);
-    const contextTokens = estimateMessagesTokens(messages);
-    const budgetDecision = getTokenBudgetDecision(contextTokens, budget.effectiveWindow);
-    if (budgetDecision.level === 'over-limit') {
-      logger.warn(
-        {
-          sessionId,
-          contextTokens: budgetDecision.contextTokens,
-          hardLimit: budgetDecision.hardLimit,
-        },
-        '上下文超出窗口硬上限，回合被拒绝',
-      );
-      throw new AppError(
-        ErrorCode.AI_CONTEXT_TOO_LARGE,
-        `上下文超出窗口上限（${budgetDecision.contextTokens} / ${budgetDecision.hardLimit} tokens），请新建会话或精简上下文`,
-      );
-    }
-    if (budgetDecision.level === 'warn') {
-      logger.warn(
-        {
-          sessionId,
-          contextTokens: budgetDecision.contextTokens,
-          compactAt: budgetDecision.compactAt,
-        },
-        '上下文接近压缩线（warn）',
-      );
-      span?.setAttribute('token.contextLevel', 'warn');
-    }
-    const compactionBudget = getCompactionBudget(budget.effectiveWindow);
-    const compressedMessages = compressByTokenBudget(messages, compactionBudget);
-    if (compressedMessages.length < messages.length) {
-      logger.info(
-        {
-          originalCount: messages.length,
-          compressedCount: compressedMessages.length,
-        },
-        '上下文已压缩',
-      );
-    }
-    const genOptions = buildGenerationOptions(
-      resolvedModel,
-      estimateMessagesTokens(compressedMessages) + budget.overheadTokens,
-      thinking,
-      temperature,
-    );
-    return { compressedMessages, genOptions };
   }
 
   private finalizeCompletedTurn(args: {
@@ -676,30 +609,22 @@ export class AgentService implements IAgentService {
     }
   }
 
-  /**
-   * AIMD 学习信号：回合终态喂回所属 provider 桶。
-   * succeeded → 计 streak（满 K 次加性增 cap）；'rate_limited' → throttled（乘性减评价 cap）；
-   * 其余可重试失败 → failed（只释放）；语义性失败/中止 → 不上报（重试决策不在并发层）。
-   * providerKey 缺失（模型未解析即失败）→ 不上报。
-   */
+  /** AIMD 学习信号（回合级）：succeeded 计 streak；rate_limited → throttled 评价 cap；
+   * NotRetryable/中止/模型未解析不上报（重试决策不在并发层，不污染 cap 学习） */
   private reportAimdOutcome(
     providerKind: string | undefined,
     outcome: 'succeeded' | ModelRetryReason,
   ): void {
-    if (providerKind === undefined || outcome === 'succeeded') {
-      if (providerKind !== undefined) {
-        this.concurrencyGate?.reportAttemptOutcome(providerKind, { kind: 'succeeded' });
-      }
+    if (providerKind === undefined || outcome === ModelRetryReason.NotRetryable) {
       return;
     }
-    if (outcome === ModelRetryReason.RateLimited) {
+    if (outcome === 'succeeded') {
+      this.concurrencyGate?.reportAttemptOutcome(providerKind, { kind: 'succeeded' });
+    } else if (outcome === ModelRetryReason.RateLimited) {
       this.concurrencyGate?.reportAttemptOutcome(providerKind, { kind: 'throttled' });
-      return;
+    } else {
+      this.concurrencyGate?.reportAttemptOutcome(providerKind, { kind: 'failed' });
     }
-    if (outcome === ModelRetryReason.NotRetryable) {
-      return;
-    }
-    this.concurrencyGate?.reportAttemptOutcome(providerKind, { kind: 'failed' });
   }
 
   private completeTurn(params: {

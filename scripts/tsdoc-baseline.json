@@ -161,9 +161,6 @@
   "src/main/infra/ai/tools/edit-file.tool.ts": {
     "count": 1
   },
-  "src/main/infra/ai/tools/error-classifier.ts": {
-    "count": 1
-  },
   "src/main/infra/ai/tools/git-add.tool.ts": {
     "count": 1
   },

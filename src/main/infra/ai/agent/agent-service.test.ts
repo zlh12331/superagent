@@ -52,11 +52,16 @@ const mocks = vi.hoisted(() => {
 });
 
 vi.mock('../models', () => ({
-  buildGenerationOptions: mocks.mockGenOptions,
   modelRegistry: {
     resolve: mocks.mockResolveModel,
     register: () => {},
   },
+}));
+
+// resolveTurnGeneration 抽到独立模块后，buildGenerationOptions 的 mock 缝随调用点迁移
+// （resolver 从 ../models/generation-options 直接 import，mock 该模块而非调用方）
+vi.mock('../models/generation-options', () => ({
+  buildGenerationOptions: mocks.mockGenOptions,
 }));
 
 vi.mock('ai', async (importOriginal) => {
