@@ -75,8 +75,34 @@ describe('isRetryableError（可重试判定）', () => {
     expect(isRetryableError(error)).toBe(false);
   });
 
-  it('TypeError（fetch 失败）：可重试', () => {
+  it('TypeError（fetch 失联形态）：可重试', () => {
     expect(isRetryableError(new TypeError('fetch failed'))).toBe(true);
+  });
+
+  it('TypeError + cause 链网络错误码（undici 真实形态）：可重试', () => {
+    const error = new TypeError('fetch failed', {
+      cause: Object.assign(new Error('connect ECONNRESET'), { code: 'ECONNRESET' }),
+    });
+    expect(isRetryableError(error)).toBe(true);
+  });
+
+  it('TypeError + cause 链 undici 超时错误码：可重试', () => {
+    const error = new TypeError('fetch failed', {
+      cause: Object.assign(new Error('headers timeout'), { code: 'UND_ERR_HEADERS_TIMEOUT' }),
+    });
+    expect(isRetryableError(error)).toBe(true);
+  });
+
+  it('TypeError（编程错误形态，如 undefined is not a function）：不可重试', () => {
+    expect(isRetryableError(new TypeError('Cannot read properties of undefined'))).toBe(false);
+    expect(isRetryableError(new TypeError('x is not a function'))).toBe(false);
+  });
+
+  it('TypeError + cause 链错误码不可重试（EACCES）：不可重试', () => {
+    const error = new TypeError('fetch failed', {
+      cause: Object.assign(new Error('permission denied'), { code: 'EACCES' }),
+    });
+    expect(isRetryableError(error)).toBe(false);
   });
 
   it('普通 Error：不可重试', () => {

@@ -12,7 +12,12 @@ function createFakeStream(options: {
   let created = 0;
   let failures = options.firstReadFailures ?? 0;
   const parts = options.parts ?? [{ type: 'text-delta', text: 'hello' }];
-  const failError = options.error ?? new TypeError('network failure');
+  // 模拟 undici 真实形态：TypeError('fetch failed') + cause 带网络错误码（isRetryableError 只认这个形态）
+  const failError =
+    options.error ??
+    new TypeError('fetch failed', {
+      cause: Object.assign(new Error('connect ECONNRESET'), { code: 'ECONNRESET' }),
+    });
   const streamable: MessageStreamSource = {
     toUIMessageStream() {
       created += 1;
@@ -63,7 +68,7 @@ describe('createStreamWithRetry', () => {
         controller: new AbortController(),
         maxAttempts: 2,
       }),
-    ).rejects.toThrow('network failure');
+    ).rejects.toThrow('fetch failed');
   }, 15_000);
 
   it('HTTP 类错误不在本层重试（model call 级重试真源是 SDK）', async () => {

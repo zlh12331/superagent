@@ -29,7 +29,47 @@ export function getErrorStatus(error: unknown): number | undefined {
   return undefined;
 }
 
-/** 可重试判定：429/5xx/SDK 标记可重试/网络错误码/TypeError（fetch 失联形态） */
+/**
+ * TypeError 兜底的 fetch 失联 message 形态：undici 恒为 `fetch failed`，
+ * Bun/Deno 措辞是 `load failed` / `network error`。
+ */
+const FETCH_FAILURE_MESSAGE_PATTERN = /fetch failed|network error|load failed/i;
+
+/** cause 链下探深度上界（防环形 cause；真实链深不过 2~3 层） */
+const CAUSE_CHAIN_MAX_DEPTH = 5;
+
+/**
+ * 沿 cause 链下探找错误码。返回值三分：
+ * - `'retryable'`：探到白名单网络错误码（ECONNRESET / UND_ERR_* 等）
+ * - `'non-retryable'`：探到错误码但不在白名单（EACCES 等系统错——真实根因明确不可重试）
+ * - `'absent'`：链上没有任何错误码
+ */
+function classifyCauseChainCodes(error: TypeError): 'retryable' | 'non-retryable' | 'absent' {
+  let current: unknown = error.cause;
+  for (
+    let depth = 0;
+    depth < CAUSE_CHAIN_MAX_DEPTH && current !== undefined && current !== null;
+    depth += 1
+  ) {
+    const code = getErrorCode(current);
+    if (code !== undefined) {
+      return RETRYABLE_NETWORK_ERROR_CODES.has(code) ? 'retryable' : 'non-retryable';
+    }
+    current = current instanceof Error ? current.cause : undefined;
+  }
+  return 'absent';
+}
+
+/**
+ * 可重试判定：429/5xx/SDK 标记可重试/网络错误码/TypeError（fetch 失联形态）。
+ *
+ * TypeError 不再一刀切可重试——编程错误（undefined is not a function 等）同为 TypeError，
+ * 一刀切会把 bug 伪装成网络抖动、拖满重试预算才暴露。TypeError 的裁决顺序：
+ * ① cause 链有错误码 → 以码为准（undici 真实根因：ECONNRESET 可重试 / EACCES 不可重试，
+ *   两者顶层 message 都是 `fetch failed`，message 无法区分）；
+ * ② 无错误码且 message 呈失联样 → 可重试（极少数网络层不挂 cause 的运行时）；
+ * ③ 其余 → 不可重试。
+ */
 export function isRetryableError(error: unknown): boolean {
   const status = getErrorStatus(error);
   if (status !== undefined) {
@@ -43,7 +83,11 @@ export function isRetryableError(error: unknown): boolean {
     return true;
   }
   if (error instanceof TypeError) {
-    return true;
+    const causeVerdict = classifyCauseChainCodes(error);
+    if (causeVerdict !== 'absent') {
+      return causeVerdict === 'retryable';
+    }
+    return FETCH_FAILURE_MESSAGE_PATTERN.test(error.message);
   }
   return false;
 }
