@@ -22,7 +22,13 @@ export interface TurnRunOutput {
  */
 export interface TurnDeps {
   resolveModel(): Promise<string>;
+  /** 冷却等待（机器 queued 态调用；闸位获取已下沉到 gateAdmission——尝试级） */
   acquireGate(): Promise<void>;
+  /** 尝试级准入：executeTurn 内模型流尝试前 acquire、终态 release + 学习信号上报（可选） */
+  gateAdmission?: {
+    acquire(): Promise<() => void>;
+    reportOutcome(outcome: 'succeeded' | 'throttled' | 'failed'): void;
+  };
   executeTurn(): Promise<TurnRunOutput>;
   finalizeCompleted(output: TurnRunOutput | undefined): void;
   finalizeAborted(output: TurnRunOutput | undefined): void;

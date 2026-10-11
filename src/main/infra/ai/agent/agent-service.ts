@@ -48,7 +48,7 @@ import type { IToolExecutor } from '../tools/tool-executor';
 import type { IToolRegistry } from '../tools/tool-registry';
 import { agentAskService } from './agent-ask-service';
 import { createTurnPartForwarder } from './stream-part-forward';
-import { assembleAndRunTurn } from './turn-assembly';
+import { assembleAndRunTurn, type TurnAssemblyArgs } from './turn-assembly';
 import { resolveTurnGeneration } from './turn-generation-resolver';
 import {
   subscribeApprovalLifecycle,
@@ -290,16 +290,15 @@ export class AgentService implements IAgentService {
             return resolvedModel.modelId;
           },
           acquireGate: async () => {
-            releaseGate =
-              this.concurrencyGate === undefined
-                ? undefined
-                : await this.concurrencyGate.acquire(
-                    // 配额键 = providerKind：同一 provider 的所有请求共享一个桶（冷却/cap 隔离）
-                    resolvedModel?.providerKind ?? 'unknown-provider',
-                    sessionId,
-                    controller.signal,
-                  );
+            // 方案 A：闸位获取下沉到 turn-assembly（尝试级，acquire/release 与流尝试配对）；
+            // 机器 queued 态在此只做冷却等待（冷却期排队，到点放行进入 running）
+            if (this.concurrencyGate !== undefined) {
+              await this.concurrencyGate.waitCooldown(
+                resolvedModel?.providerKind ?? 'unknown-provider',
+              );
+            }
           },
+          gateAdmission: this.buildGateAdmission(resolvedModel, sessionId, controller.signal),
           executeTurn: async () => {
             const resolved = resolvedModel;
             if (resolved === undefined) {
@@ -346,37 +345,25 @@ export class AgentService implements IAgentService {
                 transcriptEntries,
               }),
             );
-            const output = await assembleAndRunTurn({
-              sessionId,
-              turnId,
-              resolvedModel: resolved,
-              options,
-              controller,
-              turnEmitter,
-              transcriptEntries,
-              pushPart: (part) => {
-                rawPartCount += 1;
-                partForwarder.push(part);
-              },
-              resolveGeneration: (prompt, spanRef) =>
-                resolveTurnGeneration({
-                  sessionId,
-                  messages: options.messages,
-                  thinking: options.thinking,
-                  temperature: options.temperature,
-                  resolvedModel: resolved,
-                  systemPrompt: prompt,
-                  span: spanRef as import('@opentelemetry/api').Span | undefined,
-                  toolRegistry: this.toolRegistry,
-                }),
-              systemPrompt,
-              tools,
-              llmClient: this.llmClient,
-              onRateLimited: (ms) => {
-                this.concurrencyGate?.coolDown(resolved.providerKind, ms);
-              },
-              span,
-            });
+            const output = await assembleAndRunTurn(
+              this.buildTurnAssemblyArgs({
+                sessionId,
+                turnId,
+                resolvedModel: resolved,
+                options,
+                controller,
+                turnEmitter,
+                transcriptEntries,
+                systemPrompt,
+                tools,
+                onPushPart: (part) => {
+                  rawPartCount += 1;
+                  partForwarder.push(part);
+                },
+                gateAdmission: deps.gateAdmission,
+                span,
+              }),
+            );
             return {
               reason: output.reason,
               durationMs: output.durationMs,
@@ -607,6 +594,75 @@ export class AgentService implements IAgentService {
     } catch (err: unknown) {
       logger.error({ sessionId: turn.sessionId, error: err }, 'persistTurn 失败');
     }
+  }
+
+  /** 装配 assembleAndRunTurn 参数（executeTurn 内联闭包提取——复杂度/行数双减压） */
+  private buildTurnAssemblyArgs(context: {
+    readonly sessionId: string;
+    readonly turnId: string;
+    readonly resolvedModel: ResolvedModel;
+    readonly options: StartAgentOptions;
+    readonly controller: AbortController;
+    readonly turnEmitter: TurnEventEmitter;
+    readonly transcriptEntries: TurnTranscriptEntry[];
+    readonly systemPrompt: string;
+    readonly tools: Record<string, unknown>;
+    readonly onPushPart: (part: unknown) => void;
+    readonly gateAdmission?: TurnDeps['gateAdmission'];
+    readonly span: import('@opentelemetry/api').Span;
+  }): TurnAssemblyArgs {
+    const options = context.options;
+    return {
+      sessionId: context.sessionId,
+      turnId: context.turnId,
+      resolvedModel: context.resolvedModel,
+      options,
+      controller: context.controller,
+      turnEmitter: context.turnEmitter,
+      transcriptEntries: context.transcriptEntries,
+      pushPart: context.onPushPart,
+      resolveGeneration: (prompt, spanRef) =>
+        resolveTurnGeneration({
+          sessionId: context.sessionId,
+          messages: options.messages,
+          thinking: options.thinking,
+          temperature: options.temperature,
+          resolvedModel: context.resolvedModel,
+          systemPrompt: prompt,
+          span: spanRef as import('@opentelemetry/api').Span,
+          toolRegistry: this.toolRegistry,
+        }),
+      systemPrompt: context.systemPrompt,
+      tools: context.tools,
+      llmClient: this.llmClient,
+      onRateLimited: (ms) => {
+        this.concurrencyGate?.coolDown(context.resolvedModel.providerKind, ms);
+      },
+      ...(context.gateAdmission !== undefined ? { gateAdmission: context.gateAdmission } : {}),
+      span: context.span,
+    };
+  }
+
+  /**
+   * 尝试级准入端口（方案 A）：acquire 与模型流尝试配对（release 幂等兜底），
+   * 终态学习信号定向本回合 provider 桶。无闸环境返回直通实现（调用点零分叉）。
+   */
+  private buildGateAdmission(
+    resolvedModel: ResolvedModel | undefined,
+    sessionId: string,
+    signal: AbortSignal,
+  ): NonNullable<TurnDeps['gateAdmission']> {
+    const providerKey = resolvedModel?.providerKind ?? 'unknown-provider';
+    const gate = this.concurrencyGate;
+    if (gate === undefined) {
+      return { acquire: async () => () => {}, reportOutcome: () => {} };
+    }
+    return {
+      acquire: () => gate.acquire(providerKey, sessionId, signal),
+      reportOutcome: (outcome) => {
+        gate.reportAttemptOutcome(providerKey, { kind: outcome });
+      },
+    };
   }
 
   /** AIMD 学习信号（回合级）：succeeded 计 streak；rate_limited → throttled 评价 cap；

@@ -1246,12 +1246,17 @@ describe('agent-service 批次1 缺口补全（生命周期边界/事件/压缩/
     expect(ctx).not.toHaveProperty('userPrompt');
   });
 
-  it('concurrencyGate 注入：acquire 按 providerKind 分桶获取槽位并在回合结束释放', async () => {
+  it('concurrencyGate 注入：尝试级准入按 providerKind 分桶，回合结束释放', async () => {
     const release = vi.fn();
     const gate = {
+      // 尝试级：acquire 从 turn-assembly（executeTurn 内）调用
       acquire: vi.fn(
         async (_providerKey: string, _sessionId: string, _signal: AbortSignal) => release,
       ),
+      // queued 态冷却等待
+      waitCooldown: vi.fn(async () => {}),
+      // 终态学习信号
+      reportAttemptOutcome: vi.fn(),
     } as unknown as ConcurrencyGate;
     service = new AgentService(
       mockRegistry as unknown as IToolRegistry,
@@ -1271,6 +1276,9 @@ describe('agent-service 批次1 缺口补全（生命周期边界/事件/压缩/
       expect.any(AbortSignal),
     );
     expect(release).toHaveBeenCalled();
+    expect(gate.reportAttemptOutcome).toHaveBeenCalledWith(expect.any(String), {
+      kind: 'succeeded',
+    });
   });
 
   it('markIdle 失败：记录日志不阻断流程', async () => {
