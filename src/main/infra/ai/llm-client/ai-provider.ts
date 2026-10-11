@@ -56,10 +56,10 @@ export async function getAIProvider(
   return factory;
 }
 
-/** 限流接缝窄接口：只需 gate 的冷却两面（喂入 + 等待），结构化匹配 ConcurrencyGate 无需适配对象 */
+/** 限流接缝窄接口：providerKey 定向的冷却两面（喂入 + 等待）——结构化匹配分桶 ConcurrencyGate */
 export interface RateLimitGate {
-  coolDown(durationMs: number): void;
-  waitCooldown(): Promise<void>;
+  coolDown(providerKey: string, durationMs: number): void;
+  waitCooldown(providerKey: string): Promise<void>;
 }
 
 /** 注入的限流闸（ServiceContainer 构造 gate 后调用；未注入时 429 观测不上报、冷却不等待） */
@@ -79,8 +79,10 @@ async function ensureModelConfigured(): Promise<void> {
   if (!records.some((r) => r.isEnabled)) {
     throw new AppError(ErrorCode.AI_MODEL_NOT_CONFIGURED, '请先在设置中配置模型');
   }
-  // 冷却等待放在配置检查之后：未配置模型的报错优先于排队等待（排队前先确认能打）
-  await rateLimitGate?.waitCooldown();
+  // 冷却等待放在配置检查之后：未配置模型的报错优先于排队等待（排队前先确认能打）。
+  // 冷却桶 = 默认 provider（side query 不显式指定模型时都落这里；指定的场景由 runSideQuery
+  // 在 getModel 前自行等待）
+  await rateLimitGate?.waitCooldown(providerRegistry.getDefaultKind());
 }
 
 export const llmClient = new LlmClient({
@@ -102,7 +104,7 @@ export const llmClient = new LlmClient({
   },
   modelGate: ensureModelConfigured,
   notifyRateLimited: (durationMs) => {
-    rateLimitGate?.coolDown(durationMs);
+    rateLimitGate?.coolDown(providerRegistry.getDefaultKind(), durationMs);
   },
 });
 

@@ -301,7 +301,12 @@ export class AgentService implements IAgentService {
             releaseGate =
               this.concurrencyGate === undefined
                 ? undefined
-                : await this.concurrencyGate.acquire(sessionId, controller.signal);
+                : await this.concurrencyGate.acquire(
+                    // 配额键 = providerKind：同一 provider 的所有请求共享一个桶（冷却/cap 隔离）
+                    resolvedModel?.providerKind ?? 'unknown-provider',
+                    sessionId,
+                    controller.signal,
+                  );
           },
           executeTurn: async () => {
             const resolved = resolvedModel;
@@ -374,7 +379,9 @@ export class AgentService implements IAgentService {
               systemPrompt,
               tools,
               llmClient: this.llmClient,
-              onRateLimited: (ms) => this.concurrencyGate?.coolDown(ms),
+              onRateLimited: (ms) => {
+                this.concurrencyGate?.coolDown(resolved.providerKind, ms);
+              },
               span,
             });
             return {

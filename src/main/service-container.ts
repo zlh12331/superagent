@@ -20,7 +20,7 @@ import { initSubagentManager } from './infra/ai/agent/subagent-manager';
 import { taskService } from './infra/ai/agent/task-service';
 import {
   createConcurrencyGate,
-  DEFAULT_MAX_CONCURRENT_TURNS,
+  DEFAULT_MAX_CONCURRENT_PER_PROVIDER,
 } from './infra/ai/agent-runtime/concurrency-gate';
 import { GoalJudge } from './infra/ai/knowledge/goal-judge';
 import { GoalService } from './infra/ai/knowledge/goal-service';
@@ -89,7 +89,7 @@ function resolveMemoryHubRoot(): string | undefined {
 
 class ServiceContainer {
   // ConcurrencyGate 不做 accessor：无重依赖、构造廉价，直接初始化为 readonly 字段
-  private readonly concurrencyGate = createConcurrencyGate(DEFAULT_MAX_CONCURRENT_TURNS);
+  private readonly concurrencyGate = createConcurrencyGate(DEFAULT_MAX_CONCURRENT_PER_PROVIDER);
 
   constructor() {
     // 限流接缝：llmClient（模块级单例）观测到 429 → gate 冷却；side query 经 modelGate 等冷却。

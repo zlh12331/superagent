@@ -1241,10 +1241,12 @@ describe('agent-service 批次1 缺口补全（生命周期边界/事件/压缩/
     expect(ctx).not.toHaveProperty('userPrompt');
   });
 
-  it('concurrencyGate 注入：acquire 获取槽位并在回合结束释放', async () => {
+  it('concurrencyGate 注入：acquire 按 providerKind 分桶获取槽位并在回合结束释放', async () => {
     const release = vi.fn();
     const gate = {
-      acquire: vi.fn(async (_sessionId: string, _signal: AbortSignal) => release),
+      acquire: vi.fn(
+        async (_providerKey: string, _sessionId: string, _signal: AbortSignal) => release,
+      ),
     } as unknown as ConcurrencyGate;
     service = new AgentService(
       mockRegistry as unknown as IToolRegistry,
@@ -1257,7 +1259,12 @@ describe('agent-service 批次1 缺口补全（生命周期边界/事件/压缩/
     await service.startAgent(baseOptions());
     await flushAsync();
     expect(gate.acquire).toHaveBeenCalledTimes(1);
-    expect(gate.acquire).toHaveBeenCalledWith('test-session-id', expect.any(AbortSignal));
+    // 首参 = 配额键（providerKind，来自 resolve 后的模型）；测试 registry 的默认解析 provider
+    expect(gate.acquire).toHaveBeenCalledWith(
+      expect.any(String),
+      'test-session-id',
+      expect.any(AbortSignal),
+    );
     expect(release).toHaveBeenCalled();
   });
 

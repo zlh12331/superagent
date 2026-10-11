@@ -138,6 +138,21 @@ export class ConcurrencyController {
     this.lastRequestAt = now;
   }
 
+  /** 仅回减在飞计数（不产生任何学习信号）——闸门 release 的兜底路径：
+   * 尝试终态应先经 succeeded/throttled/failed 上报，此方法防未上报路径漏减 */
+  forceRelease(): void {
+    this.inFlight = Math.max(0, this.inFlight - 1);
+  }
+
+  /** 仅喂入冷却（不评价 cap、不动计数）——闸门 coolDown 的直通口：side query 观测到
+   * 429 时没有对应的准入/结束事件对，只表达「这个 provider 冷却一会儿」 */
+  throttleCooldown(now: number, cooldownMs: number): void {
+    if (!Number.isFinite(cooldownMs) || cooldownMs <= 0) {
+      return;
+    }
+    this.cooldownUntil = Math.max(this.cooldownUntil, now + cooldownMs);
+  }
+
   /** 冷却是否生效（闸门 acquire 前检查） */
   isCoolingDown(now: number): boolean {
     this.idleReset(now);
