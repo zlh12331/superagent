@@ -112,18 +112,12 @@ const BUILTIN_FACTORIES: Record<ProviderKind, ProviderFactory> = {
         const thinking = (args['thinking'] as Record<string, unknown> | undefined) ?? {
           type: 'enabled',
         };
-        return {
-          ...args,
-          thinking: {
-            ...thinking,
-            type: thinking['type'] ?? 'enabled',
-            ...(thinking['reasoning_effort'] !== undefined
-              ? {}
-              : typeof args['reasoning_effort'] === 'string'
-                ? { reasoning_effort: args['reasoning_effort'] }
-                : {}),
-          },
-        };
+        const topLevelEffort = args['reasoning_effort' as string];
+        const nested = { ...thinking, type: thinking['type'] ?? 'enabled' };
+        if (nested['reasoning_effort'] === undefined && typeof topLevelEffort === 'string') {
+          nested['reasoning_effort'] = topLevelEffort;
+        }
+        return { ...args, thinking: nested };
       },
       convertUsage: (usage) => {
         const raw = usage as Record<string, unknown> | null | undefined;
