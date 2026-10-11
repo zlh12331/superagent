@@ -2,6 +2,7 @@
 // 工具调用修复接线 → TurnDeps.executeTurn 的真身（机器编排的是它）
 import type { ChatMessage } from '@code-agent/shared/main';
 import { ModelRetryReason } from '@code-agent/shared/main';
+import { randomUUID } from 'node:crypto';
 import { isStepCount, streamText } from 'ai';
 import { createSdkTelemetryIntegration } from '../../telemetry/sdk-telemetry';
 import { combineAbortSignals, createTimeoutSignal } from '../agent-runtime/abort-utils';
@@ -87,6 +88,9 @@ export async function assembleAndRunTurn(args: TurnAssemblyArgs): Promise<TurnRu
   let runResult: TurnRunResult;
   let usage: SdkTotalUsageLike | null = null;
   let releaseGate: (() => void) | undefined;
+  // 逻辑调用 ID：middleware 的 Attempt span 与 telemetry integration 的 model.call 父 span
+  // 以同键 join（Attempt 经 providerOptions.codeagent 读，Call 由 streamText telemetry 回调自带）
+  const callId = randomUUID();
   try {
     // 尝试级准入：流尝试前等槽位（AbortSignal 取消排队）——acquire 后才算闸内
     if (gateAdmission !== undefined) {
@@ -103,9 +107,10 @@ export async function assembleAndRunTurn(args: TurnAssemblyArgs): Promise<TurnRu
           ...(genOptions.maxOutputTokens !== undefined
             ? { maxOutputTokens: genOptions.maxOutputTokens }
             : {}),
-          ...(genOptions.providerOptions !== undefined
-            ? { providerOptions: genOptions.providerOptions }
-            : {}),
+          providerOptions: {
+            ...(genOptions.providerOptions ?? {}),
+            codeagent: { callId },
+          },
           tools: tools as Record<string, never>,
           stopWhen: isStepCount(options.maxSteps),
           maxRetries: resolvedModel.generationConfig?.maxRetries ?? 2,

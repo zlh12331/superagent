@@ -1595,6 +1595,10 @@ describe('agent-service 批次1 缺口补全（生命周期边界/事件/压缩/
     const opts = mocks.mockStreamText.mock.calls[0]?.[0] as Record<string, unknown> | undefined;
     expect(opts?.['temperature']).toBe(0.5);
     expect(opts?.['maxOutputTokens']).toBe(4096);
-    expect(opts?.['providerOptions']).toEqual({ deepseek: { thinking: { type: 'enabled' } } });
+    // genOptions 的 providerOptions 原样透传 + callId（codeagent 命名空间，遥测 join 键）
+    expect(opts?.['providerOptions']).toMatchObject({
+      deepseek: { thinking: { type: 'enabled' } },
+      codeagent: { callId: expect.any(String) },
+    });
   });
 });
