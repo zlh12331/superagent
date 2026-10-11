@@ -158,24 +158,35 @@ export class LlmClient {
     return wrappedModel;
   }
 
-  async generateText(options: LlmGenerateTextOptions): Promise<LlmGenerateTextResult> {
+  /**
+   * ModelFallback 包装：显式指定模型（≠默认模型）调用失败且错误可降级
+   * （5xx/SDK 标记可重试/网络错）时，降级默认模型重试一次。
+   *
+   * generateText / generateJson 共用；调用方未显式指定模型时原样透传（默认模型降级无意义）。
+   */
+  private async withModelFallback<T>(
+    model: string | undefined,
+    run: (modelId: string | undefined) => Promise<T>,
+  ): Promise<T> {
     try {
-      return await this.generateTextOnce(options);
+      return await run(model);
     } catch (error) {
       const fallbackModel = this.deps.modelRegistry.resolve(undefined).modelId;
-      if (
-        options.model === undefined ||
-        options.model === fallbackModel ||
-        !isFallbackEligibleError(error)
-      ) {
+      if (model === undefined || model === fallbackModel || !isFallbackEligibleError(error)) {
         throw error;
       }
       logger.warn(
-        { model: options.model, fallbackModel, error: (error as Error).message },
+        { model, fallbackModel, error: (error as Error).message },
         '模型调用失败，降级默认模型重试（ModelFallback）',
       );
-      return this.generateTextOnce({ ...options, model: fallbackModel });
+      return run(fallbackModel);
     }
+  }
+
+  async generateText(options: LlmGenerateTextOptions): Promise<LlmGenerateTextResult> {
+    return this.withModelFallback(options.model, (modelId) =>
+      this.generateTextOnce({ ...options, ...(modelId !== undefined ? { model: modelId } : {}) }),
+    );
   }
 
   private async generateTextOnce(options: LlmGenerateTextOptions): Promise<LlmGenerateTextResult> {
@@ -214,17 +225,19 @@ export class LlmClient {
   }
 
   async generateJson<T>(options: LlmGenerateJsonOptions<T>): Promise<T> {
-    return this.runSideQuery(options.model, options, async (model, signal) => {
-      const result = await generateTextAi({
-        model,
-        output: Output.object({ schema: options.schema }),
-        prompt: options.prompt,
-        ...SDK_MODEL_CALL_RETRY_DISABLED,
-        ...(options.system !== undefined ? { system: options.system } : {}),
-        ...(signal !== undefined ? { abortSignal: signal } : {}),
-      });
-      return result.output;
-    });
+    return this.withModelFallback(options.model, (modelId) =>
+      this.runSideQuery(modelId, options, async (model, signal) => {
+        const result = await generateTextAi({
+          model,
+          output: Output.object({ schema: options.schema }),
+          prompt: options.prompt,
+          ...SDK_MODEL_CALL_RETRY_DISABLED,
+          ...(options.system !== undefined ? { system: options.system } : {}),
+          ...(signal !== undefined ? { abortSignal: signal } : {}),
+        });
+        return result.output;
+      }),
+    );
   }
 
   private async runSideQuery<T>(

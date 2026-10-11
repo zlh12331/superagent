@@ -312,6 +312,59 @@ describe('LlmClient', () => {
         vi.useRealTimers();
       }
     });
+
+    it('显式模型 + 5xx：ModelFallback 降级默认模型（与 generateText 同语义）', async () => {
+      const { client } = createClient();
+      mocks.mockGenerateText
+        .mockRejectedValueOnce(
+          new APICallError({
+            message: 'HTTP 502',
+            url: 'https://api.example.com/v1/chat/completions',
+            requestBodyValues: {},
+            statusCode: 502,
+          }),
+        )
+        .mockResolvedValueOnce({ output: { ok: true } });
+
+      const result = await client.generateJson({
+        schema: z.object({ ok: z.boolean() }),
+        prompt: 'hi',
+        model: 'gpt-4o',
+        maxAttempts: 1,
+      });
+
+      expect(result).toEqual({ ok: true });
+      expect(mocks.mockGenerateText).toHaveBeenCalledTimes(2);
+      const secondArgs = mocks.mockGenerateText.mock.calls[1]?.[0] as
+        | { model: { modelId: string } }
+        | undefined;
+      expect(secondArgs?.model.modelId).toBe('deepseek-v4-flash');
+      expect(mocks.mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ model: 'gpt-4o', fallbackModel: 'deepseek-v4-flash' }),
+        expect.stringContaining('ModelFallback'),
+      );
+    });
+
+    it('显式模型 + 429：不降级（限流非供应商故障，与 generateText 同语义）', async () => {
+      const { client } = createClient();
+      const err = new APICallError({
+        message: 'HTTP 429',
+        url: 'https://api.example.com/v1/chat/completions',
+        requestBodyValues: {},
+        statusCode: 429,
+      });
+      mocks.mockGenerateText.mockRejectedValue(err);
+
+      await expect(
+        client.generateJson({
+          schema: z.object({ ok: z.boolean() }),
+          prompt: 'hi',
+          model: 'gpt-4o',
+          maxAttempts: 1,
+        }),
+      ).rejects.toBe(err);
+      expect(mocks.mockGenerateText).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('generateText（模型级生成参数适配，DeepSeek 思考模式）', () => {
