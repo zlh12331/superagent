@@ -658,7 +658,6 @@ export class AgentService implements IAgentService {
     };
   }
 
-
   private completeTurn(params: {
     readonly sessionId: string;
     readonly turnId: string;
