@@ -112,8 +112,11 @@ const BUILTIN_FACTORIES: Record<ProviderKind, ProviderFactory> = {
         const thinking = (args['thinking'] as Record<string, unknown> | undefined) ?? {
           type: 'enabled',
         };
-        const topLevelEffort = args['reasoning_effort' as string];
-        const nested = { ...thinking, type: thinking['type'] ?? 'enabled' };
+        const topLevelEffort = args['reasoning_effort'];
+        const nested: Record<string, unknown> = {
+          ...thinking,
+          type: thinking['type'] ?? 'enabled',
+        };
         if (nested['reasoning_effort'] === undefined && typeof topLevelEffort === 'string') {
           nested['reasoning_effort'] = topLevelEffort;
         }

@@ -148,8 +148,10 @@ describe('toPersistedOutput', () => {
       { kind: 'reasoning', text: '读完再想' },
       { kind: 'tool-call', toolCallId: 'call-2', toolName: 'edit_file', input: { path: 'a.ts' } },
     ];
-    const [assistant] = buildAssistantTurnMessages('', entries);
-    const content = (assistant.content as Array<{ type: string; text?: string }>).filter(
+    const messages = buildAssistantTurnMessages('', entries);
+    const assistant = messages.find((m) => m.role === 'assistant');
+    // biome-ignore lint/style/noNonNullAssertion: find 不到 assistant 时断言本身就该失败
+    const content = (assistant!.content as Array<{ type: string; text?: string }>).filter(
       (p) => p.type === 'reasoning',
     );
     expect(content).toEqual([
