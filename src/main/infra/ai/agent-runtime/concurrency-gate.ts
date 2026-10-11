@@ -24,6 +24,9 @@ export interface ConcurrencyGate {
   acquire(providerKey: string, sessionId: string, signal?: AbortSignal): Promise<() => void>;
   /** 限流冷却：仅作用于该 provider 的桶；多次调用取最晚值；超 MAX_COOLDOWN_MS 封顶 */
   coolDown(providerKey: string, durationMs: number): void;
+  /** 无准入对的限流学习信号：side query 观测到 429 时评价该 provider 桶的 cap
+   * （乘性减 + epoch 递增 + 冷却），不动在飞计数（无 acquire/release 配对） */
+  reportUnpairedThrottle(providerKey: string, cooldownMs: number): void;
   /** 该 provider 桶是否处于冷却期（诊断/测试用） */
   isCoolingDown(providerKey: string): boolean;
   /** 等待该 provider 冷却结束（不占闸位；side query 经 modelGate 调用） */
@@ -188,6 +191,12 @@ export function createConcurrencyGate(maxConcurrentPerProvider: number): Concurr
       // MAX_COOLDOWN_MS 封顶在闸做（controller 不知道闸的常量边界）
       const capped = Math.min(durationMs, MAX_COOLDOWN_MS);
       bucket.controller.throttleCooldown(Date.now(), capped);
+      armCooldownWake(bucket, providerKey);
+    },
+    reportUnpairedThrottle(providerKey, cooldownMs) {
+      const bucket = getBucket(providerKey);
+      const capped = Math.min(Math.max(cooldownMs, 0), MAX_COOLDOWN_MS);
+      bucket.controller.throttledWithoutAdmission(Date.now(), { cooldownMs: capped });
       armCooldownWake(bucket, providerKey);
     },
     isCoolingDown(providerKey) {

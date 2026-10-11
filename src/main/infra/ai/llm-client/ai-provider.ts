@@ -56,9 +56,12 @@ export async function getAIProvider(
   return factory;
 }
 
-/** 限流接缝窄接口：providerKey 定向的冷却两面（喂入 + 等待）——结构化匹配分桶 ConcurrencyGate */
+/** 限流接缝窄接口：providerKey 定向的冷却两面（喂入 + 等待）+ 无准入对的限流学习信号——
+ * 结构化匹配分桶 ConcurrencyGate */
 export interface RateLimitGate {
   coolDown(providerKey: string, durationMs: number): void;
+  /** 无准入对的 429 学习信号：评价 cap + 冷却（不动在飞计数） */
+  reportUnpairedThrottle(providerKey: string, cooldownMs: number): void;
   waitCooldown(providerKey: string): Promise<void>;
 }
 
@@ -104,7 +107,9 @@ export const llmClient = new LlmClient({
   },
   modelGate: ensureModelConfigured,
   notifyRateLimited: (durationMs) => {
-    rateLimitGate?.coolDown(providerRegistry.getDefaultKind(), durationMs);
+    const providerKey = providerRegistry.getDefaultKind();
+    rateLimitGate?.coolDown(providerKey, durationMs);
+    rateLimitGate?.reportUnpairedThrottle(providerKey, durationMs);
   },
 });
 

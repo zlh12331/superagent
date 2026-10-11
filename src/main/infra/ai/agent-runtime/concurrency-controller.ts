@@ -153,6 +153,31 @@ export class ConcurrencyController {
     this.cooldownUntil = Math.max(this.cooldownUntil, now + cooldownMs);
   }
 
+  /** 无准入对的限流学习信号：评价 cap（乘性减 + epoch 递增 + 冷却）但不动在飞计数——
+   * side query 观测到 429 时没有 acquire/release 配对，走本入口而非 throttled
+   * （throttled 会回减 inFlight，造成计数错位） */
+  throttledWithoutAdmission(now: number, options?: { readonly cooldownMs?: number }): void {
+    this.idleReset(now);
+    this.lastRequestAt = now;
+    this.successStreak = 0;
+    this.epoch += 1;
+    if (options?.cooldownMs !== undefined && options.cooldownMs > 0) {
+      this.cooldownUntil = Math.max(this.cooldownUntil, now + options.cooldownMs);
+    }
+    if (this.lastGood !== undefined && this.cap > this.lastGood) {
+      this.lastBad = this.cap;
+      this.cap = this.lastGood;
+    } else {
+      const reduced = Math.max(
+        CONCURRENCY_FLOOR,
+        Math.floor(this.cap * CONCURRENCY_DECREASE_FACTOR),
+      );
+      this.lastBad = this.cap;
+      this.lastGood = undefined;
+      this.cap = reduced;
+    }
+  }
+
   /** 冷却是否生效（闸门 acquire 前检查） */
   isCoolingDown(now: number): boolean {
     this.idleReset(now);

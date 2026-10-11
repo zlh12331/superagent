@@ -360,6 +360,7 @@ export class AgentService implements IAgentService {
                   partForwarder.push(part);
                 },
                 gateAdmission: deps.gateAdmission,
+                assistantTextGetter: () => assistantText,
                 span,
               }),
             );
@@ -589,7 +590,8 @@ export class AgentService implements IAgentService {
     }
   }
 
-  /** 装配 assembleAndRunTurn 参数（executeTurn 内联闭包提取——复杂度/行数双减压） */
+  /** 装配 assembleAndRunTurn 参数（executeTurn 内联闭包提取——复杂度/行数双减压）。
+   * getAssistantText 取 context.assistantTextGetter（流恢复锚点的数据源，闭包内实时更新） */
   private buildTurnAssemblyArgs(context: {
     readonly sessionId: string;
     readonly turnId: string;
@@ -603,6 +605,7 @@ export class AgentService implements IAgentService {
     readonly onPushPart: (part: unknown) => void;
     readonly gateAdmission?: TurnDeps['gateAdmission'];
     readonly span: import('@opentelemetry/api').Span;
+    readonly assistantTextGetter: () => string;
   }): TurnAssemblyArgs {
     const options = context.options;
     return {
@@ -614,6 +617,7 @@ export class AgentService implements IAgentService {
       turnEmitter: context.turnEmitter,
       transcriptEntries: context.transcriptEntries,
       pushPart: context.onPushPart,
+      getAssistantPartialText: context.assistantTextGetter,
       resolveGeneration: (prompt, spanRef) =>
         resolveTurnGeneration({
           sessionId: context.sessionId,

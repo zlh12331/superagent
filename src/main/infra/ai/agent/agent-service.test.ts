@@ -339,7 +339,9 @@ describe('agent-service', () => {
         abortSignal: AbortSignal;
         maxRetries: number;
       };
-      expect(opts.model).toBe(mocks.mockModel);
+      // 架构变化（尝试级准入 + callId 穿透）：streamText 收 model id 字符串，
+      // 实例解析与 providerOptions 路由由 middleware/工厂内部完成
+      expect(opts.model).toBe('test-model');
       expect(opts.messages).toEqual(messages);
       expect(opts.tools).toBeDefined();
       expect(opts.stopWhen).toBeDefined();

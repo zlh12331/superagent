@@ -169,4 +169,34 @@ describe('ConcurrencyController（AIMD 纯状态机）', () => {
     c.throttled(3001);
     expect(c.snapshot().cap).toBe(4);
   });
+
+  it('throttledWithoutAdmission：评价 cap + epoch 递增 + 冷却，但不动 inFlight', () => {
+    const c = new ConcurrencyController(8);
+    c.admitted(1000); // 一个无关的在飞（模拟主回合流）
+    const beforeInFlight = c.snapshot().inFlight;
+    c.throttledWithoutAdmission(1001, { cooldownMs: 5000 });
+    const snap = c.snapshot();
+    expect(snap.cap).toBe(6); // 乘性减照常
+    expect(snap.epoch).toBe(1); // 裁决递增
+    expect(snap.inFlight).toBe(beforeInFlight); // 不动计数
+    expect(c.isCoolingDown(1002)).toBe(true);
+    expect(c.cooldownRemainingMs(1002)).toBe(4999);
+  });
+
+  it('throttledWithoutAdmission：连续两次继续乘性减', () => {
+    const c = new ConcurrencyController(8);
+    c.throttledWithoutAdmission(1000);
+    expect(c.snapshot().cap).toBe(6);
+    c.throttledWithoutAdmission(2000);
+    expect(c.snapshot().cap).toBe(4);
+  });
+
+  it('throttleCooldown 语义保持：不评价 cap 不动计数', () => {
+    const c = new ConcurrencyController(8);
+    c.throttleCooldown(1000, 5000);
+    const snap = c.snapshot();
+    expect(snap.cap).toBe(8); // 不评价 cap
+    expect(snap.epoch).toBe(0); // 不递增裁决
+    expect(c.isCoolingDown(1001)).toBe(true);
+  });
 });
