@@ -26,7 +26,12 @@ import {
 import { GoalJudge } from './infra/ai/knowledge/goal-judge';
 import { GoalService } from './infra/ai/knowledge/goal-service';
 import type { LlmClient } from './infra/ai/llm-client';
-import { llmClient, resetAIProvider, runtimeModelStore } from './infra/ai/llm-client/ai-provider';
+import {
+  llmClient,
+  resetAIProvider,
+  runtimeModelStore,
+  setRateLimitBridge,
+} from './infra/ai/llm-client/ai-provider';
 import { type IMCPService, MCPService } from './infra/ai/mcp';
 import { gitSummaryProviderFrom } from './infra/ai/prompt/dynamic-context';
 import type { IPromptService } from './infra/ai/prompt/prompt-service';
@@ -88,6 +93,22 @@ class ServiceContainer {
   private readonly concurrencyGate: ConcurrencyGate = createConcurrencyGate(
     DEFAULT_MAX_CONCURRENT_TURNS,
   );
+
+  constructor() {
+    // 限流接缝：llmClient（模块级单例）观测到 429 → gate 冷却；side query 经 modelGate 等冷却。
+    // gate 在容器构造期就绪，单例不反向 import 容器（防环），经 ai-provider 的 setRateLimitBridge 桥接
+    setRateLimitBridge({
+      onRateLimited: (durationMs) => {
+        this.concurrencyGate.coolDown(durationMs);
+      },
+      waitCooldown: async () => {
+        // 冷却期自旋等待（500ms 粒度足够——冷却时长以秒计）；无冷却即过
+        while (this.concurrencyGate.isCoolingDown()) {
+          await new Promise((resolve) => setTimeout(resolve, 500));
+        }
+      },
+    });
+  }
 
   private cronUnsubscribe: (() => void) | null = null;
   private cronInitialized = false;

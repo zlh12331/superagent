@@ -36,6 +36,8 @@ export interface TurnAssemblyArgs {
   readonly tools: Record<string, unknown>;
   readonly systemPrompt: string | undefined;
   readonly llmClient: LlmClient | undefined;
+  /** 限流上报：首读重试观测到 429 时回调（接并发门 coolDown；缺省不上报） */
+  readonly onRateLimited?: (durationMs: number) => void;
   readonly span: SpanLike;
 }
 
@@ -57,6 +59,7 @@ export async function assembleAndRunTurn(args: TurnAssemblyArgs): Promise<TurnRu
     systemPrompt,
     tools,
     llmClient,
+    onRateLimited,
     span,
   } = args;
   const model = await getModel(resolvedModel.modelId);
@@ -103,6 +106,7 @@ export async function assembleAndRunTurn(args: TurnAssemblyArgs): Promise<TurnRu
           telemetry: { integrations: [createSdkTelemetryIntegration()] },
         }),
       controller,
+      ...(onRateLimited !== undefined ? { onRateLimited } : {}),
     });
 
     const runner = new TurnRunner({

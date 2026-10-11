@@ -728,6 +728,48 @@ describe('LlmClient 批次2 缺口补全（降级链/覆盖透传/参数展开/�
       }
     });
 
+    it('429 重试触发 notifyRateLimited（5xx/401 不触发）', async () => {
+      vi.useFakeTimers();
+      try {
+        const notifyRateLimited = vi.fn();
+        const { registry, createProviderFactory } = createClient();
+        const client = new LlmClient({
+          modelRegistry: registry,
+          createProviderFactory,
+          notifyRateLimited,
+        });
+
+        // 429：上报一次（delayMs 来自 Retry-After '2' → 2000）
+        mocks.mockGenerateText
+          .mockRejectedValueOnce(
+            new APICallError({
+              message: 'HTTP 429',
+              url: 'https://api.example.com/v1/chat/completions',
+              requestBodyValues: {},
+              statusCode: 429,
+              responseHeaders: { 'retry-after': '2' },
+            }),
+          )
+          .mockResolvedValueOnce({ text: 'ok', usage: {} });
+        const promise1 = client.generateText({ prompt: 'hi', maxAttempts: 3 });
+        await vi.advanceTimersByTimeAsync(5000);
+        await expect(promise1).resolves.toMatchObject({ text: 'ok' });
+        expect(notifyRateLimited).toHaveBeenCalledTimes(1);
+        expect(notifyRateLimited).toHaveBeenCalledWith(2000);
+
+        // 5xx：不上报
+        mocks.mockGenerateText
+          .mockRejectedValueOnce(apiError(500))
+          .mockResolvedValueOnce({ text: 'ok', usage: {} });
+        const promise2 = client.generateText({ prompt: 'hi', maxAttempts: 3 });
+        await vi.advanceTimersByTimeAsync(5000);
+        await expect(promise2).resolves.toMatchObject({ text: 'ok' });
+        expect(notifyRateLimited).toHaveBeenCalledTimes(1);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('模型自带 timeoutMs：超时信号触发后中断重试（不无限重试）', async () => {
       vi.useFakeTimers();
       try {

@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { createConcurrencyGate, createGateAbortError } from './concurrency-gate';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createConcurrencyGate, createGateAbortError, MAX_COOLDOWN_MS } from './concurrency-gate';
 
 describe('createConcurrencyGate', () => {
   it('超并发时 FIFO 排队，释放后按先来先得放行（平均分配语义）', async () => {
@@ -87,5 +87,90 @@ describe('createConcurrencyGate', () => {
     expect(() => createConcurrencyGate(-1)).toThrow();
     expect(() => createConcurrencyGate(2.5)).toThrow();
     expect(() => createConcurrencyGate(Number.NaN)).toThrow();
+  });
+
+  describe('限流冷却（coolDown）', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('冷却期：即使有空槽 acquire 也排队，冷却到期自动放行', async () => {
+      const gate = createConcurrencyGate(2);
+      vi.setSystemTime(1_000_000);
+      gate.coolDown(1000);
+      expect(gate.isCoolingDown()).toBe(true);
+
+      const acquired: string[] = [];
+      const p1 = gate.acquire('s1').then((release) => {
+        acquired.push('s1');
+        return release;
+      });
+      // 冷却未到：不放行
+      await vi.advanceTimersByTimeAsync(0);
+      expect(acquired).toEqual([]);
+
+      // 冷却到期：唤醒定时器放行
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(gate.isCoolingDown()).toBe(false);
+      const release = await p1;
+      expect(acquired).toEqual(['s1']);
+      release();
+    });
+
+    it('冷却期已有在飞回合：release 后也不立即补位，冷却到期才放行', async () => {
+      const gate = createConcurrencyGate(1);
+      vi.setSystemTime(1_000_000);
+      const release = await gate.acquire('s1');
+      gate.coolDown(500);
+
+      const p2 = gate.acquire('s2').then(() => {
+        return 's2';
+      });
+      release();
+      // 槽位已空但冷却中：不放行
+      await vi.advanceTimersByTimeAsync(100);
+      let settled = false;
+      void p2.then(() => {
+        settled = true;
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(settled).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(400);
+      expect(await p2).toBe('s2');
+    });
+
+    it('多次 coolDown：取最晚到期值，不缩短既有冷却', async () => {
+      const gate = createConcurrencyGate(1);
+      vi.setSystemTime(1_000_000);
+      gate.coolDown(1000);
+      gate.coolDown(200); // 更短：不应把冷却提前结束
+      vi.advanceTimersByTime(200);
+      expect(gate.isCoolingDown()).toBe(true);
+      vi.advanceTimersByTime(800);
+      expect(gate.isCoolingDown()).toBe(false);
+    });
+
+    it('非法值（负数/NaN/0）：忽略', () => {
+      const gate = createConcurrencyGate(1);
+      gate.coolDown(-100);
+      gate.coolDown(Number.NaN);
+      gate.coolDown(0);
+      expect(gate.isCoolingDown()).toBe(false);
+    });
+
+    it('超 MAX_COOLDOWN_MS：封顶', () => {
+      const gate = createConcurrencyGate(1);
+      vi.setSystemTime(1_000_000);
+      gate.coolDown(MAX_COOLDOWN_MS * 10);
+      // 封顶后仍冷却，但到点时间是 now+MAX 而非 now+10×MAX
+      expect(gate.isCoolingDown()).toBe(true);
+      vi.advanceTimersByTime(MAX_COOLDOWN_MS);
+      expect(gate.isCoolingDown()).toBe(false);
+    });
   });
 });

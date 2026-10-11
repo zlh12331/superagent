@@ -61,6 +61,11 @@ export interface LlmClientDeps {
     },
   ) => Promise<(modelId: string) => LanguageModel>;
   readonly modelGate?: () => Promise<void>;
+  /**
+   * 限流上报：side query 重试观测到 429 时调用（durationMs = 建议冷却时长）。
+   * 由装配方（ai-provider）接到并发门 coolDown——side query 与主回合共享同一冷却状态。
+   */
+  readonly notifyRateLimited?: (durationMs: number) => void;
 }
 
 /** 文本生成入参（model 缺省走默认模型；signal 可中止） */
@@ -272,6 +277,10 @@ export class LlmClient {
             },
             'side query 重试',
           );
+          // 429 = provider 限流：上报冷却（min(建议值, Retry-After) 由装配方裁决），主回合闸同步受益
+          if (info.errorStatus === 429 && this.deps.notifyRateLimited !== undefined) {
+            this.deps.notifyRateLimited(info.delayMs);
+          }
         },
       });
     } finally {

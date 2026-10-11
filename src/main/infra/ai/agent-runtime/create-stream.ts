@@ -26,6 +26,8 @@ export interface CreateStreamWithRetryOptions<T extends MessageStreamSource = Me
   readonly controller: AbortController;
   readonly idleTimeoutMs?: number;
   readonly maxAttempts?: number;
+  /** 限流上报：重试观测到 429 时回调（durationMs = 建议冷却时长；缺省不上报） */
+  readonly onRateLimited?: (durationMs: number) => void;
 }
 
 /**
@@ -66,6 +68,9 @@ export async function createStreamWithRetry<T extends MessageStreamSource>(
           { attempt: info.attempt, errorStatus: info.errorStatus, delayMs: info.delayMs },
           '主流程首读重试',
         );
+        if (info.errorStatus === 429 && options.onRateLimited !== undefined) {
+          options.onRateLimited(info.delayMs);
+        }
       },
     },
   );
