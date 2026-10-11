@@ -147,3 +147,116 @@ describe('createStreamWithRetry', () => {
     expect(created.result).toBe(streamable);
   });
 });
+
+describe('createStreamWithRetry（重试边界：prelude 缓冲）', () => {
+  /** 双尝试流：第一次尝试给定 parts 后断流，第二次尝试给完整 parts */
+  function createTwoAttemptStream(
+    firstParts: unknown[],
+    secondParts: unknown[],
+  ): MessageStreamSource {
+    let attempt = 0;
+    return {
+      toUIMessageStream() {
+        attempt += 1;
+        let idx = 0;
+        const parts = attempt === 1 ? firstParts : secondParts;
+        return new ReadableStream<unknown>({
+          pull(controller) {
+            if (attempt === 1 && idx >= firstParts.length) {
+              controller.error(
+                new TypeError('fetch failed', {
+                  cause: Object.assign(new Error('connect ECONNRESET'), { code: 'ECONNRESET' }),
+                }),
+              );
+              return;
+            }
+            if (idx < parts.length) {
+              controller.enqueue(parts[idx]);
+              idx += 1;
+              return;
+            }
+            controller.close();
+          },
+        });
+      },
+    };
+  }
+
+  function collectTypes(reader: ReadableStreamDefaultReader<unknown>): Promise<string[]> {
+    const seq: string[] = [];
+    return (async () => {
+      for (;;) {
+        const next = await reader.read();
+        if (next.done) break;
+        const part = next.value as { type: string; delta?: string };
+        seq.push(part.type);
+        if (part.delta !== undefined) {
+          seq.push(part.delta);
+        }
+      }
+      return seq;
+    })();
+  }
+
+  it('前奏后断流：无感重建流，前奏跨尝试保留并按原序交付', async () => {
+    const streamable = createTwoAttemptStream(
+      [{ type: 'start' }, { type: 'tool-input-start', id: 't1' }],
+      [{ type: 'start' }, { type: 'text-start', id: 'c1' }, { type: 'text-delta', delta: 'hello' }],
+    );
+    const created = await createStreamWithRetry({
+      create: () => streamable,
+      controller: new AbortController(),
+      maxAttempts: 3,
+    });
+
+    expect(created.attemptsToBoundary).toBe(2);
+    // firstPart = 回注流首格 = 第一次尝试的 start（跨尝试保留，原序）
+    expect((created.firstPart.value as { type: string }).type).toBe('start');
+    // firstPart 已消费首格（start）；collectTypes 从回注流第二格起收
+    const seq = await collectTypes(created.reader);
+    expect(seq).toEqual(['tool-input-start', 'start', 'text-start', 'text-delta', 'hello']);
+  }, 15_000);
+
+  it('空 delta 是前奏：缓冲不触发边界', async () => {
+    const { streamable } = createFakeStream({
+      parts: [
+        { type: 'start' },
+        { type: 'text-delta', delta: '' },
+        { type: 'text-delta', delta: 'real' },
+      ],
+    });
+    const created = await createStreamWithRetry({
+      create: () => streamable,
+      controller: new AbortController(),
+    });
+    expect((created.firstPart.value as { type: string }).type).toBe('start');
+    expect(created.preludeBufferedCount).toBe(2);
+    const second = await created.reader.read();
+    expect((second.value as { type: string }).type).toBe('text-delta');
+  }, 15_000);
+
+  it('tool-call 直接是边界（不缓冲），回注流按序透传', async () => {
+    const { streamable } = createFakeStream({
+      parts: [{ type: 'start' }, { type: 'tool-call', toolCallId: 't1', toolName: 'read' }],
+    });
+    const created = await createStreamWithRetry({
+      create: () => streamable,
+      controller: new AbortController(),
+    });
+    expect(created.preludeBufferedCount).toBe(1);
+    // firstPart 已消费首格（start）；回注流第二格起收边界及其后
+    const seq = await collectTypes(created.reader);
+    expect(seq).toEqual(['tool-call']);
+  }, 15_000);
+
+  it('无前奏：原始 reader 直通，零额外包装', async () => {
+    const { streamable } = createFakeStream({});
+    const created = await createStreamWithRetry({
+      create: () => streamable,
+      controller: new AbortController(),
+    });
+    expect(created.preludeBufferedCount).toBe(0);
+    expect(created.attemptsToBoundary).toBe(1);
+    expect((created.firstPart.value as { type: string }).type).toBe('text-delta');
+  }, 15_000);
+});
