@@ -7,11 +7,12 @@ import type { ModelEntry } from './types';
 
 export const BUILTIN_MODELS: readonly ModelEntry[] = [
   {
-    id: 'deepseek-v4-flash',
+    id: 'deepseek-flash',
     providerKind: 'deepseek',
-    displayName: 'DeepSeek V4 Flash',
+    displayName: 'DeepSeek V4.1 Flash（多模态）',
     capabilities: {
       reasoning: true,
+      vision: true,
       contextWindowSize: 1_000_000,
       maxOutputTokens: 384_000,
     },
@@ -32,13 +33,13 @@ export const BUILTIN_MODELS: readonly ModelEntry[] = [
   {
     id: 'deepseek-chat',
     providerKind: 'deepseek',
-    displayName: 'DeepSeek Chat（旧版兼容）',
+    displayName: 'DeepSeek Chat（已退役：官方 2026-07-24 停用）',
     capabilities: { contextWindowSize: 64_000, maxOutputTokens: 8_192 },
   },
   {
     id: 'deepseek-reasoner',
     providerKind: 'deepseek',
-    displayName: 'DeepSeek Reasoner（旧版兼容）',
+    displayName: 'DeepSeek Reasoner（已退役：官方 2026-07-24 停用）',
     capabilities: { reasoning: true, contextWindowSize: 64_000, maxOutputTokens: 64_000 },
   },
 
@@ -120,6 +121,30 @@ export const BUILTIN_MODELS: readonly ModelEntry[] = [
       maxOutputTokens: 128_000,
     },
     generationConfig: { reasoningEffort: 'high' },
+  },
+  {
+    id: 'glm-5.2',
+    providerKind: 'zhipu',
+    displayName: 'GLM-5.2（1M 上下文）',
+    capabilities: {
+      reasoning: true,
+      contextWindowSize: 1_000_000,
+      maxOutputTokens: 128_000,
+    },
+    generationConfig: { reasoningEffort: 'max' },
+  },
+  {
+    // 官方契约：GLM-5.3 强制思考，thinking.type 仅接受 enabled（disabled 请求失败）；
+    // reasoning_effort 三档 low/high/max 默认 max
+    id: 'glm-5.3',
+    providerKind: 'zhipu',
+    displayName: 'GLM-5.3（强制思考，1M 上下文）',
+    capabilities: {
+      reasoning: true,
+      contextWindowSize: 1_000_000,
+      maxOutputTokens: 128_000,
+    },
+    generationConfig: { reasoningEffort: 'max' },
   },
   {
     id: 'mimo-v2.6-flash',
