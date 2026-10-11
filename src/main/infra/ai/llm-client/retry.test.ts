@@ -3,8 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   getErrorStatus,
   getRetryAfterDelayMs,
+  isReasonableRetryAfterMs,
   isRetryableError,
   resolveEnvRetryMaxRetries,
+  resolveRetryDelay,
   resolveRetryOptions,
   retryWithBackoff,
 } from './retry';
@@ -100,6 +102,99 @@ describe('getErrorStatus / getRetryAfterDelayMs（错误信息提取）', () => 
 
   it('getRetryAfterDelayMs：非 APICallError 返回 undefined', () => {
     expect(getRetryAfterDelayMs(new Error('plain'))).toBeUndefined();
+  });
+
+  it('getRetryAfterDelayMs：retry-after-ms（毫秒形态）优先', () => {
+    const error = createApiError(429, {
+      responseHeaders: { 'retry-after': '30', 'retry-after-ms': '750' },
+    });
+    expect(getRetryAfterDelayMs(error)).toBe(750);
+  });
+
+  it('getRetryAfterDelayMs：retry-after-ms 非法时回落秒数头', () => {
+    const error = createApiError(429, {
+      responseHeaders: { 'retry-after': '2', 'retry-after-ms': 'abc' },
+    });
+    expect(getRetryAfterDelayMs(error)).toBe(2000);
+  });
+
+  it('getRetryAfterDelayMs：大小写变体头（Retry-After）也能读到', () => {
+    const error = createApiError(429, { responseHeaders: { 'Retry-After': '5' } });
+    expect(getRetryAfterDelayMs(error)).toBe(5000);
+  });
+
+  it('getRetryAfterDelayMs：HTTP 日期形态返回未来差值', () => {
+    const future = new Date(Date.now() + 10_000).toUTCString();
+    const error = createApiError(429, { responseHeaders: { 'retry-after': future } });
+    const delta = getRetryAfterDelayMs(error);
+    expect(delta).toBeGreaterThan(0);
+    expect(delta).toBeLessThanOrEqual(10_000);
+  });
+});
+
+describe('isReasonableRetryAfterMs（Retry-After 采纳窗口）', () => {
+  it('窗口内（≤5 分钟）：采纳', () => {
+    expect(isReasonableRetryAfterMs(30_000, 1500)).toBe(true);
+    expect(isReasonableRetryAfterMs(5 * 60_000, 1500)).toBe(true);
+  });
+
+  it('超窗口但小于本地指数值（供应商要求比本地计划更短）：采纳', () => {
+    expect(isReasonableRetryAfterMs(6 * 60_000, 7 * 60_000)).toBe(true);
+  });
+
+  it('超窗口且大于本地指数值：拒绝', () => {
+    expect(isReasonableRetryAfterMs(6 * 60_000, 30_000)).toBe(false);
+  });
+
+  it('undefined / NaN / 负数：拒绝', () => {
+    expect(isReasonableRetryAfterMs(undefined, 1500)).toBe(false);
+    expect(isReasonableRetryAfterMs(Number.NaN, 1500)).toBe(false);
+    expect(isReasonableRetryAfterMs(-100, 1500)).toBe(false);
+  });
+});
+
+describe('resolveRetryDelay（延迟决策与来源诊断）', () => {
+  it('provider_header：窗口内 Retry-After 采纳且不抖动', () => {
+    const decision = resolveRetryDelay({
+      error: createApiError(429, { responseHeaders: { 'retry-after': '2' } }),
+      exponentialDelayMs: 1500,
+      jitter: true,
+    });
+    expect(decision.delayMs).toBe(2000);
+    expect(decision.jittered).toBe(false);
+    expect(decision.source).toBe('provider_header');
+  });
+
+  it('blocked_by_x_should_retry：x-should-retry false 否决 Retry-After，落本地曲线', () => {
+    const decision = resolveRetryDelay({
+      error: createApiError(429, {
+        responseHeaders: { 'retry-after': '2', 'x-should-retry': 'false' },
+      }),
+      exponentialDelayMs: 1500,
+      jitter: false,
+    });
+    expect(decision.delayMs).toBe(1500);
+    expect(decision.source).toBe('blocked_by_x_should_retry');
+  });
+
+  it('header_unparsed_or_ignored：头存在但超窗口被拒', () => {
+    const decision = resolveRetryDelay({
+      error: createApiError(429, { responseHeaders: { 'retry-after': '3600' } }),
+      exponentialDelayMs: 1500,
+      jitter: false,
+    });
+    expect(decision.delayMs).toBe(1500);
+    expect(decision.source).toBe('header_unparsed_or_ignored');
+  });
+
+  it('missing：无任何相关头', () => {
+    const decision = resolveRetryDelay({
+      error: createApiError(500),
+      exponentialDelayMs: 1500,
+      jitter: false,
+    });
+    expect(decision.delayMs).toBe(1500);
+    expect(decision.source).toBe('missing');
   });
 });
 

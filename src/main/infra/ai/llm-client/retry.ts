@@ -48,6 +48,40 @@ export function isRetryableError(error: unknown): boolean {
   return false;
 }
 
+/**
+ * Retry-After 延迟的来源诊断（取值路径审计用——该值可能在 header 保留、解析、采纳任一层断链）。
+ *
+ * - `provider_header`：供应商头被解析且已采纳
+ * - `blocked_by_x_should_retry`：x-should-retry: false 显式否决
+ * - `header_unparsed_or_ignored`：头存在但解析失败/超出采纳窗口被拒
+ * - `missing`：响应无任何 Retry-After 相关头
+ */
+export type RetryAfterSource =
+  | 'provider_header'
+  | 'blocked_by_x_should_retry'
+  | 'header_unparsed_or_ignored'
+  | 'missing';
+
+/** 大小写不敏感读响应头（供应商头键大小写不定） */
+function readHeader(headers: Record<string, unknown>, name: string): string | undefined {
+  const lowered = name.toLowerCase();
+  for (const [key, value] of Object.entries(headers)) {
+    if (key.toLowerCase() === lowered && typeof value === 'string') {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+function isShouldRetryHeaderBlocked(headers: Record<string, unknown>): boolean {
+  const value = readHeader(headers, 'x-should-retry')?.trim().toLowerCase();
+  return value === 'false' || value === '0';
+}
+
+/**
+ * 解析 Retry-After 头为毫秒（支持 `retry-after`（秒/HTTP 日期）与 `retry-after-ms`（毫秒）两种形态；
+ * HTTP 日期形态解析失败返回 undefined——不猜未来时间。
+ */
 export function getRetryAfterDelayMs(error: unknown): number | undefined {
   if (!(error instanceof APICallError)) {
     return undefined;
@@ -56,13 +90,27 @@ export function getRetryAfterDelayMs(error: unknown): number | undefined {
   if (headers === undefined) {
     return undefined;
   }
-  const retryAfter = headers['retry-after'] ?? headers['Retry-After'];
-  if (retryAfter === undefined) {
+  const msValue = readHeader(headers, 'retry-after-ms');
+  if (msValue !== undefined) {
+    const ms = Number(msValue);
+    if (Number.isFinite(ms) && ms > 0) {
+      return Math.floor(ms);
+    }
+  }
+  const secondsValue = readHeader(headers, 'retry-after');
+  if (secondsValue === undefined) {
     return undefined;
   }
-  const seconds = Number(retryAfter);
+  const seconds = Number(secondsValue);
   if (Number.isFinite(seconds) && seconds > 0) {
     return seconds * 1000;
+  }
+  const dateMs = Date.parse(secondsValue);
+  if (Number.isFinite(dateMs)) {
+    const delta = dateMs - Date.now();
+    if (delta > 0) {
+      return delta;
+    }
   }
   return undefined;
 }
@@ -74,6 +122,8 @@ export interface RetryAttemptInfo {
   readonly delayMs: number;
   /** 本轮延迟是否被抖动缩短（equal jitter：×[0.5, 1.0)）；诊断重试时序用 */
   readonly jittered: boolean;
+  /** 本轮等待值的来源诊断（Retry-After 断链审计：头保留/解析/采纳任一层都可能断） */
+  readonly retryAfterSource: RetryAfterSource;
 }
 
 export interface RetryOptions {
@@ -199,6 +249,57 @@ function normalizeNonNegativeInteger(...layers: readonly (number | undefined)[])
   return 0;
 }
 
+/**
+ * Retry-After 采纳窗口：值有限且（≤ 5 分钟 或 小于本地指数值）才采纳。
+ *
+ * 两向防误杀——几小时的 Retry-After 会把请求挂死（用户盯着转圈）；几十秒的合法限流
+ * 等待又可能被本地的 30s 封顶截掉。落在窗口内的指示才可信。
+ */
+const MAX_REASONABLE_RETRY_AFTER_MS = 5 * 60_000;
+
+export function isReasonableRetryAfterMs(
+  retryAfterMs: number | undefined,
+  exponentialDelayMs: number,
+): retryAfterMs is number {
+  return (
+    retryAfterMs !== undefined &&
+    Number.isFinite(retryAfterMs) &&
+    retryAfterMs >= 0 &&
+    (retryAfterMs <= MAX_REASONABLE_RETRY_AFTER_MS || retryAfterMs < exponentialDelayMs)
+  );
+}
+
+/**
+ * 延迟决策：合并 Retry-After 采纳窗口、指数曲线与 jitter，产出最终等待值与来源诊断。
+ *
+ * x-should-retry: false 显式否决供应商重试建议——不采纳其 Retry-After，按本地曲线退避。
+ */
+export function resolveRetryDelay(input: {
+  readonly error: unknown;
+  readonly exponentialDelayMs: number;
+  readonly jitter: boolean;
+}): { readonly delayMs: number; readonly jittered: boolean; readonly source: RetryAfterSource } {
+  const headers = input.error instanceof APICallError ? (input.error.responseHeaders ?? {}) : {};
+  if (isShouldRetryHeaderBlocked(headers)) {
+    const j = applyJitter(input.exponentialDelayMs, input.jitter);
+    return { delayMs: j.delayMs, jittered: j.jittered, source: 'blocked_by_x_should_retry' };
+  }
+  const retryAfterMs = getRetryAfterDelayMs(input.error);
+  if (isReasonableRetryAfterMs(retryAfterMs, input.exponentialDelayMs)) {
+    // 供应商显式指示优先且不再叠加抖动
+    return { delayMs: retryAfterMs, jittered: false, source: 'provider_header' };
+  }
+  const headerPresent =
+    readHeader(headers, 'retry-after') !== undefined ||
+    readHeader(headers, 'retry-after-ms') !== undefined;
+  const j = applyJitter(input.exponentialDelayMs, input.jitter);
+  return {
+    delayMs: j.delayMs,
+    jittered: j.jittered,
+    source: headerPresent ? 'header_unparsed_or_ignored' : 'missing',
+  };
+}
+
 export async function retryWithBackoff<T>(
   fn: () => Promise<T>,
   options: RetryOptions = {},
@@ -220,22 +321,21 @@ export async function retryWithBackoff<T>(
       if (attempt >= maxAttempts || !shouldRetry(error)) {
         throw error;
       }
-      const retryAfterMs = getRetryAfterDelayMs(error);
       const exponentialDelayMs = Math.min(initialDelayMs * 2 ** (attempt - 1), maxDelayMs);
-      const { delayMs: jitteredDelayMs, jittered } = applyJitter(
+      const decision = resolveRetryDelay({
+        error,
         exponentialDelayMs,
-        resolved.jitter,
-      );
-      // Retry-After 是供应商的显式等待指示，优先于本地指数曲线且不再叠加抖动
-      const delayMs = retryAfterMs ?? jitteredDelayMs;
+        jitter: resolved.jitter,
+      });
       options.onRetry?.({
         attempt,
         error,
         errorStatus: getErrorStatus(error),
-        delayMs,
-        jittered: retryAfterMs === undefined && jittered,
+        delayMs: decision.delayMs,
+        jittered: decision.jittered,
+        retryAfterSource: decision.source,
       });
-      await sleep(delayMs, options.signal);
+      await sleep(decision.delayMs, options.signal);
       attempt += 1;
     }
   }
