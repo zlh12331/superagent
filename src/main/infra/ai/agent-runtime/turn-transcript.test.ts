@@ -137,4 +137,24 @@ describe('toPersistedOutput', () => {
       value: expect.stringContaining('工具输出过长'),
     });
   });
+
+  // ⚠ 契约钉死：DeepSeek/MiMo 官方要求 Agent 带工具多轮回传历史 reasoning_content
+  // （缺失返回 400 或质量劣化）。assistant 消息 content 数组里的 reasoning part 经
+  // openai-compatible 序列化为 reasoning_content 字段——此测试丢失即回传契约破坏
+  it('reasoning part 保序进入 assistant content（回传契约：不丢失不变形）', () => {
+    const entries: TurnTranscriptEntry[] = [
+      { kind: 'reasoning', text: '思考第一段' },
+      { kind: 'tool-call', toolCallId: 'call-1', toolName: 'read_file', input: { path: 'a.ts' } },
+      { kind: 'reasoning', text: '读完再想' },
+      { kind: 'tool-call', toolCallId: 'call-2', toolName: 'edit_file', input: { path: 'a.ts' } },
+    ];
+    const [assistant] = buildAssistantTurnMessages('', entries);
+    const content = (assistant.content as Array<{ type: string; text?: string }>).filter(
+      (p) => p.type === 'reasoning',
+    );
+    expect(content).toEqual([
+      { type: 'reasoning', text: '思考第一段' },
+      { type: 'reasoning', text: '读完再想' },
+    ]);
+  });
 });
