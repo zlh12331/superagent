@@ -384,7 +384,8 @@ describe('LlmClient', () => {
       await client.generateText({ prompt: 'hi' });
 
       const args = getLastGenerateTextArgs();
-      expect(args['providerOptions']).toEqual({ deepseek: { reasoningEffort: 'max' } });
+      // callId 注入属遥测接缝（codeagent 命名空间）；deepseek 采样语义用 objectContaining 断言
+      expect(args['providerOptions']).toMatchObject({ deepseek: { reasoningEffort: 'max' } });
       expect(args['temperature']).toBeUndefined();
       expect(args['topP']).toBeUndefined();
     });
@@ -396,7 +397,10 @@ describe('LlmClient', () => {
       await client.generateText({ model: 'deepseek-reasoner', prompt: 'hi' });
 
       const args = getLastGenerateTextArgs();
-      expect(args['providerOptions']).toBeUndefined();
+      // callId（codeagent 命名空间）恒注入；deepseek 采样 providerOptions 不注入
+      expect(args['providerOptions']).toEqual({
+        codeagent: expect.objectContaining({ callId: expect.any(String) }),
+      });
       expect(args['temperature']).toBeUndefined();
     });
 
@@ -437,7 +441,10 @@ describe('LlmClient', () => {
       expect(args['temperature']).toBe(0.7);
       expect(args['topP']).toBe(0.9);
       expect(args['maxOutputTokens']).toBe(100);
-      expect(args['providerOptions']).toBeUndefined();
+      // callId（codeagent 命名空间）恒注入；gpt-4o 无 provider 级 providerOptions
+      expect(args['providerOptions']).toEqual({
+        codeagent: expect.objectContaining({ callId: expect.any(String) }),
+      });
     });
   });
 });

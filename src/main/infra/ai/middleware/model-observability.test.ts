@@ -145,4 +145,42 @@ describe('modelObservabilityMiddleware', () => {
     expect(receivedGenerateParams[0]).toBe(params);
     expect(receivedStreamParams[0]).toBe(params);
   });
+
+  describe('callId 提取（providerOptions.codeagent.callId → span 属性）', () => {
+    it('callId 存在：不抛错、result 透传（span 属性断言依赖 OTel 导出，此处验证接缝不炸）', async () => {
+      const { model } = createFakeModel();
+      const wrapped = wrapLanguageModel({
+        model,
+        middleware: modelObservabilityMiddleware,
+      });
+      const paramsWithCallId = {
+        prompt: 'hi',
+        providerOptions: { codeagent: { callId: 'call-xyz' } },
+      } as unknown as WrapCallParams;
+
+      const result = await wrapped.doGenerate(paramsWithCallId);
+
+      expect(result).toMatchObject({ text: 'ok' });
+      expect(mocks.mockLogger.debug).toHaveBeenCalledWith(
+        expect.objectContaining({ provider: 'deepseek' }),
+        '模型生成调用完成',
+      );
+    });
+
+    it('callId 缺失/非法：静默跳过属性（不炸不挂 span）', async () => {
+      const { model } = createFakeModel();
+      const wrapped = wrapLanguageModel({
+        model,
+        middleware: modelObservabilityMiddleware,
+      });
+      const badParams = {
+        prompt: 'hi',
+        providerOptions: { codeagent: { callId: 42 } },
+      } as unknown as WrapCallParams;
+
+      const result = await wrapped.doGenerate(badParams);
+
+      expect(result).toMatchObject({ text: 'ok' });
+    });
+  });
 });

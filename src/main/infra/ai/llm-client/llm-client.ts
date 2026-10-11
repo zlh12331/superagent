@@ -1,5 +1,7 @@
 // llm-client.ts：LLM 客户端——generateText / generateJson（结构化 Output）两入口，
 // 重试/超时/错误码归一收口；模型经 registry 解析 + 缓存，中间件挂可观测性
+
+import { randomUUID } from 'node:crypto';
 import { AppError, ErrorCode, type ModelApiFormat } from '@code-agent/shared/main';
 import {
   APICallError,
@@ -10,6 +12,7 @@ import {
 } from 'ai';
 import type { ZodType } from 'zod';
 import { logger } from '../../../utils/logger';
+import { createSdkTelemetryIntegration } from '../../telemetry/sdk-telemetry';
 import { estimateTokenCount } from '../agent/context-compression';
 import { combineAbortSignals, createTimeoutSignal } from '../agent-runtime/abort-utils';
 import { modelObservabilityMiddleware } from '../middleware/model-observability';
@@ -202,6 +205,9 @@ export class LlmClient {
       this.deps.modelRegistry.resolve(options.model),
       promptTokens,
     );
+    // 逻辑调用 ID：Attempt span（middleware）与 model.call 父 span（telemetry 回调）的 join 键
+    const callId = randomUUID();
+    const telemetryHooks = createSdkTelemetryIntegration();
 
     return this.runSideQuery(options.model, options, async (model, signal) => {
       const result = await generateTextAi({
@@ -212,6 +218,16 @@ export class LlmClient {
         ...(gen.maxOutputTokens !== undefined ? { maxOutputTokens: gen.maxOutputTokens } : {}),
         ...(options.system !== undefined ? { system: options.system } : {}),
         ...(gen.providerOptions !== undefined ? { providerOptions: gen.providerOptions } : {}),
+        providerOptions: {
+          ...(gen.providerOptions ?? {}),
+          codeagent: { callId },
+        },
+        ...(telemetryHooks.onLanguageModelCallStart !== undefined
+          ? { onLanguageModelCallStart: telemetryHooks.onLanguageModelCallStart }
+          : {}),
+        ...(telemetryHooks.onLanguageModelCallEnd !== undefined
+          ? { onLanguageModelCallEnd: telemetryHooks.onLanguageModelCallEnd }
+          : {}),
         ...(signal !== undefined ? { abortSignal: signal } : {}),
       });
       const usage = result.usage;

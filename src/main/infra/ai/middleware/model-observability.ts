@@ -106,10 +106,27 @@ function failAttemptSpan(
   span.end();
 }
 
+/** 从 CallOptions.providerOptions 提取逻辑调用 ID（L3 每次 generateText/streamText 生成，
+ * codeagent 命名空间由 AI SDK 剥除不发给 provider）——Attempt span 借它与 model.call 父 span join */
+function callIdFromParams(params: {
+  readonly providerOptions?: Record<string, unknown> | undefined;
+}): string | undefined {
+  const codeagent = params.providerOptions?.['codeagent'];
+  if (typeof codeagent !== 'object' || codeagent === null) {
+    return undefined;
+  }
+  const callId = (codeagent as { callId?: unknown }).callId;
+  return typeof callId === 'string' && callId.length > 0 ? callId : undefined;
+}
+
 export const modelObservabilityMiddleware: LanguageModelMiddleware = {
-  wrapGenerate({ doGenerate, model }) {
+  wrapGenerate({ doGenerate, model, params }) {
     const startedAt = Date.now();
     const span = startAttemptSpan('generate', model);
+    const callId = callIdFromParams(params);
+    if (callId !== undefined && span !== null) {
+      span.setAttribute('model.callId', callId);
+    }
     return doGenerate().then(
       (result) => {
         const latencyMs = Date.now() - startedAt;
@@ -149,9 +166,13 @@ export const modelObservabilityMiddleware: LanguageModelMiddleware = {
     );
   },
 
-  wrapStream({ doStream, model }) {
+  wrapStream({ doStream, model, params }) {
     const startedAt = Date.now();
     const span = startAttemptSpan('stream', model);
+    const callId = callIdFromParams(params);
+    if (callId !== undefined && span !== null) {
+      span.setAttribute('model.callId', callId);
+    }
     return doStream().then(
       (result) => {
         // 流「建立成功」≠ 消费完成——Attempt span 在建立时即 end（attrs 标 established=true），
