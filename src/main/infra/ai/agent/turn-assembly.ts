@@ -1,9 +1,11 @@
 // turn-assembly.ts：单回合执行拼装——模型解析 → 流创建（重试+首 part 预读）→ TurnRunner 消费 →
 // 工具调用修复接线 → TurnDeps.executeTurn 的真身（机器编排的是它）
+
+import { randomUUID } from 'node:crypto';
 import type { ChatMessage } from '@code-agent/shared/main';
 import { ModelRetryReason } from '@code-agent/shared/main';
-import { randomUUID } from 'node:crypto';
 import { isStepCount, streamText } from 'ai';
+import { logger } from '../../../utils/logger';
 import { createSdkTelemetryIntegration } from '../../telemetry/sdk-telemetry';
 import { combineAbortSignals, createTimeoutSignal } from '../agent-runtime/abort-utils';
 import { createStreamWithRetry } from '../agent-runtime/create-stream';
@@ -129,6 +131,21 @@ export async function assembleAndRunTurn(args: TurnAssemblyArgs): Promise<TurnRu
       controller,
       ...(onRateLimited !== undefined ? { onRateLimited } : {}),
     });
+
+    // 断流观测出口（core 流恢复拍板的数据源）：
+    // preludeBufferedCount>0 = 无感重试窗口真实覆盖过；attemptsToBoundary>1 = 前奏窗口内重建过流
+    logger.info(
+      {
+        sessionId,
+        turnId,
+        callId,
+        preludeBufferedCount: created.preludeBufferedCount,
+        attemptsToBoundary: created.attemptsToBoundary,
+      },
+      '流边界观测',
+    );
+    span?.setAttribute('stream.preludeBufferedCount', created.preludeBufferedCount);
+    span?.setAttribute('stream.attemptsToBoundary', created.attemptsToBoundary);
 
     const runner = new TurnRunner({
       sessionId,
