@@ -87,18 +87,30 @@ export const CONTEXT_TOKENS_MAX = 10_000_000;
 /**
  * tokens → 厂商标称 K/M 显示（二进制/十进制自适应）
  *
- * 显示口径：厂商标称混用二进制（131072→128k）与十进制（384000→384k），
- * 换算自适应——能被 1024² 整除按 M（/1024²），否则能被 1024 整除按 k（/1024），
- * 否则按十进制 K（/1000）。与 parseTokenLabel 构成双向换算对。
+ * 显示口径：厂商标称混用二进制（131072→128k）与十进制（384000→384k）。
+ * Ki 档位判据 = 能被 1024 整除**且商为 2 的幂**——128/256/512…是厂商惯用的二进制档位，
+ * 而 384000 = 375×1024 虽整除但商非 2 幂，是十进制 384K 的巧合整除，不能按 Ki 显示；
+ * 否则能被 1000 整除按十进制 K；否则四舍五入取近似。
+ * 与 parseTokenLabel 构成换算对——parse 侧 'k' 恒按 ×1024（二进制 K 是 Token 计数惯例），
+ * 故十进制标称值经「预填→保存」会二进制化（384000→393216，+2.4% 漂移，方向保守：
+ * 仅影响压缩预算/输出钳制，不损数据）。末尾回环自校验兜底超限死角：
+ * 10000000 → "10000k" 解析超上限会卡保存校验 → 回退纯 Token 数（parse 恒精确）。
  */
 export function formatTokenLabel(tokens: number): string {
   if (tokens % (1024 * 1024) === 0 && tokens >= 1024 * 1024) {
     return `${tokens / (1024 * 1024)}M`;
   }
-  if (tokens % 1024 === 0) {
-    return `${tokens / 1024}k`;
+  const quotient = tokens / 1024;
+  if (Number.isInteger(quotient) && isPowerOfTwo(quotient)) {
+    return `${quotient}k`;
   }
-  return `${Math.round(tokens / 1000)}k`;
+  const candidate = tokens % 1000 === 0 ? `${tokens / 1000}k` : `${Math.round(tokens / 1000)}k`;
+  return parseTokenLabel(candidate) !== undefined ? candidate : `${tokens}`;
+}
+
+/** 判 2 的幂（Ki 档位商识别：正整数且二进制仅一位为 1） */
+function isPowerOfTwo(n: number): boolean {
+  return n > 0 && (n & (n - 1)) === 0;
 }
 
 /**
