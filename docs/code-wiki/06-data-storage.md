@@ -31,7 +31,7 @@
 | `prompts` | id, name, description, role, content, is_default | — |
 | `token_usage` | id, session_id, model_id, input/output/total_tokens, cache_read_tokens, reasoning_tokens, created_at | — |
 | `turns` | turn_id, session_id, seq, model_id, status, tokens, duration_ms, created_at | `uq_turns_turn_id` UNIQUE + `uq_turns_session_seq` UNIQUE(session_id, seq) |
-| `runtime_models` | model_id, provider_kind, base_url, display_name, is_enabled | is_enabled CHECK(0/1) |
+| `runtime_models` | model_id, provider_kind, base_url, display_name, timeout_ms, api_format, capabilities(JSON), is_enabled | is_enabled CHECK(0/1) |
 | `skills` | name, description, prompt, source('learned') | source CHECK |
 | `app_settings` | key, value(JSON) | — |
 | `cron_tasks` | id, session_id, expression, description, next_fire_at, enabled | enabled CHECK(0/1)；session_id **无外键**（可关联子代理内部回合 id，与 tasks 同决策） |
@@ -80,7 +80,7 @@
 - 运行时 `db.ts` 调 `migrate()`：建 `__drizzle_migrations` journal 表，按 `_journal.json` `when`（folderMillis）前进执行，`SQL` 按 `--> statement-breakpoint` 分割，整体一个事务，失败回滚。
 - 迁移目录路径：dev/测试 → `app.getAppPath()/drizzle`；打包 → `process.resourcesPath/drizzle`（electron-builder extraResources）。
 
-**当前迁移链**（2026-09-30 实测 7 条）：
+**当前迁移链**（2026-10-12 实测 10 条）：
 
 | 迁移 | 语义 |
 |---|---|
@@ -91,6 +91,9 @@
 | `0004_drop_redundant_messages_index` | 清理冗余索引（UNIQUE 已覆盖单列查询路径） |
 | `0005_index_cleanup` | 索引清理专项（冗余索引去重） |
 | `0006_add_perf_indexes` | 性能索引专项（sessions pinned+updated_at / working_dir+updated_at 复合、token_usage session_id、turns created_at） |
+| `0007_special_dreadnoughts` | runtime_models 加 `timeout_ms`（模型级总时长超时） |
+| `0008_perfect_golden_guardian` | runtime_models 加 `api_format`（自定义模型 API 格式，#122） |
+| `0009_glorious_namorita` | runtime_models 加 `capabilities`（模型高级配置 JSON 持久化） |
 
 **schema 演化规范**（重要）：
 - **加列/加表/改索引**：改 `schema.ts` → `pnpm exec drizzle-kit generate`（自动生成迁移 + journal + snapshot）→ `pnpm exec drizzle-kit check` 验证。
