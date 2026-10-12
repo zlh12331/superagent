@@ -3,7 +3,7 @@
 // 关键流程：update:check 只回"检查已发起 / 发起失败"，结果与进度一律经 update:event:status 下发
 // 边界：只定义形状与值域；接线在 packages/shared/src/ipc/definitions.ts 的 update 域，
 // 检查调度、下载取消与错误归类在 src/main/infra/update/update-service.ts
-// 设计依据：docs/design/27-auto-update-spec.md
+// 设计依据：docs/implementation/27-auto-update-spec.md
 
 import { z } from 'zod';
 

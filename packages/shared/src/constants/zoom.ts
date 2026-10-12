@@ -1,6 +1,6 @@
 // zoom.ts：应用级界面缩放的档位常量 + 归一/调档/Windows overlay 高度纯函数（主进程与渲染层共用单一真源）
 // 数值语义 = webContents.setZoomFactor 的 DIP 缩放系数（1 = 100%）；浏览器预览有独立缩放域，不经此处。
-// 设计依据 docs/design/35-ui-zoom-spec.md。
+// 设计依据 docs/implementation/35-ui-zoom-spec.md。
 // ────────── 档位常量：全应用缩放的唯一值域与缺省锚点 ──────────
 /**
  * 合法缩放档位（升序，11 档）。
@@ -28,7 +28,7 @@ export const DEFAULT_ZOOM = 1;
  *
  * 非有限数（undefined/NaN/Infinity，即「缺失或彻底损坏」）→ DEFAULT_ZOOM：
  * 缺失语义是「默认 100%」而非「钳到最小档」——NaN 比较全 false 会把结果停在
- * 数组首项，必须前置拦截（实施期实测缺陷，docs/design/35-ui-zoom-spec.md §3.2 登记）。
+ * 数组首项，必须前置拦截（实施期实测缺陷，docs/implementation/35-ui-zoom-spec.md §3.2 登记）。
  *
  * 调用方三处：渲染层应用出口（src/renderer/lib/zoom.ts）、设置快照读侧（settings-store
  * 合并时归一）、主进程 window:applyZoom handler（渲染层已归一，此处防 handler 直调方）。

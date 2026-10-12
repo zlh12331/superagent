@@ -198,7 +198,7 @@ export interface BrowserSettings {
  *
  * autoCheck 是"自动发现"总开关（默认开）：开启时每次启动自动检查、发现新版
  * 后台下载、退出时自动安装；关闭时三者全停，但用户手动点"检查更新"后的
- * 下载与安装照常（见 docs/design/27-auto-update-spec.md §4）。
+ * 下载与安装照常（见 docs/implementation/27-auto-update-spec.md §4）。
  */
 export interface UpdateSettings {
   /** 是否启用自动检查更新（默认 true） */
@@ -224,7 +224,7 @@ export interface UpdateSettings {
 }
 
 /**
- * 窗口行为设置（docs/design/28-tray-spec.md §3/§7）
+ * 窗口行为设置（docs/implementation/28-tray-spec.md §3/§7）
  *
  * closeAction 是关窗语义：minimize（默认）= 点 X 隐藏到托盘、后台能力继续；
  * quit = 点 X 走关窗协商后退出。主进程在关窗事件中实时读取（readSetting），

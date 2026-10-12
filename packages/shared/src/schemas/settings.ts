@@ -154,7 +154,7 @@ export const SETTING_KEYS = [
   'browser',
   // 自动更新开关（settings.update：autoCheck 默认开、allowPrerelease 默认关；缺失/损坏按默认）
   'update',
-  // 关窗行为（settings.window.closeAction；默认 minimize=最小化到托盘，见 docs/design/28-tray-spec.md）
+  // 关窗行为（settings.window.closeAction；默认 minimize=最小化到托盘，见 docs/implementation/28-tray-spec.md）
   'window',
   // 记忆功能开关（settings.memory.enabled；关闭后不捕获新记忆、不注入召回）
   'memory',
@@ -362,7 +362,7 @@ export const SettingsSetResSchema = z.object({
  * 正常路径下设置由渲染层写入（`settings:set`），渲染层 store 即真源；但托盘菜单等
  * **主进程主动写入**（如「关闭时最小化到托盘」改 `window.closeAction`）绕过了渲染层
  * store ⇒ 不推送会让设置页显示旧值，且后续任何其它设置变更都会把旧值写回、静默覆盖
- * （丢更新，见 docs/design/30-residency-fix-spec.md §3 P2-6）。
+ * （丢更新，见 docs/implementation/30-residency-fix-spec.md §3 P2-6）。
  *
  * `key` 复用 `SETTING_KEYS`（与 settings:set 同一域清单），`value` 为该域的完整新值。
  */

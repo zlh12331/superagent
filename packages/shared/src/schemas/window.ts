@@ -3,7 +3,7 @@
 // （src/main/ipc/register.ts）据此校验入参与 handler 返回值（resSchema 必填，缺失即启动抛错）。
 // 边界：只定义形状；档位值域、归一与 overlay 高度换算在 packages/shared/src/constants/zoom.ts，
 // 缩放的实际应用（setZoomFactor + Windows titleBarOverlay 联动）在 src/main/ipc/window.handler.ts。
-// 设计依据 docs/design/35-ui-zoom-spec.md。
+// 设计依据 docs/implementation/35-ui-zoom-spec.md。
 
 import { z } from 'zod';
 

@@ -1,7 +1,7 @@
 // proxy.ts：Proxy 域 IPC 契约单一真源（proxy:test 的入参 / 响应形状与取值）
 // 链路：设置页「测试连接」→ invoke proxy:test → 主进程经 proxiedFetch 探测轻量端点（超时固定 3s）
 // 边界：只定义契约；探测与模式判定在 src/main/ipc/proxy.handler.ts，代理配置值门禁在 packages/shared/src/schemas/settings.ts
-// 设计依据：docs/design/34-network-proxy-spec.md
+// 设计依据：docs/implementation/34-network-proxy-spec.md
 
 import { z } from 'zod';
 

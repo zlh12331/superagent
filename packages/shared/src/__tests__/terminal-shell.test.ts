@@ -1,7 +1,7 @@
 // terminal-shell.test.ts：终端 shell 档位表 / 跨平台适用性 / 字号归一三组纯函数契约
 // 边界：只覆盖 shared 常量层；主进程 spawn 回落见 src/main/infra/terminal/terminal-service.test.ts，
 // 设置页 UI 见 src/renderer/components/settings/sections/terminal-section.test.tsx
-// 契约来源：docs/design/36-settings-gaps-spec.md §1B 终端设置域
+// 契约来源：docs/implementation/36-settings-gaps-spec.md §1B 终端设置域
 
 import { describe, expect, it } from 'vitest';
 

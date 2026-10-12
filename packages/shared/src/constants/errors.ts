@@ -67,9 +67,9 @@ export const ErrorCode = {
   TOOL_ABORTED: 'TOOL_ABORTED',
   // ── Code Agent：会话与备份 ──────────────────────────
   SESSION_NOT_FOUND: 'SESSION_NOT_FOUND',
-  /** 会话正被占用（有运行中回合）：破坏性批量操作（清空全部会话）拒绝执行（docs/design/36-settings-gaps-spec.md §1D） */
+  /** 会话正被占用（有运行中回合）：破坏性批量操作（清空全部会话）拒绝执行（docs/implementation/36-settings-gaps-spec.md §1D） */
   SESSION_IN_USE: 'SESSION_IN_USE',
-  /** 备份操作失败（恢复点不存在/损坏、路径非法）（docs/design/37-settings-gaps-2-spec.md §1B） */
+  /** 备份操作失败（恢复点不存在/损坏、路径非法）（docs/implementation/37-settings-gaps-2-spec.md §1B） */
   BACKUP_INVALID: 'BACKUP_INVALID',
   // ── Code Agent：终端 ────────────────────────────────
   TERMINAL_SPAWN_FAILED: 'TERMINAL_SPAWN_FAILED',

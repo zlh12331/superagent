@@ -85,7 +85,7 @@ AGENTS.md       = 工程约定摘要（命令/约束；不重复长 UX 表）
 | F2 | `08:243` 改为「浏览器 = WebContentsView 进程外预览（独立 session `browser-preview`），非 iframe；渲染层仅占位/工具条」 | 与 `browser-pane.tsx`/`preview-service.ts` 一致 |
 | F3 | `09:474` 重写浏览器段：设备尺寸/历史栈可保留事实项，**删除 iframe sandbox/重挂载**描述，改为 WebContentsView bounds/缩放语义（见 `browser-geometry.ts`） | 无 iframe 实现描述 |
 | F4/F5 | 交由 P1 T7 改 08/09 色表与「Aurora」措辞；**本题 T 文案合并时引用 P1，避免双改** | 无 `#00b89e` 现行规范 |
-| F6 | 在 `08` 附录或 `09` 浏览器节写入 WebContentsView，并链到 `docs/design/25-remote-control-spec` / AGENTS 约束（若适用） | `rg WebContentsView docs/design` 有命中 |
+| F6 | 在 `08` 附录或 `09` 浏览器节写入 WebContentsView，并链到 `docs/implementation/25-remote-control-spec` / AGENTS 约束（若适用） | `rg WebContentsView docs/design` 有命中 |
 | F7 | 对 `08` §4–§6 做一次**抽样对照表**（见 S2.3 模板），只改实证失实行 | 抽样表进 PR 描述或 audit 附录 |
 
 ### S2.2 防再漂机制（小而可落地，不做元宇宙）

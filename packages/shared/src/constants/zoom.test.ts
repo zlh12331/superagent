@@ -1,5 +1,5 @@
 // zoom.test.ts：界面缩放纯函数单测（档位表 / clampZoom 归一 / stepZoom 步进 / overlayHeightFor 联动）
-// 测试名中的 V1/V7/V9 为 docs/design/35-ui-zoom-spec.md §1.3 验收项编号（本套件测试设计见该文 §2.7）
+// 测试名中的 V1/V7/V9 为 docs/implementation/35-ui-zoom-spec.md §1.3 验收项编号（本套件测试设计见该文 §2.7）
 
 import { describe, expect, it } from 'vitest';
 

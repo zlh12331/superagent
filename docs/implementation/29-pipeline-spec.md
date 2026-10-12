@@ -527,7 +527,7 @@ artifacts/mac-arm64/latest-mac.yml
 | 文件 | 过期内容 | 应改为 |
 |---|---|---|
 | `AGENTS.md`「CI 触发策略」段 | 称 ruleset 必需检查「现 **8 项**」，实测为 **6 项**（早先的记载已过期） | 按实施后的真实值写 **5 项**，并列出 5 个 context 字符串 |
-| `docs/design/27-auto-update-spec.md` §14.11 | 称 CD「**四个变体**」覆盖更全（§1 已声明该段为历史阶段记录） | 补一句指向本文档：CD 已扩为 **6 个 job**，smoke 覆盖 6/6 |
+| `docs/implementation/27-auto-update-spec.md` §14.11 | 称 CD「**四个变体**」覆盖更全（§1 已声明该段为历史阶段记录） | 补一句指向本文档：CD 已扩为 **6 个 job**，smoke 覆盖 6/6 |
 | `.github/workflows/release.yml:128-152` 的矩阵注释块 | 称「基础的 `windows-11-arm` 镜像不含 Visual Studio」「Windows 不能像 Linux 那样拆 job」 | 前半句删除或改为「含 VS2022 + `VC.Tools.ARM64`，正迁移至 VS2026」；后半句保留（该结论仍成立，是 merge job 的存在理由） |
 
 ## 7. 风险与应对（均已核实，如实记录）

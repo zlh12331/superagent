@@ -221,7 +221,7 @@ export type HandlerSignature<Def, C> = Def extends {
  *
  * 缺失任一 request 方法的 handler → 编译期报错（通道↔handler 一致性保证）。
  * 仅含 event 方法的域（如 invalidation）经 key remapping 整域免除——事件由主进程
- * 推送侧广播，无 handler 可注册（docs/design/31-invalidation-automation-spec.md §2.1）。
+ * 推送侧广播，无 handler 可注册（docs/implementation/31-invalidation-automation-spec.md §2.1）。
  */
 export type InferHandlers<
   D extends Record<string, Record<string, RequestDefLike | EventDefLike>>,
