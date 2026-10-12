@@ -18,6 +18,8 @@ import {
 import { useSetApiKey } from '@/hooks/use-api-key';
 import { useBuiltinModelsQuery } from '@/hooks/use-models';
 import {
+  type AddRuntimeModelInput,
+  type UpdateRuntimeModelInput,
   useAddRuntimeModel,
   useTestModel,
   useUpdateRuntimeModel,
@@ -77,6 +79,8 @@ function createDefaultValues(): ModelConfigFormValues {
  * 集中一处后各保存分支只做 `...fields.displayName` 这类展开，不再重复写三元。
  * `apiKeyValue` 单独给出原始值（服务商模式需先单独调 setApiKey mutation）。
  */
+type TrimmedFields = ReturnType<typeof trimOptionalFields>;
+
 function trimOptionalFields(values: ModelConfigFormValues): {
   readonly displayName: Record<string, string>;
   readonly requestUrl: Record<string, string>;
@@ -127,6 +131,58 @@ function buildCapabilitiesOverride(
     ...(contextWindowSize !== undefined ? { contextWindowSize } : {}),
     ...(maxOutputTokens !== undefined ? { maxOutputTokens } : {}),
     ...(vision !== undefined ? { vision } : {}),
+  };
+}
+
+/** 编辑模式保存 payload（复用 trimOptionalFields 的预组装结果，避免分支内重复展开） */
+function buildUpdatePayload(
+  values: ModelConfigFormValues,
+  fields: TrimmedFields,
+  capabilities: ModelCapabilitiesOverride | null | undefined,
+): UpdateRuntimeModelInput {
+  return {
+    modelId: values.modelId.trim(),
+    ...fields.displayName,
+    ...fields.requestUrl,
+    ...fields.apiKey,
+    timeoutMs: fields.timeoutMs,
+    apiFormat: values.apiFormat,
+    ...(capabilities !== undefined ? { capabilities } : {}),
+  };
+}
+
+/** 新增（服务商模式）保存 payload：密钥走厂商级 keychain，不随模型落库 */
+function buildProviderAddPayload(
+  values: ModelConfigFormValues,
+  fields: TrimmedFields,
+  effectiveModelId: string,
+  capabilities: ModelCapabilitiesOverride | undefined,
+): AddRuntimeModelInput {
+  return {
+    modelId: effectiveModelId,
+    providerKind: values.providerKind,
+    ...fields.displayName,
+    timeoutMs: fields.timeoutMs,
+    ...(capabilities !== undefined ? { capabilities } : {}),
+  };
+}
+
+/** 新增（自定义模式）保存 payload：requestUrl / apiKey / apiFormat 随模型落库 */
+function buildCustomAddPayload(
+  values: ModelConfigFormValues,
+  fields: TrimmedFields,
+  effectiveModelId: string,
+  capabilities: ModelCapabilitiesOverride | undefined,
+): AddRuntimeModelInput {
+  return {
+    modelId: effectiveModelId,
+    providerKind: values.providerKind,
+    ...fields.requestUrl,
+    ...fields.apiKey,
+    ...fields.displayName,
+    timeoutMs: fields.timeoutMs,
+    apiFormat: values.apiFormat,
+    ...(capabilities !== undefined ? { capabilities } : {}),
   };
 }
 
@@ -319,7 +375,9 @@ export function ModelConfigDialog({
 
   /** 按模式分发保存：服务商模式密钥走厂商级 keychain，其余走模型级；
    * capabilities 三态同口径携带：编辑模式原覆盖存在且清空三项 = null（显式清除），
-   * 有值 = 覆盖写入，其余 = 不携带（省略不改 / 新增未填） */
+   * 有值 = 覆盖写入，其余 = 不携带（省略不改 / 新增未填）。
+   * 三模式 payload 构造各自提取为模块级纯函数（零分支）——分支内联展开会把
+   * 本函数认知复杂度推到 18（门槛 15），与 handleSave 当初的 40 同一病因 */
   const saveByMode = async (): Promise<void> => {
     const fields = trimOptionalFields(values);
     const capabilities = buildCapabilitiesOverride(
@@ -330,15 +388,7 @@ export function ModelConfigDialog({
     // Add 语义无「清除」（覆盖本来就存在才有清除对象）——null 只出现在编辑分支
     const capabilitiesForAdd = capabilities === null ? undefined : capabilities;
     if (isEdit) {
-      await updateMutation.mutateAsync({
-        modelId: values.modelId.trim(),
-        ...fields.displayName,
-        ...fields.requestUrl,
-        ...fields.apiKey,
-        timeoutMs: fields.timeoutMs,
-        apiFormat: values.apiFormat,
-        ...(capabilities !== undefined ? { capabilities } : {}),
-      });
+      await updateMutation.mutateAsync(buildUpdatePayload(values, fields, capabilities));
       toast.success(t('settings.modelMgmt.modelUpdated'));
       return;
     }
@@ -349,26 +399,15 @@ export function ModelConfigDialog({
           apiKey: fields.apiKeyValue,
         });
       }
-      await addMutation.mutateAsync({
-        modelId: effectiveModelId,
-        providerKind: values.providerKind,
-        ...fields.displayName,
-        timeoutMs: fields.timeoutMs,
-        ...(capabilitiesForAdd !== undefined ? { capabilities: capabilitiesForAdd } : {}),
-      });
+      await addMutation.mutateAsync(
+        buildProviderAddPayload(values, fields, effectiveModelId, capabilitiesForAdd),
+      );
       toast.success(t('settings.modelMgmt.modelAdded'));
       return;
     }
-    await addMutation.mutateAsync({
-      modelId: effectiveModelId,
-      providerKind: values.providerKind,
-      ...fields.requestUrl,
-      ...fields.apiKey,
-      ...fields.displayName,
-      timeoutMs: fields.timeoutMs,
-      apiFormat: values.apiFormat,
-      ...(capabilitiesForAdd !== undefined ? { capabilities: capabilitiesForAdd } : {}),
-    });
+    await addMutation.mutateAsync(
+      buildCustomAddPayload(values, fields, effectiveModelId, capabilitiesForAdd),
+    );
     toast.success(t('settings.modelMgmt.modelAdded'));
   };
 
