@@ -108,18 +108,20 @@ function trimOptionalFields(values: ModelConfigFormValues): {
  * - 视觉（vision）：自定义模式无内置清单兜底，表单是唯一真源，'support'/'unsupport' 都携带；
  *   服务商/编辑模式的预设以内置清单权威（默认值会误标文本模型为支持视觉），
  *   仅 'unsupport' 携带 false（显式关闭）
- * - 三项全空 → undefined（不携带，resolve 全量回退内置清单）
+ * - 三项全空：编辑模式原覆盖存在 → null（显式清除，Update 三态语义）；
+ *   其余（新增模式 / 编辑但原无覆盖）→ undefined（不携带）
  */
 function buildCapabilitiesOverride(
   values: ModelConfigFormValues,
   isCustom: boolean,
-): ModelCapabilitiesOverride | undefined {
+  hadOverride: boolean,
+): ModelCapabilitiesOverride | null | undefined {
   const contextWindowSize = parseTokenLabel(values.contextInput);
   const maxOutputTokens = parseTokenLabel(values.contextOutput);
   const vision =
     isCustom || values.imageSupport === 'unsupport' ? values.imageSupport === 'support' : undefined;
   if (contextWindowSize === undefined && maxOutputTokens === undefined && vision === undefined) {
-    return undefined;
+    return hadOverride ? null : undefined;
   }
   return {
     ...(contextWindowSize !== undefined ? { contextWindowSize } : {}),
@@ -316,10 +318,15 @@ export function ModelConfigDialog({
   };
 
   /** 按模式分发保存：服务商模式密钥走厂商级 keychain，其余走模型级；
-   * capabilities 三分支同口径携带（空 = 不带，resolve 回退内置清单） */
+   * capabilities 三态同口径携带：编辑模式原覆盖存在且清空三项 = null（显式清除），
+   * 有值 = 覆盖写入，其余 = 不携带（省略不改 / 新增未填） */
   const saveByMode = async (): Promise<void> => {
     const fields = trimOptionalFields(values);
-    const capabilities = buildCapabilitiesOverride(values, isCustom);
+    const capabilities = buildCapabilitiesOverride(
+      values,
+      isCustom,
+      isEdit && editingModel?.capabilities !== undefined,
+    );
     if (isEdit) {
       await updateMutation.mutateAsync({
         modelId: values.modelId.trim(),
