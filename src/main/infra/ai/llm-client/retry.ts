@@ -2,10 +2,19 @@
 // 退避参数支持环境变量覆盖（CODE_AGENT_MODEL_RETRY_*），归一化收口在 resolveRetryOptions
 import { APICallError } from 'ai';
 
-// 网络层可重试错误码（undici 系列 + 经典 socket 错误）
+// 网络层可重试错误码（undici 系列 + 经典 socket 错误）——瞬时网络故障全集：
+// 连接中断/重置、超时、DNS 暂时失败（ENOTFOUND/EAI_AGAIN）、主机/网络不可达。
+// EACCES 等系统错刻意排除（真实根因明确，重试无益）——降级判据（isFallbackEligibleError）
+// 与本名单同源，防「同一错误可降级却不可重试」的名单漂移
 export const RETRYABLE_NETWORK_ERROR_CODES: ReadonlySet<string> = new Set([
   'ECONNRESET',
+  'ECONNREFUSED',
+  'ECONNABORTED',
   'ETIMEDOUT',
+  'ENOTFOUND',
+  'EAI_AGAIN',
+  'EHOSTUNREACH',
+  'ENETUNREACH',
   'UND_ERR_BODY_TIMEOUT',
   'UND_ERR_CONNECT_TIMEOUT',
   'UND_ERR_HEADERS_TIMEOUT',
@@ -63,6 +72,9 @@ function classifyCauseChainCodes(error: TypeError): 'retryable' | 'non-retryable
 /**
  * 可重试判定：429/5xx/SDK 标记可重试/网络错误码/TypeError（fetch 失联形态）。
  *
+ * 供应商显式否决（x-should-retry: false/0）优先于一切本地启发式——头在即不重试，
+ * 本地退避曲线/预算不再参与（resolveRetryDelay 因此无需 blocked 分支）。
+ *
  * TypeError 不再一刀切可重试——编程错误（undefined is not a function 等）同为 TypeError，
  * 一刀切会把 bug 伪装成网络抖动、拖满重试预算才暴露。TypeError 的裁决顺序：
  * ① cause 链有错误码 → 以码为准（undici 真实根因：ECONNRESET 可重试 / EACCES 不可重试，
@@ -71,6 +83,9 @@ function classifyCauseChainCodes(error: TypeError): 'retryable' | 'non-retryable
  * ③ 其余 → 不可重试。
  */
 export function isRetryableError(error: unknown): boolean {
+  if (error instanceof APICallError && isShouldRetryHeaderBlocked(error.responseHeaders ?? {})) {
+    return false;
+  }
   const status = getErrorStatus(error);
   if (status !== undefined) {
     return status === 429 || (status >= 500 && status < 600);
@@ -96,15 +111,11 @@ export function isRetryableError(error: unknown): boolean {
  * Retry-After 延迟的来源诊断（取值路径审计用——该值可能在 header 保留、解析、采纳任一层断链）。
  *
  * - `provider_header`：供应商头被解析且已采纳
- * - `blocked_by_x_should_retry`：x-should-retry: false 显式否决
  * - `header_unparsed_or_ignored`：头存在但解析失败/超出采纳窗口被拒
  * - `missing`：响应无任何 Retry-After 相关头
+ * （x-should-retry: false 的否决不在此处——isRetryableError 直接不重试，进不来）
  */
-export type RetryAfterSource =
-  | 'provider_header'
-  | 'blocked_by_x_should_retry'
-  | 'header_unparsed_or_ignored'
-  | 'missing';
+export type RetryAfterSource = 'provider_header' | 'header_unparsed_or_ignored' | 'missing';
 
 /** 大小写不敏感读响应头（供应商头键大小写不定） */
 function readHeader(headers: Record<string, unknown>, name: string): string | undefined {
@@ -316,7 +327,8 @@ export function isReasonableRetryAfterMs(
 /**
  * 延迟决策：合并 Retry-After 采纳窗口、指数曲线与 jitter，产出最终等待值与来源诊断。
  *
- * x-should-retry: false 显式否决供应商重试建议——不采纳其 Retry-After，按本地曲线退避。
+ * 注意：x-should-retry: false 的否决在 isRetryableError 统一裁决（不重试即不进入本函数），
+ * 此处只剩「采纳头 / 头被拒 / 头缺失」三态。
  */
 export function resolveRetryDelay(input: {
   readonly error: unknown;
@@ -324,10 +336,6 @@ export function resolveRetryDelay(input: {
   readonly jitter: boolean;
 }): { readonly delayMs: number; readonly jittered: boolean; readonly source: RetryAfterSource } {
   const headers = input.error instanceof APICallError ? (input.error.responseHeaders ?? {}) : {};
-  if (isShouldRetryHeaderBlocked(headers)) {
-    const j = applyJitter(input.exponentialDelayMs, input.jitter);
-    return { delayMs: j.delayMs, jittered: j.jittered, source: 'blocked_by_x_should_retry' };
-  }
   const retryAfterMs = getRetryAfterDelayMs(input.error);
   if (isReasonableRetryAfterMs(retryAfterMs, input.exponentialDelayMs)) {
     // 供应商显式指示优先且不再叠加抖动
@@ -348,7 +356,9 @@ export async function retryWithBackoff<T>(
   fn: () => Promise<T>,
   options: RetryOptions = {},
 ): Promise<T> {
-  const resolved = resolveRetryOptions(options, {});
+  // env 真实接入（options > env > 默认三层归一）：调用方未显式传的字段由此获得
+  // CODE_AGENT_MODEL_RETRY_* 覆盖能力——此前恒传空对象，延迟类 env 是死配置
+  const resolved = resolveRetryOptions(options, process.env);
   const maxAttempts = resolved.maxAttempts;
   const initialDelayMs = resolved.initialDelayMs;
   const maxDelayMs = resolved.maxDelayMs;

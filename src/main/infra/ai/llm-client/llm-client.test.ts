@@ -530,9 +530,20 @@ describe('LlmClient 批次2 缺口补全（降级链/覆盖透传/参数展开/�
       expect(mocks.mockGenerateText.mock.calls.length).toBe(10);
     });
 
-    it('白名单外错误码（ECONNABORTED）：不降级直接抛', async () => {
+    it('瞬时网络错误码（ECONNABORTED）：与重试白名单同源——可降级（回归：名单漂移已消除）', async () => {
       const { client } = createClient();
-      const err = networkError('ECONNABORTED');
+      mocks.mockGenerateText
+        .mockRejectedValueOnce(networkError('ECONNABORTED'))
+        .mockResolvedValueOnce({ text: 'ok', usage: {} });
+
+      await client.generateText({ model: 'deepseek-chat', prompt: 'hi', maxAttempts: 1 });
+
+      expect(mocks.mockGenerateText).toHaveBeenCalledTimes(2);
+    });
+
+    it('系统错误码（EACCES）：白名单外不降级直接抛', async () => {
+      const { client } = createClient();
+      const err = networkError('EACCES');
       mocks.mockGenerateText.mockRejectedValue(err);
 
       await expect(

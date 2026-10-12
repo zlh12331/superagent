@@ -19,7 +19,13 @@ import { modelObservabilityMiddleware } from '../middleware/model-observability'
 import type { ModelRegistry } from '../models';
 import { buildGenerationOptions } from '../models/generation-options';
 import type { ProviderKind } from '../providers/types';
-import { getErrorCode, getErrorStatus, resolveEnvRetryMaxRetries, retryWithBackoff } from './retry';
+import {
+  getErrorCode,
+  getErrorStatus,
+  RETRYABLE_NETWORK_ERROR_CODES,
+  resolveEnvRetryMaxRetries,
+  retryWithBackoff,
+} from './retry';
 
 const DEFAULT_MODEL_TIMEOUT_MS = 60_000;
 
@@ -28,7 +34,8 @@ type WrapableModel = Parameters<typeof wrapLanguageModel>[0]['model'];
 // SDK 内层重试关死：重试统一收口在本文件 retryWithBackoff（双层重试会放大延迟）
 const SDK_MODEL_CALL_RETRY_DISABLED = { maxRetries: 0 } as const;
 
-// 可重试判据：5xx / SDK 标记可重试的 API 错误 / 网络层错误码（连接重置、超时、socket 断）
+// 可重试判据：5xx / SDK 标记可重试的 API 错误 / 网络层错误码（与重试白名单同源——
+// 防降级与重试名单漂移，此前 ECONNREFUSED 可降级却不可重试）
 function isFallbackEligibleError(error: unknown): boolean {
   const status = getErrorStatus(error);
   if (status !== undefined) {
@@ -38,17 +45,7 @@ function isFallbackEligibleError(error: unknown): boolean {
     return error.isRetryable === true;
   }
   const code = getErrorCode(error);
-  if (code !== undefined) {
-    return (
-      code === 'ECONNRESET' ||
-      code === 'ECONNREFUSED' ||
-      code === 'ETIMEDOUT' ||
-      code === 'UND_ERR_CONNECT_TIMEOUT' ||
-      code === 'UND_ERR_HEADERS_TIMEOUT' ||
-      code === 'UND_ERR_SOCKET'
-    );
-  }
-  return false;
+  return code !== undefined && RETRYABLE_NETWORK_ERROR_CODES.has(code);
 }
 
 /** 客户端依赖：模型注册表 + 供应商工厂 + 可选模型级 gate（限流闸）与默认超时 */
@@ -283,6 +280,8 @@ export class LlmClient {
               attempt: info.attempt,
               errorStatus: info.errorStatus,
               delayMs: info.delayMs,
+              retryAfterSource: info.retryAfterSource,
+              jittered: info.jittered,
             },
             'side query 重试',
           );

@@ -58,6 +58,27 @@ describe('isRetryableError（可重试判定）', () => {
     expect(isRetryableError(error)).toBe(true);
   });
 
+  it('瞬时网络错误码全集（连接拒绝/DNS 暂时失败/主机不可达）：可重试', () => {
+    for (const code of [
+      'ECONNREFUSED',
+      'ECONNABORTED',
+      'ENOTFOUND',
+      'EAI_AGAIN',
+      'EHOSTUNREACH',
+      'ENETUNREACH',
+    ]) {
+      const error = Object.assign(new Error(`connect ${code}`), { code });
+      expect(isRetryableError(error)).toBe(true);
+    }
+  });
+
+  it('TypeError + cause 链连接拒绝（供应商短暂重启形态）：可重试——白名单收窄回归', () => {
+    const error = new TypeError('fetch failed', {
+      cause: Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' }),
+    });
+    expect(isRetryableError(error)).toBe(true);
+  });
+
   it('undici 超时错误码（UND_ERR_*）：可重试', () => {
     for (const code of [
       'UND_ERR_BODY_TIMEOUT',
@@ -191,16 +212,14 @@ describe('resolveRetryDelay（延迟决策与来源诊断）', () => {
     expect(decision.source).toBe('provider_header');
   });
 
-  it('blocked_by_x_should_retry：x-should-retry false 否决 Retry-After，落本地曲线', () => {
-    const decision = resolveRetryDelay({
-      error: createApiError(429, {
-        responseHeaders: { 'retry-after': '2', 'x-should-retry': 'false' },
-      }),
-      exponentialDelayMs: 1500,
-      jitter: false,
+  it('x-should-retry: false 供应商显式否决：不重试（裁决收口在 isRetryableError）', () => {
+    const error = createApiError(429, {
+      responseHeaders: { 'retry-after': '2', 'x-should-retry': 'false' },
     });
-    expect(decision.delayMs).toBe(1500);
-    expect(decision.source).toBe('blocked_by_x_should_retry');
+    expect(isRetryableError(error)).toBe(false);
+    // '0' 同样否决
+    const zeroHeader = createApiError(429, { responseHeaders: { 'x-should-retry': '0' } });
+    expect(isRetryableError(zeroHeader)).toBe(false);
   });
 
   it('header_unparsed_or_ignored：头存在但超窗口被拒', () => {

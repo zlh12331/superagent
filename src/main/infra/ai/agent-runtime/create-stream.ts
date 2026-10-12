@@ -5,7 +5,7 @@ import { APICallError, RetryError } from 'ai';
 
 import { logger } from '../../../utils/logger';
 import type { RetryAttemptInfo } from '../llm-client/retry';
-import { isRetryableError, retryWithBackoff } from '../llm-client/retry';
+import { isRetryableError, resolveEnvRetryMaxRetries, retryWithBackoff } from '../llm-client/retry';
 import { DEFAULT_STREAM_IDLE_TIMEOUT_MS, readWithIdleTimeout } from './stream-reader';
 import { isRetrySafePreludePart } from './stream-retry-boundary';
 
@@ -148,7 +148,9 @@ export async function createStreamWithRetry<T extends MessageStreamSource>(
       bufferedPrelude.length = 0;
     },
     {
-      maxAttempts: options.maxAttempts ?? 3,
+      // env 穿透：未显式指定时走 CODE_AGENT_MODEL_RETRY_MAX_ATTEMPTS（尝试数=重试次数+1）；
+      // env 未配置落 resolveEnvRetryMaxRetries 默认 2 → 3，与历史默认一致
+      maxAttempts: options.maxAttempts ?? resolveEnvRetryMaxRetries(process.env) + 1,
       ...(options.controller.signal !== undefined ? { signal: options.controller.signal } : {}),
       shouldRetryOnError: (error: unknown) => {
         if (APICallError.isInstance(error) || RetryError.isInstance(error)) {
@@ -163,6 +165,8 @@ export async function createStreamWithRetry<T extends MessageStreamSource>(
             errorStatus: info.errorStatus,
             delayMs: info.delayMs,
             preludeBuffered: bufferedPrelude.length,
+            retryAfterSource: info.retryAfterSource,
+            jittered: info.jittered,
           },
           '主流程首读重试',
         );
