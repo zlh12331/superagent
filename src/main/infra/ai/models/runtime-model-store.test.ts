@@ -151,7 +151,8 @@ describe('RuntimeModelStore', () => {
     // 修复前存储文本 = JSON.stringify(JSON.stringify(obj))——双层编码形态
     const legacyText = JSON.stringify(JSON.stringify({ contextWindowSize: 131_072 }));
     const db = getDb();
-    (db.$client as import('better-sqlite3').Database)
+    const rawDb = (db as unknown as { $client: import('better-sqlite3').Database }).$client;
+    rawDb
       .prepare("UPDATE runtime_models SET capabilities = ? WHERE model_id = 'legacy-dbl'")
       .run(legacyText);
 
@@ -164,7 +165,8 @@ describe('RuntimeModelStore', () => {
     const { getDb } = await import('../../storage/db');
     await store.add({ modelId: 'legacy-bad', providerKind: 'deepseek' });
     const db = getDb();
-    (db.$client as import('better-sqlite3').Database)
+    const rawDb = (db as unknown as { $client: import('better-sqlite3').Database }).$client;
+    rawDb
       .prepare("UPDATE runtime_models SET capabilities = 'not-json' WHERE model_id = 'legacy-bad'")
       .run();
 

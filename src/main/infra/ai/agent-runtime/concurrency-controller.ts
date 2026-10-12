@@ -19,9 +19,9 @@ export const CONCURRENCY_IDLE_RESET_MS = 300_000;
 export interface ConcurrencyControllerSnapshot {
   readonly cap: number;
   readonly ceiling: number;
-    /** 限流裁决计数（诊断观测 + stale 判定基准：throttled 的 admittedEpoch 与此不等
-     * 即视为 stale）。注意：闸门 reportAttemptOutcome 当前未回传准入时 epoch——
-     * stale 判定尚未在生产链路接线（需 acquire 返回 token 跨调用传递），仅测试直传 */
+  /** 限流裁决计数（诊断观测 + stale 判定基准：throttled 的 admittedEpoch 与此不等
+   * 即视为 stale）。注意：闸门 reportAttemptOutcome 当前未回传准入时 epoch——
+   * stale 判定尚未在生产链路接线（需 acquire 返回 token 跨调用传递），仅测试直传 */
   readonly epoch: number;
   readonly inFlight: number;
   readonly successStreak: number;

@@ -327,6 +327,8 @@ export function ModelConfigDialog({
       isCustom,
       isEdit && editingModel?.capabilities !== undefined,
     );
+    // Add 语义无「清除」（覆盖本来就存在才有清除对象）——null 只出现在编辑分支
+    const capabilitiesForAdd = capabilities === null ? undefined : capabilities;
     if (isEdit) {
       await updateMutation.mutateAsync({
         modelId: values.modelId.trim(),
@@ -352,7 +354,7 @@ export function ModelConfigDialog({
         providerKind: values.providerKind,
         ...fields.displayName,
         timeoutMs: fields.timeoutMs,
-        ...(capabilities !== undefined ? { capabilities } : {}),
+        ...(capabilitiesForAdd !== undefined ? { capabilities: capabilitiesForAdd } : {}),
       });
       toast.success(t('settings.modelMgmt.modelAdded'));
       return;
@@ -365,7 +367,7 @@ export function ModelConfigDialog({
       ...fields.displayName,
       timeoutMs: fields.timeoutMs,
       apiFormat: values.apiFormat,
-      ...(capabilities !== undefined ? { capabilities } : {}),
+      ...(capabilitiesForAdd !== undefined ? { capabilities: capabilitiesForAdd } : {}),
     });
     toast.success(t('settings.modelMgmt.modelAdded'));
   };

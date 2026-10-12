@@ -30,9 +30,7 @@ function mergeSnapshotCapabilities(
     ...(builtin?.contextWindowSize !== undefined
       ? { contextWindowSize: builtin.contextWindowSize }
       : {}),
-    ...(builtin?.maxOutputTokens !== undefined
-      ? { maxOutputTokens: builtin.maxOutputTokens }
-      : {}),
+    ...(builtin?.maxOutputTokens !== undefined ? { maxOutputTokens: builtin.maxOutputTokens } : {}),
     ...(builtin?.fastOnly !== undefined ? { fastOnly: builtin.fastOnly } : {}),
     ...(builtin?.reasoning !== undefined ? { reasoning: builtin.reasoning } : {}),
     ...(override?.vision !== undefined ? { vision: override.vision } : {}),
