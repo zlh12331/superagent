@@ -339,9 +339,9 @@ describe('agent-service', () => {
         abortSignal: AbortSignal;
         maxRetries: number;
       };
-      // 架构变化（尝试级准入 + callId 穿透）：streamText 收 model id 字符串，
-      // 实例解析与 providerOptions 路由由 middleware/工厂内部完成
-      expect(opts.model).toBe('test-model');
+      // streamText 收 getModel 返回的模型实例——字符串 id 会经全局 provider
+      // 注册表（AI Gateway）解析而非项目供应商工厂（afa9b534 回归的教训）
+      expect(opts.model).toBe(mocks.mockModel);
       expect(opts.messages).toEqual(messages);
       expect(opts.tools).toBeDefined();
       expect(opts.stopWhen).toBeDefined();

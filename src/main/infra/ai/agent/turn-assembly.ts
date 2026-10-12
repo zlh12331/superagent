@@ -4,7 +4,7 @@
 import { randomUUID } from 'node:crypto';
 import type { ChatMessage } from '@code-agent/shared/main';
 import { ModelRetryReason } from '@code-agent/shared/main';
-import { isStepCount, streamText } from 'ai';
+import { isStepCount, type LanguageModel, streamText } from 'ai';
 import { logger } from '../../../utils/logger';
 import { createSdkTelemetryIntegration } from '../../telemetry/sdk-telemetry';
 import { combineAbortSignals, createTimeoutSignal } from '../agent-runtime/abort-utils';
@@ -174,7 +174,7 @@ function logRecoveryStart(fields: {
 
 /** streamText 参数装配（create: 闭包的载荷——复杂度热点提取；callId 每轮经重读 latest 拿新值） */
 function buildStreamTextParams(parts: {
-  readonly model: string;
+  readonly model: LanguageModel;
   readonly attemptMessages: ChatMessage[];
   readonly systemPrompt: string | undefined;
   readonly genOptions: GenerationOptions;
@@ -237,7 +237,10 @@ export async function assembleAndRunTurn(args: TurnAssemblyArgs): Promise<TurnRu
     gateAdmission,
     span,
   } = args;
-  await getModel(resolvedModel.modelId); // modelGate 校验 + 模型实例缓存预热（streamText 每 providerOptions 重新路由）
+  // 模型实例解析（一次捕获，跨恢复尝试复用）：getModel 兼做 providerCache 预热。
+  // ⚠️ 不能传字符串 id 给 streamText——字符串经全局 provider 注册表（AI Gateway）
+  // 解析而非项目供应商工厂，afa9b534 曾因此把每个回合路由到 Gateway（集成测试抓到）
+  const languageModel = await getModel(resolvedModel.modelId);
 
   const { compressedMessages, genOptions } = resolveGeneration(systemPrompt ?? '', span);
   const rawPartCounter = { count: 0 };
@@ -246,6 +249,7 @@ export async function assembleAndRunTurn(args: TurnAssemblyArgs): Promise<TurnRu
     sessionId,
     turnId,
     resolvedModel,
+    model: languageModel,
     options,
     controller,
     turnEmitter,
@@ -278,6 +282,7 @@ interface RecoveryContext {
   readonly sessionId: string;
   readonly turnId: string;
   readonly resolvedModel: ResolvedModel;
+  readonly model: LanguageModel;
   readonly options: StartAgentOptions;
   readonly controller: AbortController;
   readonly turnEmitter: TurnEventEmitter;
@@ -425,7 +430,7 @@ async function runSingleAttempt(args: {
     create: () =>
       streamText(
         buildStreamTextParams({
-          model: ctx.resolvedModel.modelId,
+          model: ctx.model,
           attemptMessages,
           systemPrompt: ctx.systemPrompt,
           genOptions: ctx.genOptions,
