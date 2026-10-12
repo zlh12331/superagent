@@ -3,6 +3,7 @@
 import type { ProviderKind } from '../providers/types';
 import type {
   AvailableModelInfo,
+  ModelCapabilities,
   ModelEntry,
   ModelGenerationConfig,
   ResolvedModel,
@@ -17,6 +18,31 @@ function mergeSnapshotGenerationConfig(
     return builtin;
   }
   return { ...builtin, timeoutMs: snapshot.timeoutMs };
+}
+
+/** 能力覆盖合并：内置清单全字段打底，override 携带的字段逐项覆盖（未填字段保留内置值） */
+function mergeSnapshotCapabilities(
+  builtin: ModelCapabilities | undefined,
+  override: ModelCapabilities | undefined,
+): ModelCapabilities {
+  return {
+    ...(builtin?.vision !== undefined ? { vision: builtin.vision } : {}),
+    ...(builtin?.contextWindowSize !== undefined
+      ? { contextWindowSize: builtin.contextWindowSize }
+      : {}),
+    ...(builtin?.maxOutputTokens !== undefined
+      ? { maxOutputTokens: builtin.maxOutputTokens }
+      : {}),
+    ...(builtin?.fastOnly !== undefined ? { fastOnly: builtin.fastOnly } : {}),
+    ...(builtin?.reasoning !== undefined ? { reasoning: builtin.reasoning } : {}),
+    ...(override?.vision !== undefined ? { vision: override.vision } : {}),
+    ...(override?.contextWindowSize !== undefined
+      ? { contextWindowSize: override.contextWindowSize }
+      : {}),
+    ...(override?.maxOutputTokens !== undefined
+      ? { maxOutputTokens: override.maxOutputTokens }
+      : {}),
+  };
 }
 
 /** 注册表选项：内置条目 + 各供应商默认模型 + 全局默认供应商 */
@@ -142,10 +168,15 @@ export class ModelRegistry {
     const snapshot = this.findRuntimeSnapshot(modelId);
     if (snapshot !== undefined) {
       const builtin = this.modelIndex.get(snapshot.modelId);
+      // 能力覆盖：用户手填的高级配置优先于内置清单（字段级合并——只覆盖用户填写的项）
+      const mergedCapabilities = mergeSnapshotCapabilities(
+        builtin?.capabilities,
+        snapshot.capabilitiesOverride,
+      );
       return {
         modelId: snapshot.modelId,
         providerKind: snapshot.providerKind,
-        capabilities: builtin?.capabilities ?? {},
+        capabilities: mergedCapabilities,
         generationConfig: mergeSnapshotGenerationConfig(builtin?.generationConfig, snapshot),
         isRuntime: true,
         explicitApiKey: snapshot.apiKey,

@@ -39,6 +39,8 @@ export interface RuntimeModelSnapshot {
   readonly baseUrl?: string;
   readonly apiFormat?: ModelApiFormat;
   readonly timeoutMs?: number;
+  /** 用户手填的能力覆盖（高级配置；undefined = 未填写，回退内置清单） */
+  readonly capabilitiesOverride?: ModelCapabilities;
   readonly createdAt: number;
 }
 

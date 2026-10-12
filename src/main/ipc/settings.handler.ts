@@ -158,6 +158,7 @@ export function createSettingsHandlers(params: {
         ...(input.displayName !== undefined ? { displayName: input.displayName } : {}),
         ...(input.timeoutMs !== undefined ? { timeoutMs: input.timeoutMs } : {}),
         ...(input.apiFormat !== undefined ? { apiFormat: input.apiFormat } : {}),
+        ...(input.capabilities !== undefined ? { capabilitiesOverride: input.capabilities } : {}),
       });
       llmClient.invalidateModel(input.modelId);
       return { ok: true };
@@ -171,6 +172,7 @@ export function createSettingsHandlers(params: {
         ...(input.apiKey !== undefined ? { apiKey: input.apiKey } : {}),
         ...(input.timeoutMs !== undefined ? { timeoutMs: input.timeoutMs } : {}),
         ...(input.apiFormat !== undefined ? { apiFormat: input.apiFormat } : {}),
+        ...(input.capabilities !== undefined ? { capabilitiesOverride: input.capabilities } : {}),
         ...(input.isEnabled !== undefined ? { isEnabled: input.isEnabled } : {}),
       });
       llmClient.invalidateModel(input.modelId);
@@ -193,6 +195,7 @@ export function createSettingsHandlers(params: {
           displayName: r.displayName ?? undefined,
           ...(r.timeoutMs !== undefined ? { timeoutMs: r.timeoutMs } : {}),
           ...(r.apiFormat !== undefined ? { apiFormat: r.apiFormat } : {}),
+          ...(r.capabilitiesOverride !== undefined ? { capabilities: r.capabilitiesOverride } : {}),
           isEnabled: r.isEnabled,
           createdAt: r.createdAt,
         })),

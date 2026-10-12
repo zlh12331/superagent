@@ -188,6 +188,51 @@ describe('ModelRegistry', () => {
       expect(resolved.generationConfig).toBeUndefined();
     });
 
+    it('快照带 capabilitiesOverride：覆盖字段逐项覆盖内置值，其余字段保留内置', () => {
+      registry.registerRuntimeModel({
+        id: buildRuntimeSnapshotId('deepseek', 'deepseek-v4-pro'),
+        providerKind: 'deepseek',
+        modelId: 'deepseek-v4-pro',
+        capabilitiesOverride: {
+          contextWindowSize: 512_000,
+          vision: false,
+        },
+        createdAt: 1_700_000_000_000,
+      });
+
+      const resolved = registry.resolve('deepseek-v4-pro');
+
+      expect(resolved.isRuntime).toBe(true);
+      expect(resolved.capabilities.contextWindowSize).toBe(512_000);
+      expect(resolved.capabilities.vision).toBe(false);
+      // 未覆盖字段保留内置清单值
+      expect(resolved.capabilities.maxOutputTokens).toBe(384_000);
+      expect(resolved.capabilities.reasoning).toBe(true);
+    });
+
+    it('自定义模型带 capabilitiesOverride：能力直接采用覆盖（无内置可回退）', () => {
+      registry.registerRuntimeModel({
+        id: buildRuntimeSnapshotId('openai', 'my-private-model'),
+        providerKind: 'openai',
+        modelId: 'my-private-model',
+        capabilitiesOverride: {
+          contextWindowSize: 128_000,
+          maxOutputTokens: 16_000,
+          vision: true,
+        },
+        createdAt: 1_700_000_000_000,
+      });
+
+      const resolved = registry.resolve('my-private-model');
+
+      expect(resolved.isRuntime).toBe(true);
+      expect(resolved.capabilities).toEqual({
+        contextWindowSize: 128_000,
+        maxOutputTokens: 16_000,
+        vision: true,
+      });
+    });
+
     it('注销后解析回退内置条目', () => {
       const snapshotId = buildRuntimeSnapshotId('openai', 'gpt-4o');
       registry.registerRuntimeModel({

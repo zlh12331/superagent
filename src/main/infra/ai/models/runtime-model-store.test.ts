@@ -130,6 +130,78 @@ describe('RuntimeModelStore', () => {
     expect(modelRegistry.resolve('legacy-model').apiFormat).toBeUndefined();
   });
 
+  it('add 带 capabilitiesOverride：JSON 落库 + 记录/快照携带（resolve 并入 capabilities）', async () => {
+    await store.add({
+      modelId: 'my-coder',
+      providerKind: 'deepseek',
+      capabilitiesOverride: { contextWindowSize: 512_000, vision: false },
+    });
+
+    expect((await store.list())[0]).toMatchObject({
+      capabilitiesOverride: { contextWindowSize: 512_000, vision: false },
+    });
+    const resolved = modelRegistry.resolve('my-coder');
+    expect(resolved.capabilities.contextWindowSize).toBe(512_000);
+    expect(resolved.capabilities.vision).toBe(false);
+  });
+
+  it('update：capabilities 三态（覆盖写入 / null 清除 / 省略不改）', async () => {
+    await store.add({
+      modelId: 'my-coder',
+      providerKind: 'deepseek',
+      capabilitiesOverride: { contextWindowSize: 512_000 },
+    });
+
+    await store.update({
+      modelId: 'my-coder',
+      capabilitiesOverride: { contextWindowSize: 256_000, maxOutputTokens: 16_000 },
+    });
+    expect((await store.list())[0]).toMatchObject({
+      capabilitiesOverride: { contextWindowSize: 256_000, maxOutputTokens: 16_000 },
+    });
+    expect(modelRegistry.resolve('my-coder').capabilities.contextWindowSize).toBe(256_000);
+
+    await store.update({ modelId: 'my-coder', capabilitiesOverride: null });
+    expect((await store.list())[0]?.capabilitiesOverride).toBeUndefined();
+    expect(modelRegistry.resolve('my-coder').capabilities.contextWindowSize).toBeUndefined();
+
+    // 省略 = 不修改：先写覆盖再省略更新，覆盖应保留
+    await store.add({
+      modelId: 'my-coder-2',
+      providerKind: 'deepseek',
+      capabilitiesOverride: { vision: true },
+    });
+    await store.update({ modelId: 'my-coder-2', displayName: '视觉模型' });
+    expect((await store.list())[1]).toMatchObject({ capabilitiesOverride: { vision: true } });
+  });
+
+  it('DB 脏值（畸形 capabilities JSON）：按未设置处理（丢弃不抛错）', async () => {
+    await store.add({ modelId: 'my-coder', providerKind: 'deepseek' });
+    const { getDb } = await import('../../storage/db');
+    const { runtimeModels } = await import('../../storage/schema');
+    const { eq } = await import('drizzle-orm');
+    getDb()
+      .update(runtimeModels)
+      .set({ capabilities: 'not-json{{' })
+      .where(eq(runtimeModels.modelId, 'my-coder'))
+      .run();
+
+    expect((await store.get('my-coder'))?.capabilitiesOverride).toBeUndefined();
+  });
+
+  it('loadAll：capabilitiesOverride 随快照恢复（重启后能力覆盖仍生效）', async () => {
+    await store.add({
+      modelId: 'my-coder',
+      providerKind: 'deepseek',
+      capabilitiesOverride: { contextWindowSize: 512_000 },
+    });
+
+    modelRegistry.clearRuntimeModels();
+    await new RuntimeModelStore().loadAll();
+
+    expect(modelRegistry.resolve('my-coder').capabilities.contextWindowSize).toBe(512_000);
+  });
+
   it('update：apiFormat 落库 + 注册表重建为最新值', async () => {
     await store.add({ modelId: 'my-coder', providerKind: 'deepseek' });
 
