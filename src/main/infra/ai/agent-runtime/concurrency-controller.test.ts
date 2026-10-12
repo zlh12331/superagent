@@ -32,16 +32,19 @@ describe('ConcurrencyController（AIMD 纯状态机）', () => {
     const c = new ConcurrencyController(8);
     c.admitted(1000);
     c.throttled(1001, { cooldownMs: 1000 });
+    c.forceRelease();
     expect(c.snapshot().cap).toBe(6); // floor(8×0.75)
 
     c.admitted(1100);
     c.throttled(1101, { cooldownMs: 0 });
+    c.forceRelease();
     expect(c.snapshot().cap).toBe(4); // floor(6×0.75)
 
     // 连续砍到 FLOOR 为止
     for (let i = 0; i < 10; i += 1) {
       c.admitted(2000 + i);
       c.throttled(2001 + i);
+      c.forceRelease();
     }
     expect(c.snapshot().cap).toBe(CONCURRENCY_FLOOR);
   });
@@ -50,29 +53,36 @@ describe('ConcurrencyController（AIMD 纯状态机）', () => {
     const c = new ConcurrencyController(4);
     c.admitted(1000);
     c.throttled(1001); // cap 4→3
+    c.forceRelease();
     expect(c.snapshot().cap).toBe(3);
 
     // K-1 次成功：不动
     for (let i = 0; i < CONCURRENCY_INCREASE_AFTER_SUCCESSES - 1; i += 1) {
       c.admitted(2000 + i * 10);
       c.succeeded(2001 + i * 10);
+      c.forceRelease();
     }
     expect(c.snapshot().cap).toBe(3);
 
     // 第 K 次：cap+1
     c.admitted(3000);
     c.succeeded(3001);
+    c.forceRelease();
     expect(c.snapshot().cap).toBe(4);
 
     // 已到 ceiling：不再增长
     c.admitted(4000);
     c.succeeded(4001);
+    c.forceRelease();
     c.admitted(4100);
     c.succeeded(4101);
+    c.forceRelease();
     c.admitted(4200);
     c.succeeded(4201);
+    c.forceRelease();
     c.admitted(4300);
     c.succeeded(4301);
+    c.forceRelease();
     expect(c.snapshot().cap).toBe(4);
   });
 
@@ -81,6 +91,7 @@ describe('ConcurrencyController（AIMD 纯状态机）', () => {
     // 先砍到 6（lastGood 被清——非上冲回落）
     c.admitted(1000);
     c.throttled(1001);
+    c.forceRelease();
     expect(c.snapshot().cap).toBe(6);
     expect(c.snapshot().lastGood).toBeUndefined();
 
@@ -88,12 +99,14 @@ describe('ConcurrencyController（AIMD 纯状态机）', () => {
     for (let i = 0; i < 8; i += 1) {
       c.admitted(2000 + i * 10);
       c.succeeded(2001 + i * 10);
+      c.forceRelease();
     }
     expect(c.snapshot().cap).toBe(8);
 
     // 从 8 撞墙：回退到 lastGood（6 附近的最后安全值），不按公式继续砍
     c.admitted(5000);
     c.throttled(5001);
+    c.forceRelease();
     const snap = c.snapshot();
     expect(snap.lastBad).toBe(8);
     expect(snap.cap).toBeLessThan(8);
@@ -109,17 +122,21 @@ describe('ConcurrencyController（AIMD 纯状态机）', () => {
     expect(c.cooldownRemainingMs(31_001)).toBe(0);
   });
 
-  it('非限流失败（网络错）：不评价 cap，只释放计数', () => {
+  it('非限流失败（网络错）：不评价 cap；计数由 release 独立闭环', () => {
     const c = new ConcurrencyController(4);
     c.admitted(1000);
     c.failed(1001);
-    expect(c.snapshot()).toMatchObject({ cap: 4, inFlight: 0 });
+    expect(c.snapshot().cap).toBe(4); // 学习信号不动 cap
+    expect(c.snapshot().inFlight).toBe(1); // 学习信号不回减（回减收归 forceRelease）
+    c.forceRelease();
+    expect(c.snapshot().inFlight).toBe(0);
   });
 
   it('空闲重置：无在飞超过 IDLE_RESET_MS 后遗忘 cap 回 ceiling', () => {
     const c = new ConcurrencyController(8);
     c.admitted(1000);
     c.throttled(1001); // cap 8→6
+    c.forceRelease(); // 闸位释放 → inFlight 归零，空闲重置才可能触发
     expect(c.snapshot().cap).toBe(6);
 
     // 空闲不足：不重置
@@ -134,12 +151,10 @@ describe('ConcurrencyController（AIMD 纯状态机）', () => {
   it('在飞期间不触发空闲重置（inFlight>0 挡住）', () => {
     const c = new ConcurrencyController(8);
     c.admitted(1000);
-    c.throttled(1001); // cap 6，inFlight 归零，lastRequestAt=1001
-    // 再次准入（lastRequestAt 刷新为远未来），然后以更远的时间查 cap——
-    // inFlight=1 挡住 idleReset
+    c.throttled(1001); // cap 8→6（学习信号不回减，inFlight 仍 1）
+    // inFlight=1 挡住 idleReset——即使时间已越过阈值
     const late = 1001 + CONCURRENCY_IDLE_RESET_MS + 1;
-    c.admitted(late);
-    c.canAdmit(late + CONCURRENCY_IDLE_RESET_MS);
+    c.canAdmit(late);
     expect(c.snapshot().cap).toBe(6);
   });
 

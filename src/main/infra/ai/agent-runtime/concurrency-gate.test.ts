@@ -56,6 +56,41 @@ describe('createConcurrencyGate（分桶并发门）', () => {
     r2();
   });
 
+  it('账目闭环：终态上报后 release 恰好回减一次（回归：双回减曾致实际并发超 cap）', async () => {
+    const gate = createConcurrencyGate(2);
+    const r1 = await gate.acquire('deepseek', 's1');
+    const r2 = await gate.acquire('deepseek', 's2');
+    expect(gate.getStats()).toEqual({ running: 2, queued: 0 });
+
+    // s1 完成：终态上报（纯学习）+ release（唯一回减口）→ 账面恰减一次
+    gate.reportAttemptOutcome('deepseek', { kind: 'succeeded' });
+    r1();
+    const r3 = await gate.acquire('deepseek', 's3');
+    expect(gate.getStats()).toEqual({ running: 2, queued: 0 }); // 真实 2 = 账面 2
+
+    // s2 完成 → s4 准入 → 再次满 2；此刻第 5 个必须排队（cap=2 不被旁路）
+    gate.reportAttemptOutcome('deepseek', { kind: 'failed' });
+    r2();
+    const r4 = await gate.acquire('deepseek', 's4');
+    expect(gate.getStats()).toEqual({ running: 2, queued: 0 });
+    const p5 = gate.acquire('deepseek', 's5');
+    let settled = false;
+    void p5.then(() => {
+      settled = true;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(settled).toBe(false);
+    // s3 完成 → s5 补位；依次收尾归零
+    gate.reportAttemptOutcome('deepseek', { kind: 'succeeded' });
+    r3();
+    const r5 = await p5;
+    gate.reportAttemptOutcome('deepseek', { kind: 'throttled' });
+    r4();
+    gate.reportAttemptOutcome('deepseek', { kind: 'failed' });
+    r5();
+    expect(gate.getStats()).toEqual({ running: 0, queued: 0 });
+  });
+
   it('排队期间 abort：移除队列并抛 AbortError', async () => {
     const gate = createConcurrencyGate(1);
     const release = await gate.acquire('deepseek', 's1');

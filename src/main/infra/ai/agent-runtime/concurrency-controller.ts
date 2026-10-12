@@ -19,7 +19,9 @@ export const CONCURRENCY_IDLE_RESET_MS = 300_000;
 export interface ConcurrencyControllerSnapshot {
   readonly cap: number;
   readonly ceiling: number;
-  /** 限流裁决计数；准入时发给尝试、结束时带回来比对（epoch 不一致的反馈不评价 cap） */
+    /** 限流裁决计数（诊断观测 + stale 判定基准：throttled 的 admittedEpoch 与此不等
+     * 即视为 stale）。注意：闸门 reportAttemptOutcome 当前未回传准入时 epoch——
+     * stale 判定尚未在生产链路接线（需 acquire 返回 token 跨调用传递），仅测试直传 */
   readonly epoch: number;
   readonly inFlight: number;
   readonly successStreak: number;
@@ -31,7 +33,9 @@ export interface ConcurrencyControllerSnapshot {
 /**
  * 单个 provider 上的 AIMD 状态机。
  *
- * 单位是「模型请求的每一次尝试」：inFlight = 已准入、尚未 release 的请求数。
+ * 单位是「模型请求的每一次尝试」：inFlight = 已准入、尚未 forceRelease 的请求数，
+ * 计数闭环在 gate 层（acquire → admitted / release → forceRelease）；
+ * succeeded/throttled/failed 是纯学习信号，不参与计数。
  * 纯包纪律：定时器/队列/闸门都在包外——本类只回答「cap 现在多少、能不能准入、
  * 这次信号让 cap 变了没有」。
  */
@@ -68,9 +72,9 @@ export class ConcurrencyController {
     this.lastRequestAt = now;
   }
 
-  /** 尝试成功：streak+1；满 K 次且无人排队（排队信号由调用方传）才加性增 */
+  /** 尝试成功（学习信号）：streak+1；满 K 次且无人排队（排队信号由调用方传）才加性增。
+   * 不回减计数——闸位生命周期由 admitted/forceRelease 管理（gate acquire/release 闭环） */
   succeeded(now: number, options?: { readonly waiters?: number }): void {
-    this.inFlight = Math.max(0, this.inFlight - 1);
     this.lastRequestAt = now;
     this.idleReset(now);
     this.successStreak += 1;
@@ -84,7 +88,8 @@ export class ConcurrencyController {
     }
   }
 
-  /** 尝试失败（限流类）：epoch 阻尼裁决 + 乘性减 + lastGood 记忆 + 冷却 */
+  /** 尝试限流失败（学习信号）：epoch 阻尼裁决 + 乘性减 + lastGood 记忆 + 冷却。
+   * 不回减计数——闸位生命周期由 admitted/forceRelease 管理 */
   throttled(
     now: number,
     options?: {
@@ -95,7 +100,6 @@ export class ConcurrencyController {
     },
   ): void {
     this.idleReset(now);
-    this.inFlight = Math.max(0, this.inFlight - 1);
     this.lastRequestAt = now;
     this.successStreak = 0;
     // 限流裁决计数递增：旧 epoch 的在途反馈由此自然失效（准入时带上新 epoch）
@@ -131,15 +135,15 @@ export class ConcurrencyController {
     }
   }
 
-  /** 尝试失败（非限流类：网络错/超时——不评价 cap，只释放计数） */
+  /** 尝试失败（非限流类：网络错/超时——不评价 cap，仅刷新活跃时间戳）。
+   * 不回减计数——闸位生命周期由 admitted/forceRelease 管理 */
   failed(now: number): void {
     this.idleReset(now);
-    this.inFlight = Math.max(0, this.inFlight - 1);
     this.lastRequestAt = now;
   }
 
-  /** 仅回减在飞计数（不产生任何学习信号）——闸门 release 的兜底路径：
-   * 尝试终态应先经 succeeded/throttled/failed 上报，此方法防未上报路径漏减 */
+  /** 闸位释放唯一入口（gate.acquire/release 计数闭环的减侧）——学习信号
+   * （succeeded/throttled/failed）只学习不回减，回减收口于此防双计 */
   forceRelease(): void {
     this.inFlight = Math.max(0, this.inFlight - 1);
   }

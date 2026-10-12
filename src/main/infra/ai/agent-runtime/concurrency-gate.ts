@@ -32,7 +32,8 @@ export interface ConcurrencyGate {
   /** 等待该 provider 冷却结束（不占闸位；side query 经 modelGate 调用） */
   waitCooldown(providerKey: string): Promise<void>;
   /** 回合级学习信号上报：该 provider 桶上一次 acquire 的尝试结果喂回 AIMD
-   * （rate_limited → throttled 评价 cap；其余失败 → failed 只释放；成功 → succeeded 计 streak） */
+   * （rate_limited → throttled 评价 cap；其余失败 → failed 仅刷新活跃时间戳；
+   * 成功 → succeeded 计 streak）。纯学习不回减计数——闸位回减由 release 统一收口 */
   reportAttemptOutcome(
     providerKey: string,
     outcome:
@@ -158,8 +159,9 @@ export function createConcurrencyGate(maxConcurrentPerProvider: number): Concurr
     return () => {
       if (released) return;
       released = true;
-      // S2b 阶段计数闭环在 gate 层：acquire +1 / release -1（forceRelease 无学习信号）。
-      // S2c 尝试级准入接线后，改为「终态上报负责学习与回减、release 只唤醒队列」
+      // 计数闭环在 gate 层：acquire → admitted / release → forceRelease（唯一回减口）。
+      // 终态上报（succeeded/throttled/failed）是纯学习信号不回减——若与此处双回减，
+      // inFlight 系统性低估会让 canAdmit 过度放行，实际并发静默超过 cap
       bucket.controller.forceRelease();
       dequeueNext(bucket, providerKey);
     };
