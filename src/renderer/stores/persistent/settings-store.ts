@@ -326,7 +326,7 @@ interface SettingsData {
   readonly lsp: LspSettings;
   /** 工作区（文件树行为） */
   readonly workspace: WorkspaceSettings;
-  /** 浏览器 pane（iframe 预览） */
+  /** 浏览器 pane（主进程 WebContentsView 承载，渲染层仅占位测量） */
   readonly browser: BrowserSettings;
   /** 记忆功能（隐私开关） */
   readonly memory: MemorySettings;
