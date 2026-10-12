@@ -163,7 +163,10 @@ export function ModelConfigFields({
   /** modelId 锁定：编辑模式（update 主键）或服务商下拉已选定 */
   const modelIdLocked = isEdit || (isProvider && !values.useOtherModel);
 
-  /** 选中预设模型时用厂商适配的官方数值预填高级配置（仅填空字段——用户手改过的不覆盖） */
+  /** 选中预设模型时用厂商适配的官方数值预填高级配置（仅填空字段——用户手改过的不覆盖）。
+   * ⚠ 显示口径：厂商标称混用二进制（131072→128K）与十进制（384000→384K），换算自适应——
+   * 能被 1024 整除按 Ki（/1024），否则按十进制 K（/1000）。另：高级配置字段当前为 UI
+   * 预填展示，未接入 addRuntimeModel 持久化（schema 无对应字段） */
   const applyPresetCapabilities = (modelId: string): void => {
     const preset = providerModels.find((m) => m.id === modelId);
     const caps = preset?.capabilities as
@@ -172,18 +175,14 @@ export function ModelConfigFields({
     if (caps === undefined) {
       return;
     }
-    // 上下文输入：capabilities.contextWindowSize（tokens → k 显示，与快捷按钮单位一致）
+    // tokens → 厂商标称 K 显示（二进制/十进制自适应）
+    const toKLabel = (tokens: number): string =>
+      tokens % 1024 === 0 ? `${tokens / 1024}k` : `${Math.round(tokens / 1000)}k`;
     if (values.contextInput.trim() === '' && caps.contextWindowSize !== undefined) {
-      onFieldChange('contextInput', `${Math.round(caps.contextWindowSize / 1024)}k`);
+      onFieldChange('contextInput', toKLabel(caps.contextWindowSize));
     }
-    // 上下文输出：capabilities.maxOutputTokens
     if (values.contextOutput.trim() === '' && caps.maxOutputTokens !== undefined) {
-      onFieldChange(
-        'contextOutput',
-        caps.maxOutputTokens % 1024 === 0
-          ? `${Math.round(caps.maxOutputTokens / 1024)}k`
-          : String(caps.maxOutputTokens),
-      );
+      onFieldChange('contextOutput', toKLabel(caps.maxOutputTokens));
     }
     // 视觉：capabilities.vision（仅自动填「支持」——无视觉标注的模型不主动改用户选择）
     if (caps.vision === true && values.imageSupport === 'unsupport') {
