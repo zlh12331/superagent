@@ -149,6 +149,9 @@ export const runtimeModels = sqliteTable(
     displayName: text('display_name'),
     timeoutMs: integer('timeout_ms'),
     apiFormat: text('api_format'),
+    // 用户在高级配置里手填的能力覆盖（JSON：contextWindowSize/maxOutputTokens/vision）；
+    // null = 未填写（resolve 时回退内置清单 capabilities）
+    capabilities: text('capabilities', { mode: 'json' }),
     isEnabled: integer('is_enabled').$type<0 | 1>().notNull().default(1),
     createdAt: integer('created_at').notNull(),
   },

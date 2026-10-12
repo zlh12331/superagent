@@ -552,7 +552,7 @@ describe('老库升级（增量迁移）', () => {
     return (db as unknown as { $client: Database.Database }).$client;
   }
 
-  it('旧 schema 库 → 数据保真 + 约束补齐 + journal 八条，重复 initDb 幂等', async () => {
+  it('旧 schema 库 → 数据保真 + 约束补齐 + journal 十条，重复 initDb 幂等', async () => {
     resetDb();
     await closeDb();
     const legacyDir = mkdtempSync(join(tmpdir(), 'code-agent-db-legacy-v2-'));
@@ -612,7 +612,7 @@ describe('老库升级（增量迁移）', () => {
       ).toThrow(/UNIQUE constraint failed/i);
 
       const migs = raw(db).prepare('SELECT hash FROM __drizzle_migrations').all();
-      expect(migs).toHaveLength(9);
+      expect(migs).toHaveLength(10);
 
       await closeDb();
       resetDb();
@@ -626,7 +626,7 @@ describe('老库升级（增量迁移）', () => {
     }
   }, 30_000);
 
-  it('新库：0000 ~ 0008 全执行（journal 九条），约束齐全', async () => {
+  it('新库：0000 ~ 0009 全执行（journal 十条），约束齐全', async () => {
     resetDb();
     await closeDb();
     const freshDir = mkdtempSync(join(tmpdir(), 'code-agent-db-fresh-v2-'));
@@ -634,7 +634,7 @@ describe('老库升级（增量迁移）', () => {
     try {
       const db = initDb();
       const migs = raw(db).prepare('SELECT hash FROM __drizzle_migrations').all();
-      expect(migs).toHaveLength(9);
+      expect(migs).toHaveLength(10);
       expect(() =>
         raw(db)
           .prepare(

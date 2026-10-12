@@ -1,0 +1,1 @@
+ALTER TABLE `runtime_models` ADD `capabilities` text;
