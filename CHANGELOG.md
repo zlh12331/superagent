@@ -2,6 +2,13 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [1.9.0-beta](https://github.com/zlh12331/superagent/compare/v1.8.0...v1.9.0-beta) (2026-10-12)
+
+
+### 新增
+
+* 厂商深度适配 + Agent 运行时加固 + 文档分区重构（beta 发布批次） ([#142](https://github.com/zlh12331/superagent/issues/142)) ([c752717](https://github.com/zlh12331/superagent/commit/c7527173741c16052032614185cc2dd28536c395))
+
 ## [1.8.0](https://github.com/zlh12331/superagent/compare/v1.7.0...v1.8.0) (2026-10-09)
 
 > 🎓 **毕业版本**：1.8.0-beta.1 → beta.4 逐版验证完毕，本版整体毕业为稳定版——是 1.8.x 首个面向稳定通道用户的版本。相对上一个正式版 1.7.0 的主要变化：① **对话出错时能看到具体原因了**（此前只闪一个笼统提示就消失）；② 中文显示全面修复（文件树/终端/界面不再掉宋体或发灰发绿）；③ 模型选择真正生效（界面所选模型此前只用于展示）；④ 自定义模型支持三种 API 格式；⑤ 记忆引擎安全加固（上游资产越权修复）。beta 期间每版详情见下方各 beta 段落。
