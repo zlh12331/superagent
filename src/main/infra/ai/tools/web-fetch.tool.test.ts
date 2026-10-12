@@ -1,12 +1,26 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { lookup } from 'node:dns/promises';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ToolContext } from './tool';
 import { createWebFetchTool } from './web-fetch.tool';
 
 const ctx = { workingDir: '/tmp' } as unknown as ToolContext;
 
+// url-guard 的 SSRF 防护会真实调 node:dns/promises.lookup——本机 DNS 可能把
+// example.com 解析到环回地址（实测 ::1/127.0.0.1），守卫按设计拒绝导致全文件
+// 假红。DNS 属原生基础设施层，在此处 mock（fetch 同理）；被测的抓取/解码/
+// 截断/错误分类逻辑仍跑真实实现。
+vi.mock('node:dns/promises', () => ({
+  lookup: vi.fn(async () => [{ address: '93.184.216.34', family: 4 }]),
+}));
+
 describe('web_fetch', () => {
+  beforeEach(() => {
+    vi.mocked(lookup).mockResolvedValue([{ address: '93.184.216.34', family: 4 }] as never);
+  });
+
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.clearAllMocks();
   });
 
   it('成功抓取：去标签正文 + 来源行', async () => {
