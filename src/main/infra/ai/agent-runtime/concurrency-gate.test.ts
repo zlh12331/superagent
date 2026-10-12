@@ -186,6 +186,16 @@ describe('createConcurrencyGate（分桶并发门）', () => {
       await expect(p).resolves.toBeUndefined();
     });
 
+    it('waitCooldown：signal 中止立即抛 GateAbortError（回归：中止曾挂满冷却窗 ≤5 分钟）', async () => {
+      const gate = createConcurrencyGate(1);
+      gate.coolDown('deepseek', 1000);
+      const controller = new AbortController();
+      const p = gate.waitCooldown('deepseek', controller.signal);
+      const assertion = expect(p).rejects.toThrowError(createGateAbortError());
+      controller.abort(); // 冷却未到期即中止
+      await assertion;
+    });
+
     it('bucketSnapshot：暴露桶内 controller 状态；未创建桶返回 undefined', () => {
       const gate = createConcurrencyGate(4);
       expect(gate.bucketSnapshot('deepseek')).toBeUndefined();

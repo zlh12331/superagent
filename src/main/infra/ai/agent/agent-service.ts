@@ -290,10 +290,12 @@ export class AgentService implements IAgentService {
           },
           acquireGate: async () => {
             // 方案 A：闸位获取下沉到 turn-assembly（尝试级，acquire/release 与流尝试配对）；
-            // 机器 queued 态在此只做冷却等待（冷却期排队，到点放行进入 running）
+            // 机器 queued 态在此只做冷却等待（冷却期排队，到点放行进入 running）。
+            // signal 接入：中止时立即抛 AbortError 收场，而非挂满冷却窗（≤5 分钟）
             if (this.concurrencyGate !== undefined) {
               await this.concurrencyGate.waitCooldown(
                 resolvedModel?.providerKind ?? 'unknown-provider',
+                controller.signal,
               );
             }
           },

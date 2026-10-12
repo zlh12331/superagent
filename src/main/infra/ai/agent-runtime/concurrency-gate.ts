@@ -29,8 +29,10 @@ export interface ConcurrencyGate {
   reportUnpairedThrottle(providerKey: string, cooldownMs: number): void;
   /** 该 provider 桶是否处于冷却期（诊断/测试用） */
   isCoolingDown(providerKey: string): boolean;
-  /** 等待该 provider 冷却结束（不占闸位；side query 经 modelGate 调用） */
-  waitCooldown(providerKey: string): Promise<void>;
+  /** 等待该 provider 冷却结束（不占闸位；side query 经 modelGate 调用）。
+   * signal 中止时抛 GateAbortError——回合在 queued 态等冷却时用户中止应立即收场，
+   * 而非挂满冷却窗（此前不接 signal，最长挂 MAX_COOLDOWN_MS=5 分钟） */
+  waitCooldown(providerKey: string, signal?: AbortSignal): Promise<void>;
   /** 回合级学习信号上报：该 provider 桶上一次 acquire 的尝试结果喂回 AIMD
    * （rate_limited → throttled 评价 cap；其余失败 → failed 仅刷新活跃时间戳；
    * 成功 → succeeded 计 streak）。纯学习不回减计数——闸位回减由 release 统一收口 */
@@ -204,14 +206,28 @@ export function createConcurrencyGate(maxConcurrentPerProvider: number): Concurr
     isCoolingDown(providerKey) {
       return buckets.get(providerKey)?.controller.isCoolingDown(Date.now()) === true;
     },
-    async waitCooldown(providerKey) {
+    async waitCooldown(providerKey, signal) {
       const bucket = buckets.get(providerKey);
       while (bucket !== undefined) {
+        if (signal?.aborted === true) {
+          throw createGateAbortError();
+        }
         const waitMs = bucket.controller.cooldownRemainingMs(Date.now());
         if (waitMs <= 0) {
           return;
         }
-        await new Promise((resolve) => setTimeout(resolve, waitMs));
+        await new Promise<void>((resolve, reject) => {
+          const onAbort = (): void => {
+            clearTimeout(timer);
+            signal?.removeEventListener('abort', onAbort);
+            reject(createGateAbortError());
+          };
+          const timer = setTimeout(() => {
+            signal?.removeEventListener('abort', onAbort);
+            resolve();
+          }, waitMs);
+          signal?.addEventListener('abort', onAbort, { once: true });
+        });
       }
     },
     reportAttemptOutcome(providerKey, outcome) {
