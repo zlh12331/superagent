@@ -1,5 +1,7 @@
 // scripts/lib/file-metrics.test.ts
-// 体积度量与文件收集单测（棘轮门禁的口径基础）
+// 体积度量与文件收集单测（棘轮门禁的口径基础）：跳过目录语义、净行口径、
+// 路径归一、目录不存在返回空集——fixture 建在系统临时目录，不依赖仓库布局
+
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -80,8 +82,6 @@ describe('isViolating', () => {
 
 describe('toPosixRelative', () => {
   it('反斜杠归一为正斜杠（基线跨平台一致）', () => {
-    // relative() 按平台分隔符解析：Windows 用反斜杠输入、POSIX 用正斜杠输入，
-    // 两者都应归一到 'src/main/a.ts'（硬编码反斜杠输入在 POSIX 会被当作字面段位）
     const input = process.platform === 'win32' ? '/root\\src\\main\\a.ts' : '/root/src/main/a.ts';
     expect(toPosixRelative('/root', input)).toBe('src/main/a.ts');
   });
@@ -91,7 +91,6 @@ describe('collectSourceFiles / discoverPackageSrcDirs', () => {
   it('递归收集源码并跳过产物目录与测试文件', () => {
     const files = collectSourceFiles(join(import.meta.dirname, '..', '..'));
     const rel = files.map((f) => toPosixRelative(join(import.meta.dirname, '..', '..'), f));
-    // 真实仓库必须有内容（防「扫描集静默为空 → 门禁假绿」）
     expect(rel.some((p) => p === 'src/main/service-container.ts')).toBe(true);
     expect(rel.some((p) => p === 'packages/shared/src/ipc/definitions.ts')).toBe(true);
     expect(rel.some((p) => p.includes('_template'))).toBe(false);

@@ -1,25 +1,17 @@
-// src/main/infra/ai/tools/error-classifier.test.ts
-// error-classifier 单测：AI 错误分类映射
-//
-// 测试要点：
-// 1. AppError 直接透传
-// 2. APICallError 按 statusCode 映射（401/403→KEY_INVALID, 404→MODEL_ERROR, 408→TIMEOUT,
-//    413→CONTEXT_TOO_LARGE, 429→RATE_LIMITED, 5xx→MODEL_ERROR, retryable→INTERRUPTED）
-// 3. LoadAPIKeyError → AI_API_KEY_MISSING
-// 4. TypeError → AI_STREAM_INTERRUPTED
-// 5. 未知错误 → INTERNAL_ERROR
-// 6. isAbortError 判断
-
-import { AppError, ErrorCode } from '@code-agent/shared/main';
+import {
+  AppError,
+  ErrorCode,
+  ModelErrorCode,
+  ModelFailureReason,
+  ModelRetryReason,
+} from '@code-agent/shared/main';
 import { APICallError, LoadAPIKeyError } from 'ai';
 import { describe, expect, it } from 'vitest';
-import { classifyError, isAbortError } from './error-classifier';
+import { classifyError, classifyModelFailure, isAbortError } from './error-classifier';
 
-/** 构造 APICallError（AI SDK 类型，仅需 statusCode/isRetryable 字段） */
 function createApiError(statusCode: number | undefined, isRetryable: boolean): APICallError {
   return new APICallError({
     url: 'https://api.example.com/v1/chat/completions',
-    // exactOptionalPropertyTypes: statusCode 为 undefined 时不传该字段
     ...(statusCode !== undefined ? { statusCode } : {}),
     responseHeaders: {},
     requestBodyValues: {},
@@ -76,6 +68,62 @@ describe('classifyError', () => {
     expect(classifyError(createApiError(413, false)).code).toBe(ErrorCode.AI_CONTEXT_TOO_LARGE);
   });
 
+  it('APICallError 400 + context_length_exceeded 文案：→ AI_CONTEXT_TOO_LARGE（供应商主形态）', () => {
+    const error = createApiError(400, false);
+    // OpenAI/DeepSeek 形态：400 + 错误体带 context_length_exceeded
+    Object.assign(error, {
+      responseBody: JSON.stringify({
+        error: {
+          code: 'context_length_exceeded',
+          message: "This model's maximum context length is 65536 tokens",
+        },
+      }),
+    });
+    const result = classifyError(error);
+    expect(result.code).toBe(ErrorCode.AI_CONTEXT_TOO_LARGE);
+    expect(result.message).toContain('精简对话');
+  });
+
+  it('APICallError 400 + Anthropic prompt is too long 文案：→ AI_CONTEXT_TOO_LARGE', () => {
+    const error = createApiError(400, false);
+    Object.assign(error, {
+      responseBody: JSON.stringify({
+        error: { message: 'prompt is too long: 200000 tokens > 180000 maximum' },
+      }),
+    });
+    expect(classifyError(error).code).toBe(ErrorCode.AI_CONTEXT_TOO_LARGE);
+  });
+
+  it('APICallError message 含 maximum context length（无 responseBody）：→ AI_CONTEXT_TOO_LARGE', () => {
+    const error = new APICallError({
+      url: 'https://api.example.com/v1/chat/completions',
+      statusCode: 400,
+      responseHeaders: {},
+      requestBodyValues: {},
+      message: '400 This model maximum context length is exceeded',
+      isRetryable: false,
+    });
+    expect(classifyError(error).code).toBe(ErrorCode.AI_CONTEXT_TOO_LARGE);
+  });
+
+  it('APICallError 400 无超限文案（普通参数错）：→ AI_MODEL_ERROR（不误判）', () => {
+    const error = createApiError(400, false);
+    Object.assign(error, {
+      responseBody: JSON.stringify({ error: { message: 'Invalid parameter: temperature' } }),
+    });
+    expect(classifyError(error).code).toBe(ErrorCode.AI_MODEL_ERROR);
+  });
+
+  it('APICallError 400 文案含孤词 context window（定价/参数说明类）：不误判', () => {
+    const error = createApiError(400, false);
+    Object.assign(error, {
+      responseBody: JSON.stringify({
+        error: { message: 'Invalid parameter: context window size must be positive' },
+      }),
+    });
+    expect(classifyError(error).code).toBe(ErrorCode.AI_MODEL_ERROR);
+  });
+
   it('APICallError 429：→ AI_RATE_LIMITED', () => {
     expect(classifyError(createApiError(429, true)).code).toBe(ErrorCode.AI_RATE_LIMITED);
   });
@@ -101,7 +149,6 @@ describe('classifyError', () => {
   });
 
   it('LoadAPIKeyError：→ AI_API_KEY_MISSING', () => {
-    // LoadAPIKeyError 构造器仅接受 { message }（AI SDK 定义）
     const loadError = new LoadAPIKeyError({ message: 'load failed' });
     const result = classifyError(loadError);
     expect(result.code).toBe(ErrorCode.AI_API_KEY_MISSING);
@@ -112,7 +159,6 @@ describe('classifyError', () => {
   });
 
   it('TimeoutError（AbortSignal.timeout）：→ AI_TIMEOUT', () => {
-    // Node 20+ 的 AbortSignal.timeout 超时抛 DOMException TimeoutError
     const timeoutError = new DOMException('The operation timed out', 'TimeoutError');
     expect(classifyError(timeoutError).code).toBe(ErrorCode.AI_TIMEOUT);
   });
@@ -120,5 +166,61 @@ describe('classifyError', () => {
   it('未知错误：→ INTERNAL_ERROR', () => {
     expect(classifyError(new Error('weird')).code).toBe(ErrorCode.INTERNAL_ERROR);
     expect(classifyError('string error').code).toBe(ErrorCode.INTERNAL_ERROR);
+  });
+});
+
+describe('classifyModelFailure（三轴分类）', () => {
+  it('429：rate_limited 三轴齐活 + Retry-After 透传', () => {
+    const error = createApiError(429, true);
+    Object.assign(error, { responseHeaders: { 'retry-after': '30' } });
+    const result = classifyModelFailure(error);
+    expect(result.code).toBe(ModelErrorCode.ModelRateLimited);
+    expect(result.reason).toBe(ModelFailureReason.Provider);
+    expect(result.retryReason).toBe(ModelRetryReason.RateLimited);
+    expect(result.retryable).toBe(true);
+    expect(result.retryAfterMs).toBe(30_000);
+  });
+
+  it('400 + 超限文案：context_exceeded + 不可重试（重试必然再失败）', () => {
+    const error = createApiError(400, false);
+    Object.assign(error, {
+      responseBody: JSON.stringify({ error: { code: 'context_length_exceeded' } }),
+    });
+    const result = classifyModelFailure(error);
+    expect(result.code).toBe(ModelErrorCode.ModelContextExceeded);
+    expect(result.retryReason).toBe(ModelRetryReason.NotRetryable);
+    expect(result.retryable).toBe(false);
+  });
+
+  it('TypeError + cause ECONNRESET：network_error 归因（非 provider——降级路由不看它）', () => {
+    const error = new TypeError('fetch failed', {
+      cause: Object.assign(new Error('connect ECONNRESET'), { code: 'ECONNRESET' }),
+    });
+    const result = classifyModelFailure(error);
+    expect(result.code).toBe(ModelErrorCode.ModelNetworkError);
+    expect(result.reason).toBe(ModelFailureReason.NetworkError);
+    expect(result.retryReason).toBe(ModelRetryReason.NetworkError);
+    expect(result.retryable).toBe(true);
+  });
+
+  it('TypeError（编程错误形态）：runtime 归因 + 不可重试（不伪装网络抖动）', () => {
+    const result = classifyModelFailure(new TypeError('Cannot read properties of undefined'));
+    expect(result.reason).toBe(ModelFailureReason.Runtime);
+    expect(result.retryable).toBe(false);
+    expect(result.code).toBe(ModelErrorCode.ModelUnknown);
+  });
+
+  it('AbortError：cancelled 归因（供应商失败率统计不含取消）', () => {
+    const result = classifyModelFailure(new DOMException('aborted', 'AbortError'));
+    expect(result.code).toBe(ModelErrorCode.ModelRequestCancelled);
+    expect(result.reason).toBe(ModelFailureReason.Cancelled);
+    expect(result.retryable).toBe(false);
+  });
+
+  it('5xx：server_error 处置（指数退避一档，与限流区分）', () => {
+    const result = classifyModelFailure(createApiError(502, false));
+    expect(result.retryReason).toBe(ModelRetryReason.ServerError);
+    expect(result.retryable).toBe(true);
+    expect(result.retryReason).not.toBe(ModelRetryReason.RateLimited);
   });
 });

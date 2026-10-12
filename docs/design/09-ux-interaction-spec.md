@@ -402,7 +402,7 @@ stateDiagram-v2
   ready --> submitted: 发送（校验：非空/非流式/≤8000字）
   submitted --> streaming: 首个片段到达
   streaming --> ready: 流结束（收尾：刷新缓存+清缓冲+累加用量）
-  streaming --> error: 流错误 → toast 错误码
+  streaming --> error: 流错误 → 对话区常驻错误提示卡
   submitted --> error: 请求失败
   error --> ready: 下次发送
   streaming --> ready: 停止（按钮/Esc/卸载 → agent.stop）
@@ -539,7 +539,7 @@ sequenceDiagram
   U->>C: 回车（三道校验）
   C->>T: sendMessage
   T->>M: agent:run(workingDir/maxSteps:20/mode:build/thinking)
-  M->>M: 并发门 FIFO 排队
+  M->>M: 并发门（per-provider 桶）排队
   M->>L: streamText 多轮工具循环
   M-->>C: agent:stream:part（按会话过滤）
   C-->>U: 界面实时显示
@@ -549,7 +549,7 @@ sequenceDiagram
     U->>C: 停止按钮/Esc/卸载
     C->>M: agent:stop → 推送 aborted 结束
   else 错误
-    M-->>C: agent:stream:error([CODE]) → toast
+    M-->>C: agent:stream:error([CODE]) → 对话区常驻错误提示卡（TurnErrorNotice：标题/详情/复制/重试，新流开始即清除）
   end
 ```
 
@@ -633,7 +633,7 @@ flowchart LR
   IN[输入框] -->|sendMessage| UC[useChat]
   UC -->|transport.sendMessages| TR[IpcAgentTransport 单例]
   TR -->|convertToModelMessages| RUN[agent:run]
-  RUN --> GATE[并发门 FIFO] --> LLM[大模型流式生成]
+  RUN --> GATE[并发门 per-provider 桶] --> LLM[大模型流式生成]
   LLM -->|part| PUSH[agent:stream:part] --> UC --> UI[界面]
   LLM -->|end| END[agent:stream:end] --> FIN[收尾：刷新会话缓存+清工具/审批缓冲+用量累加]
   TOOL[工具执行] -->|tool:call/result| TSTORE[tool-store] --> CARDS[消息卡片+右面板]
@@ -700,7 +700,7 @@ flowchart LR
 
 **shortcut-picker.tsx（104 行）**：忽略纯修饰键（Control/Alt/Shift/Meta/CapsLock/Tab）；格式 `Ctrl→Alt→Shift→Meta + 主键`（空格→Space、单字符大写、功能键原样）；录制时全局 keydown capture（preventDefault+stopPropagation），Esc 取消、Backspace/Delete 清空绑定；输出与 settings-store 格式一致（"Meta+P"）。
 
-**数据（data-section）**：导出 → session:exportAll → 成功 toast 带路径；打开数据目录 → app:openDataDir。**遥测（telemetry-section）**：三卡片 off/error-only/full（对标 VS Code），保存后 invalidate + toast"重启生效"。**关于（about-section 124 行）**：app:getInfo 显示版本/运行时三行/环境/数据目录（浏览器模式兜底 dev 假数据）。**回合（turns-section）**：session:getRecentTurns limit 10，显示模型/序号/状态文案/tokens/时长（s）。**实验（experimental-section）**：仅 scanlines + reasoningCollapsed 两个真实开关（诚实原则，其他不展示）。**IM 渠道（im-channels-section 161 行）**：渠道列表 + 启停 + 未配置渠道的 token 密码输入（busy 防重）；implemented=false 的渠道启动按钮禁用。**MCP（mcp-section 240 行）**：状态徽章 running emerald / starting sky / error red / stopped muted / stopped_with_error amber；工具数展开按钮 title 显示工具名列表；添加表单 name/command/args（args 按空白切分）。**技能（skills-section 190 行）**：已学列表（可移除）+ 学习表单（Textarea + Sparkles 按钮，空/pending 禁用）+ 内置技能只读灰标。**规则记忆（rules-memory-section 137 行）**：AGENTS.md 说明块 + 记忆列表（按激活会话，max-h-64 滚动）+ 清空（clearing 转圈）。**提示词（prompt-section 117 行）**：编辑态 Textarea 6 行等宽 + 保存/取消/清除（清除仅草稿非空时显示，destructive）；查看态 pre 预览或"使用默认提示词"占位。
+**数据（data-section）**：导出 → session:exportAll → 成功 toast 带路径；打开数据目录 → app:openDataDir。**遥测（telemetry-section）**：三卡片 off/error-only/full（对标 VS Code），保存后 invalidate + toast"重启生效"。**关于（about-section 124 行）**：app:getInfo 显示版本/运行时三行/环境/数据目录（浏览器模式兜底 dev 假数据）。**回合（turns-section）**：session:getRecentTurns limit 10，显示模型/序号/状态文案/tokens/时长（s）。**实验（experimental-section）**：仅 reasoningCollapsed 一个真实开关（诚实原则，其他不展示；scanlines 扫描线实验已于 2026-10-10 移除）。**IM 渠道（im-channels-section 161 行）**：渠道列表 + 启停 + 未配置渠道的 token 密码输入（busy 防重）；implemented=false 的渠道启动按钮禁用。**MCP（mcp-section 240 行）**：状态徽章 running emerald / starting sky / error red / stopped muted / stopped_with_error amber；工具数展开按钮 title 显示工具名列表；添加表单 name/command/args（args 按空白切分）。**技能（skills-section 190 行）**：已学列表（可移除）+ 学习表单（Textarea + Sparkles 按钮，空/pending 禁用）+ 内置技能只读灰标。**规则记忆（rules-memory-section 137 行）**：AGENTS.md 说明块 + 记忆列表（按激活会话，max-h-64 滚动）+ 清空（clearing 转圈）。**提示词（prompt-section 117 行）**：编辑态 Textarea 6 行等宽 + 保存/取消/清除（清除仅草稿非空时显示，destructive）；查看态 pre 预览或"使用默认提示词"占位。
 
 ### 8.3 状态仓库关键逻辑（stores）
 

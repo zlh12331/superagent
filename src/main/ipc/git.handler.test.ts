@@ -1,11 +1,7 @@
-// src/main/ipc/git.handler.test.ts
-// git.handler 单测：5 个方法转发（fake GitService DI 注入）
-
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createGitHandlers, type GitHandlerDeps } from './git.handler';
 
-/** 创建 fake GitService */
 function createFakeGitService() {
   return {
     status: vi.fn(async () => ({ branch: 'main', ahead: 0, behind: 0, files: [], clean: true })),

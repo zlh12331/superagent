@@ -1,7 +1,3 @@
-// src/renderer/components/ui/dropdown-menu.tsx
-// 下拉菜单组件（shadcn/ui new-york 风格，基于 @radix-ui/react-dropdown-menu）
-// 设计文档 §2.3 shadcn/ui 组件库
-
 import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu';
 import { ChevronRight } from 'lucide-react';
 import type * as React from 'react';
@@ -89,7 +85,6 @@ export function DropdownMenuItem({
       data-inset={inset}
       data-variant={variant}
       className={cn(
-        // 纯语义令牌（对齐 shadcn 铁律：无手动 dark: 覆盖）——destructive 焦点态统一 /10 令牌
         "focus:bg-accent focus:text-accent-foreground data-[variant=destructive]:text-error-text data-[variant=destructive]:focus:bg-destructive/10 data-[variant=destructive]:focus:text-error-text [&_svg:not([class*='text-'])]:text-muted-foreground relative flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[inset]:pl-8 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         className,
       )}

@@ -1,7 +1,3 @@
-// src/renderer/components/chat/history-parts.test.ts
-// 持久化历史 → UIMessage 忠实重建纯函数测试（高杠杆纯函数，无 DOM 依赖）
-// 业务逻辑不 mock：直接测真实 reconstructHistory / toInitialMessages 实现。
-
 import type { ChatMessage } from '@code-agent/shared/renderer';
 import { describe, expect, it } from 'vitest';
 
@@ -22,7 +18,7 @@ describe('reconstructHistory', () => {
 
   it('string content（纯文本）→ 单条 text part；空字符串跳过', () => {
     const r = reconstructHistory([msg('user', '你好'), msg('user', ''), msg('assistant', '回答')]);
-    expect(r.messages).toHaveLength(2); // 空字符串那条跳过
+    expect(r.messages).toHaveLength(2);
     expect(r.messages[0]).toMatchObject({ role: 'user', parts: [{ type: 'text', text: '你好' }] });
     expect(r.messages[1]).toMatchObject({
       role: 'assistant',
@@ -87,7 +83,6 @@ describe('reconstructHistory', () => {
   });
 
   it('孤儿 tool-error（无对应 tool-call）→ output-error 卡且保留 errorText', () => {
-    // 回归：兜底此前硬编码 output-available，孤儿错误卡会渲染成成功态并丢 errorText
     const r = reconstructHistory([
       msg('tool', [
         {
@@ -152,7 +147,7 @@ describe('reconstructHistory', () => {
       ]),
     ]);
     expect(r.droppedPartTypes).toContain('unknown-part');
-    expect(r.messages[0]?.parts).toHaveLength(1); // 只有 text
+    expect(r.messages[0]?.parts).toHaveLength(1);
   });
 
   it('旧数据：content 是 URL-like 包装（type json/text）→ unwrap to value', () => {
@@ -170,7 +165,7 @@ describe('reconstructHistory', () => {
       ]),
     ]);
     const toolPart = r.messages[0]?.parts.find((p) => 'output' in p) as { output: unknown };
-    expect(toolPart.output).toBe('匹配'); // unwrapOutput 还原
+    expect(toolPart.output).toBe('匹配');
   });
 
   it('assistant/system 角色保映射；tool → assistant；非法角色 → user', () => {
@@ -183,9 +178,6 @@ describe('reconstructHistory', () => {
   });
 
   it('孤儿工具结果的落库消息（role=tool）→ 归 assistant，不渲染成用户气泡', () => {
-    // 主进程把工具结果落成独立的 role='tool' 消息（turn-transcript
-    // buildAssistantTurnMessages）。配对的条目会被合并掉，只有孤儿结果留下——
-    // 此前 'tool' 落入兜底变 'user'，孤儿工具卡被塞进用户气泡（语义错位）。
     const r = reconstructHistory([
       msg('tool', [
         { type: 'tool-result', toolCallId: 'orphan', toolName: 'run_command', output: 'ok' },
@@ -193,7 +185,6 @@ describe('reconstructHistory', () => {
     ]);
     expect(r.messages).toHaveLength(1);
     expect(r.messages[0]?.role).toBe('assistant');
-    // 仍是工具卡（assistant 分支按 part 分发渲染富组件；system 分支只取文本会丢卡片）
     expect(r.messages[0]?.parts[0]).toMatchObject({
       type: 'dynamic-tool',
       toolName: 'run_command',
@@ -201,8 +192,6 @@ describe('reconstructHistory', () => {
   });
 
   it('落库的富回合（turn-transcript 形态）→ reasoning + 工具卡 + 文本完整重建', () => {
-    // 模拟 agent-service 落库产物：reasoning/tool-call/text 的 assistant 消息
-    // + SDK 包装形态 output 的 tool 消息（{type:'text', value}）
     const r = reconstructHistory([
       msg('assistant', [
         { type: 'reasoning', text: '先定位问题' },
@@ -218,7 +207,6 @@ describe('reconstructHistory', () => {
         },
       ]),
     ]);
-    // tool 消息的结果被合并进工具卡，自身无剩余 parts → 整条跳过
     expect(r.messages).toHaveLength(1);
     const types = r.messages[0]?.parts.map((p) => p.type);
     expect(types).toEqual(['reasoning', 'tool-read_file', 'text']);
@@ -226,9 +214,9 @@ describe('reconstructHistory', () => {
     expect(toolPart).toMatchObject({
       type: 'tool-read_file',
       state: 'output-available',
-      output: '文件内容', // unwrapOutput 还原包装
+      output: '文件内容',
     });
-    expect(r.hasRichParts).toBe(true); // textOnly 横幅条件不再成立
+    expect(r.hasRichParts).toBe(true);
     expect(r.droppedPartTypes).toEqual([]);
   });
 });

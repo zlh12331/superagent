@@ -1,12 +1,3 @@
-// src/renderer/components/chat/GoalBar.tsx
-// 会话目标栏（自 ChatPanel 提取的展示组件）
-// ──────────────────────────────────────────────
-// 左 GOAL 徽标 · 中条件文本 · 右 编辑/删除按钮。
-// 纯展示：数据（useChatGoals）与动作回调由 ChatPanel 注入。
-// 变体：无
-// 状态：completed（显示完成徽标）
-// ──────────────────────────────────────────────
-
 import { Check, Pencil, Trash2 } from 'lucide-react';
 import type { ReactElement } from 'react';
 

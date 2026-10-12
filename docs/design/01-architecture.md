@@ -217,3 +217,315 @@ ChatService（单轮无工具流式）已随死链路清理删除（2026-08 功�
 ---
 
 **统计摘要**：18 个服务实例（16 服务 + ToolRegistry/ToolExecutor 2 核心组件） / 16 个 IPC 域 / 74 个 channel（59 invoke + 15 push）/ 16 个 IPC handler 文件 / 4 层进程隔离。
+
+---
+
+# 附录 A：现状详述——进程模型、分层与目录（自 code-wiki 01 合并，2026-10-12）
+
+> 代码实然现状的细化快照，与上文"应然"设计互补；数字随代码演进会过时，以仓库现状为准。
+
+## A.1 进程模型（Electron 三进程）
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│ Renderer（React，沙箱 sandbox:true, nodeIntegration:false）  │
+│   路由 / 组件 / stores / hooks ── window.api.* 白名单        │
+└──────────────────────────────┬───────────────────────────────┘
+                               │ IPC（类型安全契约，见 19 号）
+┌──────────────────────────────┼───────────────────────────────┐
+│ Preload（CJS，contextBridge）│  createIpcApi(IPC_META)        │
+└──────────────────────────────┼───────────────────────────────┘
+                               │ ipcRenderer.invoke / on
+┌──────────────────────────────┴───────────────────────────────┐
+│ Main（Node.js）                                               │
+│   ServiceContainer ── 20 个 accessor 服务（懒加载 + 反向依赖  │
+│   dispose；Agent/Session/File/Search/Terminal/Git/Codebase/  │
+│   ToolRegistry+ToolExecutor/Permission/MCP/Prompt/MemoryPort+│
+│   MemoryHub/LSP/Goal/IM/RemoteControl/BrowserPreview/Update）│
+│   llmClient 与 cronService、agentAskService 同为模块级单例，  │
+│   非 accessor（cronService.stop() 在 dispose 链首位）         │
+│   遥测为 OTel 单通道基建（非 accessor）                        │
+└───────────────────────────────────────────────────────────────┘
+```
+
+- **Renderer**：纯前端，无 Node 权限，只能调用 preload 暴露的 `window.api.*`。
+- **Preload**：`contextBridge.exposeInMainWorld('api', api)`，由定义表 `IPC_META` 自动生成，零手写。
+- **Main**：所有真实能力（文件、搜索、终端、数据库、LLM、工具执行）都在此。`ServiceContainer` 统一管理单例生命周期。
+
+## A.2 分层架构
+
+```
+┌───────────────────────────────────────────────┐
+│ packages/shared   IPC 类型契约 + zod schema   │ ← 单一真源
+├───────────────────────────────────────────────┤
+│ src/preload       window.api 桥接（CJS, sandbox）│
+├───────────────────────────────────────────────┤
+│ src/main/ipc      Handler 层（定义表驱动注册）  │
+├───────────────────────────────────────────────┤
+│ src/main/infra    领域服务（AI/文件/搜索/终端/…）│
+│ src/main/security 安全基线（CSP/权限）          │
+│ src/main/utils    基础设施（logger/wrap/…）     │
+├───────────────────────────────────────────────┤
+│ src/renderer      React 渲染层                 │
+└───────────────────────────────────────────────┘
+```
+
+依赖方向：`renderer → shared(类型)`；`preload → shared(meta)`；`handler → infra 服务`；`infra → shared(schema)`。
+**不变量**：`infra` 不得反向依赖 `ipc`；`shared` 不依赖任何运行时大包（zod 通过子路径隔离，避免拖进 preload）。
+
+## A.3 目录结构（仓库根）
+
+```
+src/main/          主进程（service-container + infra 服务 + ipc handlers）
+  infra/ai/        Agent / Agent-Runtime / LLM 客户端 / Providers / Prompt / cron / 工具 / MCP / Models / Skills / Knowledge
+  infra/autostart/ 开机自启（OS 登录项）
+  infra/browser/   WebContentsView 浏览器预览（独立 session 分区）
+  infra/code-analysis/    代码分析器
+  infra/codebase/  codegraph CLI 封装（代码智能查询）
+  infra/file/      文件读写 + chokidar 监听
+  infra/git/       Git 操作封装（simple-git）
+  infra/i18n/      主进程轻量 i18n（工具文案）
+  infra/im/        即时通讯渠道适配器（Telegram/钉钉/微信/企微/飞书/QQ/webhook）
+  infra/invalidation/ 写路径声明式失效域（IPC 变更后自动失效渲染层 Query）
+  infra/lsp/       LSP 客户端 + 语言服务器管理器
+  infra/memory-hub/ 记忆引擎 sidecar（上游 TencentDB-Agent-Memory，MemoryPort/capture-wire）
+  infra/network/   代理接缝（proxiedFetch，34 号）
+  infra/remote/    远程控制（局域网配对）
+  infra/search/    ripgrep 搜索（grep/glob）
+  infra/storage/   SQLite + Drizzle + keychain + 偏好持久化
+  infra/telemetry/ OTel 单通道 + 事件循环延迟监控
+  infra/terminal/  node-pty 终端会话池
+  infra/update/    自动更新（electron-updater）
+  ipc/             各域 handler（定义表驱动注册）
+  security/        CSP（security/csp.ts）
+  utils/           logger / wrap / window-state / emit-event / error-report
+  index.ts         主进程入口
+  service-container.ts  统一服务生命周期（20 accessor + dispose 链）
+  根级桌面集成：window.ts / tray.ts / deep-link.ts / notification.ts / theme-linkage
+src/preload/       contextBridge 桥（index.ts + utils/create-api.ts / utils/ipc-bridge.ts）
+src/renderer/      React 层（routes / components / hooks / stores / lib / providers / i18n / styles）
+packages/shared/   IPC 契约 + zod schema（单一真源；constants / ipc / schemas 按进程拆出口）
+packages/memory-engine/  vendored 记忆引擎上游源码（utilityProcess sidecar，integrity 门禁）
+packages/tsconfig/ base / node / web 三档 tsconfig
+e2e/               Playwright 三套配置（E2E / Electron / Smoke）+ 视觉/性能/可访问性
+scripts/           工程脚本（scaffold / check-* / build-tokens）
+docs/design/       设计文档（常态化维护，见其 README.md）；docs/implementation/ 实施记录
+```
+
+`infra/ai/` 是最大的一块，拆分 `agent / agent-runtime / llm-client / mcp / models / prompt / providers / skills / tools / knowledge / middleware` 多个关注点。
+
+## A.4 关键架构决策（ADR 摘要）
+
+| 决策 | 说明 |
+|---|---|
+| **类型契约单一真源** | `packages/shared` 定义 `IpcApi` 接口 + channel 常量 + zod schema。preload 用 `satisfies IpcApi` 编译期校验形状；主进程 handler 用 zod 校验入参。改一处全仓同步。 |
+| **定义表驱动的 IPC + 编译期双向 parity** | `IPC_META`（纯字符串，preload 安全导入）→ `IPC_DEFINITIONS`（+schema）→ 推导 `IpcApi`。两处用 TS 类型相等检查保证 `meta ⊆ definitions ⊆ meta`，任何一侧多写方法都会编译失败。 |
+| **ServiceContainer 单例 + 延迟初始化** | 所有服务懒加载 + 可注入（测试用 `setXxxService`）。dispose 严格按反向依赖顺序（见附录 B §2.3）逐步骤 try/catch 隔离。 |
+| **StreamText 请求级重试** | 重试边界 = 首个真实内容事件（非空 delta / tool-call 等）——边界前结构事件缓冲为 prelude 重试时回注；边界后断流由 agent 层从对话锚点续写恢复，避免重复工具副作用。 |
+| **plan / build 双模式** | plan 模式按工具类别判定：零副作用类别（`read` 读数据 / `control` 与用户或内部状态交互，经 `isZeroSideEffectTool` 判定）→ auto，其余（edit/exec）→ deny（零副作用只读探索；另有显式逃生舱名单 `PLAN_MODE_CONTROL_TOOLS`，现仅 save_memory——它有持久化副作用，不属零副作用，防计划期不可用）；build 模式写操作走审批流。子代理继承同一 PermissionService（plan 模式下子代理写工具同样被拒）。 |
+| **前端 mock 层保留** | 渲染层 `dev/mock-api.ts` 在浏览器 dev 模式（`pnpm dev:web`）提供 `window.api` 全链路模拟，前端可独立于主进程开发；E2E 浏览器模式同走此层。不用 MSW——它拦截 HTTP，本项目 mock 的是 IPC 桥（裁决见 20 号）。 |
+| **状态管理分工** | IPC `invoke` 的 server state 用 TanStack Query（缓存 + 去重 + 失效）；IPC `on` 推送事件用 Zustand（流式 part / tool progress / file-tree）。**铁律：不要把流式事件塞进 Query。** |
+| **安全基线严格** | `sandbox:true` + `contextIsolation:true` + 自定义 CSP 注入 + 拒绝所有 Web 权限请求 + 导航/新窗口白名单（见附录 B §3）。 |
+| **非必要不自研** | 能在 Vercel AI SDK / 成熟第三方包基础上实现的不自己造轮子（复用 AI SDK streamText、simple-git、codegraph CLI 等）。 |
+
+## A.5 数据与事件流（一条消息的旅程）
+
+```
+用户输入 → renderer ChatInput
+  → useAgentBridge(AI) invokes `agent:run` (window.api)
+  → Main: agent.handler → ServiceContainer.getAgentService().startAgent()
+  → AgentService 构造回合 → llmClient(Provider) → AI SDK streamText
+  → stream part 经 streamReader/turnRunner 翻译成 TurnEvent
+  → 遇到工具调用 → ToolRegistry.toAISDKTools 的 executeHook → ToolExecutor.execute
+       → PermissionService 审批决策 → 推送 agent:tool:call 事件 → 渲染层审批卡
+       → 用户批准 → 执行 `tool.execute` → 结果回填 → 进入下一轮 (stopWhen)
+  → 全部结束后推送 agent:stream:end，渲染层收尾并失效 Query 刷新会话列表
+```
+
+核心"多轮循环"由 AI SDK `streamText` 的 `tools` + `stopWhen` 驱动，服务端在 `turn-runner` 里持续读流直到无更多工具调用或达到终止条件。
+
+## A.6 质量基线快照（2026-09-30 实测）
+
+`pnpm typecheck` 0 错误 / `pnpm lint` 0 问题 / 单元测试全绿——shared 110 + main 2135（另 8 平台相关 skip）+ renderer 1845 + integration 152 + scripts 364；测试文件 406 个（含 e2e）。数字随代码演进会过时，以 `pnpm test` 现跑结果为准。
+
+## A.7 参考
+
+- `02-tech-stack.md`、`03-directory-structure.md`、`19-ipc-spec.md`、`22-ai-tool-spec.md`（本目录）。
+
+---
+
+# 附录 B：主进程入口与生命周期（自 code-wiki 02 合并，2026-10-12）
+
+> 覆盖：`src/main/index.ts` 启动链、`ServiceContainer` 生命周期、进程安全基线、窗口创建。
+
+## B.1 入口 `src/main/index.ts`
+
+### B.1.1 启动阶段顺序（`app.whenReady()` 链）
+
+```
+whenReady
+ ├─ 单实例锁（requestSingleInstanceLock；失败则 quit；whenReady 内再查 gotTheLock 双保险）
+ ├─ initLogger()           初始化 electron-log（需要 app.getPath，必须在 whenReady 后）
+ ├─ initTelemetry()        初始化 OpenTelemetry（遥测级别 off→跳过；无 endpoint 退化为 Console）
+ ├─ initDb()               SQLite（建表幂等 + WAL + 外键 + 备份轮转 + 损坏自愈）
+ ├─ initMainI18n()         主进程 i18n（读 app_settings language 域，缺失回退 zh-CN）
+ ├─ applyProxyChange()     34 号：代理配置启动应用（在 initDb 后、IM 渠道前；fire-and-forget 失败仅 warn）
+ ├─ promptService.initialize()  幂等插入默认 Code Agent prompt（onConflictDoNothing）
+ ├─ registerGlobalErrorHandlers()
+ ├─ recoverFromCrash()     无条件执行：残留 running 会话标 interrupted + 残留 running 任务标
+ │                         failed + 清崩溃标记（崩溃标记只影响日志口径，不门控恢复本身）
+ ├─ pruneExpiredUsage()    清理 90 天窗口外的 token_usage（与用量页查询窗口对齐）
+ ├─ initRuntimeModels()    自定义模型注册到 ModelRegistry（LLM 调用前）
+ ├─ skillRegistry.loadFromRows(new LearnSkillService(llmClient).listLearned())  已学技能合并
+ ├─ serviceContainer.initImChannels()  已配置 IM 渠道自动连接（含 IM→Agent 桥接挂载；
+ │                         初始化 Promise 存入 imChannelsInit，退出时先等它落定再 stopAll）
+ ├─ serviceContainer.initSubagents()   run_subagent 工具依赖
+ ├─ mountTurnNotifications / mountApprovalNotifications  系统通知（后台回合 + 审批等待）
+ ├─ initCronScheduler()    定时任务调度接线（须在 initDb 之后）
+ ├─ registerIpcHandlers({...域 handler})   定义表驱动，缺失编译期报错
+ ├─ updateService.start()  注册 autoUpdater 事件（devUpdateEnabled 需 CODE_AGENT_DEV_UPDATE=1）
+ ├─ 注入 CSP 响应头（applyCspToSession）+ 权限请求默认拒绝
+ ├─ startMemoryMonitor()   主进程内存泄漏哨兵（60s 采样）
+ ├─ EventLoopLagMonitor    事件循环延迟监控（活跃回合上下文报告，见 lag-alert）
+ └─ createWindow() + createTray()   主窗口 + 托盘（deep-link 冷启动 URL 从 argv 补捞）
+```
+
+关窗协商在 window.ts close handler 与 before-quit 双路径共享 `isCloseConfirmed` 标志（`CODE_AGENT_SKIP_CLOSE_GUARD=1` 豁免）；运行中回合弹确认。
+
+### B.1.2 单实例锁
+
+- `app.requestSingleInstanceLock()` 失败 → 立即 `app.quit()`（不初始化任何服务）。
+- `second-instance` 事件：聚焦/还原已有主窗口。
+
+### B.1.3 环境与 userData
+
+- **dev 模式**：`userData` 重定向到项目内 `.electron-user-data/`（可用 `CODE_AGENT_USER_DATA` 覆盖，多实例隔离避免 SQLite 锁冲突）；开启 `remote-debugging-port`（默认 9222，`CODE_AGENT_DEBUG_PORT` 可覆盖，供 CDP 直连调试）。
+- **生产**：使用系统默认 `%APPDATA%/<AppName>`。
+- `.env`：dev 通过 Node 内置 `process.loadEnvFile()` 加载（NODE_ENV=test 跳过）。
+
+### B.1.4 退出清理（`before-quit`）
+
+运行中回合先协商（确认弹窗，`isCloseConfirmed` 与窗口 close 路径共享标志）→ `preventDefault` + `setQuitting()` → 停 lagMonitor/内存监控 → 等 `imChannelsInit` 落定（3s 超时兜底）→ `disposeImChannels()` → `disposeServices()`（含 closeDb，`pendingBackup` 机制等待在途备份落地）→ `shutdownTelemetry()`（flush span）→ `runDeferredInstall()`（Windows 更新：应用完全退出后再拉起安装器，消除 NSIS「无法关闭」竞态）→ `app.exit(0)`。清理失败仅记日志不阻断退出。
+
+### B.1.5 错误兜底
+
+`whenReady().catch` 捕获启动链任何同步抛错 → `console.error` + `dialog.showErrorBox` + `app.exit(1)`。
+
+## B.2 服务生命周期 `src/main/service-container.ts`
+
+### B.2.1 单例模式
+
+```ts
+export const serviceContainer = new ServiceContainer();
+serviceContainer.getAgentService();        // get 惰性初始化
+serviceContainer.setAgentService(mock | null);  // 仅测试用注入
+```
+
+每个服务都遵循 "get 惰性 + set 注入 + dispose 反向依赖" 三段式。工具系统三件套 `ToolRegistry / PermissionService / ToolExecutor` 由容器直接 `new`（非模块级单例）。
+
+### B.2.2 关键 getter 与依赖注入
+
+| getter | 初始化依赖 | 备注 |
+|---|---|---|
+| `getPromptService()` | gitSummaryProvider 闭包（动态上下文取真实 git 值） | DB 模板 + `{{gitBranch}}`/`{{gitStatus}}`/`{{agentsMd}}` 注入 |
+| `getAgentService()` | ToolRegistry + ToolExecutor + PromptService + SessionService + llmClient（标题生成 + repairToolCall 工具入参修复）+ gate + PermissionService | 通过 `ToolRegistry.toAISDKTools` 注入 `executeHook`（=ToolExecutor.execute） |
+| `getToolRegistry()` | FileService + SearchService + TerminalService + GitService + MemoryPort（memory-hub）+ LspManager + agentAskService + PermissionService + CodebaseService | 首次访问注册 34 个内置工具（tools/index.ts 为清单真源） |
+| `getPermissionService()` | CommandClassifier(llmClient) + 启动时 `readApprovalModeSync()` | 控制写操作审批 |
+| `getMcpService()` | ToolRegistry | stopAll 关闭 MCP server 子进程 |
+| `getMemoryPort()` | MemoryHubService（懒启动 sidecar） | save_memory / recall_memory 工具注册期即可用，首次调用启动引擎 |
+| `getMemoryHubService()` | memory-hub sidecar（上游 TencentDB-Agent-Memory） | 未配置 hubRoot 时内部降级为空实现（记忆静默不可用） |
+| `getCodebaseService()/getFileService()/...` | 各自模块单例 | 惰性包装 |
+| `getGoalService()` | AgentService + GoalJudge(llmClient) | mount 回合监听 |
+| `getImService()` | AgentService + PermissionService + SessionService（经 ImAgentBridge） | mount IM→Agent 桥 |
+| `getLspManager()` | 首次工具调用才创建（读 app_settings `lsp.serverCommands` 覆盖） | 懒加载 |
+
+### B.2.3 dispose() 顺序（反向依赖，每步 try/catch 隔离）
+
+```
+cronService.stop（最先：fire 会触发 agent 回合，防半拆解容器再起新回合）
+→ goalService.unmount → imBridge.unmount → imService.stopAll（先停回合依赖方，
+  drain 窗口内到达的 IM/远程命令不得再发起新回合）
+→ remoteControl.release → agentService.dispose（drain：等活跃 stream 进入
+  finally，3s 超时兜底）→ markInterruptedOnShutdown（退出善后：残留 running
+  标 interrupted，消除「干净退出留 stale running」窗口）
+→ mcpService.stopAll → lspManager.disposeAll（S14 修复：移到 agent drain 后，
+  drain 窗口内 LSP 工具调用仍可用）
+→ permissionService.dispose（含清空 ToolExecutor/ToolRegistry 引用）
+→ agentAskService.dispose → fileService.dispose（chokidar watcher）
+→ searchService.dispose（ripgrep 子进程）→ terminalService.dispose（pty）
+→ gitService / codebaseService.dispose → sessionService.dispose（不关 db）
+→ memoryHub.stop（sidecar 子进程）→ updateService.dispose → browserPreview.dispose
+→ resetAIProvider → closeDb（最后）
+```
+
+实测以 `src/main/service-container.ts` 的 `dispose()` 步骤注释为准（步骤号 1.8→11.5，2026-09-30 核对）：
+
+- `runStep` 独立 try/catch：单步失败不跳过后续，`failures[]` 汇总记录。
+- 退出路径整体顺序（index.ts before-quit）：lagMonitor/内存监控先停 → 等 imChannelsInit 落定（3s 超时兜底）→ disposeImChannels → disposeServices → shutdownTelemetry（flush span）→ runDeferredInstall（Windows 更新安装器拉起）→ app.exit(0)。
+
+### B.2.4 reset()（测试用）
+
+与 dispose 不同：**不调用外部服务的 dispose**，仅清空引用并 fire-and-forget 停 MCP/IM，最后 `resetDb()` + `resetConfigCache()`。
+
+### B.2.5 崩溃恢复 `recoverFromCrash()`
+
+启动期**无条件执行**（不依赖崩溃标记——标记只影响日志口径）：`markAllInterrupted()`（残留 running 会话 → interrupted）+ `taskService.markAllRunningFailed()`（残留 running 任务 → failed，2026-09-08 修复）→ `clearCrashMarker()`。与退出善后 `markInterruptedOnShutdown` 首尾呼应：外部工具/备份脚本读到的会话状态一律是终态。
+
+### B.2.6 导出别名
+
+`disposeServices()` / `resetServices()` / `initRuntimeModels()` 兼容旧 API，委托给 `serviceContainer`。
+
+## B.3 窗口创建与安全基线（`createWindow`）
+
+### B.3.1 BrowserWindow 配置
+
+- 宽高恢复（`window-state.json`，校验不可见时回退 1280×800），`minWidth:960` / `minHeight:640`，`minWidth` 保证聊天输入区可见。
+- 无边框标题栏：`titleBarStyle:'hidden'`；非 macOS 用 `titleBarOverlay`（透明底 + `symbolColor:#a8a29e` + 高度 52px）。
+- **webPreferences**：`preload: ../preload/index.cjs`、`contextIsolation:true`、`nodeIntegration:false`、`sandbox:true`、`webSecurity:true`。
+
+### B.3.2 导航/弹窗限制
+
+- `will-navigate`：仅允许 `http://localhost` 与 `app://`，其余 `preventDefault`。
+- `setWindowOpenHandler`：`http` 链接走 `shell.openExternal`，统一 `deny` 新窗口。
+
+### B.3.3 运行时安全
+
+- **CSP**：`applyCspToSession` 唯一注入入口（CSP / `X-Content-Type-Options: nosniff` / `X-Frame-Options` 三头一并），生产严格 / 开发宽松（允许 HMR）。跳过 `chrome-extension://` 协议响应（避免与 React DevTools 扩展自身 CSP 冲突）。
+- **权限请求**：`setPermissionRequestHandler` 默认拒绝所有（摄像头/麦克风/地理位置/通知等），显式拒绝 + 日志（拒绝而非忽略，避免 Electron 默认放行）。
+- **内存监控**：60s 采样，连续 3 次单调增长且累计 > 150MB 才告警（防 GC 抖动误报）；事件循环延迟监控（EventLoopLagMonitor）按活跃回合上下文报告。
+
+### B.3.4 静默启动与唤回
+
+开机自启（Windows/Linux 登录项携带 `--hidden` 参数；macOS 走 `wasOpenedAtLogin` 判定——ServiceManagement 不透传 args）→ `startHidden` 不显示窗口。唤回唯一实现 `window-show.ts`（show + 首次唤回应用挂起的 maximize——直接 maximize 会隐式显示窗口导致 --hidden 失效，2026-09-21 真机实测教训；三份副本曾不一致致托盘驻留后唤不回，已收敛单点）。
+
+### B.3.5 开发辅助
+
+dev 环境自动 `installExtension(REACT_DEVELOPER_TOOLS)`（失败容忍）+ `openDevTools({mode:'detach'})`（生产不触发）。
+
+### B.3.6 macOS 行为
+
+- `activate` 时无窗口则 `createWindow`（经 window-show 单点）。
+- `window-all-closed`：非 darwin 才 `app.quit()`。
+
+## B.4 遥测初始化
+
+| 组件 | 说明 |
+|---|---|
+| OpenTelemetry | `initTelemetry()` whenReady 后；采集 agent.streamText / tool.execute / IPC 业务 span；遥测级别 off→跳过初始化；无 `OTEL_EXPORTER_OTLP_ENDPOINT` 退化为 Console |
+
+> 错误处理为本地优先（2026-09-13 移除 Sentry）：异常经 `src/main/utils/error-report.ts` 单一出口落本地日志（渲染层经 electron-log 转发主进程，随诊断包导出）。
+
+## B.5 关键文件清单
+
+| 文件 | 职责 |
+|---|---|
+| `src/main/index.ts` | 主进程入口、生命周期、窗口、安全 |
+| `src/main/service-container.ts` | 服务单例 + 生命周期（20 accessor + dispose 链 + recoverFromCrash） |
+| `src/main/config/index.ts` | AppConfig（环境配置读取） |
+| `src/main/security/csp.ts` | 安全响应头唯一注入入口（CSP/nosniff/XFO） |
+| `src/main/utils/logger.ts` | electron-log + 全局错误处理 + 崩溃标记 |
+| `src/main/utils/window-state.ts` | 窗口尺寸状态记忆 |
+| `src/main/window.ts` | 窗口创建/close 协商/静默启动（根级） |
+| `src/main/quit-state.ts` | 退出标志进程级单点（isQuitting/isCloseConfirmed 双路径共享） |
+| `src/main/window-show.ts` | 窗口唤回唯一实现（托盘/通知/桌面图标共用） |
+| `src/main/infra/autostart/autostart.ts` | 开机自启（OS 登录项，托盘与设置页同源） |

@@ -1,8 +1,3 @@
-// src/renderer/components/dev/MetricsPanel.test.tsx
-// MetricsPanel 单测/集成（四态渲染 / 指标格式化 / 刷新与禁用语义）
-// 策略：mock `@/hooks/use-system`（数据获取边界），组件自身逻辑走真实实现。
-// （原 dev-panels.test 按被测组件拆分至此）
-
 import type { SystemStatusRes } from '@code-agent/shared/renderer';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -72,7 +67,6 @@ describe('MetricsPanel', () => {
   });
 
   it('查询失败：渲染错误提示 + 已本地化的错误文案', () => {
-    // 错误码经 unwrapErrorMessage 解析为 errors.* 文案（此前直出 `[CODE] message`）
     setStatusState({ error: new Error('[INTERNAL_ERROR] 获取失败') });
     render(<MetricsPanel />);
     expect(screen.getByText('指标获取失败')).toBeTruthy();
@@ -87,10 +81,10 @@ describe('MetricsPanel', () => {
   it('有数据：内存/CPU/运行时长按档位格式化', () => {
     setStatusState({ data: STATUS_SAMPLE });
     render(<MetricsPanel />);
-    expect(screen.getByText('100.0 MB')).toBeTruthy(); // rss
-    expect(screen.getByText('20.0 MB')).toBeTruthy(); // heapUsed
-    expect(screen.getByText('1.50 s')).toBeTruthy(); // cpu.user
-    expect(screen.getByText('1h 1m 1s')).toBeTruthy(); // uptime
+    expect(screen.getByText('100.0 MB')).toBeTruthy();
+    expect(screen.getByText('20.0 MB')).toBeTruthy();
+    expect(screen.getByText('1.50 s')).toBeTruthy();
+    expect(screen.getByText('1h 1m 1s')).toBeTruthy();
   });
 
   it('有数据：环境信息与 PID 展示', () => {
@@ -106,7 +100,6 @@ describe('MetricsPanel', () => {
   it('有数据：打包态标记（isPackaged=true → 打包版）', () => {
     setStatusState({ data: { ...STATUS_SAMPLE, isPackaged: true } });
     render(<MetricsPanel />);
-    // 该标记已走 i18n（此前硬编码英文 'packaged'/'dev'）
     expect(screen.getByText(/· 打包版/)).toBeTruthy();
   });
 

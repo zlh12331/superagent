@@ -1,11 +1,7 @@
-// src/main/infra/ai/task-service.test.ts
-// 任务状态机单测：创建/更新/列表/终端状态锁定（内存 DB）
-
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TaskKind, TaskService, TaskStatus } from '../../src/main/infra/ai/agent/task-service';
 import { createTestDb } from '../../src/main/infra/storage/test-utils';
 
-// mock getDb：内存数据库（drizzle 迁移，schema.ts 单一真源）
 function createInMemoryDb() {
   return createTestDb();
 }
@@ -109,7 +105,6 @@ describe('TaskService', () => {
   it('持久化：新实例可读取已创建任务（跨实例）', async () => {
     const sid = await createSession();
     const id = new TaskService().create(sid, TaskKind.AGENT, '持久任务');
-    // 新实例（同一 DB）可读
     const task = new TaskService().get(id);
     expect(task?.description).toBe('持久任务');
   });

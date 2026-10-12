@@ -1,6 +1,3 @@
-// src/renderer/hooks/use-sessions.test.tsx
-// use-sessions 单元测试：会话列表 / 详情 / 创建 / 删除 / 重命名
-
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
@@ -57,7 +54,6 @@ describe('use-sessions hooks', () => {
     (window.api.session.list as ReturnType<typeof vi.fn>).mockResolvedValue(
       ok({ sessions: [{ id: 's1', title: '会话1' }], total: 1 }),
     );
-    // staleTime Infinity：第二个观察者挂载命中新鲜缓存，不触发重复拉取
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false, staleTime: Infinity, gcTime: 0 } },
     });
@@ -66,11 +62,9 @@ describe('use-sessions hooks', () => {
     }
     const { result } = renderHook(() => useSessionsFlat(), { wrapper: Wrapper });
     await waitFor(() => expect(result.current.data).toEqual([{ id: 's1', title: '会话1' }]));
-    // select 只作用于观察者 result：缓存条目保持分页形状（乐观更新按页适配不受影响）
     expect(queryClient.getQueryData(SESSIONS_QUERY_KEY)).toMatchObject({
       pages: [{ sessions: [{ id: 's1', title: '会话1' }] }],
     });
-    // 同 key 同 queryFn：再挂一个 useSessionsQuery 观察者共享缓存，不重复请求
     renderHook(() => useSessionsQuery(), { wrapper: Wrapper });
     expect(window.api.session.list).toHaveBeenCalledTimes(1);
   });
@@ -106,7 +100,6 @@ describe('use-sessions hooks', () => {
   it('useDeleteSession：调用 delete', async () => {
     (window.api.session.delete as ReturnType<typeof vi.fn>).mockResolvedValue(ok({ ok: true }));
     const { result } = renderHook(() => useDeleteSession(), { wrapper: createWrapper() });
-    // mutate 接收会话 id 字符串（非对象）
     result.current.mutate('s1');
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(window.api.session.delete).toHaveBeenCalledWith({ id: 's1' });
@@ -114,7 +107,6 @@ describe('use-sessions hooks', () => {
 
   it('useDeleteSession：成功后移除该会话的详情缓存（removeQueries，防 stale 命中已删会话）', async () => {
     (window.api.session.delete as ReturnType<typeof vi.fn>).mockResolvedValue(ok({ ok: true }));
-    // 自建 client 并暴露给断言（默认 createWrapper 不外露）
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false, staleTime: 0, gcTime: 0 } },
     });
@@ -122,8 +114,6 @@ describe('use-sessions hooks', () => {
       return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
     }
     const { result } = renderHook(() => useDeleteSession(), { wrapper: Wrapper });
-    // 先在缓存中植入该会话的详情（模拟用户曾打开过该会话；用真实数据 key——
-    // removeQueries 按前缀清理，须覆盖 hook 实际写入的 meta 形状条目）
     queryClient.setQueryData(SESSION_DETAIL_DATA_KEY('s1', false), {
       session: { id: 's1', workingDir: '/tmp', title: '旧会话' },
       messages: [],
@@ -132,7 +122,6 @@ describe('use-sessions hooks', () => {
 
     result.current.mutate('s1');
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    // removeQueries 语义：缓存条目彻底消失（invalidate 只会标记 stale，仍可命中）
     expect(queryClient.getQueryData(SESSION_DETAIL_DATA_KEY('s1', false))).toBeUndefined();
   });
 

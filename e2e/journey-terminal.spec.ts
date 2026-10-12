@@ -1,17 +1,10 @@
-// e2e/journey-terminal.spec.ts
-// 核心用户旅程 E2E：终端流程（batch 3）
-// ──────────────────────────────────────────────────────────────
-// 旅程 5：快捷键打开终端 → 新建终端 → xterm 渲染 → 输入
-// 环境：web 模式（mock window.api——mock PTY 输出/回显）
-// 入口说明（2026-08 对齐现 UI）：DevPanel 为动态 tab 制（默认仅任务摘要常驻），
-// 「终端」tab 经 Ctrl+` 快捷键自动加入并激活（AppShell onOpenTerminal 机制），
-// 旧断言「终端 tab 常驻」已失效，改为真实用户快捷键路径。
-// ──────────────────────────────────────────────────────────────
-
+// e2e/journey-terminal.spec.ts：终端旅程 E2E——Ctrl+` 唤出终端视图 → 自动建终端 → xterm 挂载 → 键盘输入
+// 环境：浏览器模式（vite.web.config.ts + dev mock window.api，PTY 输出/回显均为 mock）
+// 入口：DevPanel 是动态 tab 制（默认仅 info 常驻），「终端」tab 由 Ctrl+` 快捷键加入并激活
 import { expect, test } from '@playwright/test';
 
 test.describe('终端用户旅程（batch 3）', () => {
-  // 预热：vite 冷启动首屏编译慢——先行访问触发编译
+  // 预热：vite 冷启动首屏编译慢，先访问一次触发编译，后续用例首屏才稳定
   test.beforeAll(async ({ browser }) => {
     const page = await browser.newPage();
     await page.goto('/');
@@ -22,21 +15,21 @@ test.describe('终端用户旅程（batch 3）', () => {
   test('旅程5：Ctrl+` 打开终端 → 新建终端 → xterm 渲染', async ({ page }) => {
     await page.goto('/');
 
-    // 先进入一个既有会话（欢迎页模式右面板隐藏，DevPanel 未挂载；mock 预置会话标题固定）
+    // 会话标题取自 dev mock 预置数据（src/renderer/dev/mock-api.ts），改 mock 需同步此正则
     const firstThread = page.getByRole('button', { name: /重构 IPC|修复双|设计令牌/ }).first();
     await expect(firstThread).toBeVisible({ timeout: 10_000 });
     await firstThread.click();
     await page.waitForTimeout(500);
 
-    // 快捷键：Ctrl+`（右面板展开 + devPanelTab 切 terminal，视图自动加入 tab 列表）
+    // Ctrl+`：展开右面板并把 devPanelTab 切到 terminal，该 tab 随即被 DevPanel 加入 tab 列表
     await page.keyboard.press('Control+`');
 
     const terminalTab = page.getByRole('tab', { name: '终端' }).first();
     await expect(terminalTab).toBeVisible({ timeout: 10_000 });
     await terminalTab.click();
 
-    // 自动创建：进入终端视图且无终端时直接创建（用户要求：无「新建终端」按钮）
-    // xterm 渲染（输出在 canvas，文本不可断言；输出正确性由集成测试覆盖）
+    // 进入终端视图即自动创建终端（会话下无终端时 TerminalPanel 直接建，界面无「新建终端」按钮）；
+    // 此处只断言 xterm 已挂载——PTY 输出/文本语义由 tests/integration/terminal.test.ts 覆盖
     await expect(page.locator('.xterm, [class*="terminal-view"]').first()).toBeVisible({
       timeout: 15_000,
     });
@@ -56,17 +49,16 @@ test.describe('终端用户旅程（batch 3）', () => {
     await expect(terminalTab).toBeVisible({ timeout: 10_000 });
     await terminalTab.click();
 
-    // 自动创建机制（同用例一）：等待 xterm 挂载
     await expect(page.locator('.xterm, [class*="terminal-view"]').first()).toBeVisible({
       timeout: 15_000,
     });
 
-    // 输入区（xterm 隐藏 textarea——键盘输入入口）存在
+    // 输入区 = xterm 的隐藏 textarea，键盘事件入口（随光标定位的透明代理）
     const termInput = page.locator('.xterm-helper-textarea, .xterm textarea').first();
     await expect(termInput).toBeVisible({ timeout: 10_000 });
-    // 交互入口 = 点击终端可视区（真实用户路径）：helper textarea 是跟随光标的
-    // 1px 输入代理，光标在首列时正好位于右面板 resizer 热区下方，不能直接点它
+    // 点终端可视区（真实用户路径）而非直接点 textarea：后者透明度 0、z-index 为负，直接点命中不稳定
     await page.locator('.xterm-screen, .xterm').first().click();
+    // 点完焦点必须落到 textarea——xterm 只在该 textarea 聚焦时接收键入
     await expect
       .poll(() =>
         page.evaluate(
@@ -77,7 +69,7 @@ test.describe('终端用户旅程（batch 3）', () => {
     await termInput.pressSequentially('echo hello');
     await termInput.press('Enter');
     await page.waitForTimeout(500);
-    // 无崩溃（输入后面板仍在）
+    // 输入后终端面板仍在：防输入链路崩溃/卸载，不作内容断言
     await expect(page.locator('.xterm, [class*="terminal-view"]').first()).toBeVisible();
   });
 });

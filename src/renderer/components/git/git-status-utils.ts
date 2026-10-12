@@ -1,21 +1,3 @@
-// src/renderer/components/git/git-status-utils.ts
-// Git 文件状态 → 图标/配色/文案 元数据表（单一真源）
-// ──────────────────────────────
-// 拆分背景：GitPanel 486 行，纯函数与组件混合，按职责提取
-//
-// 表驱动重构（2026-09-15）：原 getIconForFileStatus / getColorForFileStatus /
-// getLabelKeyForFileStatus 三个平行 switch 合并为单表——新增状态从改 3 处降为 1 行；
-// satisfies Record 保留编译期穷尽性。文案键对齐协议值（t(`git.${status}`)）零映射。
-//
-// 图标色与文本色分离（2026-09 file-tree 审计同批）：原单字段 className 同时喂给
-// 12px 图标和 9px 状态标签，且 conflicted 里混着 font-semibold（对 SVG 无意义）
-// ——一个字段承担两种消费场景，必然在某一侧取错令牌。拆为 iconClassName /
-// labelClassName 后：
-// - 图标用语义基色（accent-2/success/warn/error），表达"这是什么状态"
-// - 标签用 -text 变体（亮色下加深保 4.5:1，见 tokens.css 注释），9px 小字才够清晰
-// 同域的 git-panel-parts.tsx 一直用的是 -text 变体，此前两处各写一套。
-// ──────────────────────────────
-
 import type { GitFileStatus } from '@code-agent/shared/main';
 import type { LucideIcon } from 'lucide-react';
 import { AlertCircle, FileEdit, FilePlus, FileQuestion, FileX } from 'lucide-react';
@@ -56,7 +38,6 @@ const GIT_STATUS_META = {
   renamed: {
     icon: FileEdit,
     iconClassName: 'text-accent-2',
-    // accent-2 无 -text 变体；全仓既有用法即以它作文本色（approval-preview 等）
     labelClassName: 'text-accent-2',
   },
   untracked: {

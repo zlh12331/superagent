@@ -1,16 +1,5 @@
-// src/main/infra/ai/agent/turn-subscriptions.ts
-// 回合期订阅装配（2026-09-27 从 agent-service 提取，保持宿主体量在棘轮基线内）
-// ──────────────────────────────────────────────────────────────
-// - subscribeApprovalLifecycle：审批生命周期 → 回合状态机（waitingApproval 数据源）
-// - subscribeAskLifecycle：提问生命周期 → 回合状态机（waitingInput 数据源，38 号阶段 2）
-// - subscribeTurnAccumulators：TEXT_DELTA 拼接助手全文 + TOOL_CALL 转录入转录表
-// 行为与原 streamToWebContents 内联实现逐行等价（提取不改变订阅时机与退订语义）。
-//
-// 退订语义：三个订阅函数各自返回退订函数，宿主 agent-service 在机器 cleanup
-// 出口动作里逐一调用（unsubscribeAll / unsubscribeApproval?.() / unsubscribeAsk?.()），
-// 保证回合结束后监听器从 permission-service / ask-service / turnEmitter 上摘除。
-// ──────────────────────────────────────────────────────────────
-
+// turn-subscriptions.ts：回合机器的外部事件接线——审批/ask 生命周期 → 机器事件、
+// 事件累积器（转录/流转发）在回合运行时挂载
 import type { TurnTextDeltaEvent, TurnToolCallEvent } from '@code-agent/shared/main';
 import { TurnEventType } from '@code-agent/shared/main';
 import type { TurnEventEmitter } from '../agent-runtime';
@@ -19,13 +8,6 @@ import type { TurnTranscriptEntry } from '../agent-runtime/turn-transcript';
 import type { IPermissionService } from '../tools/permission-service';
 import type { AgentAskService } from './agent-ask-service';
 
-/**
- * 审批生命周期订阅（waitingApproval 状态运行时数据源）
- *
- * 审批推送 → waitingApproval；决议完成 → 恢复 running（按 sessionId 过滤）。
- * 返回 permissionService 提供的退订函数；permissionService 缺席（未注入）时
- * 返回 undefined——调用方须容忍该分支（无审批服务即无 waitingApproval 状态）。
- */
 export function subscribeApprovalLifecycle(
   permissionService: IPermissionService | undefined,
   sessionId: string,
@@ -39,9 +21,6 @@ export function subscribeApprovalLifecycle(
     },
     onResolved: (p) => {
       if (p.sessionId === sessionId) {
-        // 38 号阶段 2：决议结果透传（approved/denied/timed-out/aborted）
-        // 2026-10-08：同时透传 approvalId——并行审批下机器需据此判断「已决的是
-        // 哪一条」与「是否还有其它待决」（决定留在等待态还是退出 to streaming）
         turnMachine.send({
           type: 'approval.responded',
           approvalId: p.approvalId,
@@ -52,13 +31,6 @@ export function subscribeApprovalLifecycle(
   });
 }
 
-/**
- * 提问生命周期订阅（waitingInput 状态运行时数据源，38 号阶段 2 收尾）
- *
- * 提问推送 → waitingInput；回答/超时完成 → 回 streaming（按 sessionId 过滤）。
- * 与 subscribeApprovalLifecycle 同构：此前机器不感知提问，挂起期间显示 streaming。
- * 恒返回退订函数（askService 为模块单例，不缺席）。
- */
 export function subscribeAskLifecycle(
   askService: AgentAskService,
   sessionId: string,
@@ -72,9 +44,6 @@ export function subscribeAskLifecycle(
     },
     onResolved: (p) => {
       if (p.sessionId === sessionId) {
-        // 机器 waitingInput 只认 answered/timed-out（aborted 走回合中断路径，
-        // 不经此事件——AskDecisionOutcome 的 aborted 分支在此不映射）；
-        // 2026-10-08：透传 askId——并行提问下机器据此判断已决的是哪一条
         if (p.decision !== 'aborted') {
           turnMachine.send({ type: 'ask.responded', askId: p.askId, decision: p.decision });
         }
@@ -83,12 +52,6 @@ export function subscribeAskLifecycle(
   });
 }
 
-/**
- * 回合事件累积订阅：TEXT_DELTA 拼接助手全文；TOOL_CALL 转录入转录表
- *
- * 返回合并退订函数（回合收尾 cleanup 出口调用）：内部一次性摘除 TEXT_DELTA 与
- * TOOL_CALL 两个监听器，调用方无需分别持有。
- */
 export function subscribeTurnAccumulators(
   emitter: TurnEventEmitter,
   sinks: {
@@ -99,7 +62,6 @@ export function subscribeTurnAccumulators(
   const offText = emitter.on(TurnEventType.TEXT_DELTA, (event) => {
     sinks.onTextDelta((event as TurnTextDeltaEvent).text);
   });
-  // 工具调用转录（tool-call：模型发起，含入参；结果在 executeHook 处累积 output）
   const offToolCall = emitter.on(TurnEventType.TOOL_CALL, (event) => {
     const e = event as TurnToolCallEvent;
     sinks.onToolCall({

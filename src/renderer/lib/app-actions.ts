@@ -1,13 +1,3 @@
-// src/renderer/lib/app-actions.ts
-// 应用壳层 IPC 桥（app.* / 外部打开 / 退出）
-// ──────────────────────────────────────────────────────────────
-// 职责（direct-ipc 清迁，2026-09-26）：
-// - 组件/.tsx 禁止直连 window.api；app 域动作收敛到本文件（lib 层豁免）
-// - AppErrorBoundary 也走此模块：保持「零 Provider / 零 hook」约束，
-//   同时满足 .tsx 不直连 window.api 的一致性规则
-// - 浏览器模式（无 preload）一律静默降级，不在成员访问阶段抛 TypeError
-// ──────────────────────────────────────────────────────────────
-
 import type { AppInfoRes } from '@code-agent/shared/renderer';
 
 import { hasIpcBridge, unwrap } from '@/lib/ipc';

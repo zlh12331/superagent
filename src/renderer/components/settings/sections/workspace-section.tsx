@@ -1,13 +1,3 @@
-// src/renderer/components/settings/sections/workspace-section.tsx
-// 工作区 pane（对齐 Trae Work：文件树/工作区相关设置）
-// ──────────────────────────────────────────────────────────────
-// 展示当前工作目录与文件树状态（file-tree-store 真实数据）。
-// 文件树行为：忽略模式（每行一条，主进程 file:list 现读——改后即生效）+
-// 默认展开层级（1-3，下次打开/切换项目生效）。
-// 语言服务器：LSP 按语言命令行覆盖（settings-store lsp 分组写穿透 SQLite，
-// 主进程 getLspManager 构造时读取；重启生效）。
-// ──────────────────────────────────────────────────────────────
-
 import { FolderTree } from 'lucide-react';
 import type { ReactElement } from 'react';
 import { Input } from '@/components/ui/input';
@@ -62,7 +52,6 @@ export function WorkspaceSection(): ReactElement {
         </div>
       </div>
 
-      {/* 文件树行为（忽略模式即时生效；展开层级下次打开/切换项目生效） */}
       <SectionTitle>{t('settings.tree.title')}</SectionTitle>
       <SettingRow
         label={t('settings.tree.expandDepth')}
@@ -99,7 +88,6 @@ export function WorkspaceSection(): ReactElement {
         />
       </SettingRow>
 
-      {/* 语言服务器（LSP 按语言覆盖命令行；主进程构造 manager 时读取，重启生效） */}
       <SectionTitle>{t('settings.lsp.title')}</SectionTitle>
       <p className="text-muted-foreground max-w-md text-xs leading-relaxed">
         {t('settings.lsp.hint')}

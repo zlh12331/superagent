@@ -1,21 +1,5 @@
-// src/main/infra/ai/tools/read-file.tool.ts
-// read_file 工具：封装 FileService.read，供 Code Agent 读取文件内容
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 接收 LLM 生成的 path/offset/limit 入参
-// - 通过 path-guard 把路径解析为 workingDir 内的绝对路径
-// - 调用 FileService.read 读取文件内容
-//
-// 权限：'auto'（只读操作，无副作用，自动执行）
-//
-// 入参：
-// - path：文件路径（相对或绝对，相对路径基于 workingDir 解析）
-// - offset：起始行（0-based，省略时从第 0 行开始）
-// - limit：读取行数（省略时读到文件末尾）
-//
-// 输出：ToolResult（title + output 文本 + metadata 结构化数据）
-// ──────────────────────────────────────────────────────────────
-
+// read-file.tool.ts：read_file 工具——分页读文件，路径过工作区守卫，读取计入 read-tracker
+//（loop-detector 的同文件连读检测数据源）
 import type { FileReadRes } from '@code-agent/shared/main';
 import { z } from 'zod';
 import type { IFileService } from '../../file/file-service';
@@ -44,11 +28,6 @@ const ReadFileInputSchema = z.object({
 
 type ReadFileInput = z.infer<typeof ReadFileInputSchema>;
 
-/**
- * 创建 read_file 工具（读取工作目录内 UTF-8 文本文件，支持 offset/limit 分批读取）
- *
- * @param fileService 文件服务（执行实际读取）
- */
 export function createReadFileTool(fileService: IFileService): Tool<ReadFileInput> {
   return {
     name: 'read_file',
@@ -58,7 +37,6 @@ export function createReadFileTool(fileService: IFileService): Tool<ReadFileInpu
     permission: 'auto',
     category: 'read',
     execute: async (input: ReadFileInput, ctx: ToolContext): Promise<ToolResult> => {
-      // realTarget：文件 IO 用真实落点（TOCTOU，debt.md#d1）；metadata.path 保持输入形态
       const { resolved, realTarget } = resolveWithinWorkspace(input.path, ctx.workingDir);
 
       const result: FileReadRes = await fileService.read({
@@ -66,7 +44,6 @@ export function createReadFileTool(fileService: IFileService): Tool<ReadFileInpu
         offset: input.offset,
         limit: input.limit,
       });
-      // 记录已读文件（priorReadEnforcement：编辑前必须先读；键与 edit/write 的检查侧一致）
       readTracker.record(ctx.sessionId, realTarget);
 
       return {

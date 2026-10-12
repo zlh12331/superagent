@@ -1,11 +1,3 @@
-// src/renderer/components/layout/thread-item.test.tsx
-// 会话线程项测试（正向 / 边界 / 异常）：选择 / 内联重命名生命周期 / 菜单回调 /
-// 置顶标识 / 搜索高亮 / 删除中禁用 / 拖拽态视觉
-// ──────────────────────────────────────────────────────────────
-// mock 边界：useRenameSession（mutation 边界）与 @dnd-kit/sortable（拖拽库）；
-// 菜单（Radix DropdownMenu）、重命名输入、键盘交互走真实实现。
-// ──────────────────────────────────────────────────────────────
-
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -18,12 +10,10 @@ const { mockRenameAsync, sortableState } = vi.hoisted(() => ({
 }));
 
 vi.mock('@/hooks/use-sessions', () => ({
-  // 组件仅解构 mutateAsync；重命名提交经 mutation 落库（invalidate 由 hook 内部负责）
   useRenameSession: () => ({ mutateAsync: mockRenameAsync }),
 }));
 
 vi.mock('@dnd-kit/sortable', () => ({
-  // 拖拽库在 jsdom 无实际几何：给惰性值即可；isDragging 由用例按需置位
   useSortable: () => ({
     attributes: {},
     listeners: {},
@@ -105,7 +95,6 @@ describe('ThreadItem · 渲染与选择', () => {
 
   it('跨会话待审批：hasPendingApproval 显示沙漏徽标 + sr-only 文案', () => {
     const { container } = renderThread({ hasPendingApproval: true });
-    // 琥珀沙漏与运行中转圈（Loader2）是两个独立信号，可同时出现
     expect(container.querySelector('.lucide-hourglass')).not.toBeNull();
     expect(screen.getByText('该会话有待审批的工具调用')).toBeDefined();
   });
@@ -149,7 +138,6 @@ describe('ThreadItem · 内联重命名生命周期', () => {
     await waitFor(() =>
       expect(mockRenameAsync).toHaveBeenCalledWith({ id: 's1', title: '新名字' }),
     );
-    // 提交后退出编辑态
     expect(screen.queryByLabelText(i18n.t('sidebar.renameTitle'))).toBeNull();
   });
 
@@ -178,7 +166,7 @@ describe('ThreadItem · 内联重命名生命周期', () => {
     renderThread();
     fireEvent.doubleClick(screen.getByRole('button', { name: /我的会话/ }));
     const input = await screen.findByLabelText(i18n.t('sidebar.renameTitle'));
-    fireEvent.keyDown(input, { key: 'Enter' }); // defaultValue 未变
+    fireEvent.keyDown(input, { key: 'Enter' });
     expect(mockRenameAsync).not.toHaveBeenCalled();
   });
 
@@ -197,7 +185,6 @@ describe('ThreadItem · 操作菜单', () => {
   async function openMenu(): Promise<void> {
     const user = userEvent.setup();
     await user.click(screen.getByLabelText(i18n.t('sidebar.sessionActions')));
-    // Radix 菜单内容渲染在 portal 中，等待出现
     await screen.findByText(i18n.t('sidebar.pin'));
   }
 
@@ -219,8 +206,6 @@ describe('ThreadItem · 操作菜单', () => {
   });
 
   it('正向：菜单「重命名」→ 选中后关闭菜单（输入态由双击用例覆盖）', async () => {
-    // jsdom 中 Radix 关菜单的焦点还原与 autoFocus 输入的 blur 提交竞态——
-    // 未改名即退出编辑态属时序产物，真实浏览器输入框持焦。此处断言菜单选中链路。
     renderThread();
     await openMenu();
     fireEvent.click(screen.getByText(i18n.t('sidebar.rename')));

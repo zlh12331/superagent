@@ -1,31 +1,9 @@
 // scripts/check-docs-scripts.ts
-// 文档脚本表 ↔ package.json 一致性闸（文档防腐化维度）
-// ──────────────────────────────────────────────────────────────
-// 背景（2026-09-22 实测）：文档里的「脚本表」会随 package.json 演进而腐化，
-// 且腐化是静默的——读者照着文档敲命令才发现。实测扫出 10 处不符，例如：
-//   · `07-engineering-design.md` 列了 `build:win:full`（脚本已不存在）
-//   · `build:win` 的命令漏掉三个 prepare 步骤与 `--x64 --arm64`
-//   · `typecheck` 未反映 scripts/ 纳入后的复合命令
-//   · `patches/README.md` 把 `memory-engine:patch <action>` 写成 `:export` 等后缀
-// 故设本闸，让这类漂移由机器拦住而非依赖人工扫描。
-//
-// ── 判据（为什么这样定，直接决定误报率）────────────────────────
-// 只校验**表头首列恰为 `脚本`** 的 markdown 表格行。若不加这一限制，
-// 会把大量非脚本表误判为漂移（实测命中过这些类别）：
-//   · 协议消息类型表（`hello` / `delta` / `tool` / `error` / `end`）
-//   · CI job 名表（`unit-summary` / `e2e-electron-summary`）
-//   · 依赖表（包名如 `electron-devtools-installer`）
-//   · 函数名表（如 `linuxAutostartFileExists`）
-//   · 专项测试的 grep 模式表（表头第二列是「grep 模式」而非「命令」）
-//
-// 逐行的两项校验：
-//   ① 第一列必须是 package.json 中真实存在的脚本名
-//   ② 仅当**表头第二列恰为 `命令`** 时，才比对第二列与 package.json 原文
-//      （第二列是「grep 模式」「说明」等的表格只查 ①）
-//
-// 比对前把 markdown 表格必需的 `\|` 转义还原为 `|`——表格单元格内不能出现裸 `|`，
-// 故文档写 `--grep "a\|b"` 而 package.json 写 `--grep "a|b"`，二者语义相同。
-// ──────────────────────────────────────────────────────────────
+// 文档脚本表 ↔ package.json 一致性闸：文档里的脚本表随演进静默腐化
+// （2026-09-22 实测 10 处：不存在的脚本、漏参数、复合命令不同步），机器拦而非人工扫
+// 判据：只校验「表头首列恰为 脚本」的表格——不限则协议消息表/CI job 名表/依赖表
+// 会大量误报；第二列恰为「命令」时才逐字比对（转义还原后），其余只查脚本名存在
+// 运行：pnpm exec tsx scripts/check-docs-scripts.ts
 
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
@@ -89,10 +67,7 @@ export function splitRow(line: string): string[] {
   if (!trimmed.startsWith('|')) {
     return [];
   }
-  // 按**未被转义**的 `|` 拆分：表格单元格内的裸 `|` 必须写成 `\|`，
-  // 直接 `split('|')` 会把 `--grep "a\|b"` 这类内容拆碎。
   const parts = trimmed.split(/(?<!\\)\|/);
-  // 首尾各有一个空段（行首/行尾的 `|`）
   return parts.slice(1, -1).map((c) => c.trim());
 }
 
@@ -127,7 +102,6 @@ export function checkText(
       continue;
     }
     const header = splitRow(headerLine);
-    // 只处理「首列表头恰为 `脚本`」的表格
     if (unquote(header[0] ?? '') !== '脚本') {
       continue;
     }

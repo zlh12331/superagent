@@ -1,12 +1,8 @@
-// packages/shared/src/schemas/remote.ts
-// 远程控制域契约（LAN 直连：移动端 → 桌面端 Agent）
-// ──────────────────────────────────────────────────────────────
-// 设计：
-// - remote:getStatus / start / stop 三个请求-响应方法，响应统一为 RemoteStatusRes
-//   （启停后立即回读状态，渲染层无需二次请求即可刷新面板）
-// - token 仅经桌面端显式展示分发（配对动作），永不通过 UDP 公告 / HTTP /info 泄露
-// - addresses 为可直连的完整入口地址（http://局域网IPv4:端口），渲染层直接展示/复制
-// ──────────────────────────────────────────────────────────────
+// remote.ts：远程控制域 IPC 契约单一真源（局域网直连：移动端 → 桌面端 Agent）
+// 四方法（getStatus / start / stop / setBindScope）响应统一为 RemoteStatusRes，且变更后立即回读
+// 状态返回——渲染层无需二次请求即可刷新面板。
+// 安全约束：token 只经桌面端显式展示分发（配对动作），不进入 UDP 公告与 HTTP /info 响应。
+// 边界：只定义形状与值域；监听、令牌校验与 UDP 发现实现在 src/main/infra/remote/。
 
 import { z } from 'zod';
 
@@ -33,11 +29,14 @@ export interface RemoteStatusRes {
   readonly instanceName: string;
   /** 绑定范围（lan=局域网可连；loopback=仅本机 127.0.0.1） */
   readonly bindScope: RemoteBindScope;
-  /** 直连地址（lan=局域网 IPv4 端点；loopback=仅本机端点；未运行为空数组） */
+  /**
+   * 可直连的完整入口 URL（形如 `http://192.168.1.10:52341`，含协议与端口，可直接展示/复制）
+   * lan=局域网 IPv4 端点；loopback=仅本机端点；未运行或不可配对时为空数组
+   */
   readonly addresses: readonly string[];
   /** 正在执行的远程命令数（无头回合） */
   readonly activeCommands: number;
-  /** 最近一次命令到达时间戳（从未收到为 null） */
+  /** 最近一次命令到达时间戳（毫秒，同 `Date.now()`；从未收到为 null） */
   readonly lastCommandAt: number | null;
 }
 

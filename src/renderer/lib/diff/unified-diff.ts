@@ -1,16 +1,3 @@
-// src/renderer/lib/diff/unified-diff.ts
-// unified diff 文本解析器（git:diff 输出 → 自研 diff 渲染行）
-// ──────────────────────────────────────────────────────────────
-// 背景：统一 diff 渲染为自研方案（DiffRowsTable + shiki 行高亮）。
-// git:diff 返回 unified diff 原始文本（含 @@ hunk 头）。本解析器将 unified
-// diff 拆解为 hunk 列表：每个 hunk 还原出语义化行序列（类型 + 双侧行号 +
-// 内容，供双栏表格直接渲染），同时保留变更前后的文本片段（oldLines/newLines）。
-//
-// 已知限制（诚实标注）：hunk 之间未出现在 diff 中的文件行无法从 unified
-// diff 还原（git 默认仅输出上下文行），因此渲染为分 hunk 视图
-// （GitHub 风格的变更块展示），而非完整文件视图。
-// ──────────────────────────────────────────────────────────────
-
 import type { DiffLineType } from './line-diff';
 
 /** hunk 内单行（语义化：类型 + 双侧行号 + 内容，双栏渲染的原子单元） */
@@ -95,11 +82,9 @@ function toNumberedLine(type: DiffLineType, text: string, cursor: NumberingCurso
 export function parseUnifiedDiff(diff: string): readonly UnifiedDiffHunk[] {
   const hunks: MutableHunk[] = [];
   let current: MutableHunk | null = null;
-  // 行号游标随 hunk 重置（@@ 头携带两侧起始行号）
   let cursor: NumberingCursor = { oldNumber: 1, newNumber: 1 };
 
   for (const rawLine of diff.split('\n')) {
-    // CRLF 行尾归一化（git 在 Windows 输出 \r\n）
     const line = rawLine.replace(/\r$/, '');
     const hunkHeader = line.match(/^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/);
     if (hunkHeader !== null) {
@@ -131,7 +116,6 @@ export function parseUnifiedDiff(diff: string): readonly UnifiedDiffHunk[] {
       current.newLines.push(context);
       current.lines.push(toNumberedLine('context', context, cursor));
     }
-    // `\ No newline at end of file` 与空行：忽略（不进入内容）
   }
 
   return hunks;
@@ -161,7 +145,7 @@ export function countHunks(diff: string): number {
 export function extractDiffTargetPath(diff: string): string | null {
   for (const rawLine of diff.split('\n')) {
     const line = rawLine.replace(/\r$/, '');
-    if (line.startsWith('@@')) break; // 进入 hunk 体即止（+++ 头只出现在头部）
+    if (line.startsWith('@@')) break;
     if (!line.startsWith('+++ ')) continue;
     const field = line.slice(4).split('\t')[0]?.trim() ?? '';
     if (field === '' || field === '/dev/null') continue;

@@ -1,13 +1,9 @@
-// src/main/infra/ai/agent/cron-service.test.ts
-// 定时任务服务单测：创建/删除/列表/启停/触发（内存 DB + croner 真实调度）
-
 import { eq } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { schema } from '../../storage/schema';
 import { createTestDb } from '../../storage/test-utils';
 import { CronService } from './cron-service';
 
-// mock getDb：内存数据库（drizzle 迁移，schema.ts 单一真源）
 function createInMemoryDb() {
   return createTestDb();
 }
@@ -31,10 +27,8 @@ vi.mock('../../storage/db', async (importOriginal) => {
 
 import { getDb, resetDb } from '../../storage/db';
 
-/** 秒级表达式（croner 6 字段：秒/分/时/日/月/周）——单测触发不等待分钟级 */
 const EVERY_SECOND = '* * * * * *';
 
-/** 等待条件成立（真实 croner 调度触发用） */
 async function waitFor(condition: () => boolean, timeoutMs = 3_000): Promise<void> {
   const start = Date.now();
   while (!condition()) {
@@ -85,7 +79,6 @@ describe('CronService', () => {
     const disabled = service.list().find((t) => t.id === id);
     expect(disabled?.enabled).toBe(false);
 
-    // 停用：等待 1.2s（croner 秒级调度）不应触发
     const fired: string[] = [];
     service.onFire((task) => {
       fired.push(task.id);
@@ -109,7 +102,6 @@ describe('CronService', () => {
     await waitFor(() => fired.length >= 1);
     expect(fired[0]?.description).toBe('每秒');
 
-    // 下次触发已更新（未来）
     const after = service.list().find((t) => t.id === id);
     expect(after?.nextFireAt as number).toBeGreaterThan(Date.now());
   });
@@ -121,15 +113,13 @@ describe('CronService', () => {
       fired.push(task.id);
     });
     service.start();
-    service.start(); // 幂等（不重复创建实例）
+    service.start();
     service.stop();
-    service.stop(); // 幂等
+    service.stop();
 
-    // 停止后不再触发
     await new Promise((resolve) => setTimeout(resolve, 1_200));
     const stoppedCount = fired.length;
 
-    // 重新 start：恢复任务并继续触发
     service.start();
     await waitFor(() => fired.length > stoppedCount);
   });
@@ -150,7 +140,6 @@ describe('CronService', () => {
     service.create('s2', '0 10 * * *', '任务 B');
     const tasks = service.list();
     expect(tasks).toHaveLength(2);
-    // 同毫秒 id 兜底：稳定性
     expect(service.list().map((t) => t.id)).toEqual(tasks.map((t) => t.id));
   });
 
@@ -162,9 +151,7 @@ describe('CronService', () => {
   it('setEnabled 停用后重新启用：复用已有调度实例（resume 分支）', () => {
     const service = new CronService();
     const id = service.create('sess-1', EVERY_SECOND, '每秒任务');
-    // 停用：job 保留在 jobs Map（仅 pause）
     expect(service.setEnabled(id, false)).toBe(true);
-    // 重新启用：复用 job（不重复创建调度实例）
     expect(service.setEnabled(id, true)).toBe(true);
     const jobs = (service as unknown as { jobs: Map<string, unknown> }).jobs;
     expect(jobs.size).toBe(1);
@@ -174,7 +161,6 @@ describe('CronService', () => {
     const service = new CronService();
     const enabledId = service.create('sess-1', EVERY_SECOND, '启用任务');
     const disabledId = service.create('sess-2', EVERY_SECOND, '停用任务');
-    // 模拟"重启后无调度实例"：从 jobs Map 移除 + 改库停用
     const jobs = (service as unknown as { jobs: Map<string, unknown> }).jobs;
     jobs.delete(disabledId);
     getDb()
@@ -184,10 +170,8 @@ describe('CronService', () => {
       .run();
 
     service.start();
-    // start 幂等
     service.start();
 
-    // 启用任务恢复调度；停用任务跳过（不创建实例）
     expect(jobs.has(enabledId)).toBe(true);
     expect(jobs.has(disabledId)).toBe(false);
   });
@@ -196,14 +180,12 @@ describe('CronService', () => {
     const service = new CronService();
     const idA = service.create('sess-1', EVERY_SECOND, '任务 A');
     const idB = service.create('sess-2', EVERY_SECOND, '任务 B');
-    // 把两条记录改为同一 createdAt，验证 id 兜底排序确定性
     const db = getDb();
     const now = 1_700_000_000_000;
     db.update(schema.cronTasks).set({ createdAt: now }).where(eq(schema.cronTasks.id, idA)).run();
     db.update(schema.cronTasks).set({ createdAt: now }).where(eq(schema.cronTasks.id, idB)).run();
 
     const tasks = service.list();
-    // 排序确定性：两次调用结果一致
     expect(service.list().map((t) => t.id)).toEqual(tasks.map((t) => t.id));
   });
 });

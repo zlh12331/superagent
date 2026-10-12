@@ -1,12 +1,3 @@
-// src/renderer/components/settings/sections/models-section.tsx
-// 模型管理 pane（文档 11-model-management-spec 蓝图形态：列表页 + 弹窗驱动）
-// ──────────────────────────────────────────────────────────────
-// 页面结构（文档 3.1）：标题区（主标题/副标题/说明 + 添加按钮）+ 表格 +
-// 3 类弹窗（添加模型/配置三模式/删除确认）。
-// 数据源：settings:listRuntimeModels（L3）；启停/编辑走 settings:updateRuntimeModel。
-// API Key 配置入口在配置弹窗内（服务商模式走 settings:setApiKey）。
-// ──────────────────────────────────────────────────────────────
-
 import type { ApiKeyProvider, RuntimeModelInfo } from '@code-agent/shared/renderer';
 import { Loader2, Pencil, Plus, Trash2 } from 'lucide-react';
 import { type ReactElement, useState } from 'react';
@@ -71,7 +62,6 @@ function RuntimeModelTable({
           <tr key={model.modelId} className="border-border border-b">
             <td className="px-2 py-1.5">
               <div className="flex items-center gap-2">
-                {/* 品牌图标：无图标数据源，用首字母色块（默认图标） */}
                 <span className="bg-accent/10 text-accent-text flex size-5 shrink-0 items-center justify-center rounded text-2xs font-semibold">
                   {providerLabel(model.providerKind, t)[0]}
                 </span>
@@ -132,15 +122,11 @@ export function ModelsSection(): ReactElement {
   const { t } = useTranslation();
   const { getErrorMessage } = useErrorMessage();
 
-  // 模型管理列表（L3：settings:listRuntimeModels，用户配置的模型记录）
-  // 说明：服务商模式保存的模型也落 runtimeModelStore（providerKind + 具体 modelId，
-  // API Key 走厂商级 keychain）——"配置一个模型显示一条记录"，不并入未配置的内置模型。
   const { data: runtimeData, isError, error, refetch } = useRuntimeModelsQuery();
   const runtimeModels = runtimeData?.models ?? [];
   const updateMutation = useUpdateRuntimeModel();
   const removeMutation = useRemoveRuntimeModel();
 
-  // 弹窗状态（L1）
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [configState, setConfigState] = useState<ConfigDialogState | null>(null);
 
@@ -163,7 +149,6 @@ export function ModelsSection(): ReactElement {
 
   /** 启停开关：partial 更新 isEnabled（乐观由 query 失效后刷新） */
   const handleToggle = (model: RuntimeModelInfo, enabled: boolean): void => {
-    // onError 由 hook 层统一 toast（unwrapErrorMessage 本地化），调用层不重复
     updateMutation.mutate({ modelId: model.modelId, isEnabled: enabled });
   };
 
@@ -184,9 +169,7 @@ export function ModelsSection(): ReactElement {
 
   return (
     <div className="flex flex-col gap-4 pt-2">
-      {/* 模型管理列表页（文档 3.1.2：标题区 + 表格） */}
       <div className="flex flex-col gap-2">
-        {/* 标题区：主标题 + 副标题 + 说明 + 添加按钮 */}
         <div className="flex items-center justify-between">
           <div className="flex flex-col gap-0.5">
             <h2 className="text-foreground text-lg font-bold tracking-wide">
@@ -208,8 +191,6 @@ export function ModelsSection(): ReactElement {
           </Button>
         </div>
 
-        {/* error 态优先：查询失败时 runtimeData 为 undefined → runtimeModels 为空数组，
-            若不判 error 会被下方空态分支渲染成「还没有配置模型」，把加载失败误导为空 */}
         <QueryErrorRow
           isError={isError}
           errorMessage={error instanceof Error ? unwrapErrorMessage(error, getErrorMessage) : null}
@@ -231,7 +212,6 @@ export function ModelsSection(): ReactElement {
         )}
       </div>
 
-      {/* 添加模型弹窗 */}
       <AddModelDialog
         open={addDialogOpen}
         onClose={() => setAddDialogOpen(false)}
@@ -239,7 +219,6 @@ export function ModelsSection(): ReactElement {
         onSelectCustom={handleSelectCustom}
       />
 
-      {/* 模型配置弹窗（服务商/自定义/编辑三模式） */}
       <ModelConfigDialog
         open={configState !== null}
         mode={configState?.mode ?? 'custom'}

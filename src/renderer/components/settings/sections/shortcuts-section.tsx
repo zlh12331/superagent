@@ -1,13 +1,3 @@
-// shortcuts-section.tsx（自 SettingsDialog 拆分）
-// 设置 · 快捷键独立分区（36 号 C：录键冲突检测 + 恢复默认；原嵌通用页，后独立成导航项）
-// ──────────────────────────────────────────────
-// 设计：
-// - 冲突检测在 onChange（ShortcutPicker 保持纯录制控件，不知业务清单）：
-//   与其他自定义键或固定键冲突 → toast 指明冲突动作并拒绝写入（保留旧值）
-// - 恢复默认：单键行内小钮（仅与默认值不同时显示）+ 分区底部一键全部恢复
-//   （confirm 确认——覆盖类操作）；DEFAULT_SHORTCUTS 是单一真源
-// ──────────────────────────────────────────────
-
 import { Keyboard, RotateCcw } from 'lucide-react';
 import type { ReactElement } from 'react';
 import { toast } from 'sonner';
@@ -120,7 +110,6 @@ export function ShortcutsSection(): ReactElement {
         </Button>
       </div>
 
-      {/* 固定键速查（只读）：清单与帮助对话框同源（FIXED_SHORTCUTS），不可自定义 */}
       <div className="pt-2">
         <SectionTitle>{t('settings.shortcuts.fixedTitle')}</SectionTitle>
         <div className="flex flex-col gap-2">

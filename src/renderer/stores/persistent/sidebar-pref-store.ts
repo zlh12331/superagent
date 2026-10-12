@@ -1,15 +1,3 @@
-// src/renderer/stores/persistent/sidebar-pref-store.ts
-// 侧栏偏好持久化（L2 persistent）
-// ──────────────────────────────────────────────────────────────
-// 背景：会话拖拽排序（orderOverrides）与文件夹折叠态此前是 Sidebar 本地
-// useState——刷新/重启全部丢失（用户显式操作不持久）。
-//
-// 设计：
-// - orderOverrides：folderName → 会话 id 顺序（覆盖服务端 updatedAt 默认序）
-// - collapsedFolders：折叠的文件夹名集合
-// - persist 到 localStorage（zustand persist v3 协议，跨重启生效）
-// ──────────────────────────────────────────────────────────────
-
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 

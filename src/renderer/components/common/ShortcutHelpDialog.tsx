@@ -1,12 +1,3 @@
-// src/renderer/components/common/ShortcutHelpDialog.tsx
-// 快捷键帮助对话框（对齐参考项目 ShortcutHelpDialog + 原型 #shortcutHelp）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 双列网格展示应用内全部快捷键（kbd + 描述）
-// - 触发入口：'?' 全局快捷键（AppShell 挂载）+ 设置抽屉快捷键 pane
-// - 描述走 i18n（shortcutHelp.*），按键符号为技术标识不本地化
-// ──────────────────────────────────────────────────────────────
-
 import { Keyboard } from 'lucide-react';
 import type { ReactElement } from 'react';
 
@@ -40,15 +31,11 @@ export function formatKeys(value: string): string {
  * 防两处清单漂移（36 号 C 曾发生帮助表漏列缩放键）。
  */
 export const FIXED_SHORTCUTS: readonly ShortcutItem[] = [
-  // F1 与 '?' 等价（对齐参考项目：? / F1 打开快捷键帮助）
   { descriptionKey: 'shortcutHelp.item.openShortcutHelp', keys: '? / F1' },
   { descriptionKey: 'shortcutHelp.item.toggleSidebar', keys: 'Ctrl + B' },
   { descriptionKey: 'shortcutHelp.item.toggleRightPanel', keys: 'Ctrl + J' },
-  // Ctrl+` 打开终端（对齐参考项目 codex.openTerminal 快捷键）
   { descriptionKey: 'shortcutHelp.item.openTerminal', keys: 'Ctrl + `' },
-  // Alt+← 返回上一视图（对齐参考项目 backBtn）
   { descriptionKey: 'shortcutHelp.item.back', keys: 'Alt + ←' },
-  // 界面缩放（35 号固定键区：36 号 C 补录进帮助——此前帮助表漏列）
   { descriptionKey: 'shortcutHelp.item.zoomIn', keys: 'Ctrl + =' },
   { descriptionKey: 'shortcutHelp.item.zoomOut', keys: 'Ctrl + -' },
   { descriptionKey: 'shortcutHelp.item.zoomReset', keys: 'Ctrl + 0' },
@@ -70,13 +57,9 @@ export interface ShortcutHelpDialogProps {
  */
 export function ShortcutHelpDialog({ open, onClose }: ShortcutHelpDialogProps): ReactElement {
   const { t } = useTranslation();
-  // 可自定义快捷键读设置真源（此前硬编码默认值：用户改键后帮助表与实际绑定不一致，实测 bug）
   const shortcuts = useSettingsStore((s) => s.shortcuts);
-  // 「自定义快捷键」直达：多入口分区机制复用（openSettings 带分区 id），先关本对话框再开设置
   const openSettings = useUiStore((s) => s.openSettings);
-  // 纯派生，交给 React Compiler 记忆化（shortcuts 稳定时复用）
   const items: readonly ShortcutItem[] = [
-    // ⌘K 与 ⌘P 等价（对齐参考项目 toggle-command-palette）
     {
       descriptionKey: 'shortcutHelp.item.openCommandPalette',
       keys: `${formatKeys(shortcuts.commandPalette)} / Ctrl + K`,
@@ -98,7 +81,6 @@ export function ShortcutHelpDialog({ open, onClose }: ShortcutHelpDialogProps): 
           <DialogTitle className="text-md font-semibold">{t('shortcutHelp.title')}</DialogTitle>
           <DialogDescription className="sr-only">{t('shortcutHelp.title')}</DialogDescription>
         </DialogHeader>
-        {/* 双列网格（对齐原型 #shortcutHelp：grid-cols-2 + gap-x-6 + gap-y-1） */}
         <div className="grid grid-cols-2 gap-x-6 gap-y-1 px-5 py-4 text-xs leading-[1.9]">
           {items.map((item) => (
             <div key={item.descriptionKey} className="flex items-center gap-1.5">
@@ -109,7 +91,6 @@ export function ShortcutHelpDialog({ open, onClose }: ShortcutHelpDialogProps): 
             </div>
           ))}
         </div>
-        {/* 底部直达：自定义快捷键去设置分区（快速参考与管理面板的联动入口） */}
         <div className="border-border flex justify-end border-t px-5 py-3">
           <Button
             variant="ghost"

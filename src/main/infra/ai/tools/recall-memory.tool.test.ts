@@ -1,7 +1,3 @@
-// src/main/infra/ai/tools/recall-memory.tool.test.ts
-// recall_memory 工具单测：按需检索跨会话记忆（只读）
-// ──────────────────────────────────────────────────────────────
-
 import { describe, expect, it, vi } from 'vitest';
 import type { ZodType } from 'zod';
 
@@ -34,7 +30,6 @@ describe('createRecallMemoryTool', () => {
     const result = await tool.execute({ query: '项目约定' }, createCtx());
     expect(result.title).toBe('记忆检索（3 条）');
     expect(result.output).toBe('召回上下文');
-    // 上游 RecallRequest 要求 session_key 非空，必须带当前会话 id
     expect(recall).toHaveBeenCalledWith({ query: '项目约定', sessionKey: 'sess-1' });
   });
 

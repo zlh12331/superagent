@@ -1,6 +1,6 @@
-// electron.vite.config.ts
-// electron-vite 配置：定义 main / preload / renderer 三个构建入口
-// 参考 electron-vite 官方文档 https://electron-vite.org/
+// electron.vite.config.ts：Electron 三进程构建配置（main / preload / renderer 的入口、别名与插件）
+// 仅服务 `pnpm dev` / `pnpm build`；浏览器模式的 dev 走 vite.web.config.ts——同一份渲染层
+// 源码的另一套入口配置，故 renderer 的 root/alias/插件改动需在两处同步
 
 import { cpSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -10,15 +10,11 @@ import { defineConfig } from 'electron-vite';
 import { visualizer } from 'rollup-plugin-visualizer';
 import type { Plugin } from 'vite';
 
-// Source Map 生成配置
-// - main/preload/renderer 统一 'hidden'：生成 .map 文件但不暴露 sourceMappingURL（生产环境推荐）
-// - .map 不入安装包（electron-builder.yml files 排除 **/*.map），构建机 out/ 保留供本地排障
-// - 无符号上传：Sentry 已于 2026-09-13 移除，错误经 error-report.ts 落本地日志
+// 'hidden' 生成 .map 但不写 sourceMappingURL 注释（生产推荐形态）：排障靠构建机 out/ 里的
+// .map，安装包侧由 electron-builder.yml 的 "!**/*.map" 整体排除（无云端符号上传，出错走本地日志）
 const SOURCEMAP_MODE = 'hidden' as const;
 
-// 包体积分析：`pnpm analyze:bundle` 时启用 rollup-plugin-visualizer
-// - 渲染层产物生成交互式 treemap（stats/renderer-bundle.html）+ 机器可读 stats.json
-// - 不注入 ANALYZE_BUNDLE=1 时零开销（不参与日常构建）
+// `pnpm analyze:bundle` 以 ANALYZE_BUNDLE=1 触发；未置位时体积分析插件不进插件链，日常构建零开销
 const ANALYZE_BUNDLE = process.env['ANALYZE_BUNDLE'] === '1';
 
 /**
@@ -45,30 +41,27 @@ function copyDevAppUpdateYml(): Plugin {
 
 /** 渲染层插件列表（analyze 模式追加体积分析插件） */
 function rendererPlugins(): Plugin[] {
-  // concat 对数组参数有展平语义：@vitejs/plugin-react v6 返回 Plugin[]，
-  // 用 concat 统一拍平，避免元素类型推断成 Plugin | Plugin[] 联合
   const plugins: Plugin[] = ([] as Plugin[]).concat(
+    // @vitejs/plugin-react v6 返回 Plugin[]，concat 对数组参数有展平语义，
+    // 故用 concat 起步避免元素类型推断成 Plugin | Plugin[]
     react({
-      // React Compiler：启用（oxc 通道）。@vitejs/plugin-react v6 已移除 `babel` 选项，
-      // compiler 选项经 oxc-transform-react（peerDep）生效；该依赖缺失时本选项会静默
-      // 不产生任何效果（本项目 2026-08 就踩过一次"配置静默忽略"），因此设
-      // scripts/check-compiler.ts 在 build 后断言产物含 react/compiler-runtime 编译痕迹。
-      // compilationMode 'infer'：自动识别组件/Hook，与存量手写 useMemo/useCallback 共存。
+      // React Compiler 经 oxc 通道生效（v6 已无 babel 选项）；oxc-transform-react 是可选
+      // peerDep，缺失时本配置静默失效，由 pnpm check:compiler 在 build 后断言产物含
+      // react/compiler-runtime 痕迹兜底。'infer' = 自动识别组件/Hook，与手写 memo 共存
       compiler: { compilationMode: 'infer' },
     }),
-    // Tailwind v4 官方 Vite 插件（替代 v3 的 postcss 配置）
-    // 文档：https://tailwindcss.com/docs/installation/using-vite
+    // Tailwind v4 官方 Vite 插件（v4 起不再走 postcss 配置链路）
     tailwindcss(),
   );
   if (ANALYZE_BUNDLE) {
     plugins.push(
-      // rollup-plugin-visualizer 的返回类型（VisualizerPlugin）与 Vite Plugin
-      // 结构兼容但声明独立，push 到 Vite 插件数组需显式兑现
+      // 插件返回类型 VisualizerPlugin 与 Vite Plugin 结构兼容但声明独立，push 进插件数组需显式兑现
       visualizer({
         filename: 'stats/renderer-bundle.html',
         gzipSize: true,
         brotliSize: true,
-        // 同时输出 stats.json 供脚本/CI 解析对比
+        // 本仓所用 rollup-plugin-visualizer 7.x 中该选项已弃用，且会把 template 覆写为 raw-data——
+        // 故 filename 落盘的是原始 JSON 数据（stats/ 已 gitignore），而非 treemap 页面
         json: true,
         template: 'treemap',
       }) as Plugin,
@@ -79,7 +72,6 @@ function rendererPlugins(): Plugin[] {
 
 // biome-ignore lint/style/noDefaultExport: electron-vite 框架要求 config 文件必须使用 export default
 export default defineConfig({
-  // 主进程构建配置
   main: {
     plugins: [copyDevAppUpdateYml()],
     build: {
@@ -91,9 +83,6 @@ export default defineConfig({
       },
     },
   },
-  // Preload 脚本构建配置
-  // 输出 CJS 格式（.cjs）：sandbox: true 下 preload 必须是 CommonJS
-  // 参考 electron-vite ESM 限制：https://electron-vite.org/guide/dev#limitations-of-sandboxing
   preload: {
     build: {
       sourcemap: SOURCEMAP_MODE,
@@ -102,17 +91,18 @@ export default defineConfig({
           index: resolve(__dirname, 'src/preload/index.ts'),
         },
         output: {
+          // sandbox: true 要求 preload 是 CommonJS；根 package.json 为 type: module，
+          // 故同时固定 .cjs 扩展名，保证按 CJS 加载
           format: 'cjs',
           entryFileNames: '[name].cjs',
         },
       },
     },
   },
-  // 渲染层（React 19.2 + Vite 8 + React Compiler + Tailwind v4）配置
   renderer: {
     root: 'src/renderer',
     resolve: {
-      // 与 tsconfig.json paths 对齐，让 Vite 能解析 @/* 别名
+      // 与 src/renderer/tsconfig.json 的 paths（@/* → ./*）对齐；vite.web.config.ts 有同款别名
       alias: {
         '@': resolve(__dirname, 'src/renderer'),
       },

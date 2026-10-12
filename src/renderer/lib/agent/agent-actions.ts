@@ -1,12 +1,3 @@
-// src/renderer/lib/agent/agent-actions.ts
-// Agent 交互动作 IPC 桥（respondAsk / approvalResponse）
-// ──────────────────────────────────────────────────────────────
-// 职责（direct-ipc 清迁，2026-09-26）：
-// - 提问回传与审批响应此前写在 ask-dialog / inline-approval-card 组件内，
-//   违反「.tsx 不直连 window.api」；收敛到 lib/agent（桥接层豁免）
-// - 与 ipc-agent-transport 的分工：transport 管流式回合，本文件管单次动作
-// ──────────────────────────────────────────────────────────────
-
 import type { AgentAnswer, AgentApprovalResponseReq } from '@code-agent/shared/renderer';
 
 import { hasIpcBridge, unwrap } from '@/lib/ipc';

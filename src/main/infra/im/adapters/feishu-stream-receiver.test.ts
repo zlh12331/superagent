@@ -1,15 +1,6 @@
-// src/main/infra/im/adapters/feishu-stream-receiver.test.ts
-// FeishuStreamReceiver 单测：飞书长连接接收器（正向/边界/异常三件套）
-// ──────────────────────────────────────────────────────────────
-// 测试策略（遵循"业务逻辑不 mock、外部依赖注入 fake"）：
-// - EventDispatcherCtor / WSClientCtor 经构造注入 fake（SDK 外部依赖）
-// - register 回调捕获后手动触发，验证事件分发到订阅者
-// ──────────────────────────────────────────────────────────────
-
 import { describe, expect, it, vi } from 'vitest';
 import { FeishuStreamReceiver } from './feishu-stream';
 
-/** fake 事件分发器：register 捕获事件回调 */
 class FakeEventDispatcher {
   handler: ((data: unknown) => void) | undefined;
   register(handlers: Record<string, (data: unknown) => void>): this {
@@ -22,17 +13,14 @@ class FakeEventDispatcher {
   }
 }
 
-/** fake WS 客户端：start 可编程 */
 class FakeWsClient {
   readonly start = vi.fn(async () => {});
   readonly close = vi.fn();
 }
 
-/** 当前测试的共享 fake（构造桩返回） */
 let currentDispatcher: FakeEventDispatcher;
 let currentWsClient: FakeWsClient;
 
-/** 构造桩：返回共享实例（保持 new 语义） */
 class SharedEventDispatcherCtor {
   constructor() {
     // biome-ignore lint/correctness/noConstructorReturn: 测试桩返回共享实例（保持 new 语义）
@@ -66,7 +54,6 @@ function makeReceiver(): {
   return { receiver, dispatcher: currentDispatcher, wsClient: currentWsClient };
 }
 
-/** 合法飞书消息事件（FeishuMessageEventV1 形状：顶层 message/sender） */
 function feishuEvent(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     sender: {

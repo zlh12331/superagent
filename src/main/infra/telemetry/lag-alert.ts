@@ -1,19 +1,11 @@
-// src/main/infra/telemetry/lag-alert.ts
-// 事件循环阻塞告警（2026-09-06 审计修复：补充现场上下文）
-// ──────────────────────────────────────────────────────────────
-// 此前只上报 lagMs，无法定位阻塞源。现在附带「当时是否有活跃回合」与堆占用，
-// 便于把阻塞关联到具体操作（长会话分词 / 大库查询 / 备份 / 迁移）。
-// ──────────────────────────────────────────────────────────────
-
+// lag-alert.ts：事件循环阻塞告警的文案与上报（reportMessage + warn 双落）
 import { reportMessage } from '../../utils/error-report';
 import { logger } from '../../utils/logger';
 import type { EventLoopLagSample } from './event-loop-lag';
 
 /**
- * 上报一次事件循环阻塞告警
- *
- * @param sample 采样结果（lagMs / intervalMs）
- * @param hasActiveTurn 查询是否有活跃 agent 回合（由调用方注入，避免遥测层依赖 agent 层）
+ * 上报一次阻塞采样：附活跃回合状态与堆占用（归因用——空闲期阻塞多半是系统级，
+ * 回合期阻塞才指向我们的代码）
  */
 export function reportEventLoopLag(sample: EventLoopLagSample, hasActiveTurn: () => boolean): void {
   const context = {

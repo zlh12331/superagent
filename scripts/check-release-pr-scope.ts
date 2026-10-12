@@ -1,29 +1,12 @@
 // scripts/check-release-pr-scope.ts
-// Release PR 内容边界闸门（护栏 C，2026-10-06 落地）
-// ──────────────────────────────────────────────────────────────
-// 背景：#90 作为 Release PR 携带 276 行 check-release-anchor.ts 等代码进 main
-//   ——ci.yml 的瘦身 if 只看分支名不看 diff，且恰逢 #93 空 squash，该代码从未
-//   经任何 CI。「Release PR 只含版本号 + CHANGELOG」此前是口头不变量，本脚本
-//   把它变成闸门。
-//
-// 职责：拉取 release-please 分支 PR 的 files 列表，断言每个 path ∈ 白名单：
-//   CHANGELOG.md / .release-please-manifest.json / package.json
-//   package.json 只允许动 "version": 行（release-please 的版本 bump）。
-//   patch 字段缺失（GitHub 对超 ~400 行 diff 省略）时 package.json 按越界
-//   fail-closed（内容约束无从执行，要求人工复核）；任一越界 → exit 1，
-//   提示先走普通 PR 再发版。
-//
-// 接线：ci.yml quality 的「Release PR gates」步骤（ruleset 必需检查 ⇒ 自动获得
-//   合并阻塞力）+ release.yml gate 兜底。
-//
-// 实现：复用 scripts/lib/github-rest.ts（零子进程 + SSRF 防线 + fetch 注入）。
-//   PR 号来源：--pr N 显式指定，或按 head 分支名 release-please--* 从 open PR
-//   中查找（CI 场景 github.head_ref 即该分支）。
-//
-// 用法：
-//   pnpm check:release-pr-scope --pr 98
-//   pnpm check:release-pr-scope --branch release-please--branches--main
-// ──────────────────────────────────────────────────────────────
+// Release PR 内容边界闸门（护栏 C）：release-please 分支 PR 只允许 CHANGELOG.md /
+// .release-please-manifest.json / package.json 的版本行——「Release PR 零代码」的
+// 口头不变量成闸。背景：#90 曾携 276 行代码借 Release PR 进 main 且未经任何 CI
+// （ci.yml 瘦身 if 只看分支名不看 diff，恰逢 #93 空 squash）
+// fail-closed：patch 缺失（GitHub 对超 ~400 行 diff 省略）时 package.json 按越界计
+// （内容约束无从执行，转人工复核）；任一越界 exit 1，代码改动须先走普通 PR
+// 接线：ci.yml quality「Release PR gates」（ruleset 必需检查）+ release.yml gate 兜底
+// 用法：pnpm check:release-pr-scope --pr N | --branch release-please--branches--main
 
 import { pathToFileURL } from 'node:url';
 
@@ -78,7 +61,6 @@ export function findScopeViolations(
       continue;
     }
     if (f.filename === 'package.json') {
-      // patch 缺失（GitHub 对超大 diff 省略该字段）→ 内容约束失效，fail-closed
       if (f.patch === undefined) {
         violations.push({
           filename: f.filename,
@@ -157,7 +139,7 @@ export async function runScopeCheck(options: ScopeCheckOptions = {}): Promise<vo
   let prNumber: number;
   let actualFiles: { filename: string; patch?: string }[];
   if (files !== undefined) {
-    prNumber = -1; // 注入模式（测试/演练）
+    prNumber = -1;
     actualFiles = files;
   } else {
     const fetched = await fetchReleasePrFiles(options);
@@ -180,7 +162,6 @@ export async function runScopeCheck(options: ScopeCheckOptions = {}): Promise<vo
   console.log('[check-release-pr-scope] ✅ 内容边界干净（仅版本号 + CHANGELOG）');
 }
 
-// 仅直接执行时跑 CLI（main-module 守卫，import 不触发网络/exit）
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   runScopeCheck().catch((e: unknown) => {
     console.error('[check-release-pr-scope] ❌ 执行失败：', e instanceof Error ? e.message : e);

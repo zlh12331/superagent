@@ -1,12 +1,3 @@
-// src/renderer/components/$1/git-status-utils.test.ts
-// git-status-utils 表驱动单元测试
-// ──────────────────────────────────────────────────────────────
-// 测试要点：
-// 1. getGitStatusMeta：6 状态全量映射（icon/className）
-// 2. i18n 键契约：check:i18n 对动态模板前缀域（git. 等）豁免静态检查，
-//    此处运行时兜底——i18next 缺键时返回键本身，「翻译 ≠ 键」即键存在
-// ──────────────────────────────────────────────────────────────
-
 import { AlertCircle, FileEdit, FilePlus, FileQuestion, FileX } from 'lucide-react';
 import { describe, expect, it } from 'vitest';
 
@@ -40,7 +31,6 @@ describe('git-status-utils', () => {
     expect(getGitStatusMeta('deleted').labelClassName).toContain('text-error-text');
     expect(getGitStatusMeta('renamed').labelClassName).toBe('text-accent-2');
     expect(getGitStatusMeta('untracked').labelClassName).toBe('text-muted-foreground');
-    // conflicted 额外加粗（比普通状态更需要被注意到）
     expect(getGitStatusMeta('conflicted').labelClassName).toBe('text-error-text font-semibold');
   });
 

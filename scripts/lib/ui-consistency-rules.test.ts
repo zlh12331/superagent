@@ -1,9 +1,6 @@
 // scripts/lib/ui-consistency-rules.test.ts
-// 写法一致性规则核反例 fixture 测试：七条规则逐一「违规样本必须命中 +
-// 干净/豁免样本必须放过」
-// ──────────────────────────────────────────────────────────────
-// 背景外部审计点名判据内联零测试（L2 缺口）——本文件补齐。
-// ──────────────────────────────────────────────────────────────
+// 写法一致性规则核反例 fixture：每条规则「违规样本必须命中 + 干净/豁免样本必须
+// 放过」（外部审计点名判据内联零测试，本文件补齐）
 
 import { describe, expect, it } from 'vitest';
 
@@ -119,15 +116,12 @@ describe('通用豁免', () => {
   });
 
   it('render-ref-write：use-latest-ref.ts 豁免 / 读取与比较放过', () => {
-    // hook 内的写入是规则的合法实现点
     expect(
       ruleIdsOf(scanUiConsistency(scanOne('hooks/use-latest-ref.ts', 'ref.current = value;'))),
     ).not.toContain('render-ref-write');
-    // 读取调用（无赋值）不命中
     expect(
       ruleIdsOf(scanUiConsistency(scanOne('components/a.tsx', 'onStopRef.current(onStop);'))),
     ).not.toContain('render-ref-write');
-    // 比较运算（== / ===）不命中
     expect(
       ruleIdsOf(scanUiConsistency(scanOne('components/a.tsx', 'if (aRef.current === b) return;'))),
     ).not.toContain('render-ref-write');

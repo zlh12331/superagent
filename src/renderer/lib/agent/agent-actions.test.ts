@@ -1,6 +1,3 @@
-// src/renderer/lib/agent/agent-actions.test.ts
-// Agent one-shot IPC bridge: respondAsk / approvalResponse
-
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ipcErr, ipcOk } from '@/lib/ipc-factories';

@@ -1,6 +1,3 @@
-// src/renderer/lib/browser-actions.test.ts
-// Browser preview IPC bridge: nav / navigate / state / subscribe + no-bridge
-
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {

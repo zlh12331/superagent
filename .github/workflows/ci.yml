@@ -1,5 +1,5 @@
 # .github/workflows/ci.yml
-# CI 流水线：PR 触发，跑质量门禁 + 测试矩阵（六平台）
+# CI 流水线：PR / merge_group（队列）触发，跑质量门禁 + 测试矩阵（六平台）
 #
 # 设计（2026-09-20 六平台改造后）：
 # - quality job：ubuntu ×1，快速反馈 typecheck/lint/gitleaks/静态审计/门禁自测/audit
@@ -24,7 +24,8 @@
 #   summary job 的 `name:` 必须逐字等于上述字符串，且必须带 `if: always()`。
 #
 # 触发策略（2026-09-10 方案二：CI on PR, CD on main）：
-# - **只 pull_request 触发，不再 push: main**。仓库 ruleset 强制「main 所有提交必须走 PR」
+# - **pull_request + merge_group 触发，不再 push: main**（2026-10-07 接入 merge queue，
+#   见下文 merge_group 节）。仓库 ruleset 强制「main 所有提交必须走 PR」
 #   且 bypass_actors 为空（管理员亦不可绕过）、strict_required_status_checks_policy=true
 #   （PR 必须含 main 最新提交）、required_linear_history（只允许 squash/rebase，树不变）
 #   ⇒ 必需检查在合并前已对**完全相同的内容**跑过，push 阶段重复验证无信息增益。

@@ -1,6 +1,3 @@
-// src/renderer/components/settings/sections/data-section.test.tsx
-// DataSection 测试（正向 / 边界 / 异常）：会话导出/导入 + 设置导出/导入 +
-// 打开数据目录 + 清空全部会话（36-D），含 IPC、用户取消与确认分支
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -248,7 +245,6 @@ describe('DataSection', () => {
     });
 
     it('正向：恢复默认设置（确认后）→ store 全量回落默认 + 成功提示', async () => {
-      // 预置非默认值：重置后必须回到 DEFAULT_SETTINGS
       useSettingsStore.setState({
         theme: 'light',
         ai: { ...useSettingsStore.getState().ai, temperature: 1.5, systemPrompt: 'custom' },
@@ -264,7 +260,6 @@ describe('DataSection', () => {
       await waitFor(() =>
         expect(mockToastSuccess).toHaveBeenCalledWith(t('settings.resetAllSettingsDone')),
       );
-      // store 已全量回落默认（applySettingsSnapshot({}) 语义）
       expect(useSettingsStore.getState().theme).toBe('dark');
       expect(useSettingsStore.getState().ai.temperature).toBe(0.7);
       expect(useSettingsStore.getState().ai.systemPrompt).toBe('');
@@ -304,11 +299,9 @@ describe('DataSection', () => {
       window.api = { update: { getCacheInfo, clearCache } } as never;
       renderSection();
 
-      // 占用文案（1.0 MB / 2 个文件）
       await waitFor(() => expect(screen.getByText(/1\.0 MB/)).toBeTruthy());
 
       await userEvent.click(screen.getByRole('button', { name: t('settings.clearUpdateCache') }));
-      // 危险操作先确认：沿用 confirm store（DialogHost 未挂载 → 需手动放行）
       const { useConfirmDialogStore } = await import('@/stores/transient/confirm-dialog-store');
       await waitFor(() => expect(useConfirmDialogStore.getState().currentRequest).not.toBeNull());
       useConfirmDialogStore.getState()._resolve(true);
@@ -332,8 +325,6 @@ describe('DataSection', () => {
       expect(screen.queryByRole('button', { name: t('settings.clearUpdateCache') })).toBeNull();
     });
   });
-
-  // ── 清空全部会话（36-D） ──────────────────────────────────────
 
   describe('clearAllSessions（36-D）', () => {
     it('正向：confirm 放行 → IPC 调用 + 成功提示含删除数', async () => {

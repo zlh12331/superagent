@@ -1,16 +1,3 @@
-// src/renderer/lib/agent/stream-chunk-batcher.ts
-// 流式 text-delta 出口合并器（把「每 token 一次提交」降为「每窗口一次提交」）
-// ──────────────────────────────────────────────────────────────
-// 动机：主进程每收到一个 token 就推一条 agent:stream:part，transport 原样 enqueue ⇒
-// useChat 每 token setState 一次 ⇒ 流式消息的 react-markdown 全量重解析每 token 跑一次
-// （单次 O(消息长度)，整条回复累计 O(n²)）。
-// 合并相邻 text-delta 后，DOM 提交次数由时间窗上限决定（≈50 次/秒），与 token 数解耦。
-// ──────────────────────────────────────────────────────────────
-// 约束：
-// - 仅合并「同一条 text part（id 相同）且相邻」的 delta，其余 chunk 一律立即透出
-// - 透出顺序与入队顺序一致：任何非合并 chunk 前先把缓冲 delta 落地
-// - flush 幂等；dispose 取消定时器且不再透出（流已关闭/取消时使用）
-
 import type { UIMessageChunk } from 'ai';
 
 /** 默认合并窗口（毫秒）：≈ 60fps 下 1~2 帧，打字机观感不受影响 */
@@ -70,7 +57,6 @@ export function createStreamChunkBatcher(options: StreamChunkBatcherOptions): St
   const maxChars = options.maxChars ?? TEXT_DELTA_BATCH_MAX_CHARS;
   const schedule = options.schedule ?? defaultScheduler;
 
-  // 缓冲：合并后的 chunk 模板（保留首条的 id/providerMetadata 等非 delta 字段）
   let pending: { readonly chunk: TextDeltaChunk; readonly id: string; text: string } | null = null;
   let cancelTimer: (() => void) | null = null;
   let disposed = false;
@@ -93,12 +79,10 @@ export function createStreamChunkBatcher(options: StreamChunkBatcherOptions): St
     push(chunk) {
       if (disposed) return;
       if (chunk.type !== 'text-delta') {
-        // 顺序保证：非 delta chunk 前必须先落地缓冲
         flush();
         emit(chunk);
         return;
       }
-      // 不同 text part（id 不同）不可合并；相邻同 id 才累积
       if (pending !== null && pending.id !== chunk.id) {
         flush();
       }

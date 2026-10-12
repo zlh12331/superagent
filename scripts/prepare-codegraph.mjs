@@ -1,29 +1,10 @@
 // scripts/prepare-codegraph.mjs
-// 生成 resources/codegraph-{arch}/（@colbymchenry/codegraph 平台捆绑包，按架构分目录）
-// ──────────────────────────────────────────────────────────────
-// 背景：codebase 工具（Agent 代码库智能查询）经 spawn 调用 codegraph CLI。
-//   @colbymchenry/codegraph 以 optionalDependencies 分发各平台捆绑包
-//   （vendored Node 24 + app，esbuild 同款模式），pnpm 装入
-//   node_modules/.pnpm/@colbymchenry+codegraph-<platform>-<arch>@*/。
-//   CodebaseService.resolveCodegraphBundle 在运行时按平台选择
-//   node.exe（Windows）或 bin/codegraph（其他）。
-//
-// 为什么按架构分目录（2026-09-20 多架构发布）：
-//   发布矩阵含 x64 与 arm64，而捆绑包内含**平台二进制**（node.exe / bin/codegraph）
-//   ——同名文件无法在同一目录共存。此前只部署 host 架构的那一份，导致交叉构建
-//   （如 macos-latest 为 arm64 却要产出 x64 包）把错误架构的二进制打进安装包：
-//   mac x64 用户在 codebase 工具上会因架构不匹配而失败（既有缺陷，随本次修复）。
-//   现每个架构部署到独立目录，electron-builder 侧用 extraResources 的 ${arch} 宏
-//   按构建目标选取（该宏经 app-builder-lib 的 getFileMatchers → expandMacro 展开，
-//   已核实：platformPackager.createGetFileMatchersOptions 传入 Arch[arch]）。
-//
-// 前置：pnpm-workspace.yaml 的 supportedArchitectures 需含 x64 与 arm64
-//   （否则 pnpm 只装 host 架构那一个 optionalDependency，本脚本会报缺包）。
-//
-// 用法：
-//   node scripts/prepare-codegraph.mjs                 # 部署 x64 + arm64
-//   CODE_AGENT_TARGET_ARCHS=x64 node scripts/...       # 只部署指定架构（CI 单架构 job）
-// ──────────────────────────────────────────────────────────────
+// 生成 resources/codegraph-{arch}/（@colbymchenry/codegraph 平台捆绑包）：codebase
+// 工具经 spawn 调用它；捆绑包以 optionalDependencies 分发（vendored Node + app）
+// ⚠️ 必须按架构分目录（2026-09-20 多架构发布）：包内是平台二进制（node.exe /
+// bin/codegraph），同名文件无法同目录共存——此前只部署 host 架构一份，交叉构建
+// 会把错误架构打进安装包（mac x64 用户 codebase 工具必败）；electron-builder 侧
+// 用 extraResources 的 ${arch} 宏按目标选取
 
 import { cpSync, existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';

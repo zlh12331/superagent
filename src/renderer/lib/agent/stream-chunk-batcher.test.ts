@@ -1,9 +1,3 @@
-// src/renderer/lib/agent/stream-chunk-batcher.test.ts
-// 流式 text-delta 出口合并器行为锁定
-// ──────────────────────────────────────────────
-// 回归目标：修复「每个 token 一次 DOM 提交 ⇒ 流式消息 react-markdown 全量重解析 O(n²)」。
-// 关键约束：合并不许丢字、不许乱序、不许跨 text part 串字。
-
 import type { UIMessageChunk } from 'ai';
 import { beforeEach, describe, expect, it } from 'vitest';
 
@@ -91,7 +85,6 @@ describe('createStreamChunkBatcher', () => {
     batcher.push(delta('t1', '1234'));
     batcher.push(delta('t1', '5678'));
     expect(emitted).toEqual([delta('t1', '12345678')]);
-    // 缓冲已清空：再次 flush 不产生重复透出
     batcher.flush();
     expect(emitted).toHaveLength(1);
   });
@@ -103,7 +96,6 @@ describe('createStreamChunkBatcher', () => {
     batcher.flush();
     batcher.flush();
     expect(emitted).toEqual([delta('t1', 'A')]);
-    // 缓冲落地后定时器已取消
     expect(timers).toHaveLength(0);
   });
 

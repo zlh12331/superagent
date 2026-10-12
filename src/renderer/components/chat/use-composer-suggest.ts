@@ -1,14 +1,3 @@
-// src/renderer/components/chat/use-composer-suggest.ts
-// composer 建议面板状态与键盘处理（自 ChatInput 拆出）
-// ──────────────────────────────────────────────
-// 职责（单一内聚：斜杠/提及建议的完整行为链）：
-// - 触发检测（suggest-trigger.ts 纯函数：slash 1-20 字符、mention ≤30 字符，任意位置触发取靠后）
-// - 候选过滤（slash 内置命令；mention search.glob 200ms 防抖委托 use-mention-files）
-// - 键盘高亮（ArrowUp/Down 循环选择，Tab/Enter 应用，Esc 清除触发段保留其余输入）
-// - 应用建议（带 action 的斜杠命令执行动作不填充文本；mention 替换 @查询 为完整路径）
-// 不含渲染（面板 UI 由 SlashSuggestPanel 承担）与 vim/发送逻辑。
-// ──────────────────────────────────────────────
-
 import type { KeyboardEvent, RefObject } from 'react';
 import { useEffect, useState } from 'react';
 
@@ -122,8 +111,6 @@ function handleEscapeClear(
     return false;
   }
   event.preventDefault();
-  // 关闭建议：只清除触发段（"/xxx" 或 "@xxx"），保留用户其余输入——
-  // 此前 setValue('') 会清空整个输入框且同步覆盖草稿（数据丢失）
   const caret = event.currentTarget.selectionStart ?? value.length;
   const triggerChar = slashOpen ? '/' : '@';
   const at = value.lastIndexOf(triggerChar, Math.max(0, caret - 1));
@@ -170,32 +157,23 @@ export function useComposerSuggest({
 }: UseComposerSuggestDeps): UseComposerSuggestResult {
   const { t } = useTranslation();
 
-  // ── 触发检测（照搬参考项目 useSlashSuggest：支持任意位置触发，取位置靠后者）──
-  // 触发检测为纯函数（suggest-trigger.ts）：slash 1-20 字符、mention ≤30 字符（允许空串）
   const { atIndex, slashIndex, activeTrigger, activeQuery } = detectSuggestTrigger(value);
 
-  // slash 建议：内置命令过滤（command 带 '/' 前缀，查询词不含 '/'——对齐参考项目 useSlashSuggest 语义）
   const filteredSuggestions: readonly SlashSuggestion[] =
     activeTrigger === 'slash' && activeQuery !== null ? filterSlashSuggestions(activeQuery) : [];
 
-  // mention 建议：search.glob 按查询过滤（200ms 防抖与生命周期见 use-mention-files.ts）
   const mentionFiles = useMentionFiles(activeTrigger, activeQuery, workingDir);
 
   const mentionOpen = activeTrigger === 'mention' && mentionFiles.length > 0;
   const slashOpen = activeTrigger === 'slash' && filteredSuggestions.length > 0;
-  // 统一建议面板开关（两者互斥，取靠后者触发）
   const suggestOpen = slashOpen || mentionOpen;
 
-  // 键盘高亮索引：ArrowUp/Down 循环选择，Enter/Tab 应用选中项（此前固定第 0 项，
-  // 键盘用户无法选择第 2+ 条建议）；输入内容变化时重置回第一项
   const [suggestIndex, setSuggestIndex] = useState(0);
   // biome-ignore lint/correctness/useExhaustiveDependencies: 故意监听 value/activeTrigger 变化重置高亮，不读取其值
   useEffect(() => {
     setSuggestIndex(0);
   }, [value, activeTrigger]);
 
-  // 当前高亮建议的可读文本与总数（sr-only live region 播报用；textarea 不允许
-  // combobox 角色，故不依赖 aria-activedescendant）
   const activeSuggestionLabel = suggestionLabelText({
     slashOpen,
     filteredSuggestions,
@@ -214,18 +192,14 @@ export function useComposerSuggest({
    * 策略相反，属同类数据丢失在新位置的残留。
    */
   const applySuggestion = (command: string): void => {
-    // slashIndex < 0 说明触发段已消失（如外部改值），保守起见不动输入
     const before = slashIndex < 0 ? value : value.slice(0, slashIndex);
-    // 带 action 的命令：执行动作（对齐参考项目），不填充文本
     const suggestion = findSlashSuggestion(command);
     if (suggestion?.action !== undefined) {
-      // 移除触发段（保留其前的用户输入），suggestOpen 派生自输入值 → 面板自动关闭
       setValue(before);
       onAfterChange?.();
       onSlashCommand?.(suggestion.action);
       return;
     }
-    // 替换触发段为完整命令（保留之前的文本，避免抹掉用户已输入的内容）
     setValue(`${before}${command} `);
     onAfterChange?.();
     textareaRef.current?.focus();
@@ -253,7 +227,6 @@ export function useComposerSuggest({
     if (!suggestOpen) {
       return false;
     }
-    // 当前高亮项在候选集内的安全下标（候选集为空时 selected=0，由下游 undefined 判定兜底）
     const count = slashOpen ? filteredSuggestions.length : mentionFiles.length;
     const selected = Math.min(suggestIndex, Math.max(0, count - 1));
     if (handleArrowNav(event, { count, setSuggestIndex })) {

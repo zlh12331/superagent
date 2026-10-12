@@ -1,55 +1,37 @@
-// e2e/playwright.electron.config.ts
-// Playwright Electron E2E 测试配置（方案 E）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 配置 Electron E2E 测试运行环境
-// - 用 _electron.launch 启动真实 Electron（连接到 dev server）
-// - 验证 window.api 全链路 IPC、React DevTools、Profiler 埋点
-//
-// 前置条件：
-// - dev server 必须已启动（pnpm dev）
-// - main + preload 必须已构建（pnpm dev 会自动构建）
-//
-// 运行方式：
-//   1. 先启动 dev server：pnpm dev（保持运行）
-//   2. 另开终端跑测试：pnpm test:e2e:electron
-//
-// 与 playwright.config.ts（纯浏览器模式）的区别：
-// - playwright.config.ts：浏览器访问 localhost:5199（web 模式专属端口），无 preload，测纯前端 UI
-// - playwright.electron.config.ts：_electron.launch 启动 Electron，有 preload + IPC 全链路
-// ──────────────────────────────────────────────────────────────
+// playwright.electron.config.ts：Electron 真实窗口 E2E 的 Playwright 配置——只收四类 electron 专属 spec（见 testMatch）。
+// 用例经 _electron.launch 驱动仓库自身的 Electron，走 preload + IPC 全链路；纯前端 UI 用例归 e2e/playwright.config.ts。
 
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from '@playwright/test';
 
-// 仓库根（webServer 的 cwd 默认是配置文件目录，不显式指定会导致
-// electron-vite/vite 在 e2e/ 下找不到根配置而提前退出，2026-08-27 实测暴露）
+// 仓库根。webServer.cwd 默认取配置文件所在目录（e2e/）而非 cwd，须显式指定：
+// 在 e2e/ 下找不到根配置时 electron-vite 会直接退出
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 export default defineConfig({
   testDir: '.',
-  // 匹配 electron 专属 spec（真实 Electron 链路：功能 + 性能 + dev 更新调试 + 静默启动）
+  // 四类 electron 专属 spec：主窗口 + window.api/IPC 全链路（含 DevTools hook）、IPC 性能基准、
+  // dev 更新调试（CODE_AGENT_DEV_UPDATE）、--hidden 静默启动
   testMatch: [
     '**/electron.spec.ts',
     '**/perf-electron.spec.ts',
     '**/electron-update-dev.spec.ts',
     '**/electron-hidden-start.spec.ts',
   ],
+  // 用例总预算，也是关闭兜底的上限：e2e/helpers/close-electron.ts 的优雅关闭等待（15s）须远低于它，
+  // 否则关窗挂起时兜底强杀会被 Playwright 自己的超时掐断
   timeout: 60_000,
   expect: {
     timeout: 10_000,
   },
   workers: 1,
+  // 本地不重试：失败立即暴露；CI 另以 --retries=2 覆盖本值，吸收共享 runner 的基准抖动
   retries: 0,
-  // ⚠️ outputFolder 必须写成基于 ROOT 的绝对路径：相对路径会被解析到**配置文件所在目录**
-  // （即 e2e/），而非 cwd。此前写成 'playwright-report-electron' 时报告落在
-  // e2e/playwright-report-electron/，而 ci.yml 的上传路径是仓库根的
-  // playwright-report-electron/ ⇒ 报告从未被上传（"No files were found"），
-  // 失败现场无 artifact 可查（2026-09-21 调查 windows-11-arm 的 E2E 失败时暴露）。
-  // browser 那套未设 outputFolder，默认落在仓库根，故一直正常——此处对齐它。
   reporter: [
     ['list'],
+    // outputFolder 必须是基于 ROOT 的绝对路径：相对路径按配置文件所在目录（e2e/）解析而非 cwd，
+    // 报告会落到 e2e/playwright-report-electron/，与 .github/workflows/ci.yml 从仓库根上传的目录不符
     ['html', { open: 'never', outputFolder: join(ROOT, 'playwright-report-electron') }],
   ],
   use: {
@@ -57,7 +39,8 @@ export default defineConfig({
     video: 'retain-on-failure',
     trace: 'retain-on-failure',
   },
-  // 自动启动 dev server（与 playwright.config.ts 一致；本地已手动运行时自动复用）
+  // 先拉起 electron-vite dev：端口须与 spec 内的 ELECTRON_RENDERER_URL 一致（主进程据此
+  // loadURL 连 dev server 而非 loadFile）；本地已开着 pnpm dev 时复用现有实例
   webServer: {
     command: 'pnpm exec electron-vite dev',
     cwd: ROOT,

@@ -1,6 +1,3 @@
-// src/renderer/components/chat/suggest-trigger.test.ts
-// 斜杠/提及建议触发检测纯函数回归（对齐参考项目 useSlashSuggest 触发语义）
-
 import { describe, expect, it } from 'vitest';
 
 import { detectSuggestTrigger } from './suggest-trigger';
@@ -28,12 +25,10 @@ describe('detectSuggestTrigger', () => {
   });
 
   it('触发词在但查询段非法 → 不触发且 activeQuery 为 null（不泄漏查询段）', () => {
-    // 回归：此前 activeQuery 回落 mentionQuery，'hi @ ' 会返回非 null 的 ' '
     const s = detectSuggestTrigger('hi @ ');
     expect(s.activeTrigger).toBeNull();
     expect(s.activeQuery).toBeNull();
 
-    // slash 非法查询且 @ 在更早位置（activeTrigger 为 null）同样不得泄漏
     const s2 = detectSuggestTrigger('@x /he llo');
     expect(s2.activeTrigger).toBeNull();
     expect(s2.activeQuery).toBeNull();

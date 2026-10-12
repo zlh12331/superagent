@@ -1,22 +1,3 @@
-// src/main/infra/ai/mcp/mcp-service.test.ts
-// mcp-service 单测：多 server 管理器
-//
-// 测试要点：
-// 1. startServer：启动成功 → 工具注册到 ToolRegistry
-// 2. startServer：启动失败 → 状态 error，不抛错
-// 3. startServer：重名 server 先停旧再启新
-// 4. startServer：工具重名时跳过
-// 5. stopServer：注销工具 + 关闭 client + 移除 Map 条目
-// 6. stopServer：未注册的 server 静默忽略（幂等）
-// 7. stopAll：并行停止所有 server
-// 8. listServers：返回 server 状态快照
-// 9. hasRunningServers：判断是否有运行中 server
-// 10. validateMcpServerConfig：配置校验
-//
-// 接线背景：生产中 MCPService 由 ServiceContainer lazy accessor 创建，
-// mcp:start handler 先 validateMcpServerConfig 后 startServer（双重防线）；
-// 本文件 mock MCPClient 类（不依赖真实子进程），错误隔离语义全在此覆盖。
-
 import { AppError, ErrorCode } from '@code-agent/shared/main';
 import type { Mock } from 'vitest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -27,9 +8,7 @@ import { isMcpToolName, MCPService, validateMcpServerConfig } from './mcp-servic
 import type { McpToolDescriptor } from './mcp-tool-adapter';
 import type { McpServerConfig } from './mcp-types';
 
-// vi.mock 必须在顶层：mock MCPClient 类
 const mocks = vi.hoisted(() => {
-  // 每个 test 用例会重置 mockMCPClientInstance 以便配置 listTools/connect/close 行为
   const mockMCPClientInstance = {
     connect: vi.fn(),
     listTools: vi.fn(),
@@ -43,7 +22,6 @@ const mocks = vi.hoisted(() => {
   return { mockMCPClientInstance };
 });
 
-// Mock MCPClient：构造函数返回 mockMCPClientInstance
 vi.mock('./mcp-client', () => ({
   // biome-ignore lint/style/useNamingConvention: 必须匹配导出的类名
   // biome-ignore lint/complexity/useArrowFunction: 必须用普通函数以支持 new 调用
@@ -52,7 +30,6 @@ vi.mock('./mcp-client', () => ({
   }),
 }));
 
-// Mock logger（避免污染主进程日志）
 vi.mock('../../../utils/logger', () => ({
   logger: {
     info: vi.fn(),
@@ -62,7 +39,6 @@ vi.mock('../../../utils/logger', () => ({
   },
 }));
 
-// 构造 mock ToolRegistry
 function makeToolRegistry(): IToolRegistry & {
   register: Mock;
   unregister: Mock;
@@ -84,7 +60,6 @@ function makeToolRegistry(): IToolRegistry & {
   };
 }
 
-// 构造 mock tool 描述符
 function makeDescriptor(
   name: string,
   overrides: Partial<McpToolDescriptor> = {},
@@ -97,7 +72,6 @@ function makeDescriptor(
   };
 }
 
-// 基础 server config
 const baseConfig: McpServerConfig = {
   name: 'filesystem',
   command: 'npx',
@@ -113,7 +87,6 @@ describe('mcp-service', () => {
     toolRegistry = makeToolRegistry();
     service = new MCPService(toolRegistry);
 
-    // 默认 mock 行为：connect 成功、listTools 返回空数组、close 成功
     mocks.mockMCPClientInstance.connect.mockResolvedValue(undefined);
     mocks.mockMCPClientInstance.listTools.mockReturnValue([]);
     mocks.mockMCPClientInstance.close.mockResolvedValue(undefined);
@@ -130,7 +103,6 @@ describe('mcp-service', () => {
 
       await service.startServer(baseConfig);
 
-      // 两个工具按命名空间注册
       expect(toolRegistry.register).toHaveBeenCalledTimes(2);
       expect(toolRegistry.register).toHaveBeenCalledWith(
         expect.objectContaining({ name: 'mcp__filesystem__read_file' }),
@@ -153,7 +125,6 @@ describe('mcp-service', () => {
     it('启动失败 → 状态 error 且不抛错（错误隔离）', async () => {
       mocks.mockMCPClientInstance.connect.mockRejectedValue(new Error('connection refused'));
 
-      // 不抛错
       await expect(service.startServer(baseConfig)).resolves.toBeUndefined();
 
       const infos = service.listServers();
@@ -163,22 +134,17 @@ describe('mcp-service', () => {
     });
 
     it('重名 server 先停旧再启新', async () => {
-      // 第一次启动
       mocks.mockMCPClientInstance.listTools.mockReturnValue([makeDescriptor('read_file')]);
       await service.startServer(baseConfig);
 
-      // 第二次启动同名 server（会触发 stopServer 旧的）
       mocks.mockMCPClientInstance.listTools.mockReturnValue([makeDescriptor('write_file')]);
       await service.startServer(baseConfig);
 
-      // 旧的 client.close 被调用
       expect(mocks.mockMCPClientInstance.close).toHaveBeenCalled();
-      // 旧工具被注销
       expect(toolRegistry.unregister).toHaveBeenCalledWith('mcp__filesystem__read_file');
     });
 
     it('工具重名时跳过注册', async () => {
-      // 预先注册一个同名工具（模拟其他 server 已注册）
       const existingTool = {
         name: 'mcp__filesystem__read_file',
         description: 'existing',
@@ -187,7 +153,6 @@ describe('mcp-service', () => {
         execute: vi.fn(),
       } as unknown as Tool;
       toolRegistry.register(existingTool);
-      // 清除预注册的调用记录，只统计 startServer 内部的注册调用
       toolRegistry.register.mockClear();
 
       mocks.mockMCPClientInstance.listTools.mockReturnValue([
@@ -197,7 +162,6 @@ describe('mcp-service', () => {
 
       await service.startServer(baseConfig);
 
-      // 仅注册 write_file（read_file 被跳过）
       expect(toolRegistry.register).toHaveBeenCalledTimes(1);
       expect(toolRegistry.register).toHaveBeenCalledWith(
         expect.objectContaining({ name: 'mcp__filesystem__write_file' }),
@@ -240,9 +204,7 @@ describe('mcp-service', () => {
 
       mocks.mockMCPClientInstance.close.mockRejectedValue(new Error('close failed'));
 
-      // 不抛错，仅记录状态
       await service.stopServer('filesystem');
-      // 已从 Map 移除
       expect(service.listServers()).toHaveLength(0);
     });
   });
@@ -251,7 +213,6 @@ describe('mcp-service', () => {
     it('并行停止所有 server', async () => {
       mocks.mockMCPClientInstance.listTools.mockReturnValue([makeDescriptor('read_file')]);
 
-      // 启动两个 server（不同 name）
       await service.startServer(baseConfig);
       await service.startServer({
         ...baseConfig,
@@ -263,8 +224,6 @@ describe('mcp-service', () => {
       await service.stopAll();
 
       expect(service.listServers()).toHaveLength(0);
-      // 每个 client 的 close 被调用一次
-      // 由于 MCPClient 被 mock 为单例，close 会被多次调用
     });
 
     it('空 Map 时直接返回', async () => {

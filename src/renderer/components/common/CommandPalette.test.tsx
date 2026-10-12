@@ -1,6 +1,3 @@
-// src/renderer/components/$1/CommandPalette.test.tsx
-// 命令面板冒烟补测：操作组命令渲染 + 主题三态循环标题
-
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
@@ -37,7 +34,6 @@ describe('CommandPalette 冒烟', () => {
     renderPalette();
     expect(screen.getByText('新建会话')).toBeDefined();
     expect(screen.getByText('打开设置')).toBeDefined();
-    // dark → 下一个 light（三态循环标题指向下一个主题）
     expect(screen.getByText('切换到亮色主题')).toBeDefined();
   });
 

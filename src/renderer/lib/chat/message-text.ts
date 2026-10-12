@@ -1,15 +1,3 @@
-// src/renderer/lib/chat/message-text.ts
-// 消息文本提取（UIMessage parts → 纯文本）· chat 领域跨特性共享的纯函数
-// ──────────────────────────────────────────────────────────────
-// 为什么放 lib/chat 而非 components/chat（2026-09-15 结构审计）：
-// 本函数有三个消费方，跨两个特性边界——components/chat（message-item /
-// use-message-nav-rail）与 hooks/use-conversation-search。若继续留在
-// components/chat/message-utils，则 hooks → 特性内部实现文件形成目录级循环
-// （ChatPanel → hooks/use-conversation-search → components/chat/message-utils），
-// 违反「共享层不得反向依赖特性实现」的方向约束。
-// lib/{agent,diff,query} 为先例：领域纯逻辑 + colocated 测试。
-// ─────────────────────────────────────────────────────────────
-
 import type { UIMessage } from 'ai';
 import { isTextUIPart } from 'ai';
 

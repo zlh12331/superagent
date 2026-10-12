@@ -1,19 +1,8 @@
-// src/main/infra/browser/preview-service.test.ts
-// BrowserPreviewService 单测：视图生命周期/视口落地/事件收敛（DI 注入 fake 视图）
-//
-// 测试要点：
-// 1. navigate：懒创建视图 + 附着窗口 + loadURL；非 http/https 拒绝
-// 2. setViewport：bounds/zoom/可见性落地；rect=null 仅隐藏不销毁（页面保活）
-// 3. configure：严格模式切换销毁重建并回放 URL/几何；同值幂等
-// 4. webContents 事件收敛：did-navigate 等 → state 广播；主框架失败 → loadFailed
-// 5. dispose：close + detach，窗口已销毁时安全跳过
-
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { openExternalMock } = vi.hoisted(() => ({ openExternalMock: vi.fn() }));
 
 vi.mock('electron', () => ({
-  // 字符串键：避免 useNamingConvention 对 PascalCase 属性名的检查
   ['BrowserWindow']: { getAllWindows: vi.fn(() => []) },
   ['WebContentsView']: vi.fn(),
   ['session']: { fromPartition: vi.fn() },
@@ -23,7 +12,6 @@ vi.mock('electron', () => ({
 import type { BrowserWindow, WebContentsView } from 'electron';
 import { BrowserPreviewService } from './preview-service';
 
-/** fake 窗口（记录 addChildView/removeChildView） */
 function createFakeWin(): BrowserWindow & {
   added: unknown[];
   removed: unknown[];
@@ -45,7 +33,6 @@ function createFakeWin(): BrowserWindow & {
   } as unknown as BrowserWindow & { added: unknown[]; removed: unknown[] };
 }
 
-/** fake webContents（事件注册表 + 可编程状态） */
 interface FakeWebContents {
   handlers: Map<string, (...args: unknown[]) => void>;
   emit(event: string, ...args: unknown[]): void;
@@ -60,7 +47,6 @@ interface FakeWebContents {
   destroyed: boolean;
 }
 
-/** fake 视图工厂（记录 javascript 选项；测试经返回的 wc 触发事件） */
 function createFakeViewFactory() {
   const created: { javascript: boolean; wc: FakeWebContents }[] = [];
   const factory = (options: { readonly javascript: boolean }): WebContentsView => {
@@ -125,7 +111,6 @@ function createFakeViewFactory() {
 
 type Broadcast = [channel: string, payload: unknown];
 
-/** 组装被测服务（fake 窗口 + fake 视图工厂 + 广播捕获） */
 function createHarness() {
   const win = createFakeWin();
   const { factory, created } = createFakeViewFactory();
@@ -142,7 +127,6 @@ function createHarness() {
 
 const RECT = { x: 800, y: 52, width: 400, height: 600 };
 
-/** 取当前视图的 fake webContents（未创建即测试失败） */
 function mustWc(h: ReturnType<typeof createHarness>): FakeWebContents {
   const wc = h.created[0]?.wc;
   if (wc === undefined) {
@@ -298,7 +282,6 @@ describe('BrowserPreviewService', () => {
       const wc = mustWc(h);
       wc.emit('__windowOpen', { url: 'https://popup.example' });
       expect(openExternalMock).toHaveBeenCalledWith('https://popup.example');
-      // 非/http(s) 不转交
       openExternalMock.mockClear();
       wc.emit('__windowOpen', { url: 'javascript:alert(1)' });
       expect(openExternalMock).not.toHaveBeenCalled();

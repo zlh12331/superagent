@@ -1,10 +1,3 @@
-// src/main/infra/ai/knowledge/goal-service.test.ts
-// 会话目标服务单测：CRUD + 回合事件驱动自动判定（内存 DB + mock 依赖）
-//
-// 接线背景：生产中 GoalService 由 ServiceContainer 惰性创建并 mount；
-// 判定输入 = TEXT_DELTA 累积的助手全文（user 消息不经事件流）——本组用例
-// 以 TEXT_DELTA + TURN_END 事件序列驱动，与生产口径一致。
-
 import type { TurnEvent } from '@code-agent/shared/main';
 import { TurnEventType } from '@code-agent/shared/main';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -32,7 +25,6 @@ vi.mock('../../storage/db', async (importOriginal) => {
   };
 });
 
-/** 捕获 mount 注册的回合回调（handleTurnEvent 是私有方法） */
 function captureTurnHandler(agentService: { onTurnEvent: ReturnType<typeof vi.fn> }) {
   return agentService.onTurnEvent.mock.calls[0]?.[0] as (event: TurnEvent) => Promise<void>;
 }
@@ -46,7 +38,6 @@ describe('GoalService', () => {
     resetDb();
     agentService = { onTurnEvent: vi.fn(() => () => {}) };
     goalJudge = { judge: vi.fn(async () => ({ met: false, reason: '未达成', impossible: false })) };
-    // goals.session_id 外键引用 sessions.id，预插会话行（goals 与 tasks 不同，有 FK）
     getDb()
       .insert(sessions)
       .values({

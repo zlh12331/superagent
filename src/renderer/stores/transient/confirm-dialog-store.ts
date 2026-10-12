@@ -1,21 +1,4 @@
-// src/renderer/stores/transient/confirm-dialog-store.ts
-// 命令式确认/输入对话框 store（照搬自参考项目 F:\TraeProjects\Agent2\1\src\features\dialog\confirm-dialog-store.ts）
-// ──────────────────────────────────────────────────────────────
-// 对齐原型 showConfirmDialog / showPromptDialog：命令式调用 + Promise 返回值，
-// 调用方用 await 等待用户选择，代码结构与 window.confirm 一致：
-//
-//   if (!(await confirm({ title: '确认删除', message: '此操作不可撤销', danger: true }))) return
-//   const name = await prompt({ title: '重命名', label: '新名称', defaultValue: 'old' })
-//
-// 设计要点：
-// - store 只保存"当前请求"和 resolver，不关心 UI 渲染（DialogHost 订阅渲染）
-// - 同时只允许一个弹窗，后到的请求排队（FIFO）
-// - 非持久化：重启后清空，避免遗留 resolver 导致 Promise 永远 pending
-// ──────────────────────────────────────────────────────────────
-
 import { create } from 'zustand';
-
-// ===== 请求类型 =====
 
 /** 确认对话框请求参数 */
 export interface ConfirmOptions {
@@ -55,8 +38,6 @@ interface DialogRequest {
   readonly resolver: (result: boolean | string | null) => void;
 }
 
-// ===== Store 接口 =====
-
 interface ConfirmDialogState {
   /** 当前待处理的请求（null 表示无弹窗显示） */
   readonly currentRequest: DialogRequest | null;
@@ -69,8 +50,6 @@ interface ConfirmDialogState {
   readonly _resolve: (result: boolean | string | null) => void;
 }
 
-// ===== Store 实现 =====
-
 export const useConfirmDialogStore = create<ConfirmDialogState>()((set, get) => ({
   currentRequest: null,
   queue: [],
@@ -79,7 +58,6 @@ export const useConfirmDialogStore = create<ConfirmDialogState>()((set, get) => 
     return new Promise<boolean | string | null>((resolve) => {
       const fullRequest: DialogRequest = { ...request, resolver: resolve };
       const state = get();
-      // 当前无弹窗 → 立即激活；否则排队
       if (state.currentRequest === null) {
         set({ currentRequest: fullRequest });
       } else {
@@ -92,10 +70,8 @@ export const useConfirmDialogStore = create<ConfirmDialogState>()((set, get) => 
     const state = get();
     if (state.currentRequest === null) return;
 
-    // 先调用 resolver 结束外层 Promise
     state.currentRequest.resolver(result);
 
-    // 从队列取下一个请求激活（FIFO）
     const nextRequest = state.queue[0] ?? null;
     set((s) => ({
       currentRequest: nextRequest,
@@ -103,8 +79,6 @@ export const useConfirmDialogStore = create<ConfirmDialogState>()((set, get) => 
     }));
   },
 }));
-
-// ===== 公共便捷函数 =====
 
 /**
  * 弹出确认对话框，返回 Promise<boolean>。

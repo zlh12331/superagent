@@ -1,6 +1,3 @@
-// src/main/infra/ai/subagent-manager.test.ts
-// 子代理管理器单测：内置代理列表/委派执行/结果收集/会话过滤
-
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createTestDb } from '../../src/main/infra/storage/test-utils';
 
@@ -68,7 +65,6 @@ describe('SubagentManager', () => {
     const manager = new SubagentManager(stubs.agentService);
 
     const promise = manager.run('general', '分析这段代码', '/tmp/proj');
-    // startAgent 被调用（无头：无 webContents + 子代理 systemPrompt）
     await vi.waitFor(() => {
       expect(stubs.mockStartAgent).toHaveBeenCalledTimes(1);
     });
@@ -84,12 +80,11 @@ describe('SubagentManager', () => {
     expect(callArgs.systemPrompt).toContain('通用子代理');
     expect(callArgs.maxSteps).toBe(15);
 
-    // 模拟子代理回合事件（sessionId 过滤）
     const listener = stubs.turnListeners[0];
     expect(listener).toBeDefined();
     listener?.({
       type: 'text-delta',
-      sessionId: 'other-session', // 其他回合事件应被忽略
+      sessionId: 'other-session',
       turnId: 'x1',
       timestamp: Date.now(),
       text: '不该被收集',

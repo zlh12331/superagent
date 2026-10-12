@@ -1,14 +1,3 @@
-// tests/integration/settings.test.ts
-// Settings/Whitelist 域集成测试（batch 6/9）
-// ──────────────────────────────────────────────────────────────
-// 链路：IPC handler（真实）→ 存储层（真实文件：keychain.dat / telemetry-pref.json /
-//       approval-pref.json / whitelist-pref.json）→ 临时 userData
-// 替身：safeStorage（SDK 边界——假加密；真实 DPAPI 由 Electron 提供）
-//
-// 维度覆盖：接口契约 / 错误传播（safeStorage 不可用）/
-// 场景：持久化往返（set→重读文件）/ 幂等（重复 set 覆盖）/ 并发（并行 set 不同 provider）
-// ──────────────────────────────────────────────────────────────
-
 import { describe, expect, it } from 'vitest';
 import { PermissionService } from '../../src/main/infra/ai/tools/permission-service';
 import {
@@ -29,7 +18,6 @@ describe('settings 域集成链路（batch 6）', () => {
       });
       await handlers.setApiKey({ provider: 'openai', apiKey: 'sk-test-123' });
       const res = await handlers.getApiKey({ provider: 'openai' });
-      // 安全契约（P0 加固）：getApiKey 只回传 configured 布尔，不回传明文 key
       expect(res.configured).toBe(true);
     });
   });
@@ -130,9 +118,6 @@ describe('settings 域集成链路（batch 6）', () => {
       await handlers.setApiKey({ provider: 'openai', apiKey: 'sk-persist' });
       await handlers.setTelemetryLevel({ level: 'error-only' });
 
-      // 文件级验证：keychain.dat 与 telemetry-pref.json 真实落盘（userData 临时目录）
-      // keychain.dat 为加密字节（Buffer 序列化数组）——明文不可见，验证存在非空；
-      // 明文往返已由 set→get 用例覆盖
       const { readFileSync } = await import('node:fs');
       const { join } = await import('node:path');
       const userData = (globalThis as Record<string, unknown>)['__itState'] as { userData: string };
@@ -153,7 +138,6 @@ describe('settings 域集成链路（batch 6）', () => {
       await handlers.setApiKey({ provider: 'openai', apiKey: 'v1' });
       await handlers.setApiKey({ provider: 'openai', apiKey: 'v2' });
       const res = await handlers.getApiKey({ provider: 'openai' });
-      // 明文不再回传（防 IPC 侧泄露）；覆盖语义由 keychain 单测保证
       expect(res.configured).toBe(true);
     });
   });
@@ -184,8 +168,6 @@ describe('settings 域集成链路（batch 6）', () => {
         sessionService: getSessionService(),
         permissionService: new PermissionService(),
       });
-      // 注：keychain 读-改-写无锁（Promise.all 并发会丢失更新）；
-      // 生产 IPC 主进程串行处理不触发——此处按 IPC 语义串行验证
       for (let i = 0; i < 5; i++) {
         await handlers.setApiKey({ provider: `provider-${i}`, apiKey: `sk-${i}` });
       }

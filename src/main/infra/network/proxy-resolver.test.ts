@@ -1,10 +1,3 @@
-// src/main/infra/network/proxy-resolver.test.ts
-// 代理配置解析器单测（34 号网络代理；docs/design/34-network-proxy-spec.md §2.7）
-// ──────────────────────────────────────────────────────────────
-// 覆盖：三模式归一化 / 缺失损坏回 system（fail-open）/ localhost 恒绕过 /
-// bypass 匹配 / URL 内嵌凭据脱敏 / 非法协议拒绝。
-// ──────────────────────────────────────────────────────────────
-
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../../utils/logger', () => ({
@@ -117,9 +110,7 @@ describe('shouldBypass', () => {
 });
 
 describe('maskProxyUrl（安全：凭据不落日志）', () => {
-  beforeEach(() => {
-    // 无共享状态，占位
-  });
+  beforeEach(() => {});
 
   it('带凭据 URL 脱敏', () => {
     expect(maskProxyUrl('http://user:pass@10.0.0.1:8080')).toBe('http://***@10.0.0.1:8080');

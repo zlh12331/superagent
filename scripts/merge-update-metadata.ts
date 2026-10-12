@@ -1,22 +1,8 @@
 // scripts/merge-update-metadata.ts
-// 合并 Windows / macOS 的双架构更新元数据（CD 拆 job 后的必需配套）
-// ──────────────────────────────────────────────────────────────
-// 背景：CD 的 build 从「Windows/macOS 各 1 个 job 兼双架构」拆成「每架构 1 个 job」
-// 后，两个 job 都会产出同名元数据（latest.yml / latest-mac.yml）——release job 用
-// `cp -n` 收集，只有一份能生效，另一架构的用户将拿不到自己的更新条目。本 CLI 在
-// merge job 里把两份合成一份（Linux 的元数据本就按架构分文件，不参与合并）。
-//
-// 用法（无路径参数——源/目标目录是脚本内常量，见下）：
-//   tsx scripts/merge-update-metadata.ts
-//     · 读   artifacts/          （download-artifact 落盘的目录）
-//     · 写   merged-meta/        （作为独立 artifact 上传，供 release job 取用）
-//
-// 为什么不留 --dir/--out 之类的路径开关：本脚本在 CI 里只在两个固定目录间搬运，
-// 开放路径参数会引入不必要的路径注入面。本地复现时把产物放到 artifacts/ 即可；
-// 合并逻辑本身是纯函数（scripts/lib/update-metadata.ts），单测直接覆盖。
-//
-// 合并语义见 scripts/lib/update-metadata.ts 的文件头（与 electron-builder 对齐）。
-// ──────────────────────────────────────────────────────────────
+// 合并 Windows/macOS 双架构更新元数据（CD merge job 步骤）：build 拆成每架构一个
+// job 后两 job 各产同名 latest*.yml，cp -n 只有一份生效、另一架构用户拿不到更新
+// 条目；Linux 元数据本就按架构分文件，不参与合并。合并语义见 lib/update-metadata.ts
+// 用法：tsx scripts/merge-update-metadata.ts（无路径参数，源/目标为脚本内常量）
 
 import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
@@ -108,8 +94,6 @@ function findPair(
         pair[arch] = file;
       }
     } else {
-      // 路径里没有架构串：可能是 CD 回滚到「单 job 双架构」后的产物
-      // （artifact-suffix 回到 win / mac），也可能是目录结构不符预期
       unclassified.push(file);
     }
   }
@@ -140,12 +124,6 @@ function main(): void {
   }
   mkdirSync(outDir, { recursive: true });
 
-  // 每个待合并的元数据必须能确定「双架构来源」，否则失败。
-  // 两种可接受的形态：
-  //   a) 两份单架构（拆 job 后的正常形态）→ 合并；
-  //   b) 一份且已含双架构条目（CD 回滚到「单 job 双架构」后的形态）→ 原样透传。
-  // 其余情况（只有一份且是单架构）说明上游 build job 没按预期产出，严格失败：
-  // 让问题在 merge 阶段暴露，而不是拖到 publish 的资产断言。
   const problems: string[] = [];
   try {
     for (const name of MERGEABLE_NAMES) {
@@ -165,7 +143,6 @@ function main(): void {
         continue;
       }
 
-      // 无架构标签的候选（回滚场景）：若已是双架构则透传
       const candidates = [...unclassified, x64 ?? arm64].filter(
         (candidate): candidate is string => candidate !== undefined,
       );
@@ -207,8 +184,6 @@ function main(): void {
   }
 }
 
-// 仅在被直接执行时运行主逻辑（被单测 import 时不执行——本脚本 main() 会读写
-// artifacts/ 并在失败时 exit(1)，无守卫会让导入它的测试进程直接中断）
 if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main();
 }

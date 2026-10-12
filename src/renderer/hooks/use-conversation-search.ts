@@ -1,12 +1,3 @@
-// src/renderer/hooks/use-conversation-search.ts
-// 会话内搜索状态（对齐参考项目 superagent ConversationSearchBar + useConversationSearch）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 管理搜索状态（visible / query / currentMatch / totalMatches）
-// - findMessageMatches：消息级匹配纯函数（可单测）
-// - 导航循环：↑↓ / Enter / Shift+Enter 在匹配项间循环
-// ──────────────────────────────────────────────────────────────
-
 import type { UIMessage } from 'ai';
 import { useState } from 'react';
 import { extractText } from '@/lib/chat/message-text';
@@ -71,7 +62,6 @@ export function useConversationSearch(messages: readonly UIMessage[]): Conversat
   const [query, setQuery] = useState('');
   const [currentMatch, setCurrentMatch] = useState(-1);
 
-  // 匹配计算：纯派生，交给 React Compiler 记忆化（messages/query 变化时重算）
   const matchIndexes = findMessageMatches(messages, query);
 
   const open = () => {
@@ -88,14 +78,12 @@ export function useConversationSearch(messages: readonly UIMessage[]): Conversat
 
   const search = (nextQuery: string) => {
     setQuery(nextQuery);
-    // 重置到第一个匹配（查询变化时）
     setCurrentMatch(nextQuery.trim() === '' ? -1 : 0);
   };
 
   const navigate = (dir: 1 | -1) => {
     if (matchIndexes.length === 0) return;
     setCurrentMatch((prev) => {
-      // 无当前匹配（-1）时：下一个=第一个，上一个=最后一个
       if (prev === -1) {
         return dir === 1 ? 0 : matchIndexes.length - 1;
       }

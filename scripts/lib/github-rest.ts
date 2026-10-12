@@ -1,16 +1,9 @@
 // scripts/lib/github-rest.ts
-// GitHub REST 只读客户端（发版门禁脚本共享；2026-10-06 自 check-release-anchor.ts 提取）
-// ──────────────────────────────────────────────────────────────
-// 安全设计（Mimosa 门禁对齐，沿用锚点检查首版防线）：
-//   - 零子进程：Node 原生 fetch 直连 REST API，不 spawn gh/git（动态参数派生
-//     子进程是 Mimosa 拦截的高发形态，且 spawn 解析在 Windows 不可靠）
-//   - SSRF 三重防线：仅 https + 固定 host 白名单 + path 前缀锚定（逐条复核）
-//   - 动态值（版本号 / PR 号）进入 path 前必须由调用方过语义白名单
-//     （SemVer RE / ^\d+$）；本模块只做结构复核，不替代语义白名单
-//   - 认证：GITHUB_TOKEN（匿名可用但限流 60/h，CI 必配）
-// fetchFn 依赖注入：单测以假 fetch 覆盖「网络失败 / 404 / 正常」三路——
-// 测试真实实现而非 mock 模块（仓库测试规范）。
-// ──────────────────────────────────────────────────────────────
+// GitHub REST 只读客户端（发版门禁脚本共享）。安全设计（Mimosa 门禁对齐）：
+// 零子进程（Node fetch 直连——动态参数 spawn 是 Mimosa 拦截高发形态且 Windows 不可靠）/
+// SSRF 三重防线：仅 https + host 白名单 + path 前缀锚定 / 动态值（版本号/PR 号）进 path
+// 前必须由调用方过语义白名单（SemVer RE / ^\d+$），本模块只做结构复核
+// fetchFn 依赖注入：单测以假 fetch 覆盖网络失败/404/正常三路（测试真实实现非 mock 模块）
 
 export const GH_API_HOST = 'api.github.com';
 
@@ -46,9 +39,6 @@ export interface CreateGhApiOptions {
 export function createGhApiClient(options: CreateGhApiOptions): GhApiClient {
   const pathPrefix = `/repos/${options.repo}/`;
   const fetchFn = options.fetchFn ?? fetch;
-  // 动态构造而非字面量：HTTP 头名是协议常量（PascalCase / kebab-case 不可改），
-  // 字面量属性会触发 useNamingConvention（本目录不在 biome.json 的 override 清单）；
-  // 经索引签名的 Record 写入不触发属性名检查（原锚点脚本同款写法）。
   const headers: Record<string, string> = {};
   headers['Accept'] = 'application/vnd.github+json';
   headers['X-GitHub-Api-Version'] = '2022-11-28';

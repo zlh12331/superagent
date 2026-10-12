@@ -1,12 +1,3 @@
-// src/renderer/components/$1/approval-utils.test.ts
-// approval-utils 单元测试（2026-09-15 表驱动重构后）
-// ──────────────────────────────────────────────────────────────
-// 测试要点：
-// 1. getApprovalMeta：10 类型全量映射（icon/className/dangerous/canRemember）
-// 2. 协议外类型的编译期拒绝（satisfies Record 穷尽性，运行时不可达）
-// 3. getField / getBooleanField / getStringArrayField 类型守卫
-// ──────────────────────────────────────────────────────────────
-
 import {
   CloudUpload,
   FileDiff,
@@ -97,10 +88,8 @@ describe('approval-utils', () => {
 
     it('getNonEmptyField：空串按「无值」处理（getField 会返回空串）', () => {
       expect(getNonEmptyField({ command: 'ls' }, 'command')).toBe('ls');
-      // 关键差异：空命令视为无值（run_command 审批卡据此隐藏「编辑后重提」）
       expect(getNonEmptyField({ command: '' }, 'command')).toBeUndefined();
       expect(getField({ command: '' }, 'command')).toBe('');
-      // 与 getField 同源的守卫语义
       expect(getNonEmptyField({ command: 42 }, 'command')).toBeUndefined();
       expect(getNonEmptyField(null, 'command')).toBeUndefined();
       expect(getNonEmptyField({}, 'command')).toBeUndefined();

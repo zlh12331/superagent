@@ -1,13 +1,3 @@
-// src/renderer/hooks/use-update.ts
-// 自动更新状态读取 hook（薄封装：读 update-store + 暴露动作）
-// ──────────────────────────────────────────────────────────────
-// 状态来源：use-update-bridge（AppShell 唯一订阅点，见 update-store 头注释）。
-// 本 hook 不再自行订阅——此前三个消费点各订阅一次同一通道，是启动期重复
-// getStatus 的根因。
-//
-// 动作（check / cancel / install）直接走 IPC：它们不需要状态，也不应带来订阅。
-// ──────────────────────────────────────────────────────────────
-
 import type { UpdateStatusPayload } from '@code-agent/shared/renderer';
 
 import { useUpdateStore } from '@/stores/transient/update-store';
@@ -48,7 +38,6 @@ export function useUpdate(): UseUpdateResult {
       return;
     }
     await api.update.check({ manual: true });
-    // 主进程在检查发起时记录时间，这里同步刷新（无需再发一次 getStatus）
     markChecked(Date.now());
   };
 

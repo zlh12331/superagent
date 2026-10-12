@@ -1,19 +1,9 @@
-// e2e/smoke.prod.spec.ts
-// 生产构建冒烟测试
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 针对 electron-builder 打包后的 win-unpacked 可执行文件运行测试
-// - 验证生产构建（app.isPackaged === true）的真实运行情况
-// - 覆盖：应用启动、窗口渲染、preload 注入、IPC 全链路、SQLite 持久化
-//
-// 与 electron.spec.ts（dev 模式）的区别：
-// - 不验证 React DevTools（生产环境不安装）
-// - 不验证 RenderProfiler 埋点（生产环境透传，不收集）
-// - 聚焦：窗口可打开、IPC 可通、SQLite 可读写
-//
-// 运行方式：
-//   pnpm build:dist && pnpm test:smoke
-// ──────────────────────────────────────────────────────────────
+// e2e/smoke.prod.spec.ts：生产构建冒烟——用 _electron.launch 直接启动 electron-builder 打包产物
+// （release/ 下的 unpacked 可执行文件，而非 dev server），验证打包链路没把应用打坏。
+// 只覆盖「能起来」这一层：主界面渲染 / preload 注入 / IPC 全链路（含 SQLite 初始化）/ 启动耗时；
+// dev 专属行为不在生产构建里（React DevTools 仅在 !app.isPackaged 时安装，src/main/window.ts），
+// 那部分由 e2e/electron.spec.ts 覆盖。
+// 前置：pnpm build:dist 产出 release/；运行 pnpm test:smoke（release.yml 各平台 build job 同用此命令）。
 
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
@@ -21,34 +11,31 @@ import type { ElectronApplication, Page } from '@playwright/test';
 import { expect, test } from '@playwright/test';
 import { _electron as electron } from 'playwright';
 
-// P5 修复：按平台解析打包产物可执行文件路径（此前硬编码 Windows 路径，
-// 而 CI smoke-prod 双平台 + release.yml 三平台矩阵都会跑本 spec——
-// Linux/macOS 上「可执行文件不存在」必挂，长期红灯掩盖真实回归）。
-// electron-builder 产物约定（2026-09-20 多架构后目录名带架构后缀，见
-// platformPackager.computeAppOutDir：`${platform}${getArchSuffix(arch)}-unpacked`，
-// 默认架构 x64 不带后缀）：
-// - Windows：release/win-unpacked 或 win-arm64-unpacked
-// - Linux：release/linux-unpacked 或 linux-arm64-unpacked
-// - macOS：release/mac（x64）/ mac-arm64，.app 在其中的 Contents/MacOS/
-// 选择策略：优先匹配**当前进程架构**的目录（CI 上 runner 架构即目标架构之一；
-// Windows/macOS 单 job 产出双架构时，只有本机架构的产物可被 smoke 启动）。
+// 下面两个名字必须与 electron-builder.yml 的产物命名一致（productName / linux.executableName）：
+// 改打包配置时这里要同步，否则路径解析全落空，只会以「可执行文件不存在」的形式失败
 const PRODUCT_NAME = 'Code Agent Desktop';
 const LINUX_EXECUTABLE = 'code-agent-desktop';
 
 /** 当前架构对应的 unpacked 目录后缀（x64 为默认架构，无后缀） */
 const ARCH_SUFFIX = process.arch === 'arm64' ? '-arm64' : '';
 
-/** 按候选顺序找到第一个存在的路径 */
+/**
+ * 按候选顺序返回第一个存在的路径。
+ *
+ * 全都不存在时返回首选路径，好让调用方的前置检查以「可执行文件不存在」报错，而不是得到空串。
+ */
 function firstExisting(candidates: readonly string[]): string {
   for (const candidate of candidates) {
     if (existsSync(candidate)) {
       return candidate;
     }
   }
-  // 都不存在时返回首选路径，让测试以「文件不存在」的真实原因失败
   return candidates[0] ?? '';
 }
 
+// 打包产物路径按平台解析（unpacked 目录名带架构后缀，x64 无后缀——见 ARCH_SUFFIX）：
+// Windows/Linux 为 release/<platform>[-arm64]-unpacked/，macOS 为 release/mac[-arm64|-x64]/*.app/Contents/MacOS/。
+// 候选顺序把当前进程架构的目录排前：只有本机架构的构建才一定能在本机启动，其余目录仅作回退。
 function resolvePackagedExecutable(): string {
   const releaseDir = join(process.cwd(), 'release');
   if (process.platform === 'win32') {
@@ -65,7 +52,6 @@ function resolvePackagedExecutable(): string {
       ),
     );
   }
-  // macOS：本机架构目录优先，再回退到其它已知目录名（mac 为 x64 默认，无后缀）
   const preferred =
     process.arch === 'arm64' ? ['mac-arm64', 'mac'] : ['mac', 'mac-arm64', 'mac-x64'];
   return firstExisting(
@@ -77,19 +63,18 @@ function resolvePackagedExecutable(): string {
 
 const EXECUTABLE_PATH = resolvePackagedExecutable();
 
-// 启动打包后的 Electron 应用
+/** 启动打包产物并返回 DOM 就绪的首窗；可执行文件缺失时抛出带构建提示的错误 */
 async function launchPackagedApp(): Promise<{ app: ElectronApplication; page: Page }> {
-  // 前置检查：可执行文件必须存在
   if (!existsSync(EXECUTABLE_PATH)) {
     throw new Error(`可执行文件不存在：${EXECUTABLE_PATH}\n请先执行 pnpm build:dist 生成打包产物`);
   }
 
   const app = await electron.launch({
     executablePath: EXECUTABLE_PATH,
-    // 生产环境不需要 ELECTRON_RENDERER_URL，应用会 loadFile 加载本地 renderer
+    // 生产构建不经 ELECTRON_RENDERER_URL，主进程 loadFile 加载打包内的 renderer（src/main/window.ts）
     env: {
       ...process.env,
-      // 生产模式：确保不进入 dev 逻辑
+      // 压成 production：runner 继承的 NODE_ENV=test 会让 appEnv 判成 test（src/main/config/index.ts）
       NODE_ENV: 'production',
     },
   });
@@ -103,6 +88,7 @@ test.describe('生产构建冒烟测试', () => {
   let app: ElectronApplication;
   let page: Page;
 
+  // 每条用例独立启停应用：避免残留窗口 / 单实例锁（src/main/index.ts）影响下一条
   test.afterEach(async () => {
     if (app) {
       await app.close();
@@ -112,11 +98,9 @@ test.describe('生产构建冒烟测试', () => {
   test('应用启动并渲染主界面', async () => {
     ({ app, page } = await launchPackagedApp());
 
-    // 应用标题正确
     const title = await page.title();
     expect(title).toContain('Code Agent Desktop');
 
-    // root 节点有子元素（React 已渲染）
     const rootChildCount = await page.evaluate(() => {
       const root = document.getElementById('root');
       return root?.childElementCount ?? 0;
@@ -133,14 +117,14 @@ test.describe('生产构建冒烟测试', () => {
     });
 
     expect(apiKeys).not.toBeNull();
-    // 验证关键域存在（preload 正常注入）
+    // 这里只抽样关键域（完整清单真源：packages/shared/src/ipc/meta.ts）；断言 models 而非 codebase——
+    // codebase 查询走工具（src/main/infra/ai/tools/codebase.tool.ts），不占独立 IPC 域
     expect(apiKeys).toContain('app');
     expect(apiKeys).toContain('session');
     expect(apiKeys).toContain('system');
     expect(apiKeys).toContain('agent');
     expect(apiKeys).toContain('file');
     expect(apiKeys).toContain('git');
-    // codebase 查询走工具（codebase tool）而非独立 IPC 域，此处断言现役 models 域
     expect(apiKeys).toContain('models');
     expect(apiKeys).toContain('tool');
     expect(apiKeys).toContain('settings');
@@ -157,7 +141,7 @@ test.describe('生产构建冒烟测试', () => {
       };
     });
 
-    // SQLite 初始化成功才能返回数据
+    // session/list 直连 SQLite：返回 data 即证明打包产物的库初始化（含 drizzle 迁移）成功
     expect(result.hasError).toBe(false);
     expect(result.hasData).toBe(true);
   });
@@ -176,12 +160,13 @@ test.describe('生产构建冒烟测试', () => {
 
     expect(result.hasError).toBe(false);
     expect(result.hasData).toBe(true);
-    // 生产构建必须返回 isPackaged === true
+    // isPackaged 取自 Electron 的 app.isPackaged（src/main/ipc/system.handler.ts）：
+    // 断言 true 才说明被测的是打包产物本身，而非源码启动
     expect(result.isPackaged).toBe(true);
   });
 
   test('生产构建启动到可交互 < 10s（分段报告）', async () => {
-    // 前置检查（与 launchPackagedApp 一致，但需分段计时故独立实现）
+    // 前置检查与 launchPackagedApp 等价，但本用例要分段计时，故不共用而独立实现
     if (!existsSync(EXECUTABLE_PATH)) {
       throw new Error(
         `可执行文件不存在：${EXECUTABLE_PATH}\n请先执行 pnpm build:dist 生成打包产物`,
@@ -201,14 +186,15 @@ test.describe('生产构建冒烟测试', () => {
     await page.waitForLoadState('domcontentloaded');
     const t3 = Date.now(); // DOM 加载完成
 
-    // UI 就绪：输入框可见（React 挂载完成——生产首页无品牌文本，textarea 是最稳标志）
+    // UI 就绪判据：React 挂载后才会渲染出聊天输入框（src/renderer/components/chat/ChatInput.tsx）
     const input = page.locator('textarea').first();
+    // 单步上限 15s，宽于总预算 10s：冷启动慢时报「输入框始终不可见」，即 React 未挂载这一具体症状
     await expect(input).toBeVisible({ timeout: 15_000 });
-    const t4 = Date.now(); // React 首屏渲染完成
+    const t4 = Date.now();
 
-    // 可交互：输入框可聚焦（真实键盘事件可写入）
+    // 「可交互」判据：能对输入框完成一次输入操作，而不只是元素出现
     await input.fill('');
-    const t5 = Date.now(); // 可交互
+    const t5 = Date.now();
 
     const total = t5 - t0;
     console.log(
@@ -232,10 +218,10 @@ test.describe('生产构建冒烟测试', () => {
       errors.push(err.message);
     });
 
-    // 等待应用完全渲染
+    // 渲染期报错在 load 之后才到达，没有「收齐」事件可等，故留固定观察窗口
     await page.waitForTimeout(2000);
 
-    // 过滤已知的非阻塞警告（如 CSP 警告、DevTools 提示）
+    // 滤掉非阻塞噪音（DevTools 安装提示、CSP 相关输出）：它们不代表业务回归，但会让用例常红
     const criticalErrors = errors.filter(
       (e) =>
         !e.includes('DevTools') &&

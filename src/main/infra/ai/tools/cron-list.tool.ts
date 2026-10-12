@@ -1,22 +1,11 @@
-// src/main/infra/ai/tools/cron-list.tool.ts
-// cron_list 工具：列出定时任务（对齐 qwen cron_list 工具语义）
-// ──────────────────────────────────────────────────────────────
-// 设计：
-// - 列出全部定时任务（创建时间倒序），精简展示
-// - permission='auto' / category='read'：只读
-// ──────────────────────────────────────────────────────────────
-
+// cron-list.tool.ts：cron_list 工具——列定时任务
 import { z } from 'zod';
 import { t } from '../../i18n';
 import { cronService } from '../agent/cron-service';
 import type { Tool, ToolContext, ToolResult } from './tool';
 
-/** cron_list 入参（无字段） */
 const CronListInputSchema = z.object({});
 
-/**
- * 创建 cron_list 工具（依赖模块级 CronService 单例）
- */
 export function createCronListTool(): Tool<Record<string, never>> {
   return {
     name: 'cron_list',

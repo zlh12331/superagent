@@ -1,13 +1,3 @@
-// src/renderer/components/settings/SettingsDialog.tsx
-// 设置全屏页 · 组装层
-// ──────────────────────────────────────────────────────────────
-// 设计（用户要求全屏形态，对齐桌面 LLM 客户端设置页）：
-// - Sheet 全屏覆盖（无抽屉调宽，右上角关闭按钮避让窗口控件）
-// - 左侧分组导航（tablist 语义 + 方向键循环）
-// - 右侧内容区按 activeSection 分发渲染（renderSection 集中分发）
-// - 现有 sections/ 面板保持独立（拆分成果保留），本文件仅编排
-// ──────────────────────────────────────────────────────────────
-
 import type { LucideIcon } from 'lucide-react';
 import {
   ArrowLeft,
@@ -81,7 +71,6 @@ const NAV_GROUPS: readonly NavGroup[] = [
     items: [
       { id: 'usage', labelKey: 'settings.nav.usage', icon: BarChart3 },
       { id: 'general', labelKey: 'settings.nav.general', icon: SettingsIcon },
-      // 网络代理（34 号）：运行环境域——代理/直连模式 + 测试连接
       { id: 'proxy', labelKey: 'settings.nav.proxy', icon: Network },
       { id: 'mobile', labelKey: 'settings.nav.mobile', icon: Smartphone },
     ],
@@ -89,15 +78,12 @@ const NAV_GROUPS: readonly NavGroup[] = [
   {
     labelKey: 'settings.group.capabilities',
     items: [
-      // 模型：模型管理列表页 + 弹窗（文档蓝图形态）
       { id: 'models', labelKey: 'settings.nav.models', icon: ServerIcon },
       { id: 'mcp', labelKey: 'settings.nav.mcp', icon: Plug },
       { id: 'skills', labelKey: 'settings.nav.skills', icon: Sparkles },
       { id: 'browser', labelKey: 'settings.nav.browser', icon: Globe },
       { id: 'workspace', labelKey: 'settings.nav.workspace', icon: FolderTree },
-      // 终端（36 号 B）：默认 shell 选择 + 字号（交互式终端域）
       { id: 'terminal', labelKey: 'settings.nav.terminal', icon: TerminalSquare },
-      // 快捷键：自定义键录制/冲突检测/恢复默认 + 固定键速查（原嵌通用页，独立分区提升可发现性）
       { id: 'shortcuts', labelKey: 'settings.nav.shortcuts', icon: Keyboard },
     ],
   },
@@ -105,7 +91,6 @@ const NAV_GROUPS: readonly NavGroup[] = [
     labelKey: 'settings.group.agent',
     items: [
       { id: 'rules-memory', labelKey: 'settings.nav.rulesMemory', icon: BookOpenText },
-      // 审批权限：工具审批策略（自模型 pane 拆出独立，属智能与行为域）
       { id: 'approval-mode', labelKey: 'settings.nav.approvalMode', icon: ShieldCheck },
     ],
   },
@@ -164,8 +149,6 @@ function renderSection(section: SettingsSectionId, drawerOpen: boolean): ReactEl
  */
 export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps): ReactElement {
   const { t } = useTranslation();
-  // 分区状态收敛 ui-store：支持"打开并直达指定分区"（顶栏更新指示 → 关于），
-  // 且普通入口（openSettings() 不带分区）落在默认分区，等价于此前的打开即重置。
   const activeSection = useUiStore((s) => s.settingsSection ?? DEFAULT_SECTION);
   const setActiveSection = useUiStore((s) => s.setSettingsSection);
 
@@ -175,7 +158,6 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps): Rea
         <SheetTitle className="sr-only">{t('settings.title')}</SheetTitle>
         <SheetDescription className="sr-only">{t('settings.desc')}</SheetDescription>
 
-        {/* 头部（左上角返回按钮；右侧预留窗口控件 overlay 区 140px 透明拖拽） */}
         <div className="bg-muted/50 flex shrink-0 items-center gap-2.5 border-b px-[18px] py-3.5">
           <Button
             variant="ghost"
@@ -190,13 +172,10 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps): Rea
           <SettingsIcon className="text-primary size-4" strokeWidth={1.5} />
           <span className="text-foreground text-sm font-semibold">{t('settings.title')}</span>
           <span className="text-muted-foreground font-mono text-xs">{t('settings.desc')}</span>
-          {/* 窗口控件 overlay 预留区（透明拖拽：不遮挡系统关闭/最小化按钮） */}
           <div className="app-region-drag ml-auto h-full w-[140px] shrink-0" aria-hidden="true" />
         </div>
 
-        {/* 主体：左导航 + 右内容 */}
         <div className="grid min-h-0 min-w-0 flex-1 grid-cols-[160px_1fr] overflow-hidden">
-          {/* 导航 */}
           <div
             className="bg-muted/30 overflow-y-auto overflow-x-hidden border-r px-2 py-3"
             role="tablist"
@@ -240,8 +219,6 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps): Rea
                       onClick={() => setActiveSection(item.id)}
                       className={cn(
                         'text-muted-foreground hover:bg-muted hover:text-foreground mb-0.5 flex w-full items-center gap-[9px] rounded-[calc(var(--radius)-1px)] border-l-2 border-l-transparent px-2.5 py-2 text-left text-sm transition-colors',
-                        // 激活态：accent 竖条（对齐原型 L3535 inset 2px）+ 文字用 foreground
-                        // （text-primary 青色在浅色模式白底上仅 2.51:1，不满足 WCAG AA）
                         isActive &&
                           'bg-card text-foreground border-l-[color:var(--accent)] font-medium',
                       )}
@@ -255,10 +232,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps): Rea
             ))}
           </div>
 
-          {/* 内容区 */}
           <div className="overflow-y-auto overflow-x-hidden px-5 py-[18px]">
-            {/* 组件级错误边界：pane 抛错局部降级（不拖垮整个设置抽屉）；
-               resetKeys 随分区切换重置错误态——此前切分区后错误残留 */}
             <SectionErrorBoundary name={`settings:${activeSection}`} resetKeys={[activeSection]}>
               {renderSection(activeSection, open)}
             </SectionErrorBoundary>

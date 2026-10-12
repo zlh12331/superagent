@@ -1,33 +1,11 @@
-// src/main/infra/ai/agent/turn-assembly.ts
-// 回合的「装配 + 流消费」：从模型实例到 TurnRunner 统计的一段纯参数化流程
-// ──────────────────────────────────────────────────────────────
-// 在回合生命周期中的位置：机器（agent-turn-machine）在 running 态经
-// deps.executeTurn 调用本模块；本模块返回决策数据（reason/usage/part 计数），
-// 由机器 deciding 决策链裁决终态、由宿主三个 finalize 收尾——本模块**不做
-// 任何终态判定**（超时/空回复/中断的归因都在机器）。
-//
-// 六步流程（与提取前的 agent-service.executeTurn 逐行等价）：
-//   1. 取 model 实例（ai-provider 单例）
-//   2. 建模型级总时长超时信号（与用户中断合并为同一 abort 形态）
-//   3. 生成参数与上下文预算（委托宿主 resolveGeneration）
-//   4. createStreamWithRetry 创建流（首 part 预读，传输层失败可重试）
-//   5. TurnRunner 消费（读流 → 翻译 → 事件产出 → 统计）
-//   6. 等 usage（PromiseLike，失败静默置 null）
-//
-// 为什么独立成模块（38 号 spec 阶段 1）：这约 130 行是纯「参数装配 + 流消费」，
-// 与机器控制流、宿主收尾正交；抽出后 agent-service 净行回到 file-size 棘轮门槛内。
-//
-// 与宿主的职责边界（抽出的取舍，改动前先读）：
-// - 订阅装配（subscribeTurnAccumulators）留宿主：累积器（assistantText /
-//   transcriptEntries）是收尾闭包持有的状态，跨模块传递徒增接口面
-// - 用户消息落库（persistUserMessageQuietly）留宿主：写 DB 是宿主效果
-// - 模型级超时定时器的**创建与清理都在本模块**（谁创建谁清理，try/finally）——
-//   38 号阶段 2 收尾修复：提取时清理链曾断裂，宿主的 clearModelTimeout
-//   沦为对一个从未赋值的变量的 no-op
-// ──────────────────────────────────────────────────────────────
+// turn-assembly.ts：单回合执行拼装——模型解析 → 流创建（重试+首 part 预读）→ TurnRunner 消费 →
+// 工具调用修复接线 → TurnDeps.executeTurn 的真身（机器编排的是它）
 
+import { randomUUID } from 'node:crypto';
 import type { ChatMessage } from '@code-agent/shared/main';
-import { isStepCount, streamText } from 'ai';
+import { ModelRetryReason } from '@code-agent/shared/main';
+import { isStepCount, type LanguageModel, streamText } from 'ai';
+import { logger } from '../../../utils/logger';
 import { createSdkTelemetryIntegration } from '../../telemetry/sdk-telemetry';
 import { combineAbortSignals, createTimeoutSignal } from '../agent-runtime/abort-utils';
 import { createStreamWithRetry } from '../agent-runtime/create-stream';
@@ -39,16 +17,11 @@ import { getModel } from '../llm-client/ai-provider';
 import type { LlmClient } from '../llm-client/llm-client';
 import type { GenerationOptions } from '../models/generation-options';
 import type { ResolvedModel } from '../models/types';
+import { classifyModelFailure } from '../tools/error-classifier';
 import type { StartAgentOptions } from './agent-service';
 import { createRepairToolCall } from './repair-tool-call';
 import type { SdkTotalUsageLike } from './turn-usage-report';
 
-/**
- * 装配 + 消费入参
- *
- * 宿主闭包状态经此传入，本模块自身无状态（不持有跨调用数据）——所有跨步骤
- * 共享的引用（emitter/累积器/合帧器）都由宿主创建并在此借入。
- */
 export interface TurnAssemblyArgs {
   readonly sessionId: string;
   readonly turnId: string;
@@ -56,16 +29,8 @@ export interface TurnAssemblyArgs {
   readonly options: StartAgentOptions;
   readonly controller: AbortController;
   readonly turnEmitter: TurnEventEmitter;
-  /** 回合转录累积（宿主数组引用；本模块向其中 push reasoning 条目） */
   readonly transcriptEntries: TurnTranscriptEntry[];
-  /** 原始 part 推送（宿主合帧缓冲：text-delta 微批合帧 + 其余透传，P2-31） */
   readonly pushPart: (part: unknown) => void;
-  /**
-   * 生成参数解析（宿主方法：token 预算决策 / 上下文压缩 / 采样参数）
-   *
-   * 放在宿主而非本模块的原因：预算决策需要 toolRegistry（固定开销估算）与
-   * 日志/遥测，属宿主已装配的依赖面。
-   */
   readonly resolveGeneration: (
     systemPrompt: string,
     span: SpanLike,
@@ -73,40 +38,186 @@ export interface TurnAssemblyArgs {
     readonly compressedMessages: ChatMessage[];
     readonly genOptions: GenerationOptions;
   };
-  /** AI SDK 工具集合（宿主 toolRegistry.toAISDKTools 产物，含 executeHook 注入） */
   readonly tools: Record<string, unknown>;
-  /** 系统提示词（undefined 时 streamText 不带 system 字段） */
   readonly systemPrompt: string | undefined;
-  /** LLM 客户端（仅用于 repairToolCall 工具入参修复；未注入则不挂钩子） */
   readonly llmClient: LlmClient | undefined;
+  /** 已产出的 assistant 部分文本（流恢复锚点的数据源；随 text delta 实时更新） */
+  readonly getAssistantPartialText: () => string;
+  /** 限流上报：重试观测到 429 时回调（定向本回合 provider 桶冷却） */
+  readonly onRateLimited?: (durationMs: number) => void;
+  /** 尝试级准入：每次模型流尝试前 acquire（拿票）、终态 release + 学习信号上报（方案 A——
+   * 闸约束的是 provider 真实在飞数，退避期不持票）；缺省=无闸直通 */
+  readonly gateAdmission?: {
+    /** 等待槽位/冷却（AbortSignal 取消排队）；返回 release（幂等） */
+    acquire: () => Promise<() => void>;
+    /** 尝试终态学习信号：成功计 streak / 限流评价 cap / 其余失败只释放 */
+    reportOutcome: (outcome: 'succeeded' | 'throttled' | 'failed') => void;
+  };
   readonly span: SpanLike;
 }
 
-/**
- * OTel Span 的结构子集
- *
- * 只声明本模块用到的 setAttribute——避免为一个可选遥测调用把
- * @opentelemetry/api 的类型依赖引入本模块（宿主传入的 span 结构上兼容）。
- */
 export interface SpanLike {
   setAttribute(key: string, value: string | number | boolean): void;
 }
 
-/**
- * 装配 streamText 并消费至回合结束
- *
- * 六步流程见文件头。**不做终态判定**：返回值（reason / usage / rawPartCount /
- * timeoutSignalAborted）是原始决策数据，超时/空回复/中断的归因与终态裁决
- * 由机器的 deciding 决策链完成。
- *
- * 失败语义：本模块内部错误直接抛出（由机器 invoke 的 onError 承接）；但
- * 两个「可容忍失败」就地静默——usage 获取失败置 null、流空闲超时由 TurnRunner
- * 归类为 timeout reason。
- *
- * @param args 装配入参（宿主闭包状态；见 TurnAssemblyArgs）
- * @returns 决策数据（reason/durationMs/rawPartCount/usage/timeoutSignalAborted）
- * @throws 装配或流消费的不可容忍错误（机器按 isAbortFailure/error 分流）
- */
+/** 尝试级准入端口形状（TurnDeps.gateAdmission / RecoveryContext 共用） */
+interface GateAdmissionPort {
+  acquire(): Promise<() => void>;
+  reportOutcome(outcome: 'succeeded' | 'throttled' | 'failed'): void;
+}
+
+/** 流恢复独立预算：与首读重试/限流重试互不占用 */
+const STREAM_RECOVERY_MAX = 3;
+
+/** 恢复轮的对话锚点：已产出的 assistant 部分文本并入 messages（provider 收到完整上下文）。
+ * ⚠ 恢复语义是「追加续写」不是「重答」：assistantText 渲染层/入库继续 += 累积，
+ * 恢复指令要求从中断处继续——provider 不遵守时最多出现重复段落，不会丢内容
+ * （零协议改动；替换式恢复需要 turn-reset 事件 + 消费面重置，代价不成比例） */
+function buildAttemptMessages(ctx: RecoveryContext, streamRecoveryCount: number): ChatMessage[] {
+  if (streamRecoveryCount === 0 || ctx.getAssistantPartialText().length === 0) {
+    return ctx.compressedMessages;
+  }
+  return [
+    ...ctx.compressedMessages,
+    {
+      role: 'assistant' as const,
+      content: ctx.getAssistantPartialText(),
+    },
+    {
+      role: 'user' as const,
+      content:
+        '（你上面的回复因连接中断被截断，已有内容用户已收到。请直接从中断处继续输出剩余内容，不要重复已有部分。）',
+    },
+  ];
+}
+
+/** 空补全决策日志（retry / retried-still-empty 两分支共用） */
+function logEmptyCompletion(
+  sessionId: string,
+  turnId: string,
+  callId: string,
+  decision: 'retry' | 'retried-still-empty',
+): void {
+  logger.warn(
+    { sessionId, turnId, callId },
+    decision === 'retry'
+      ? '模型空补全（零文本零工具零 part）：重开流重试一次'
+      : '空补全重试后仍为空：按原样完成',
+  );
+}
+
+/** 空补全三态决策：'retry'（首遇空补全，重开流）/ 'retried-still-empty'（重试后仍空，接受完成）/ 'ok'（非空补全） */
+function decideEmptyCompletion(
+  runResult: TurnRunResult,
+  rawParts: number,
+  alreadyRetried: boolean,
+  getAssistantPartialText: () => string,
+): 'retry' | 'retried-still-empty' | 'ok' {
+  if (runResult.reason !== 'completed' || rawParts > 0 || getAssistantPartialText().length > 0) {
+    return 'ok';
+  }
+  return alreadyRetried ? 'retried-still-empty' : 'retry';
+}
+
+/** 恢复判定：可重试失败 + 已产出部分内容 + 预算未尽 + 未中止 → 允许从对话锚点重开 */
+function shouldAttemptRecovery(
+  appError: ReturnType<typeof classifyModelFailure>,
+  signal: AbortSignal,
+  recoveryCount: number,
+  getAssistantPartialText: () => string,
+): boolean {
+  return (
+    !signal.aborted &&
+    appError.retryable &&
+    recoveryCount < STREAM_RECOVERY_MAX &&
+    getAssistantPartialText().length > 0
+  );
+}
+
+/** 失败学习信号分流：rate_limited → throttled（评价 cap）/ 其余可重试 → failed 只释放 */
+function reportFailureToGate(
+  gate: GateAdmissionPort | undefined,
+  appError: ReturnType<typeof classifyModelFailure>,
+): void {
+  if (gate === undefined) {
+    return;
+  }
+  if (appError.retryReason === ModelRetryReason.RateLimited) {
+    gate.reportOutcome('throttled');
+  } else if (appError.retryable) {
+    gate.reportOutcome('failed');
+  }
+}
+
+function logRecoveryStart(fields: {
+  readonly sessionId: string;
+  readonly turnId: string;
+  readonly callId: string;
+  readonly attempt: number;
+  readonly max: number;
+  readonly discardedChars: number;
+  readonly error: unknown;
+}): void {
+  logger.warn(
+    {
+      sessionId: fields.sessionId,
+      turnId: fields.turnId,
+      callId: fields.callId,
+      recoveryAttempt: fields.attempt,
+      recoveryMax: fields.max,
+      discardedChars: fields.discardedChars,
+      error: fields.error instanceof Error ? fields.error.message : String(fields.error),
+    },
+    '流中断恢复：从对话锚点重开',
+  );
+}
+
+/** streamText 参数装配（create: 闭包的载荷——复杂度热点提取；callId 每轮经重读 latest 拿新值） */
+function buildStreamTextParams(parts: {
+  readonly model: LanguageModel;
+  readonly attemptMessages: ChatMessage[];
+  readonly systemPrompt: string | undefined;
+  readonly genOptions: GenerationOptions;
+  readonly callIdGetter: () => string;
+  readonly tools: Record<string, unknown>;
+  readonly maxSteps: number;
+  readonly maxRetries: number;
+  readonly effectiveAbortSignal: AbortSignal | undefined;
+  readonly llmClient: LlmClient | undefined;
+}): Parameters<typeof streamText>[0] {
+  return {
+    model: parts.model,
+    messages: parts.attemptMessages,
+    allowSystemInMessages: true,
+    ...(parts.systemPrompt !== undefined ? { system: parts.systemPrompt } : {}),
+    ...parts.genOptions.samplingOptions,
+    ...(parts.genOptions.maxOutputTokens !== undefined
+      ? { maxOutputTokens: parts.genOptions.maxOutputTokens }
+      : {}),
+    providerOptions: {
+      ...(parts.genOptions.providerOptions ?? {}),
+      codeagent: { callId: parts.callIdGetter() },
+    },
+    tools: parts.tools as Record<string, never>,
+    stopWhen: isStepCount(parts.maxSteps),
+    maxRetries: parts.maxRetries,
+    ...(parts.effectiveAbortSignal !== undefined
+      ? { abortSignal: parts.effectiveAbortSignal }
+      : {}),
+    ...(parts.llmClient !== undefined
+      ? {
+          repairToolCall: createRepairToolCall({
+            llmClient: parts.llmClient,
+            ...(parts.effectiveAbortSignal !== undefined
+              ? { signal: parts.effectiveAbortSignal }
+              : {}),
+          }),
+        }
+      : {}),
+    telemetry: { integrations: [createSdkTelemetryIntegration()] },
+  };
+}
+
 export async function assembleAndRunTurn(args: TurnAssemblyArgs): Promise<TurnRunOutputLike> {
   const {
     sessionId,
@@ -121,139 +232,260 @@ export async function assembleAndRunTurn(args: TurnAssemblyArgs): Promise<TurnRu
     systemPrompt,
     tools,
     llmClient,
+    getAssistantPartialText,
+    onRateLimited,
+    gateAdmission,
     span,
   } = args;
-  // 1. 取 model 实例（ai-provider 模块级单例，与 ChatService 同源）
-  //    必须传 resolvedModel.modelId 而非 undefined：宿主已按「请求 modelId →
-  //    设置 ai.defaultModel → 默认模型」解析出 ResolvedModel，此处若再传
-  //    undefined，会二次解析回默认模型，导致「元数据/生成参数取自 A 模型、
-  //    实际请求发给 B 模型」的分裂。显式传 id 与宿主解析结果恒等
-  //    （resolve 幂等：同 id 再解析返回同一 providerKind / capabilities）
-  const model = await getModel(resolvedModel.modelId);
+  // 模型实例解析（一次捕获，跨恢复尝试复用）：getModel 兼做 providerCache 预热。
+  // ⚠️ 不能传字符串 id 给 streamText——字符串经全局 provider 注册表（AI Gateway）
+  // 解析而非项目供应商工厂，afa9b534 曾因此把每个回合路由到 Gateway（集成测试抓到）
+  const languageModel = await getModel(resolvedModel.modelId);
 
-  // 2. 模型级总时长超时（P0-1）：仅当模型配置了 timeoutMs 才创建信号。
-  //    数据来源（2026-10-07 接通）：runtime_models.timeout_ms 列（设置页模型
-  //    弹窗可配，经 ModelRegistry 与内置 generationConfig 合并）+ 内置模型条目。
-  //    未配置时 modelTimeout 仍为 undefined——仅流空闲超时兜底（stream-reader），
-  //    与本信号互补：空闲超时管「无字节」，总时长管「有进展但整体跑飞」。
-  let modelTimeout: ReturnType<typeof createTimeoutSignal> | undefined;
-  if (resolvedModel.generationConfig?.timeoutMs !== undefined) {
-    modelTimeout = createTimeoutSignal(resolvedModel.generationConfig.timeoutMs);
-  }
-  // 合并信号：超时与用户中断折叠为同一 abort 形态（下游 TurnRunner 靠 isTimeout
-  // 回调再区分二者——timeout 走错误出口、aborted 走中断出口）
-  const effectiveAbortSignal = combineAbortSignals([controller.signal, modelTimeout?.signal]);
-
-  // 3. 生成参数与上下文预算：委托宿主（预算决策/压缩/采样参数解析需要宿主已装配
-  //    的 toolRegistry 与日志/遥测）。systemPrompt 为空串时仍传入——宿主内部据此
-  //    口径估算固定开销
   const { compressedMessages, genOptions } = resolveGeneration(systemPrompt ?? '', span);
-  let rawParts = 0;
+  const rawPartCounter = { count: 0 };
 
-  // 4. 创建流 + 消费。try/finally 的意义：模型级超时定时器由本模块创建，
-  //    也必须由本模块清理（回合结束即释放，防「长超时 × 高频回合」堆积定时器）。
+  const recovery = await runRecoveryLoop({
+    sessionId,
+    turnId,
+    resolvedModel,
+    model: languageModel,
+    options,
+    controller,
+    turnEmitter,
+    transcriptEntries,
+    pushPart,
+    compressedMessages,
+    genOptions,
+    systemPrompt,
+    tools,
+    llmClient,
+    getAssistantPartialText,
+    onRateLimited,
+    gateAdmission,
+    span,
+    onRawPart: () => {
+      rawPartCounter.count += 1;
+    },
+  });
+
+  return {
+    reason: recovery.runResult.reason,
+    durationMs: recovery.runResult.durationMs,
+    rawPartCount: rawPartCounter.count,
+    usage: recovery.usage,
+    timeoutSignalAborted: recovery.modelTimeoutAborted,
+  };
+}
+
+interface RecoveryContext {
+  readonly sessionId: string;
+  readonly turnId: string;
+  readonly resolvedModel: ResolvedModel;
+  readonly model: LanguageModel;
+  readonly options: StartAgentOptions;
+  readonly controller: AbortController;
+  readonly turnEmitter: TurnEventEmitter;
+  readonly transcriptEntries: TurnTranscriptEntry[];
+  readonly pushPart: (part: unknown) => void;
+  readonly compressedMessages: ChatMessage[];
+  readonly genOptions: GenerationOptions;
+  readonly systemPrompt: string | undefined;
+  readonly tools: Record<string, unknown>;
+  readonly llmClient: LlmClient | undefined;
+  readonly getAssistantPartialText: () => string;
+  readonly onRateLimited: ((durationMs: number) => void) | undefined;
+  readonly gateAdmission:
+    | {
+        acquire(): Promise<() => void>;
+        reportOutcome(outcome: 'succeeded' | 'throttled' | 'failed'): void;
+      }
+    | undefined;
+  readonly span: SpanLike;
+  readonly onRawPart: () => void;
+}
+
+/**
+ * 恢复循环（core 级）：边界后断流且可重试时，把已产出的 assistant 部分文本并入对话重开流；
+ * 独立预算（STREAM_RECOVERY_MAX），中止/timeout/恢复耗尽后原样上抛。
+ */
+async function runRecoveryLoop(ctx: RecoveryContext): Promise<{
+  runResult: TurnRunResult;
+  usage: unknown;
+  modelTimeoutAborted: boolean;
+}> {
   let runResult: TurnRunResult;
   let usage: SdkTotalUsageLike | null = null;
-  try {
-    // 4a. createStreamWithRetry：请求级重试（默认 3 次尝试）**只兜 SDK 覆盖不到的
-    //     传输层失败**；HTTP 类错误（429/5xx）已由 streamText 的 model call 级
-    //     maxRetries 重试，两层不叠加（否则尝试次数相乘）。首 part 成功后不再重试
-    //     ——流中错误重试会重复工具副作用。
-    const created = await createStreamWithRetry({
-      create: () =>
-        streamText({
-          model,
-          messages: compressedMessages,
-          // 允许 messages 中携带 system（本仓消息历史可能含 system 条目）
-          allowSystemInMessages: true,
-          // 条件展开：exactOptionalPropertyTypes 下可选字段不可显式传 undefined
-          ...(systemPrompt !== undefined ? { system: systemPrompt } : {}),
-          ...genOptions.samplingOptions,
-          ...(genOptions.maxOutputTokens !== undefined
-            ? { maxOutputTokens: genOptions.maxOutputTokens }
-            : {}),
-          ...(genOptions.providerOptions !== undefined
-            ? { providerOptions: genOptions.providerOptions }
-            : {}),
-          tools: tools as Record<string, never>,
-          // 多轮工具调用上限（AI SDK v7 以 stopWhen 取代旧 maxSteps）
-          stopWhen: isStepCount(options.maxSteps),
-          // model call 级重试真源：模型配置优先，缺省 2 次重试（= 3 次尝试）
-          maxRetries: resolvedModel.generationConfig?.maxRetries ?? 2,
-          ...(effectiveAbortSignal !== undefined ? { abortSignal: effectiveAbortSignal } : {}),
-          // 工具入参自动修复（SDK v7 repairToolCall 钩子）：LLM 生成非法入参
-          // （zod 校验失败）时用轻量 LLM 调用重生成，避免该轮工具调用静默丢弃。
-          // 未注入 llmClient 时不挂载（测试/无 side-query 通道场景）
-          ...(llmClient !== undefined
-            ? {
-                repairToolCall: createRepairToolCall({
-                  llmClient,
-                  modelId: resolvedModel.modelId,
-                  ...(effectiveAbortSignal !== undefined ? { signal: effectiveAbortSignal } : {}),
-                }),
-              }
-            : {}),
-          // 模型级遥测：在回合 span 之下为每次 LLM 调用自动生成子 span
-          // （integration 内部对未初始化 OTel 判空跳过）
-          telemetry: { integrations: [createSdkTelemetryIntegration()] },
-        }),
-      controller,
-      // 请求级尝试次数用默认值：与 SDK 的 model call 级重试互不重叠（见 4a 说明）
-    });
+  let releaseGate: (() => void) | undefined;
+  // 逻辑调用 ID：middleware 的 Attempt span 与 telemetry integration 的 model.call 父 span
+  // 以同键 join（Attempt 经 providerOptions.codeagent 读，Call 由 streamText telemetry 回调自带）
+  let callId = randomUUID();
+  let streamRecoveryCount = 0;
+  let recoveredDiscardedChars = 0;
+  let emptyCompletionRetried = false;
+  let modelTimeout: ReturnType<typeof createTimeoutSignal> | undefined;
 
-    // 4b. TurnRunner 消费：读流 → 翻译领域事件 → 产出统计。不感知 webContents/DB
-    //     （事件经 emitter 产出，推送由宿主订阅承接）；流空闲超时在 runner 内守卫。
-    const runner = new TurnRunner({
-      sessionId,
-      turnId,
-      modelId: resolvedModel.modelId,
-      controller,
-      emitter: turnEmitter,
-      // 空闲超时兜底（600s 无 chunk）：真实可达的超时保护——与模型级超时不同，
-      // 这条在缺失 timeoutMs 配置时仍然生效
-      idleTimeoutMs: DEFAULT_STREAM_IDLE_TIMEOUT_MS,
-      // 首 part 已在 createStreamWithRetry 内预读，runner 接续消费同一 reader
-      firstPart: created.firstPart,
-      // 超时归因回调：把「超时导致的 abort」与「用户中断」区分开（见第 2 步）
-      ...(modelTimeout !== undefined
-        ? { isTimeout: (): boolean => modelTimeout?.signal.aborted === true }
-        : {}),
-      // 原始 part 回调：计数（空回复防护判据）+ 转录 reasoning + 推送给宿主合帧器
-      onPart: (part) => {
-        rawParts += 1;
-        // 思考过程转录（SDK reasoning-delta；工具调用/结果走事件订阅，不在此）
-        if (part.type === 'reasoning-delta' && typeof part.delta === 'string') {
-          transcriptEntries.push({ kind: 'reasoning', text: part.delta });
+  try {
+    // 恢复循环：正常完成/中止/超时跳出；可重试流错误且预算未尽 → 记账后重开
+    for (;;) {
+      // 尝试级准入：流尝试前等槽位（AbortSignal 取消排队）——acquire 后才算闸内
+      if (ctx.gateAdmission !== undefined) {
+        releaseGate = await ctx.gateAdmission.acquire();
+      }
+      const attemptMessages = buildAttemptMessages(ctx, streamRecoveryCount);
+
+      try {
+        callId = randomUUID();
+        // 每轮重建模型超时信号（重开流需要新的完整超时窗口）
+        const attempt = await runSingleAttempt({ ctx, callId, attemptMessages });
+        runResult = attempt.runResult;
+        usage = attempt.usage;
+        modelTimeout = attempt.modelTimeout;
+        // 空补全检测：runner 正常完成但零文本零工具零 part——provider 偶发空流。
+        // 空补全专属预算 1（不复用恢复预算）：重开流重试一次，仍空则按原样完成
+        const emptyDecision = decideEmptyCompletion(
+          attempt.runResult,
+          attempt.rawParts,
+          emptyCompletionRetried,
+          ctx.getAssistantPartialText,
+        );
+        // 空补全三态：retry 置位后重开；retried-still-empty 接受完成；ok 直通成功收尾
+        switch (emptyDecision) {
+          case 'retry':
+            logEmptyCompletion(ctx.sessionId, ctx.turnId, callId, emptyDecision);
+            emptyCompletionRetried = true;
+            continue;
+          case 'retried-still-empty':
+            logEmptyCompletion(ctx.sessionId, ctx.turnId, callId, emptyDecision);
+            break;
+          default:
+            ctx.gateAdmission?.reportOutcome('succeeded');
         }
-        // P2-31：text-delta 进宿主合帧缓冲，其余 part 落地缓冲后立即透传（保序）
-        pushPart(part);
-      },
-    });
-    runResult = await runner.run(created.stream as ReadableStream<unknown>, created.reader);
-    // 6. 等 usage：totalUsage 是 PromiseLike（流结束后才 resolve），失败静默置 null
-    //    （usage 缺失不应让整个回合失败——finalize 侧会按 null 处理）
-    usage = await Promise.resolve(created.result.totalUsage).catch(() => null);
+        break;
+      } catch (error: unknown) {
+        const appError = classifyModelFailure(error);
+        // 失败分类：可重试错误里限流是唯一的 cap 学习信号；其余失败只释放
+        reportFailureToGate(ctx.gateAdmission, appError);
+        // 恢复判定：可重试失败 + 已产出部分内容 + 预算未尽 + 未中止 → 从对话锚点重开
+        if (
+          !shouldAttemptRecovery(
+            appError,
+            ctx.controller.signal,
+            streamRecoveryCount,
+            ctx.getAssistantPartialText,
+          )
+        ) {
+          throw error;
+        }
+        streamRecoveryCount += 1;
+        recoveredDiscardedChars = ctx.getAssistantPartialText().length;
+        logRecoveryStart({
+          sessionId: ctx.sessionId,
+          turnId: ctx.turnId,
+          callId,
+          attempt: streamRecoveryCount,
+          max: STREAM_RECOVERY_MAX,
+          discardedChars: recoveredDiscardedChars,
+          error,
+        });
+        ctx.span?.setAttribute('stream.recoveryCount', streamRecoveryCount);
+        ctx.span?.setAttribute('stream.discardedChars', recoveredDiscardedChars);
+      } finally {
+        // 计数释放幂等兜底——学习信号先走（throttled/succeeded 已回减），这里防漏减
+        releaseGate?.();
+        releaseGate = undefined;
+      }
+    }
   } finally {
-    // 模型级超时定时器清理（谁创建谁清理，见第 4 步说明）
     modelTimeout?.clear();
   }
 
   return {
-    reason: runResult.reason,
-    durationMs: runResult.durationMs,
-    rawPartCount: rawParts,
+    runResult,
     usage,
-    timeoutSignalAborted: modelTimeout?.signal.aborted === true,
+    modelTimeoutAborted: modelTimeout?.signal.aborted === true,
   };
 }
 
-/**
- * 消费产物形状（与 agent-turn-machine.TurnRunOutput 结构对齐）
- *
- * 独立声明而非直接 import 机器类型的原因：机器已 import 本模块的
- * TurnAssemblyArgs 等，反向 import 会成循环。两者结构必须手工保持同步
- * ——改动任一方的字段时同步另一方（机器侧字段有 JSDoc 说明各字段用途）。
- */
+/** 单次流尝试：模型超时信号重建 → createStreamWithRetry（首读重试）→ TurnRunner 消费；
+ * 错误原样上抛给恢复循环裁决（首 part 经 created.reader 首读，调用方接力消费） */
+async function runSingleAttempt(args: {
+  readonly ctx: RecoveryContext;
+  readonly callId: string;
+  readonly attemptMessages: ChatMessage[];
+}): Promise<{
+  runResult: TurnRunResult;
+  usage: SdkTotalUsageLike | null;
+  modelTimeout: ReturnType<typeof createTimeoutSignal> | undefined;
+  rawParts: number;
+}> {
+  const { ctx, callId, attemptMessages } = args;
+  let attemptRawParts = 0;
+  const modelTimeout =
+    ctx.resolvedModel.generationConfig?.timeoutMs !== undefined
+      ? createTimeoutSignal(ctx.resolvedModel.generationConfig.timeoutMs)
+      : undefined;
+  const effectiveAbortSignal = combineAbortSignals([ctx.controller.signal, modelTimeout?.signal]);
+  const created = await createStreamWithRetry({
+    create: () =>
+      streamText(
+        buildStreamTextParams({
+          model: ctx.model,
+          attemptMessages,
+          systemPrompt: ctx.systemPrompt,
+          genOptions: ctx.genOptions,
+          callIdGetter: () => callId,
+          tools: ctx.tools,
+          maxSteps: ctx.options.maxSteps,
+          maxRetries: ctx.resolvedModel.generationConfig?.maxRetries ?? 2,
+          effectiveAbortSignal,
+          llmClient: ctx.llmClient,
+        }),
+      ),
+    controller: ctx.controller,
+    ...(ctx.onRateLimited !== undefined ? { onRateLimited: ctx.onRateLimited } : {}),
+  });
+
+  // 断流观测出口（core 流恢复拍板的数据源）：
+  // preludeBufferedCount>0 = 无感重试窗口真实覆盖过；attemptsToBoundary>1 = 前奏窗口内重建过流
+  logger.info(
+    {
+      sessionId: ctx.sessionId,
+      turnId: ctx.turnId,
+      callId,
+      preludeBufferedCount: created.preludeBufferedCount,
+      attemptsToBoundary: created.attemptsToBoundary,
+    },
+    '流边界观测',
+  );
+  ctx.span?.setAttribute('stream.preludeBufferedCount', created.preludeBufferedCount);
+  ctx.span?.setAttribute('stream.attemptsToBoundary', created.attemptsToBoundary);
+
+  const runner = new TurnRunner({
+    sessionId: ctx.sessionId,
+    turnId: ctx.turnId,
+    modelId: ctx.resolvedModel.modelId,
+    controller: ctx.controller,
+    emitter: ctx.turnEmitter,
+    idleTimeoutMs: DEFAULT_STREAM_IDLE_TIMEOUT_MS,
+    firstPart: created.firstPart,
+    ...(modelTimeout !== undefined
+      ? { isTimeout: (): boolean => modelTimeout?.signal.aborted === true }
+      : {}),
+    onPart: (part) => {
+      attemptRawParts += 1;
+      ctx.onRawPart();
+      if (part.type === 'reasoning-delta' && typeof part.delta === 'string') {
+        ctx.transcriptEntries.push({ kind: 'reasoning', text: part.delta });
+      }
+      ctx.pushPart(part);
+    },
+  });
+  const runResult = await runner.run(created.stream as ReadableStream<unknown>, created.reader);
+  const usage = await Promise.resolve(created.result.totalUsage).catch(() => null);
+  return { runResult, usage, modelTimeout, rawParts: attemptRawParts };
+}
+
 export interface TurnRunOutputLike {
   readonly reason: 'completed' | 'aborted' | 'timeout';
   readonly durationMs: number;

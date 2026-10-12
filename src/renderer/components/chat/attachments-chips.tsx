@@ -1,9 +1,3 @@
-// src/renderer/components/chat/attachments-chips.tsx
-// 附件 chip 列表（自 ChatInput 拆出：显示 + 移除，纯展示）
-// ──────────────────────────────────────────────
-// 只负责渲染附件列表与移除回调；附件数据与移除后状态更新由 ChatInput 持有。
-// ──────────────────────────────────────────────
-
 import { FileText, X } from 'lucide-react';
 import type { ReactElement } from 'react';
 
@@ -45,7 +39,6 @@ export function AttachmentsChips({
             variant="ghost"
             size="icon"
             onClick={() => onRemove(att.path)}
-            // 带附件名：多个 chip 时 SR 才不会听到一串同名的「关闭」按钮
             aria-label={t('chat.removeAttachment', { name: att.name })}
             title={t('chat.removeAttachment', { name: att.name })}
             className="hover:text-foreground size-auto rounded-full"

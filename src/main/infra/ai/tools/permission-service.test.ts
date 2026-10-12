@@ -1,13 +1,3 @@
-// src/main/infra/ai/tools/permission-service.test.ts
-// PermissionService 单测：权限决策 + 审批流（安全关键模块）
-//
-// 测试要点：
-// 1. decide：默认返回 tool.permission；记忆命中（approved→auto / denied→ask）；过期记忆惰性清理
-// 2. requestApproval：推送 AGENT_APPROVAL_REQUEST；abortSignal 中断立即 reject；超时 reject；webContents 销毁 reject
-// 3. handleApprovalResponse：resolve 对应 Promise；rememberDecision 缓存决策
-// 4. dispose：reject 所有 pending，清理记忆
-// 5. stableStringify：键顺序不影响记忆 key
-
 import { ErrorCode, IPC_CHANNELS } from '@code-agent/shared/main';
 import type { WebContents } from 'electron';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -21,7 +11,6 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../../../utils/logger', () => ({ logger: mocks.mockLogger }));
 
-// 白名单持久化：测试环境隔离（内存假实现，避免依赖 electron app.getPath）
 const whitelistMocks = vi.hoisted(() => ({
   entries: [] as Array<{ toolName: string; pattern: string }>,
   readWhitelistSync: vi.fn((): Array<{ toolName: string; pattern: string }> => []),
@@ -33,7 +22,6 @@ vi.mock('../../storage/whitelist-pref', () => ({
   writeWhitelist: whitelistMocks.writeWhitelist,
 }));
 
-/** 创建 mock 工具 */
 function createMockTool(
   permission: 'auto' | 'ask' = 'ask',
   category: 'read' | 'control' | 'edit' | 'exec' = 'edit',
@@ -48,7 +36,6 @@ function createMockTool(
   } as unknown as Tool;
 }
 
-/** 创建 mock WebContents */
 function createMockWebContents(): WebContents {
   return {
     isDestroyed: vi.fn(() => false),
@@ -56,7 +43,6 @@ function createMockWebContents(): WebContents {
   } as unknown as WebContents;
 }
 
-/** 创建审批请求 payload */
 function createApprovalPayload(
   overrides: Partial<Parameters<PermissionService['requestApproval']>[0]> = {},
 ) {
@@ -105,7 +91,6 @@ describe('PermissionService', () => {
         toolName: 'mock_tool',
       });
 
-      // 决议 → onResolved（38 号阶段 2：带决策结果）
       service.handleApprovalResponse('ap-1', true, false);
       await expect(requestPromise).resolves.toBe(true);
       expect(onResolved).toHaveBeenCalledWith({
@@ -190,11 +175,7 @@ describe('PermissionService', () => {
       expect(decision.permission).toBe('ask');
     });
 
-    // ── control 类别（2026-10-08：零副作用控制面，如 ask_user_question）──
-
     it('control 工具（auto）：默认 ask 模式直接放行——不再"先批准提问才能提问"', async () => {
-      // 回归锚：ask_user_question 此前 permission='ask'+category='exec'，
-      // 默认模式下先弹审批卡（且卡上只在问"是否允许提问"），批准后才显示问题
       const tool = { ...createMockTool('auto', 'control'), name: 'ask_user_question' };
       const decision = await service.decide(tool, { questions: [{ question: 'q' }] });
       expect(decision.permission).toBe('auto');
@@ -208,8 +189,6 @@ describe('PermissionService', () => {
     });
 
     it('control 工具：即使 permission 标为 ask（元数据保守），plan 模式同样放行', async () => {
-      // 类别判据（零副作用）优先于 permission 声明：control 不产生副作用，
-      // 不该因元数据标错而在只读阶段被拒
       service.setApprovalMode('plan');
       const tool = { ...createMockTool('ask', 'control'), name: 'ask_user_question' };
       const decision = await service.decide(tool, { questions: [{ question: 'q' }] });
@@ -239,8 +218,6 @@ describe('PermissionService', () => {
     });
 
     it('MCP auto 工具用 script 别名携带命令 → 经 Layer-0 流程后仍降级 ask', async () => {
-      // 别名键被 extract 识别进 Layer-0 流程；该命令未被静态危险库命中时，
-      // 仍由 MCP fail-closed（2c）兜底拦截——两条路都不给免审批
       const tool = { ...createMockTool('auto', 'exec'), name: 'mcp__evil__run' };
       const decision = await service.decide(tool, { script: 'rm -rf /' });
       expect(decision.permission).toBe('ask');
@@ -257,7 +234,6 @@ describe('PermissionService', () => {
       const tool = createMockTool('ask');
       whitelistMocks.readWhitelistSync.mockReturnValue([{ toolName: 'mock_tool', pattern: '' }]);
       service = new PermissionService();
-      // 加载即迁移：无效条目不进入内存白名单
       expect(service.listWhitelist()).toEqual([]);
       const decision = await service.decide(tool, { path: '/tmp/a.ts' });
       expect(decision.permission).toBe('ask');
@@ -331,8 +307,6 @@ describe('PermissionService', () => {
     it('P2 路径边界：边界内相对路径保持 auto；盘符越界同样降级', async () => {
       service = new PermissionService();
       service.setApprovalMode('auto');
-      // boundary 用真实运行目录：硬编码本地路径（如 F:\TraeProjects\1）在 CI checkout
-      // 到任意目录时 realpath 失败 → fail closed 全量降级，导致界内用例误判
       const boundaryDir = process.cwd();
       const inside = await service.decide(
         createMockTool('ask', 'exec'),
@@ -368,7 +342,6 @@ describe('PermissionService', () => {
       const decision = await service.decide(createMockTool('ask', 'exec'), {
         command: 'git status && cat package.json',
       });
-      // 复合命令跳过 SAFE_READ_ONLY 快速路径，无分类器时保守 ask
       expect(decision.permission).toBe('ask');
     });
 
@@ -422,17 +395,14 @@ describe('PermissionService', () => {
 
     it('setApprovalMode(auto)：exec 命令分层（破坏性强制 ask / 只读自动 / 其余保守 ask）', async () => {
       service.setApprovalMode('auto');
-      // 破坏性命令：强制 ask + 危险标注
       const dangerous = await service.decide(createMockTool('ask', 'exec'), {
         command: 'git reset --hard HEAD',
       });
       expect(dangerous.permission).toBe('ask');
       expect(dangerous.description).toContain('破坏性');
-      // 只读安全命令：自动放行
       expect(
         (await service.decide(createMockTool('ask', 'exec'), { command: 'git status' })).permission,
       ).toBe('auto');
-      // 其他命令：保守 ask（无分类器时）
       expect(
         (await service.decide(createMockTool('ask', 'exec'), { command: 'pnpm install' }))
           .permission,
@@ -441,7 +411,6 @@ describe('PermissionService', () => {
 
     it('setApprovalMode(auto)：userPrompt 意图豁免破坏性拦截（意图优先，无意图时标注危险）', async () => {
       service.setApprovalMode('auto');
-      // 用户显式说 discard → 破坏性拦截豁免（命令非只读 → 保守 ask）
       expect(
         (
           await service.decide(
@@ -451,7 +420,6 @@ describe('PermissionService', () => {
           )
         ).permission,
       ).toBe('ask');
-      // 无意图：危险标注出现在描述中
       const withoutIntent = await service.decide(createMockTool('ask', 'exec'), {
         command: 'git reset --hard HEAD',
       });
@@ -520,9 +488,6 @@ describe('PermissionService', () => {
     });
 
     it('共享子对象（DAG）：不误判为循环引用，记忆 key 正常命中', async () => {
-      // 回归：stableStringifyInternal 曾在出栈时不清除 visited，
-      // 导致 { files: [o], primary: o } 这类兄弟引用抛 TypeError，
-      // 而原生 JSON.stringify 对同样输入是能序列化的。
       const tool = createMockTool('ask');
       const shared = { path: '/tmp/a.ts' };
       service.rememberDecision(tool, { files: [shared], primary: shared }, true);
@@ -548,13 +513,11 @@ describe('PermissionService', () => {
         wc,
       );
 
-      // 推送事件
       expect(wc.send).toHaveBeenCalledWith(
         IPC_CHANNELS.AGENT_APPROVAL_REQUEST,
         expect.objectContaining({ approvalId: 'approval-1' }),
       );
 
-      // 用户批准
       service.handleApprovalResponse('approval-1', true, false);
       await expect(promise).resolves.toBe(true);
     });
@@ -602,7 +565,6 @@ describe('PermissionService', () => {
         { path: '/tmp/a.ts' },
         wc,
       );
-      // 机器 after 超时到期的等价调用
       service.expireApproval('approval-1');
       await expect(pending).rejects.toMatchObject({
         code: ErrorCode.TOOL_PERMISSION_DENIED,
@@ -612,7 +574,6 @@ describe('PermissionService', () => {
         approvalId: 'approval-1',
         decision: 'timed-out',
       });
-      // 幂等：再次 expire 不抛错（pending 已清）
       expect(() => service.expireApproval('approval-1')).not.toThrow();
     });
 
@@ -693,9 +654,6 @@ describe('PermissionService', () => {
     });
   });
 
-  // ── plan 模式硬拦截（2026-09-06 安全审计修复）──────────────
-  // 修复前：记忆缓存（步骤 1）与白名单（步骤 2.5）先于 plan 判定返回 'auto'，
-  // 导致 plan 模式下"曾被批准的同入参调用"或"白名单命令"仍会真实写文件/执行。
   describe('plan 模式：记忆 / 白名单不得绕过只读约束', () => {
     it('记忆命中 approved（写类工具）→ 仍 deny', async () => {
       const tool = createMockTool('ask', 'edit');

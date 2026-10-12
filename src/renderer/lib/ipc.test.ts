@@ -1,5 +1,3 @@
-// src/renderer/lib/ipc.test.ts
-// unwrap（IPC 响应解包）单测
 import { describe, expect, it } from 'vitest';
 
 import { unwrap } from './ipc';

@@ -1,7 +1,3 @@
-// src/renderer/components/ui/context-menu.tsx
-// 右键菜单组件（shadcn/ui new-york 风格，基于 @radix-ui/react-context-menu）
-// 设计文档 §2.3 shadcn/ui 组件库
-
 import * as ContextMenuPrimitive from '@radix-ui/react-context-menu';
 import type * as React from 'react';
 

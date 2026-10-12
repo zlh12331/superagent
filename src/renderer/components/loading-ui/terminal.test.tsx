@@ -1,13 +1,3 @@
-// src/renderer/components/$1/terminal.test.tsx
-// Terminal 加载指示器测试（正向 / 边界 / 异常）
-// ──────────────────────────────────────────────────────────────
-// 此前仅经 TerminalPanel 间接覆盖（无独立断言），故这些行为没有被锁定：
-// 1. 可访问性契约：role="status" + sr-only **本地化** 文案；提示符/光标对读屏器隐藏
-// 2. 动画不内联 <style>（改用 styles/ 各域 css 的 .loading-ui-terminal-cursor）
-//    —— 防止回退为组件内私有 keyframe（渲染层唯一内联 style 的历史问题）
-// 3. props 透传：prompt 默认值与覆盖、className 合并、style 透传
-// ──────────────────────────────────────────────────────────────
-
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
@@ -21,14 +11,12 @@ describe('Terminal（loading-ui）', () => {
       render(<Terminal />);
       const status = screen.getByRole('status');
       expect(status).toBeDefined();
-      // sr-only 文案走 i18n，而非硬编码 'Loading'
       expect(status.textContent).toContain(i18n.t('common.loading'));
     });
 
     it('提示符与光标对读屏器隐藏（纯装饰，不重复播报）', () => {
       const { container } = render(<Terminal prompt="$" />);
       const hidden = container.querySelectorAll('[aria-hidden="true"]');
-      // 提示符 + 光标块，共两个装饰元素
       expect(hidden).toHaveLength(2);
       expect(hidden[0]?.textContent).toBe('$');
     });
@@ -48,7 +36,6 @@ describe('Terminal（loading-ui）', () => {
     it('空提示符合法（仅显示光标）', () => {
       const { container } = render(<Terminal prompt="" />);
       expect(container.querySelector('[aria-hidden="true"]')?.textContent).toBe('');
-      // 光标仍在
       expect(container.querySelector('.loading-ui-terminal-cursor')).not.toBeNull();
     });
   });

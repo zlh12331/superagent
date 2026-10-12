@@ -1,11 +1,3 @@
-// src/renderer/components/git/file-list.tsx
-// Git 变更文件列表（变更项 + 骨架屏）
-// ──────────────────────────────
-// 拆分背景（2026-08 重构）：自 GitPanel 486 行按职责提取。
-// 职责：渲染 status.files（图标 + 状态标签 + 路径）与加载骨架屏；
-// 选中态由父级 selectedFilePath 驱动，点击只上报 onSelect（不自行取数）。
-// ──────────────────────────────
-
 import type { GitFileStatus } from '@code-agent/shared/renderer';
 import type { ReactElement } from 'react';
 import { Button } from '@/components/ui/button';
@@ -23,12 +15,10 @@ interface FileListProps {
 
 /** Git 变更文件列表：状态图标 + 文件名，选中高亮（点击回调给父级拉 diff） */
 export function FileList({ files, selectedFilePath, onSelect }: FileListProps): ReactElement {
-  // 本地化文案
   const { t } = useTranslation();
   return (
     <ul className="flex flex-col gap-0.5 p-1">
       {files.map((file) => {
-        // 状态元数据单一入口；文案键 = 协议值（git.<status>）
         const meta = getGitStatusMeta(file.status);
         const Icon = meta.icon;
         const label = t(`git.${file.status}`);

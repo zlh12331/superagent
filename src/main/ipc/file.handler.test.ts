@@ -1,9 +1,3 @@
-// src/main/ipc/file.handler.test.ts
-// file.handler 单测：
-// 1. 9 个方法转发（fake FileService DI 注入）
-// 2. P0 工作区收口：边界内放行 / `../` 遍历拒绝 / 符号链接逃逸拒绝 /
-//    工作区外绝对路径拒绝 / 无根 fail closed / rename 双侧校验
-
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -13,7 +7,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearUserReadGrants, grantUserReadPaths } from '../infra/file/user-grants';
 import { confineToWorkspace, createFileHandlers, type FileHandlerDeps } from './file.handler';
 
-/** 创建 fake FileService */
 function createFakeFileService() {
   return {
     read: vi.fn(async () => ({ content: '', size: 0 })),
@@ -30,7 +23,6 @@ function createFakeFileService() {
 
 const EMPTY_CTX = {} as never;
 
-/** 建立真实临时目录（realpath 归一，避免 /var → /private/var 类符号链接干扰） */
 function makeTempDir(prefix: string, sub = ''): string {
   const dir = realpathSync(mkdtempSync(join(tmpdir(), `${prefix}-`)));
   const target = sub === '' ? dir : join(dir, sub);
@@ -38,7 +30,6 @@ function makeTempDir(prefix: string, sub = ''): string {
   return target;
 }
 
-/** 断言抛出越界 AppError */
 async function expectDenied(promise: Promise<unknown>): Promise<void> {
   await expect(promise).rejects.toBeInstanceOf(AppError);
   await expect(promise).rejects.toMatchObject({ code: ErrorCode.UNAUTHORIZED });
@@ -48,7 +39,6 @@ describe('file.handler', () => {
   let fileService: ReturnType<typeof createFakeFileService>;
   const tempDirs: string[] = [];
 
-  /** 创建 handler：roots 即边界集合 */
   function build(roots: readonly string[]) {
     fileService = createFakeFileService();
     return createFileHandlers({ fileService, workspaceRoots: async () => roots });
@@ -208,7 +198,6 @@ describe('file.handler', () => {
       try {
         symlinkSync(outside, linkPath, process.platform === 'win32' ? 'junction' : 'dir');
       } catch {
-        // 平台不支持创建符号链接（无权限）时跳过本用例，不伪报通过
         return;
       }
       const handlers = build([workspace]);
@@ -288,7 +277,6 @@ describe('file.handler', () => {
   });
 
   describe('用户手势授权（工作区外附件的只读放行通道）', () => {
-    /** 工作区外的真实附件文件 */
     function makeOutsideAttachment(name: string): string {
       const file = join(outside, name);
       writeFileSync(file, 'content', 'utf8');

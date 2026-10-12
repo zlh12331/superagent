@@ -1,19 +1,3 @@
-// src/renderer/hooks/use-git.test.tsx
-// use-git 单元测试
-// ──────────────────────────────────────────────────────────────
-// 测试要点：
-// 1. GIT_STATUS_QUERY_KEY：返回 ['git', 'status', path] 常量
-// 2. useGitStatusQuery：
-//    - 成功：data 返回 GitStatusRes
-//    - 错误：IpcResponse.error 分支 → throw + Query 进入 isError
-//    - enabled=false：不发起请求
-// 3. useGitDiffQuery：
-//    - 成功：data 返回 GitDiffRes
-//    - 错误：IpcResponse.error 分支 → throw
-//    - enabled=false：不发起请求
-//    - 默认 ref='HEAD', staged=false
-// ──────────────────────────────────────────────────────────────
-
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
@@ -21,13 +5,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { GIT_STATUS_QUERY_KEY, useGitDiffQuery, useGitStatusQuery } from './use-git';
 
-// ── 测试工具：创建 QueryClient wrapper ────────────────────────
-//
-// TanStack Query hooks 需要 QueryClientProvider 包裹才能使用
-// retries: 0 让错误立即返回（不重试，避免测试超时）
-//
-// 注意：children 类型用 ReactNode（而非 ReactElement），
-// React 19 升级后 QueryClientProvider 的 children 类型为 ReactNode（包含 undefined）
 function createWrapper() {
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -40,8 +17,6 @@ function createWrapper() {
   }
   return Wrapper;
 }
-
-// ── 测试数据 fixture ──────────────────────────────────────────
 
 const mockGitStatusRes = {
   branch: 'master',
@@ -60,19 +35,16 @@ const mockGitDiffRes = {
 
 describe('use-git hooks', () => {
   beforeEach(() => {
-    // 重置 window.api.git
     window.api.git = {
       status: vi.fn(),
       diff: vi.fn(),
     } as never;
   });
 
-  // ── GIT_STATUS_QUERY_KEY ───────────────────────────────
   describe('GIT_STATUS_QUERY_KEY', () => {
     it("返回 ['git', 'status', path] 元组", () => {
       const key = GIT_STATUS_QUERY_KEY('/repo');
       expect(key).toEqual(['git', 'status', '/repo']);
-      // as const 保证是 tuple，不是普通数组
       expect(Array.isArray(key)).toBe(true);
     });
 
@@ -81,7 +53,6 @@ describe('use-git hooks', () => {
     });
   });
 
-  // ── useGitStatusQuery ─────────────────────────────────
   describe('useGitStatusQuery', () => {
     it('成功：返回 GitStatusRes', async () => {
       (window.api.git.status as ReturnType<typeof vi.fn>).mockResolvedValue({
@@ -96,7 +67,6 @@ describe('use-git hooks', () => {
         expect(result.current.isSuccess).toBe(true);
       });
       expect(result.current.data).toEqual(mockGitStatusRes);
-      // 验证 IPC 调用参数
       expect(window.api.git.status).toHaveBeenCalledWith({ path: '/repo' });
     });
 
@@ -112,7 +82,6 @@ describe('use-git hooks', () => {
       await waitFor(() => {
         expect(result.current.isError).toBe(true);
       });
-      // 错误信息格式：[CODE] message
       expect(result.current.error?.message).toBe('[GIT_ERROR] not a git repository');
     });
 
@@ -125,7 +94,6 @@ describe('use-git hooks', () => {
         wrapper: createWrapper(),
       });
 
-      // enabled=false 时不会 fetch
       expect(result.current.fetchStatus).toBe('idle');
       expect(window.api.git.status).not.toHaveBeenCalled();
     });
@@ -135,7 +103,6 @@ describe('use-git hooks', () => {
         data: mockGitStatusRes,
       });
 
-      // 第一次 hook
       const wrapper = createWrapper();
       const { result: result1, unmount: unmount1 } = renderHook(() => useGitStatusQuery('/repo'), {
         wrapper,
@@ -145,7 +112,6 @@ describe('use-git hooks', () => {
       });
       unmount1();
 
-      // 第二次 hook（相同 path）应使用缓存（staleTime=10s 内）
       const { result: result2 } = renderHook(() => useGitStatusQuery('/repo'), {
         wrapper,
       });
@@ -153,12 +119,10 @@ describe('use-git hooks', () => {
         expect(result2.current.isSuccess).toBe(true);
       });
 
-      // 只应调用一次 IPC（第二次走缓存）
       expect(window.api.git.status).toHaveBeenCalledTimes(1);
     });
   });
 
-  // ── useGitDiffQuery ───────────────────────────────────
   describe('useGitDiffQuery', () => {
     it('成功：返回 GitDiffRes', async () => {
       (window.api.git.diff as ReturnType<typeof vi.fn>).mockResolvedValue({
@@ -229,8 +193,6 @@ describe('use-git hooks', () => {
         data: mockGitDiffRes,
       });
 
-      // exactOptionalPropertyTypes: 可选属性 ref/staged 不允许显式传 undefined
-      // 省略字段时，queryFn 内部通过 ?? 兜底为 'HEAD'/false
       const { result } = renderHook(
         () =>
           useGitDiffQuery(
@@ -244,7 +206,6 @@ describe('use-git hooks', () => {
       await waitFor(() => {
         expect(result.current.isSuccess).toBe(true);
       });
-      // queryFn 内部使用 ?? 兜底：ref='HEAD', staged=false, filePath=undefined
       expect(window.api.git.diff).toHaveBeenCalledWith({
         path: '/repo',
         ref: 'HEAD',
@@ -278,7 +239,6 @@ describe('use-git hooks', () => {
         expect(r2.current.isSuccess).toBe(true);
       });
 
-      // staleTime=0：第二次也应重新请求
       expect(window.api.git.diff).toHaveBeenCalledTimes(2);
     });
   });

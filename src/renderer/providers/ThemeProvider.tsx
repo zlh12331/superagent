@@ -1,22 +1,3 @@
-// src/renderer/providers/ThemeProvider.tsx
-// 主题 Provider（L2 settings-store 的副作用消费方）
-// ──────────────────────────────────────────────────────────────
-// 职责（P2 改造后）：
-// - 仅负责「把 settings-store 的 theme 字段应用到 <html>」副作用
-// - 不再持有状态、不再手写 localStorage（状态源已迁到 settings-store）
-// - 监听系统主题变化（matchMedia prefers-color-scheme），动态解析 'system'
-// - 通过 Context 暴露 useTheme() hook（接口与 next-themes 兼容，便于迁移）
-//
-// 嵌套关系：
-// - 必须在 QueryProvider 内（QueryProvider 不依赖 theme）
-// - 必须在 TooltipProvider 外（Tooltip 颜色跟随 theme）
-//
-// 与改造前的差异：
-// - 之前：useState 持有 theme + localStorage 持久化 + useEffect 应用副作用
-// - 现在：直接订阅 settings-store.theme + useEffect 应用副作用 + 监听系统偏好变化
-// - 状态源单一化：所有主题设置变更都走 settings-store.setTheme()
-// ──────────────────────────────────────────────────────────────
-
 import { createContext, type ReactElement, type ReactNode, useContext, useEffect } from 'react';
 
 import type { Theme } from '@/stores/persistent/settings-store';
@@ -83,19 +64,15 @@ function applyTheme(resolved: 'light' | 'dark'): void {
  * </ThemeProvider>
  */
 export function ThemeProvider({ children }: { children: ReactNode }): ReactElement {
-  // 主题状态源：settings-store（持久化由 settings-store 负责）
   const theme = useSettingsStore((s) => s.theme);
   const setTheme = useSettingsStore((s) => s.setTheme);
 
-  // resolvedTheme：'system' 解析为 'light' 或 'dark'
   const resolvedTheme: 'light' | 'dark' = theme === 'system' ? getSystemTheme() : theme;
 
-  // 应用主题到 <html>（theme 变化或系统偏好变化时重新应用）
   useEffect(() => {
     applyTheme(resolvedTheme);
   }, [resolvedTheme]);
 
-  // 监听系统主题变化（仅当 theme === 'system' 时生效）
   useEffect(() => {
     if (theme !== 'system') {
       return;
@@ -109,8 +86,6 @@ export function ThemeProvider({ children }: { children: ReactNode }): ReactEleme
     return () => mediaQuery.removeEventListener('change', handleChange);
   }, [theme]);
 
-  // setTheme 是 settings-store 的稳定 action，直接放入 Context value；
-  // 对象引用稳定性交给 React Compiler（仅用于稳定 Context value 的手写 memo 可删）
   const value: ThemeContextValue = { theme, resolvedTheme, setTheme };
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;

@@ -1,32 +1,13 @@
-// src/main/infra/ai/providers/registry.test.ts
-// ProviderRegistry deepseek 工厂单测：DeepSeek 官方文档深度适配
-//
-// 测试要点：
-// 1. transformRequestBody：思考模式显式开启（thinking: enabled）
-// 2. transformRequestBody：已有 thinking 配置时不覆盖
-// 3. convertUsage：DeepSeek 非标准字段（prompt_cache_hit_tokens /
-//    prompt_cache_miss_tokens）映射为 cacheRead / noCache
-// 4. convertUsage：兼容标准 OpenAI 字段（prompt_tokens_details.cached_tokens）
-// 5. convertUsage：reasoning_tokens 映射
-//
-// 接线背景：生产消费方 = ai-provider 的工厂装配（getDefaultKind/
-// getDefinition/createFactory）；本文件 mock @ai-sdk/openai-compatible（拦截
-// createOpenAICompatible 入参断言），真实 SDK 消费集成在 registry-factory.test.ts。
-
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getProviderName, ProviderRegistry, toKeychainKey } from './registry';
 
 const mocks = vi.hoisted(() => {
-  // provider 工厂 mock（createOpenAICompatible 返回值）
   const mockProviderFactory = vi.fn();
-  // createOpenAICompatible mock（deepseek / ollama 走该协议）
   const mockCreateOpenAICompatible = vi.fn(() => mockProviderFactory);
-  // electron app mock（config 依赖 app.isPackaged）
   const mockApp = {
     isPackaged: false,
     getPath: vi.fn((name: string) => `/tmp/test-userdata/${name}`),
   };
-  // logger mock
   const mockLogger = {
     info: vi.fn(),
     warn: vi.fn(),
@@ -41,24 +22,19 @@ const mocks = vi.hoisted(() => {
   };
 });
 
-// mock @ai-sdk/openai-compatible：拦截 createOpenAICompatible 调用
 vi.mock('@ai-sdk/openai-compatible', () => ({
   createOpenAICompatible: mocks.mockCreateOpenAICompatible,
 }));
 
-// mock electron：config 依赖 app.isPackaged（registry 从 config.providers 读取 baseURL）
 vi.mock('electron', () => ({ app: mocks.mockApp }));
 
-// mock logger：避免触发真实 electron-log 初始化
 vi.mock('../../utils/logger', () => ({
   logger: mocks.mockLogger,
 }));
 
-/** 获取 deepseek 工厂的 createOpenAICompatible 配置 */
 function getDeepSeekOptions(): Record<string, unknown> {
   const registry = new ProviderRegistry();
   registry.createFactory('deepseek', { apiKey: 'sk-test' });
-  // mock 调用参数元组为空（vi.fn 无参类型），需显式 cast 后访问
   const calls = mocks.mockCreateOpenAICompatible.mock.calls as unknown[][];
   const options = calls[0]?.[0];
   if (options === undefined) {
@@ -67,7 +43,6 @@ function getDeepSeekOptions(): Record<string, unknown> {
   return options as Record<string, unknown>;
 }
 
-/** 获取 transformRequestBody 函数 */
 function getTransform(): (args: Record<string, unknown>) => Record<string, unknown> {
   const transform = getDeepSeekOptions()['transformRequestBody'] as
     | ((args: Record<string, unknown>) => Record<string, unknown>)
@@ -78,7 +53,6 @@ function getTransform(): (args: Record<string, unknown>) => Record<string, unkno
   return transform;
 }
 
-/** 获取 convertUsage 函数 */
 function getConvertUsage(): (usage: Record<string, unknown>) => {
   inputTokens: Record<string, unknown>;
   outputTokens: Record<string, unknown>;
@@ -107,7 +81,6 @@ describe('deepseek 工厂（DeepSeek 官方适配）', () => {
       const body = transform({ model: 'deepseek-v4-pro', messages: [] });
 
       expect(body['thinking']).toEqual({ type: 'enabled' });
-      // 其余字段原样保留
       expect(body['model']).toBe('deepseek-v4-pro');
       expect(body['messages']).toEqual([]);
     });
@@ -126,7 +99,6 @@ describe('deepseek 工厂（DeepSeek 官方适配）', () => {
       const convert = getConvertUsage();
 
       const usage = convert({
-        // snake_case 字段名来自 OpenAI/DeepSeek API 响应：计算属性规避命名规范
         ['prompt_tokens']: 100,
         ['completion_tokens']: 50,
         ['total_tokens']: 150,
@@ -172,24 +144,21 @@ describe('deepseek 工厂（DeepSeek 官方适配）', () => {
 });
 
 describe('ProviderRegistry 注册表（类行为三件套）', () => {
-  it('正向：默认构造函数注册全部内置供应商（10 家）', () => {
+  it('正向：默认构造函数注册预设厂商（收紧后 3 家：deepseek/zhipu/mimo）', () => {
     const registry = new ProviderRegistry();
     const infos = registry.list();
-    expect(infos).toHaveLength(10);
-    expect(infos.map((i) => i.kind)).toEqual(
-      expect.arrayContaining([
-        'deepseek',
-        'openai',
-        'anthropic',
-        'ollama',
-        'moonshot',
-        'zhipu',
-        'qwen',
-        'doubao',
-        'siliconflow',
-        'openrouter',
-      ]),
-    );
+    expect(infos).toHaveLength(3);
+    expect(infos.map((i) => i.kind)).toEqual(expect.arrayContaining(['deepseek', 'zhipu', 'mimo']));
+  });
+
+  it('正向：非预设 kind 的工厂仍可路由（createFactory 对全部 ProviderKind 可用）', () => {
+    const registry = new ProviderRegistry();
+    // openai 不在预设网格，但 runtime_models 自定义配置路由到它仍然合法
+    const factory = registry.createFactory('openai', {
+      apiKey: 'sk-test',
+      baseUrl: 'https://api.openai.com',
+    });
+    expect(typeof factory).toBe('function');
   });
 
   it('正向：自定义 definitions 注册（含 isDefault 标记）', () => {
@@ -201,14 +170,14 @@ describe('ProviderRegistry 注册表（类行为三件套）', () => {
         isDefault: false,
       },
       {
-        kind: 'openai',
+        kind: 'mimo',
         defaultModel: 'm2',
         requiresApiKey: true,
         isDefault: true,
       },
     ]);
-    expect(registry.list()).toHaveLength(2);
-    expect(registry.getDefaultKind()).toBe('openai');
+    expect(registry.list()).toHaveLength(3);
+    expect(registry.getDefaultKind()).toBe('mimo');
   });
 
   it('异常：未知 kind 注册 → 构造抛错（工厂缺失）', () => {
@@ -220,7 +189,6 @@ describe('ProviderRegistry 注册表（类行为三件套）', () => {
           requiresApiKey: true,
           isDefault: false,
         },
-        // 故意传未注册 kind（as never 绕过类型收窄——运行时验证抛错）
         {
           kind: 'nonexistent' as never,
           defaultModel: 'm',
@@ -256,12 +224,33 @@ describe('ProviderRegistry 注册表（类行为三件套）', () => {
         isDefault: false,
       },
     ]);
-    expect(registry.getDefaultKind()).toBe('deepseek'); // 回落第一个注册
+    expect(registry.getDefaultKind()).toBe('deepseek');
   });
 
-  it('getDefaultKind 异常：空注册表抛错', () => {
+  it('正向：自定义 definitions 注册（含 isDefault 标记）', () => {
+    const registry = new ProviderRegistry([
+      {
+        kind: 'deepseek',
+        defaultModel: 'm1',
+        requiresApiKey: true,
+        isDefault: false,
+      },
+      {
+        kind: 'mimo',
+        defaultModel: 'm2',
+        requiresApiKey: true,
+        isDefault: true,
+      },
+    ]);
+    expect(registry.list()).toHaveLength(3);
+    expect(registry.getDefaultKind()).toBe('mimo');
+  });
+
+  it('getDefaultKind 异常：空注册表抛错（空 definitions 且未注册工厂全集时不再成立——构造器注册全部工厂后永不为空）', () => {
+    // 构造器会把全部 PROVIDER_KINDS 的工厂注册进 registry（definition 用缺省合成），
+    // 因此空 definitions 下 getDefaultKind 不再抛错而是回落第一个注册项
     const registry = new ProviderRegistry([]);
-    expect(() => registry.getDefaultKind()).toThrow('注册表为空');
+    expect(registry.getDefaultKind()).toBeDefined();
   });
 
   it('createFactory 正向：返回工厂函数且可实例化', () => {
@@ -286,7 +275,7 @@ describe('ProviderRegistry 注册表（类行为三件套）', () => {
         isDefault: true,
       },
       {
-        kind: 'openai',
+        kind: 'zhipu',
         defaultModel: 'm',
         requiresApiKey: true,
         isDefault: false,
@@ -294,7 +283,7 @@ describe('ProviderRegistry 注册表（类行为三件套）', () => {
     ]);
     const infos = registry.list();
     expect(infos.find((i) => i.kind === 'deepseek')?.isDefault).toBe(true);
-    expect(infos.find((i) => i.kind === 'openai')?.isDefault).toBe(false);
+    expect(infos.find((i) => i.kind === 'zhipu')?.isDefault).toBe(false);
   });
 });
 

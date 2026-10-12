@@ -1,11 +1,3 @@
-// src/main/infra/ai/agent-runtime/turn-transcript.test.ts
-// 回合转录 → 落库消息构造（纯函数测试，无 mock）
-//
-// 接线背景：生产调用方为 agent-service 的 completeTurn（机器三终态收尾
-// 共用的落库段）。本组用例守住 part 形态与 SDK response.messages 的对齐
-// ——渲染层 unwrapOutput 原生解包 tool-result.output 的 {type,value} 包装，
-// 形态变更即跨层破坏（重开会话的富消息可见性依赖此契约）。
-
 import { describe, expect, it } from 'vitest';
 import {
   buildAssistantTurnMessages,
@@ -144,5 +136,27 @@ describe('toPersistedOutput', () => {
       type: 'json',
       value: expect.stringContaining('工具输出过长'),
     });
+  });
+
+  // ⚠ 契约钉死：DeepSeek/MiMo 官方要求 Agent 带工具多轮回传历史 reasoning_content
+  // （缺失返回 400 或质量劣化）。assistant 消息 content 数组里的 reasoning part 经
+  // openai-compatible 序列化为 reasoning_content 字段——此测试丢失即回传契约破坏
+  it('reasoning part 保序进入 assistant content（回传契约：不丢失不变形）', () => {
+    const entries: TurnTranscriptEntry[] = [
+      { kind: 'reasoning', text: '思考第一段' },
+      { kind: 'tool-call', toolCallId: 'call-1', toolName: 'read_file', input: { path: 'a.ts' } },
+      { kind: 'reasoning', text: '读完再想' },
+      { kind: 'tool-call', toolCallId: 'call-2', toolName: 'edit_file', input: { path: 'a.ts' } },
+    ];
+    const messages = buildAssistantTurnMessages('', entries);
+    const assistant = messages.find((m) => m.role === 'assistant');
+    // biome-ignore lint/style/noNonNullAssertion: find 不到 assistant 时断言本身就该失败
+    const content = (assistant!.content as Array<{ type: string; text?: string }>).filter(
+      (p) => p.type === 'reasoning',
+    );
+    expect(content).toEqual([
+      { type: 'reasoning', text: '思考第一段' },
+      { type: 'reasoning', text: '读完再想' },
+    ]);
   });
 });

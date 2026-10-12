@@ -1,9 +1,6 @@
-// e2e/journey-agent.spec.ts
-// 核心用户旅程 E2E：Agent 审批流程（batch 2）
-// ──────────────────────────────────────────────────────────────
-// 旅程 4：Agent 模式 → 工具调用 → 审批弹窗/卡片 → 批准/拒绝 → 结果展示
-// 环境：web 模式（mock window.api——mock 推送 agent:approval:request）
-// ──────────────────────────────────────────────────────────────
+// e2e/journey-agent.spec.ts：浏览器模式 E2E——Agent 审批旅程（工具调用 → 内联审批卡片 → 批准/拒绝）
+// window.api 由 src/renderer/dev/mock-api.ts 提供，mock 经 agent:approval:request 推送审批请求；
+// 三个用例分段覆盖契约：卡片出现 / 批准后卡片收敛 / 拒绝后卡片收敛
 
 import { expect, test } from '@playwright/test';
 
@@ -18,9 +15,10 @@ import {
 } from './journey-helpers';
 
 test.describe('Agent 审批用户旅程（batch 2）', () => {
-  // 预热：vite 冷启动首屏编译慢——先行访问触发编译；
-  // 并走一次完整发送链（transport/useChat/审批卡片组件冷编译——
-  // 本批首个用例 :26 最慢，对齐 journey-chat 预热策略）
+  // 预热：vite dev 冷启动首次编译慢，且本批首个用例要跑通完整发送链（transport/useChat/
+  // 审批卡片组件均为冷编译）——先自跑一遍轻量发送，别让首个用例独自承担编译耗时
+  // （同 e2e/journey-chat.spec.ts 的预热策略）。catch 为空是刻意为之：用例自带前置与
+  // 重试，预热失败不应让整个批次失败
   test.beforeAll(async ({ browser }) => {
     const page = await browser.newPage();
     await page.goto('/');
@@ -33,9 +31,7 @@ test.describe('Agent 审批用户旅程（batch 2）', () => {
       await page.locator('.send-btn:visible').first().waitFor({ timeout: 10_000 });
       await input.press('Enter');
       await page.waitForTimeout(5_000);
-    } catch {
-      // 预热失败不影响用例（用例自身有重试）
-    }
+    } catch {}
     await page.close();
   });
 
@@ -43,7 +39,6 @@ test.describe('Agent 审批用户旅程（batch 2）', () => {
     await setupChatSession(page);
     await typeMessage(page, '帮我执行一个命令');
     await waitSendReady(page);
-    // 发送并等待审批卡片（重试——mock 推送时序）
     await sendAndWaitApproval(page, async () => {
       await page.locator('.send-btn:visible').first().click({ timeout: 5_000 });
     });
@@ -53,11 +48,10 @@ test.describe('Agent 审批用户旅程（batch 2）', () => {
     await setupChatSession(page);
     await typeMessage(page, '帮我部署一下');
     await waitSendReady(page);
-    // 等待审批卡片出现 → 点击批准
     const approveBtn = await sendAndWaitApproval(page, async () => {
       await page.locator('.send-btn:visible').first().click({ timeout: 5_000 });
     });
-    // 高负载下点击可能落在 React 重渲染间隙而丢失——点击直至状态翻转（审批按钮隐藏）
+    // 高负载下点击可能落在 React 重渲染间隙而丢失——反复点击直至状态翻转（审批按钮消失）
     await expect(async () => {
       if (await approveBtn.isVisible()) {
         await approveBtn.click();
@@ -70,13 +64,12 @@ test.describe('Agent 审批用户旅程（batch 2）', () => {
     await setupChatSession(page);
     await typeMessage(page, '不要执行');
     await waitSendReady(page);
-    // 等待审批卡片出现 → 点击拒绝
     await sendAndWaitApproval(page, async () => {
       await page.locator('.send-btn:visible').first().click({ timeout: 5_000 });
     });
     const rejectBtn = page.getByRole('button', { name: /拒绝|取消/ }).first();
     await expect(rejectBtn).toBeVisible({ timeout: 5_000 });
-    // 同批准路径：点击直至状态翻转，防重渲染间隙丢点击
+    // 同批准用例：点击可能落在重渲染间隙被丢弃，重试到卡片消失为止
     await expect(async () => {
       if (await rejectBtn.isVisible()) {
         await rejectBtn.click();

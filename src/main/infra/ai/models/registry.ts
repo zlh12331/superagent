@@ -1,42 +1,15 @@
-// src/main/infra/ai/models/registry.ts
-// 模型注册表：模型级解析 + 跨供应商查找 + 运行时快照
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 维护内置模型索引（模型 id → ModelEntry）
-// - 按模型 id 解析：显式 id 优先；未传/未注册 → 供应商默认模型
-// - 运行时快照注册/注销（手动配置的模型与内置模型统一解析）
-// - 停用身份管理（用户关闭的模型 resolve 返回 available=false，LLM 层拦截）
-//
-// 设计（对标 qwen-code modelRegistry + resolveModelAcrossAuthTypes）：
-// - 模型是路由最小单元：resolve('gpt-4o-mini') 无需调用方知道供应商
-// - 未知模型 id 不抛错：回退默认供应商默认模型并保留原始 id 透传
-//   （原注释的「测试连接」场景已随 models:test 改为裸 HTTP 探测而不再
-//   经注册表——透传兜底现为「配置错误的防御性降级」，llm-client 侧打
-//   warn 便于定位）
-// - 本文件不依赖 SDK / config / keychain（纯领域层，便于单测）
-// ──────────────────────────────────────────────────────────────
-
+// registry.ts：模型注册表——内置清单 + 运行时快照（用户自定义模型）合并解析，
+// 支持 resolve(id?) → ResolvedModel 单一出口
 import type { ProviderKind } from '../providers/types';
 import type {
   AvailableModelInfo,
+  ModelCapabilities,
   ModelEntry,
   ModelGenerationConfig,
   ResolvedModel,
   RuntimeModelSnapshot,
 } from './types';
 
-/**
- * 合并运行时快照与同名内置条目的生成参数
- *
- * 快照只暴露一个生成参数旋钮（timeoutMs），其余默认值属模型固有属性：
- * 服务商模式下快照的 modelId 就是内置 id（仅覆盖 apiKey/baseUrl），
- * 若整组丢弃内置 generationConfig，reasoningEffort 等项目级偏好会静默回退到
- * 供应商默认。自定义模式（modelId 非内置）回落 undefined，保持既有语义。
- *
- * @param builtin 同名内置条目的 generationConfig（无则 undefined）
- * @param snapshot 运行时快照（仅 timeoutMs 参与合并）
- * @returns 合并结果；两者皆无 → undefined
- */
 function mergeSnapshotGenerationConfig(
   builtin: ModelGenerationConfig | undefined,
   snapshot: RuntimeModelSnapshot,
@@ -47,32 +20,42 @@ function mergeSnapshotGenerationConfig(
   return { ...builtin, timeoutMs: snapshot.timeoutMs };
 }
 
-/**
- * ModelRegistry 构造参数
- */
+/** 能力覆盖合并：内置清单全字段打底，override 携带的字段逐项覆盖（未填字段保留内置值） */
+function mergeSnapshotCapabilities(
+  builtin: ModelCapabilities | undefined,
+  override: ModelCapabilities | undefined,
+): ModelCapabilities {
+  return {
+    ...(builtin?.vision !== undefined ? { vision: builtin.vision } : {}),
+    ...(builtin?.contextWindowSize !== undefined
+      ? { contextWindowSize: builtin.contextWindowSize }
+      : {}),
+    ...(builtin?.maxOutputTokens !== undefined ? { maxOutputTokens: builtin.maxOutputTokens } : {}),
+    ...(builtin?.fastOnly !== undefined ? { fastOnly: builtin.fastOnly } : {}),
+    ...(builtin?.reasoning !== undefined ? { reasoning: builtin.reasoning } : {}),
+    ...(override?.vision !== undefined ? { vision: override.vision } : {}),
+    ...(override?.contextWindowSize !== undefined
+      ? { contextWindowSize: override.contextWindowSize }
+      : {}),
+    ...(override?.maxOutputTokens !== undefined
+      ? { maxOutputTokens: override.maxOutputTokens }
+      : {}),
+  };
+}
+
+/** 注册表选项：内置条目 + 各供应商默认模型 + 全局默认供应商 */
 export interface ModelRegistryOptions {
-  /** 内置模型条目表 */
   readonly entries: readonly ModelEntry[];
-  /** 各供应商默认模型 id（未指定模型时解析目标） */
-  readonly defaultModelByKind: Record<ProviderKind, string>;
-  /** 全局默认供应商（未指定模型时的最终兜底） */
+  readonly defaultModelByKind: Partial<Record<ProviderKind, string>>;
   readonly defaultKind: ProviderKind;
 }
 
-/**
- * 模型注册表
- *
- * 无状态（除运行时快照/停用 Map 外）：内置模型为常量表。
- * 模块级单例 modelRegistry 在 models/index.ts 装配（ai-provider / llm-client /
- * agent-service 导入）。
- */
+/** 模型注册表：内置索引 + 运行时快照/停用集（settings 侧写入后同步进来） */
 export class ModelRegistry {
   private readonly modelIndex: Map<string, ModelEntry>;
-  private readonly defaultModelByKind: Record<ProviderKind, string>;
+  private readonly defaultModelByKind: Partial<Record<ProviderKind, string>>;
   private readonly defaultKind: ProviderKind;
-  /** 运行时快照：快照 id → 快照（用户手动配置的模型） */
   private readonly runtimeSnapshots = new Map<string, RuntimeModelSnapshot>();
-  /** 已停用模型 id 集合（用户关闭；resolve 返回 available=false，LLM 层拦截） */
   private readonly disabledModels = new Set<string>();
 
   constructor(options: ModelRegistryOptions) {
@@ -84,51 +67,27 @@ export class ModelRegistry {
     }
   }
 
-  /**
-   * 按模型 id 查找内置条目（不含运行时快照）
-   */
   findBuiltin(modelId: string): ModelEntry | undefined {
     return this.modelIndex.get(modelId);
   }
 
-  /**
-   * 标记模型停用（关闭开关；启动时从 DB 恢复）
-   *
-   * 停用模型不注册运行时快照，但保留禁用身份供 resolve 拦截。
-   */
   registerDisabledModel(modelId: string): void {
     this.disabledModels.add(modelId);
   }
 
-  /** 取消停用标记（重新启用） */
   unregisterDisabledModel(modelId: string): void {
     this.disabledModels.delete(modelId);
   }
 
-  /** 模型当前是否处于停用状态（当前无生产调用方，仅单测——LLM 层拦截走
-   * resolve 的 available 字段，本方法供未来消费方与调试） */
   isModelDisabled(modelId: string): boolean {
     return this.disabledModels.has(modelId);
   }
 
-  /**
-   * 解析模型 id → 完整解析结果
-   *
-   * 优先级：
-   * 0. modelId 已停用 → 返回 available=false（不可路由；区别于任意 id 的透传兜底）
-   * 1. modelId 显式提供且已注册（运行时快照优先 / 内置条目）→ 该模型条目
-   * 2. modelId 显式提供但未注册 → 默认供应商默认模型 + 原始 id 透传
-   *    （配置错误的防御性降级：llm-client 侧打 warn 定位，生产多为拼错模型名
-   *    或引用已删除的运行时模型）
-   * 3. modelId 未提供 → 默认供应商默认模型
-   *
-   * @param modelId 目标模型 id（省略 = 默认模型）
-   * @returns 解析结果（永不抛错）
-   */
   resolve(modelId: string | undefined): ResolvedModel {
-    // 目标模型 id：显式 id 优先；省略 = 默认供应商默认模型。
-    // 停用检查覆盖两条路径：显式 id 停用 + 默认模型被停用（resolve(undefined)）。
-    const target = modelId ?? this.defaultModelByKind[this.defaultKind];
+    // 默认模型缺省（未登记 kind）时回退显式解析或 unknown 透传——
+    // 收紧预设后部分厂商无内置默认模型，运行时模型/显式 id 仍是有效路径
+    const defaultForKind = this.defaultModelByKind[this.defaultKind];
+    const target = modelId ?? defaultForKind ?? 'unknown';
     if (this.disabledModels.has(target)) {
       const entry = this.modelIndex.get(target);
       return {
@@ -149,11 +108,9 @@ export class ModelRegistry {
       return explicit;
     }
 
-    // 回退：默认供应商默认模型（原始 modelId 透传，防御性降级——llm-client 打 warn）
-    const defaultModelId = this.defaultModelByKind[this.defaultKind];
-    const entry = this.modelIndex.get(defaultModelId);
+    const entry = defaultForKind !== undefined ? this.modelIndex.get(defaultForKind) : undefined;
     return {
-      modelId: modelId ?? defaultModelId,
+      modelId: modelId ?? defaultForKind ?? 'unknown',
       providerKind: this.defaultKind,
       capabilities: entry?.capabilities ?? {},
       generationConfig: entry?.generationConfig,
@@ -165,37 +122,22 @@ export class ModelRegistry {
     };
   }
 
-  /**
-   * 注册运行时模型快照（幂等：同 id 覆盖）
-   */
   registerRuntimeModel(snapshot: RuntimeModelSnapshot): void {
     this.runtimeSnapshots.set(snapshot.id, snapshot);
   }
 
-  /**
-   * 注销运行时模型快照（幂等）
-   */
   unregisterRuntimeModel(snapshotId: string): void {
     this.runtimeSnapshots.delete(snapshotId);
   }
 
-  /** 当前运行时快照数量（测试断言用） */
   getRuntimeSnapshotCount(): number {
     return this.runtimeSnapshots.size;
   }
 
-  /**
-   * 清空全部运行时快照（测试重置 / 应用级清理场景）
-   */
   clearRuntimeModels(): void {
     this.runtimeSnapshots.clear();
   }
 
-  /**
-   * 列出全部可用模型（设置 UI 下拉）
-   *
-   * 内置模型 + 运行时快照模型。
-   */
   listModels(): AvailableModelInfo[] {
     const builtins: AvailableModelInfo[] = [];
     for (const entry of this.modelIndex.values()) {
@@ -220,37 +162,28 @@ export class ModelRegistry {
     return [...builtins, ...runtimes];
   }
 
-  /**
-   * 解析显式模型 id（已注册的模型条目或运行时快照）
-   */
   private resolveExplicit(modelId: string): ResolvedModel | undefined {
-    // 1. 运行时快照优先（用户手动配置覆盖内置）
     const snapshot = this.findRuntimeSnapshot(modelId);
     if (snapshot !== undefined) {
-      // 同名内置条目：能力元数据与生成默认值的事实来源。
-      // 服务商模式下快照的 modelId 就是内置 id（如 deepseek-v4-pro，仅覆盖
-      // apiKey/baseUrl），此时能力是同一模型的固有属性，必须沿用——否则
-      // contextWindowSize 回落 128K 保守值、reasoning 标记丢失导致向思考模型
-      // 注入采样参数（DeepSeek 官方语义：思考模式忽略 temperature/top_p）。
-      // 自定义模式的 modelId 通常不对应内置条目 → 回落空能力（保守策略）。
       const builtin = this.modelIndex.get(snapshot.modelId);
+      // 能力覆盖：用户手填的高级配置优先于内置清单（字段级合并——只覆盖用户填写的项）
+      const mergedCapabilities = mergeSnapshotCapabilities(
+        builtin?.capabilities,
+        snapshot.capabilitiesOverride,
+      );
       return {
         modelId: snapshot.modelId,
         providerKind: snapshot.providerKind,
-        capabilities: builtin?.capabilities ?? {},
-        // 生成参数：内置默认值 + 快照 timeoutMs 覆盖（用户只调这一个旋钮，
-        // 不应整组抹掉内置条目的 reasoningEffort 等默认值；两者皆无 → undefined）
+        capabilities: mergedCapabilities,
         generationConfig: mergeSnapshotGenerationConfig(builtin?.generationConfig, snapshot),
         isRuntime: true,
         explicitApiKey: snapshot.apiKey,
         explicitBaseUrl: snapshot.baseUrl,
-        // 自定义模型可携带 API 格式（服务商模式快照不带 → undefined，工厂按 kind 路由）
         apiFormat: snapshot.apiFormat,
         available: true,
       };
     }
 
-    // 2. 内置模型条目
     const entry = this.modelIndex.get(modelId);
     if (entry === undefined) {
       return undefined;
@@ -268,7 +201,6 @@ export class ModelRegistry {
     };
   }
 
-  /** 按模型 id 查找运行时快照（遍历快照值） */
   private findRuntimeSnapshot(modelId: string): RuntimeModelSnapshot | undefined {
     for (const snapshot of this.runtimeSnapshots.values()) {
       if (snapshot.modelId === modelId) {

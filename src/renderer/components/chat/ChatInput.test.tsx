@@ -1,13 +1,3 @@
-// src/renderer/components/$1/ChatInput.test.tsx
-// ChatInput 组件测试（纯受控组件：状态按钮 + 斜杠建议）
-// ──────────────────────────────────────────────────────────────
-// 测试要点：
-// 1. 空输入：发送按钮禁用
-// 2. 输入文本：发送按钮启用，点击触发 onSend
-// 3. 输入 "/"：弹出斜杠建议列表
-// 4. streaming 状态：显示停止按钮
-// ──────────────────────────────────────────────────────────────
-
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -46,7 +36,6 @@ describe('ChatInput', () => {
     render(<ChatInput status="ready" onSend={onSend} onStop={onStop} />);
     const input = screen.getByRole('textbox');
     await userEvent.type(input, '/');
-    // listbox 弹出且至少包含一个建议项
     expect(screen.getByRole('listbox')).toBeTruthy();
     expect(screen.getAllByRole('option').length).toBeGreaterThan(0);
   });
@@ -58,7 +47,6 @@ describe('ChatInput', () => {
 
     const commands = screen.getAllByRole('option').map((o) => o.textContent?.trim() ?? '');
     expect(commands).toHaveLength(9);
-    // textContent 为「命令+描述」拼接（如 '/interrupt中断当前生成'），按前缀断言
     const commandNames = commands.map((c) => c.split(/[^/a-z]/i)[0]);
     expect(commandNames).toEqual(
       expect.arrayContaining([
@@ -116,13 +104,6 @@ describe('ChatInput', () => {
     expect(screen.queryByRole('button', { name: /发送消息/ })).toBeNull();
   });
 
-  // ── IME 组合态（2026-09 审计修复的回归锚） ─────────────────────
-  //
-  // 背景：中文/日文输入法候选窗内的 Enter（选用候选词）与 Esc（取消候选）都会
-  // 派发 keydown，key 正是 'Enter'/'Escape' 且无修饰键。此前未判 isComposing，
-  // 用户「打拼音按 Enter 上字」会直接把半截文本发送出去（本项目带 zh-CN 语言包，
-  // 属主干路径）。修复用 event.nativeEvent.isComposing 拦截。
-
   it('IME 组合态：Enter 不发送（候选词上字不应触发发送）', () => {
     render(<ChatInput status="ready" onSend={onSend} onStop={onStop} />);
     const input = screen.getByRole('textbox');
@@ -149,13 +130,10 @@ describe('ChatInput', () => {
     fireEvent.change(input, { target: { value: '你好' } });
     fireEvent.keyDown(input, { key: 'Enter', isComposing: false });
 
-    // 发送管线含异步（附件拼接/超长校验），等待其落地
     await waitFor(() => expect(onSend).toHaveBeenCalledWith('你好'));
   });
 });
 
-// ── 组件交互深覆盖（原 chat-gaps.test 的 ChatInput 段并入） ──────
-// 草稿恢复/保存/清除、斜杠建议应用、@提及、附件、受控/注入、超长拦截、拖拽手柄
 describe('ChatInput 组件交互', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -384,8 +362,6 @@ describe('ChatInput 组件交互', () => {
     expect(handle).not.toBeNull();
     const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
     Object.defineProperty(textarea, 'offsetHeight', { value: 40, configurable: true });
-    // 键盘下限 = min(scrollHeight 自然高度, 160)（与拖拽路径对齐）；jsdom 无布局引擎
-    // scrollHeight 恒 0，mock 内容自然高度 40 —— ArrowDown 不得缩破内容高度
     Object.defineProperty(textarea, 'scrollHeight', { value: 40, configurable: true });
     textarea.style.height = '40px';
     if (handle !== null) {
@@ -413,7 +389,6 @@ describe('ChatInput 组件交互', () => {
   });
 
   it('会话切换（chatId 变化）：恢复新会话草稿', () => {
-    // 独立挂载验证（避免 rerender effect 时序与共享 store 竞态）
     useDraftStore.getState().setDraft('chat-x', { text: '会话X草稿', attachments: [] });
     useDraftStore.getState().setDraft('chat-y', { text: '会话Y草稿', attachments: [] });
     const { unmount } = renderInput({ chatId: 'chat-x' });
@@ -432,9 +407,7 @@ describe('ChatInput 组件交互', () => {
     renderInput({ chatId: 'chat-dup' });
     fireEvent.click(screen.getByLabelText('附加文件'));
     await screen.findByText('a.txt');
-    // 重复路径去重：仅一个 chip
     expect(screen.getAllByText('a.txt')).toHaveLength(1);
-    // 取消选择：不新增
     (window.api as unknown as Record<string, unknown>)['dialog'] = {
       pickFiles: vi.fn(async () => ({ data: { canceled: true, paths: [] } })),
     };
@@ -506,7 +479,6 @@ describe('ChatInput 组件交互', () => {
   });
 
   it('拖拽手柄：pointerdown/move/up 调整高度（向上拖变高）', () => {
-    // jsdom 无布局，mock 布局属性
     const originalSetPointerCapture = HTMLElement.prototype.setPointerCapture;
     HTMLElement.prototype.setPointerCapture = vi.fn();
     try {
@@ -516,14 +488,11 @@ describe('ChatInput 组件交互', () => {
       Object.defineProperty(textarea, 'offsetHeight', { value: 40, configurable: true });
       const handle = document.querySelector('.composer-drag-handle') as HTMLElement;
       fireEvent.pointerDown(handle, { clientY: 200, pointerId: 1 });
-      // 向上拖 100px（clientY 200 → 100）：高度 40 → 140
       fireEvent.pointerMove(document, { clientY: 100 });
       expect(textarea.style.height).toBe('140px');
       expect(textarea.style.maxHeight).toBe('140px');
-      // 向下拖超下限：钳位到 dragMinH（100）
       fireEvent.pointerMove(document, { clientY: 300 });
       expect(textarea.style.height).toBe('100px');
-      // 拖拽结束清理
       fireEvent.pointerUp(document);
     } finally {
       HTMLElement.prototype.setPointerCapture = originalSetPointerCapture;

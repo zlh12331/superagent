@@ -1,9 +1,3 @@
-// src/main/infra/memory-hub/prewarm.test.ts
-// 记忆引擎启动预热单测：决策分支 + 调度行为（幂等/失败静默/延迟）
-// ──────────────────────────────────────────────────────────────
-// 说明：scheduleMemoryPrewarm 有模块级幂等标记，故用 vi.resetModules() +
-//   动态 import 隔离各用例的模块状态。
-
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() }));
@@ -12,14 +6,12 @@ vi.mock('../../utils/logger', () => ({
   logger: { info: mocks.info, warn: mocks.warn, error: mocks.error, debug: mocks.debug },
 }));
 
-/** 读取（重置模块后）的 prewarm 模块 */
 async function loadModule() {
   vi.resetModules();
   return import('./prewarm');
 }
 
 describe('shouldPrewarm（纯决策）', () => {
-  /** 基线决策：已配置 + 已启用 + 非测试 + 无豁免 */
   const base = { configured: true, enabled: true, isTest: false, skipFlag: false } as const;
 
   it('引擎已配置且启用、非测试、无豁免 → 预热', async () => {
@@ -63,7 +55,6 @@ describe('scheduleMemoryPrewarm（调度）', () => {
     process.env = { ...originalEnv };
   });
 
-  /** 构造 fake 服务（只用到 isConfigured 与 ensureStarted） */
   function fakeService(overrides?: { configured?: boolean; reject?: boolean }) {
     const health = vi.fn(async () => true);
     const ensureStarted = vi.fn(async () => {
@@ -83,7 +74,6 @@ describe('scheduleMemoryPrewarm（调度）', () => {
     const service = fakeService();
     scheduleMemoryPrewarm({ service });
 
-    // 立即返回：延迟未到不应启动
     expect(service.ensureStarted).not.toHaveBeenCalled();
 
     await vi.advanceTimersByTimeAsync(PREWARM_DELAY_MS);

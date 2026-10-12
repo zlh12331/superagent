@@ -1,8 +1,3 @@
-// src/main/ipc/app.handler.test.ts
-// app.handler 单测：app 域 handler 对象（定义表驱动模式下直接测业务函数）
-//
-// 测试维度：正向 / 安全（协议白名单）/ 诊断导出（保存与取消双路径）
-
 import { dialog, shell } from 'electron';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -23,10 +18,8 @@ import { AppError, ErrorCode, IPC_PROTOCOL_VERSION } from '@code-agent/shared/ma
 import { exportDiagnosticsPackage } from '../diagnostics';
 import { appHandlers } from './app.handler';
 
-/** 空 ctx（app 域不使用 ctx） */
 const EMPTY_CTX = {} as never;
 
-/** mock 的导出函数（类型收窄用） */
 const mockExport = vi.mocked(exportDiagnosticsPackage);
 
 describe('app.handler', () => {
@@ -80,8 +73,6 @@ describe('app.handler', () => {
 
     const result = await appHandlers.exportDiagnostics(undefined, EMPTY_CTX);
 
-    // autostart：诊断包新增的运行时状态段（30-spec §3 P2-2）——测试环境未打包，
-    // autostart 的 supported=false，读取结果原样透传
     expect(mockExport).toHaveBeenCalledWith({
       filePath: 'C:/diag/diagnostics-2026-09-04.zip',
       userDataPath: '/mock/user-data',

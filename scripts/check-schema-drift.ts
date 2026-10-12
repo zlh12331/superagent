@@ -1,23 +1,10 @@
 // scripts/check-schema-drift.ts
-// schema.ts ↔ drizzle/ 迁移快照 一致性闸（数据层单一真源维度）
-// ──────────────────────────────────────────────────────────────
-// 校验两件事：
-//   ① 漂移：schema.ts 改了但没跑 `drizzle-kit generate` 生成迁移
-//   ② 快照链完整性：迁移快照自身的版本/父子 id 链无误（drizzle-kit check）
-//
-// 判据（与提交状态无关）：
-//   先快照 drizzle/ 下的文件清单 → 跑 generate → 再快照 → 出现新文件即漂移。
-//
-// 为什么不用 `git diff --quiet -- drizzle/`（CI 原实现）：
-//   1. **本地必然误报**：改了 schema.ts 并已 generate，只要还没提交就判定失败，
-//      而本地开发中途跑 verify:local 正是这个状态。
-//   2. **漏检未跟踪文件**：`git diff` 只看已跟踪文件，新增的迁移 `.sql` 与
-//      `meta/*_snapshot.json` 都是未跟踪的。CI 上它之所以还能生效，靠的是
-//      `meta/_journal.json`（已跟踪）被 generate 改动这一间接信号——一旦该文件
-//      的写法变化，闸门就会静默失效。本实现直接看文件集合，不依赖这个巧合。
-//
-// 漂移时**保留**已生成的迁移文件（它们就是修复物），并提示提交。
-// ──────────────────────────────────────────────────────────────
+// schema.ts ↔ drizzle/ 迁移一致性闸：① 漂移（改了 schema 没跑 drizzle-kit generate）
+// ② 快照链完整性（drizzle-kit check）
+// 判据与提交状态无关：跑 generate 前后对比 drizzle/ 文件集合，出新文件即漂移。
+// 不用 `git diff --quiet -- drizzle/`（原 CI 实现）——本地「已 generate 未提交」必然
+// 误报；且 git diff 只看已跟踪文件、漏检新增迁移（CI 生效全靠 _journal.json 恰好
+// 被改的间接信号）。漂移时保留已生成的迁移文件（它们就是修复物），提示提交
 
 import { execSync } from 'node:child_process';
 import { readdirSync } from 'node:fs';

@@ -1,5 +1,3 @@
-// turn-error-store.test.ts
-// 回合错误 store 单测：set 覆盖 / ensure 缺位才写 / clear 按会话 / 并发隔离
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { useTurnErrorStore } from './turn-error-store';

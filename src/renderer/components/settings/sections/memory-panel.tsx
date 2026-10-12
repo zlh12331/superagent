@@ -1,10 +1,3 @@
-// src/renderer/components/settings/sections/memory-panel.tsx
-// 记忆管理面板（从 rules-memory-section 提取：开关 + 引擎状态 + 列表 + 清除）
-// ──────────────────────────────────────────────────────────────
-// 拆分理由：规则（AGENTS.md 说明，纯静态）与记忆（有状态的管理界面）是两个
-// 关注点；合并后单函数体已超函数体棘轮门槛。
-// ──────────────────────────────────────────────────────────────
-
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { BrainCircuit, Loader2, Trash2 } from 'lucide-react';
 import type { ReactElement } from 'react';
@@ -164,11 +157,7 @@ function useMemoryClear(params: {
       if (!ok) return;
       try {
         await clearOneMutation.mutateAsync();
-      } catch {
-        // 失败已由 onError toast；此处吞掉 rejection——unhandled rejection 会冒泡到
-        // 全局（渲染层错误出口/日志噪音）。调用方写的是 `void clearOne()`，
-        // 只丢弃返回值、并不捕获拒绝。
-      }
+      } catch {}
     },
     clearAll: async () => {
       const ok = await confirm({
@@ -179,9 +168,7 @@ function useMemoryClear(params: {
       if (!ok) return;
       try {
         await clearAllMutation.mutateAsync();
-      } catch {
-        // 同上：onError 已提示，吞掉 rejection 防未处理拒绝冒泡
-      }
+      } catch {}
     },
   };
 }
@@ -224,9 +211,7 @@ function MemoryHeader({
 /** 记忆：开关 + 状态 + 列表 + 清除（会话级 / 全量） */
 export function MemoryPanel(): ReactElement {
   const { t } = useTranslation();
-  // 记忆按会话隔离：展示当前激活会话的记忆
   const activeSessionId = useActiveSessionStore((s) => s.activeSessionId);
-  // 隐私开关（写穿透 SQLite；主进程侧 1s 缓存后生效）
   const memoryEnabled = useSettingsStore((s) => s.memory.enabled);
   const updateMemory = useSettingsStore((s) => s.updateMemory);
 
@@ -252,7 +237,6 @@ export function MemoryPanel(): ReactElement {
   });
   const memories = memoriesData?.memories ?? [];
 
-  // 引擎状态：面板打开时拉一次（不轮询——状态变化低频，且拉取本身不启动引擎）
   const { data: status } = useQuery({
     queryKey: MEMORY_STATUS_QUERY_KEY,
     queryFn: getMemoryStatus,
@@ -272,7 +256,6 @@ export function MemoryPanel(): ReactElement {
         onClear={() => void clearOne()}
       />
 
-      {/* 隐私开关（默认开启；关闭后不捕获也不召回，已记录数据保留） */}
       <div className="mt-2">
         <ToggleRow
           name={t('settings.memoryEnabled')}
@@ -282,7 +265,6 @@ export function MemoryPanel(): ReactElement {
         />
       </div>
 
-      {/* 引擎状态 + 数据量（不轮询；状态变化低频） */}
       <MemoryStatusBar status={status ?? null} text={statusText} />
 
       <MemoryEntryList
@@ -294,7 +276,6 @@ export function MemoryPanel(): ReactElement {
         onRetry={() => void refetchMemories()}
       />
 
-      {/* 清除全部记忆（跨全部会话；仅在有数据时显示） */}
       {(status?.sessionCount ?? 0) > 0 && (
         <div className="mt-3">
           <Button

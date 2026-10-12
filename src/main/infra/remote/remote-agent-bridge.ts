@@ -1,28 +1,5 @@
-// src/main/infra/remote/remote-agent-bridge.ts
-// 远程控制命令 → Agent 回合桥接（无头执行，结果同步回传）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - RemoteControlService.onCommand 是唯一挂载点：令牌校验在传输层，本层只管执行
-// - 执行路径与 IM 桥接同款（AgentService.startAgent 无头 + approvalMode 门控 +
-//   transcript 落库），不新开执行通道
-// - 与会话映射：clientId → sessionId（内存 Map，首条命令自动建会话）
-// - 多轮上下文：每回合从 DB 回读该会话历史再追加本条命令（IM 桥接当前只发
-//   单条消息、无历史回读，此处按远程控制"连续对话"的定位补齐）
-// - 执行结果作为 HTTP /command 响应体回传移动端（无 WebSocket 前的同步语义）
-// - 阶段 3 增量回传：文本/工具/错误事件经传输层注入的 emit 通道逐帧回推
-//   （SSE 请求写事件帧；JSON 请求 emit 为 noop，只取最终 reply）——
-//   本层不为「有无流式」写两套逻辑，emit 一律调用即可
-//
-// 安全设计（对齐"远程执行默认保守"）：
-// - 仅 approvalMode 为 auto / yolo 时执行（ask/plan 无审批通道，回传提示）
-// - 同一 clientId 串行执行：执行中收到的命令回传排队提示
-// - 工作目录：应用 userData 下的专用沙箱目录（不用用户主目录，避免第三方
-//   诱导读取 ~/.ssh、~/.aws 等敏感文件并回传）
-//
-// 依赖注入：remoteControl（订阅）/ agentService（执行）/
-//          permissionService（模式检查）/ sessionService（历史回读 + 落库）
-// ──────────────────────────────────────────────────────────────
-
+// remote-agent-bridge.ts：远程命令 → Agent 回合的桥——收命令、起会话跑回合、流式回传 SSE
+// 安全边界：远程回合工作目录锁定在 userData/remote-workspace（绝不碰用户任意路径）
 import { randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -40,24 +17,16 @@ import type {
   RemoteCommandResult,
 } from './remote-control';
 
-/**
- * 远程命令 agent 的沙箱工作目录（与 IM 沙箱同级、同策略）
- *
- * 使用点求值（W9 修复）：与 IM 桥同因——模块加载期快照早于 dev 的
- * app.setPath('userData') 重定向，会导致 dev/E2E 数据分叉。
- */
+/** 远程工作区根（固定 userData 下，不让远程客户端指定任意目录） */
 export function getRemoteDefaultWorkingDir(): string {
   return join(app.getPath('userData'), 'remote-workspace');
 }
 
-/** 单回合最大工具调用轮数（与 IM 桥接一致） */
+// 远程回合护栏：步数 20 / 总时长 10 分钟 / 回复截断 2 万字符——移动端窄屏场景不需要完整深度
 const MAX_STEPS = 20;
-/** 回合完成兜底超时（HTTP 长请求不宜像 IM 那样挂 30 分钟） */
 const TURN_TIMEOUT_MS = 10 * 60 * 1000;
-/** 回传文本上限（防单回合超长输出撑爆响应） */
 const MAX_REPLY_CHARS = 20_000;
 
-/** 回合结束原因 → 回传文案 */
 const REASON_LABELS: Record<string, string> = {
   completed: '✅ 完成',
   aborted: '⏹ 已中断',
@@ -66,13 +35,9 @@ const REASON_LABELS: Record<string, string> = {
   timeout: '⏱ 执行超时',
 };
 
-/**
- * 远程命令 → Agent 桥接（由 ServiceContainer 在创建远程控制服务时挂载）
- */
+/** 远程命令 → Agent 桥：客户端级互斥（单客户端同时只跑一回合）+ 审批模式前置检查 */
 export class RemoteAgentBridge {
-  /** 会话映射：clientId → sessionId（重启后由新命令重建） */
   private readonly sessionMap = new Map<string, string>();
-  /** 正在执行的 clientId 集合（串行控制） */
   private readonly busyClients = new Set<string>();
   private mounted = false;
   private unsubscribeCommand: (() => void) | null = null;
@@ -84,9 +49,6 @@ export class RemoteAgentBridge {
     private readonly sessionService: ISessionService,
   ) {}
 
-  /**
-   * 挂载到远程控制服务的命令入口（幂等）
-   */
   mount(): void {
     if (this.mounted) {
       return;
@@ -95,7 +57,6 @@ export class RemoteAgentBridge {
     try {
       mkdirSync(getRemoteDefaultWorkingDir(), { recursive: true });
     } catch (err: unknown) {
-      // 目录创建失败不阻断挂载（agent 工具会在无目录时返回明确错误）
       logger.warn({ error: err }, '远程控制 agent 沙箱工作目录创建失败');
     }
     this.unsubscribeCommand = this.remoteControl.onCommand((command, emit) =>
@@ -104,9 +65,6 @@ export class RemoteAgentBridge {
     logger.info({}, '远程控制 → Agent 桥接已挂载');
   }
 
-  /**
-   * 解除命令订阅（应用退出 / 测试隔离；幂等）
-   */
   unmount(): void {
     if (!this.mounted) {
       return;
@@ -117,12 +75,6 @@ export class RemoteAgentBridge {
     logger.info({}, '远程控制 → Agent 桥接已解除挂载');
   }
 
-  /**
-   * 处理单条远程命令（串行 + 模式检查 + 回合执行 + 结果回传）
-   *
-   * 始终 accepted=true：命令到达即视为已接管，拒绝原因写在 reply 里
-   * （移动端拿到的是一条可读的助手回复，而不是无解释的 accepted:false）。
-   */
   private async handleCommand(
     command: RemoteCommand,
     emit: RemoteCommandEmitter,
@@ -136,6 +88,7 @@ export class RemoteAgentBridge {
       };
     }
 
+    // 前置检查：远程无人在场点审批，plan/ask 模式会卡死回合——要求 auto/yolo 才放行
     const mode = this.permissionService.getApprovalMode();
     if (mode !== 'auto' && mode !== 'yolo') {
       return {
@@ -157,12 +110,7 @@ export class RemoteAgentBridge {
     }
   }
 
-  /**
-   * 建立/复用会话（首条命令落库创建，标题标记远程控制来源）
-   *
-   * 关键：sessionId 取 sessionService.create 的返回值——create 内部自行生成 id，
-   * 传入自定义 id 不会被采用（沿用调用方 id 会导致后续落库 SESSION_NOT_FOUND）。
-   */
+  /** 客户端专属会话（clientId 一对一；创建失败降级一次性 sessionId——无历史但能跑） */
   private async ensureSession(clientId: string): Promise<string> {
     const existing = this.sessionMap.get(clientId);
     if (existing !== undefined) {
@@ -177,19 +125,13 @@ export class RemoteAgentBridge {
       this.sessionMap.set(clientId, sessionId);
       return sessionId;
     } catch (err: unknown) {
-      // 建会话失败：本回合降级为一次性执行（id 不缓存，下条命令重试建会话）。
-      // 不用 clientId 兜底——它由移动端自报，语义上不是会话主键。
       logger.warn({ error: err, clientId }, '远程控制会话创建失败（降级为一次性执行）');
       return randomUUID();
     }
   }
 
-  /**
-   * 执行单回合：回读历史 + 追加本条命令 → startAgent（无头）→ 等待 TURN_END
-   *
-   * @param emit 增量事件通道（流式请求逐帧回推移动端；非流式为 noop）
-   * @returns 回传给移动端的执行结果文本与回合结束原因
-   */
+  // 跑一回合并等结束：onTurnEvent 边流边 emit，TURN_END/超时先到者触发 completion——
+  // 超时只是不再等（回合继续跑完），回复标注 timeout
   private async runTurn(
     sessionId: string,
     userText: string,
@@ -206,7 +148,6 @@ export class RemoteAgentBridge {
     const completion = new Promise<void>((resolve) => {
       resolveCompletion = resolve;
     });
-    // 兜底超时：回合事件丢失时不至于让 HTTP 请求永久悬挂
     const timeout = setTimeout(() => {
       reason = 'timeout';
       resolveCompletion();
@@ -214,8 +155,6 @@ export class RemoteAgentBridge {
     timeout.unref?.();
 
     const unsubscribe = this.agentService.onTurnEvent((event) => {
-      // onTurnEvent 是类级全局监听：必须按 sessionId 过滤，
-      // 否则桌面端并发会话的文本/工具事件会串入本次回传。
       if (event.sessionId !== undefined && event.sessionId !== sessionId) {
         return;
       }
@@ -252,33 +191,19 @@ export class RemoteAgentBridge {
         workingDir: getRemoteDefaultWorkingDir(),
         systemPrompt: undefined,
         maxSteps: MAX_STEPS,
-        // 无头：不传 webContents（流式推送跳过；exec 工具拒绝、edit 按 auto 快速路径放行）
       });
       await completion;
     } finally {
       clearTimeout(timeout);
-      // 订阅在发射循环外解除（监听器内 unsubscribe 会打断 emitter 的集合遍历）
       unsubscribe();
     }
 
-    // 2026-09-08 修复（S1 重复落库）：此处不再自行落库。
-    // AgentService 已是唯一写入方——回合开始落最后一条 user 消息
-    // （agent-service.ts:414-425），回合结束落 assistant 富 parts
-    // （completeTurn → appendMessage）。桥接再写一遍会让同一条消息
-    // 带不同 seq 落库两次（UNIQUE 不冲突 → 静默重复），历史翻倍 +
-    // loadHistory 回读到重复轮次。桥接只负责回传文本。
     return { reply: buildReply(assistantText, turnEvents, reason), reason };
   }
 
-  /**
-   * 回读会话历史（多轮上下文）
-   *
-   * 读失败降级为空历史（降级为单轮，不因此拒绝执行远程命令）。
-   */
   private async loadHistory(sessionId: string): Promise<ChatMessage[]> {
     try {
       const res = await this.sessionService.get(sessionId);
-      // messages 落库前即 ChatMessage（ModelMessage）序列化，读回结构一致
       return res.messages as ChatMessage[];
     } catch (err: unknown) {
       logger.warn({ sessionId, error: err }, '远程控制历史回读失败（本回合无上下文）');
@@ -287,7 +212,6 @@ export class RemoteAgentBridge {
   }
 }
 
-/** 组装回传文本：正文 + 工具/错误摘要 + 结束状态（超长截断） */
 function buildReply(assistantText: string, turnEvents: readonly string[], reason: string): string {
   const blocks: string[] = [];
   const text = assistantText.trim();

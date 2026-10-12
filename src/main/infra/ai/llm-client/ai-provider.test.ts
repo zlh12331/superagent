@@ -1,26 +1,8 @@
-// src/main/infra/ai/llm-client/ai-provider.test.ts
-// ai-provider 单测：多供应商路由 + keychain 读取 + 单例缓存 + 模型门禁
-//
-// 测试要点：
-// 1. getAIProvider 默认 kind=deepseek：从 keychain 读取 apiKey 并创建 provider
-// 2. 缓存：第二次调用直接返回缓存（不重复读 keychain）
-// 3. 显式 apiKey 参数：创建临时实例不污染缓存
-// 4. keychain 返回 null：抛 AppError(AI_API_KEY_MISSING)
-// 5. getModel：默认模型来自供应商定义，可显式覆盖；门禁拒绝（AI_MODEL_NOT_CONFIGURED）
-// 6. 多供应商路由：kind 路由到对应 SDK 工厂；ollama 无需 API Key
-// 7. resetAIProvider：清空缓存（keychain 也重新读取）
-// 8. ProviderRegistry：内置 10 个供应商，默认 kind 为 deepseek
-
 import { AppError, ErrorCode } from '@code-agent/shared/main';
 import type { Mock } from 'vitest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-// vi.mock 会被 hoist，工厂函数内不能引用外部 const
-// 必须用 vi.hoisted 导出 mock 对象（工厂内部直接 return，不能嵌套 const）
 const mocks = vi.hoisted(() => {
-  // provider 工厂 mock（createOpenAICompatible 返回值）
-  // 默认实现返回合法 v4 model：常规路径（getModel → LlmClient）会在
-  // wrapLanguageModel 中检查 specificationVersion 并透传 provider/modelId
   const mockProviderFactory = vi.fn((modelId: string) => ({
     specificationVersion: 'v4',
     provider: 'test-provider',
@@ -28,26 +10,19 @@ const mocks = vi.hoisted(() => {
     doGenerate: async () => ({ text: 'mock' }),
     doStream: async () => ({ stream: {} }),
   }));
-  // createOpenAICompatible mock
   const mockCreateOpenAICompatible = vi.fn(() => mockProviderFactory);
-  // createOpenAI mock（OpenAI 官方 provider）
   const mockCreateOpenAI = vi.fn(() => mockProviderFactory);
-  // createAnthropic mock（Anthropic provider）
   const mockCreateAnthropic = vi.fn(() => mockProviderFactory);
-  // keychain.getSecret mock
   const mockGetSecret = vi.fn();
-  // runtime-model-store mock（模型配置门禁：默认返回一条启用记录，放行 getModel）
   const mockListRuntimeModels = vi.fn(
     async (): Promise<Array<Record<string, unknown>>> => [
       { modelId: 'deepseek-chat', providerKind: 'deepseek', isEnabled: true },
     ],
   );
-  // electron app mock（config 依赖 app.isPackaged）
   const mockApp = {
     isPackaged: false,
     getPath: vi.fn((name: string) => `/tmp/test-userdata/${name}`),
   };
-  // logger mock
   const mockLogger = {
     info: vi.fn(),
     warn: vi.fn(),
@@ -66,30 +41,24 @@ const mocks = vi.hoisted(() => {
   };
 });
 
-// mock @ai-sdk/openai-compatible：拦截 createOpenAICompatible 调用
 vi.mock('@ai-sdk/openai-compatible', () => ({
   createOpenAICompatible: mocks.mockCreateOpenAICompatible,
 }));
 
-// mock @ai-sdk/openai：拦截 createOpenAI 调用
 vi.mock('@ai-sdk/openai', () => ({
   createOpenAI: mocks.mockCreateOpenAI,
 }));
 
-// mock @ai-sdk/anthropic：拦截 createAnthropic 调用
 vi.mock('@ai-sdk/anthropic', () => ({
   createAnthropic: mocks.mockCreateAnthropic,
 }));
 
-// mock keychain：拦截 getSecret，避免真实文件 IO
 vi.mock('../../storage/keychain', () => ({
   getSecret: mocks.mockGetSecret,
 }));
 
-// mock electron：config 依赖 app.isPackaged（registry 从 config.providers 读取 baseURL）
 vi.mock('electron', () => ({ app: mocks.mockApp }));
 
-// mock logger：避免触发真实 electron-log 初始化
 vi.mock('../../../utils/logger', () => ({
   logger: mocks.mockLogger,
 }));
@@ -106,11 +75,8 @@ import {
 describe('ai-provider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // 重置单例缓存（避免用例之间污染）
     resetAIProvider();
-    // 默认：keychain 中存在 API Key
     mocks.mockGetSecret.mockResolvedValue('sk-test-api-key');
-    // 默认：存在一条启用模型记录 → 放行模型配置门禁
     vi.spyOn(runtimeModelStore, 'list').mockResolvedValue([
       { modelId: 'deepseek-chat', providerKind: 'deepseek', isEnabled: true } as never,
     ]);
@@ -120,11 +86,8 @@ describe('ai-provider', () => {
     it('首次调用：从 keychain 读取 apiKey 并创建 provider', async () => {
       const provider = await getAIProvider();
 
-      // 应该调用 keychain.getSecret('deepseek-api-key')
       expect(mocks.mockGetSecret).toHaveBeenCalledWith('deepseek-api-key');
-      // 应该调用 createOpenAICompatible（deepseek 走 OpenAI Compatible 协议）
       expect(mocks.mockCreateOpenAICompatible).toHaveBeenCalledTimes(1);
-      // 返回值应该是 provider 工厂函数
       expect(provider).toBe(mocks.mockProviderFactory);
     });
 
@@ -132,40 +95,28 @@ describe('ai-provider', () => {
       await getAIProvider();
       await getAIProvider();
 
-      // keychain 应该只被读一次
       expect(mocks.mockGetSecret).toHaveBeenCalledTimes(1);
-      // createOpenAICompatible 应该只被调用一次
       expect(mocks.mockCreateOpenAICompatible).toHaveBeenCalledTimes(1);
     });
 
     it('显式 apiKey 参数：创建临时实例不污染缓存', async () => {
-      // 先初始化缓存
       const cached = await getAIProvider();
       expect(mocks.mockCreateOpenAICompatible).toHaveBeenCalledTimes(1);
 
-      // 显式传入 apiKey：不应读 keychain，应创建新实例
       const tempProvider = await getAIProvider({ apiKey: 'sk-explicit-key' });
 
-      // 不应再次读 keychain（因为显式传入了 apiKey）
       expect(mocks.mockGetSecret).toHaveBeenCalledTimes(1);
-      // createOpenAICompatible 应该被调用 2 次（缓存 + 临时）
       expect(mocks.mockCreateOpenAICompatible).toHaveBeenCalledTimes(2);
-      // 临时实例与缓存实例引用相同（mock 返回同一引用），仅验证调用次数
       void tempProvider;
 
-      // 再次调用（无参数）：应返回原缓存实例
       const cachedAgain = await getAIProvider();
       expect(cachedAgain).toBe(cached);
-      // createOpenAICompatible 调用次数不变（缓存命中）
       expect(mocks.mockCreateOpenAICompatible).toHaveBeenCalledTimes(2);
     });
 
     it('createOpenAICompatible 入参：baseURL 应拼接 /v1 后缀', async () => {
       await getAIProvider();
 
-      // 校验传给 createOpenAICompatible 的配置
-      // mock.calls 类型推断为空元组 `[][]`，无法直接索引 [0][0]
-      // 用 as unknown as 断言为 `[[ConfigShape]]` 以访问首个调用的首参
       type ProviderConfig = {
         name: string;
         baseURL: string;
@@ -178,7 +129,6 @@ describe('ai-provider', () => {
         throw new Error('createOpenAICompatible 未被调用或入参缺失');
       }
       expect(config.name).toBe('deepseek');
-      // baseURL 应为 apiBase + /v1
       expect(config.baseURL).toBe('https://api.deepseek.com/v1');
       expect(config.apiKey).toBe('sk-test-api-key');
       expect(config.includeUsage).toBe(true);
@@ -221,7 +171,6 @@ describe('ai-provider', () => {
     it('kind=ollama：无需 API Key，走 OpenAI Compatible 协议', async () => {
       await getAIProvider({ kind: 'ollama' });
 
-      // 本地服务不读 keychain
       expect(mocks.mockGetSecret).not.toHaveBeenCalled();
       expect(mocks.mockCreateOpenAICompatible).toHaveBeenCalledTimes(1);
     });
@@ -235,28 +184,22 @@ describe('ai-provider', () => {
       await getAIProvider({ kind: 'deepseek' });
       await getAIProvider({ kind: 'openai' });
 
-      // 两个供应商分别创建，缓存互不干扰
       expect(getProviderCacheSize()).toBe(2);
     });
   });
 
   describe('getModel', () => {
     it('默认 modelId：使用供应商默认模型（deepseek-v4-flash）', async () => {
-      // getAIProvider 返回 mock 的 vi.fn()，但类型是工厂函数
-      // 需要 cast 为 Mock 才能调用 mockClear
       const providerFactory = (await getAIProvider()) as unknown as Mock;
-      // 清除之前的调用记录
       providerFactory.mockClear();
 
       const model = await getModel();
 
-      // 应使用供应商定义中的默认模型 id 调用 provider 工厂
-      expect(providerFactory).toHaveBeenCalledWith('deepseek-v4-flash');
-      // 常规路径经 LlmClient wrap：modelId/provider 透传，streamText 能力保留
+      expect(providerFactory).toHaveBeenCalledWith('deepseek-flash');
       expect(model).toMatchObject({
         specificationVersion: 'v4',
         provider: 'test-provider',
-        modelId: 'deepseek-v4-flash',
+        modelId: 'deepseek-flash',
       });
     });
 
@@ -290,41 +233,31 @@ describe('ai-provider', () => {
     });
 
     it('显式 apiKey：创建临时 provider 不污染缓存', async () => {
-      // 先初始化缓存
       await getAIProvider();
       mocks.mockProviderFactory.mockClear();
       mocks.mockCreateOpenAICompatible.mockClear();
 
-      // 显式 apiKey 调用 getModel
       await getModel('test-model', { apiKey: 'sk-temp' });
 
-      // createOpenAICompatible 应该被调用（临时实例）
       expect(mocks.mockCreateOpenAICompatible).toHaveBeenCalledTimes(1);
-      // provider 工厂应该用 'test-model' 调用
       expect(mocks.mockProviderFactory).toHaveBeenCalledWith('test-model');
     });
   });
 
   describe('ProviderRegistry', () => {
-    it('内置 10 个供应商，默认 kind 为 deepseek', () => {
+    it('预设 3 家（深度适配），默认 kind 为 deepseek；工厂全集仍可路由', () => {
       const registry = new ProviderRegistry();
       const infos = registry.list();
 
-      expect(infos).toHaveLength(10);
+      expect(infos.map((i) => i.kind).sort()).toEqual(['deepseek', 'mimo', 'zhipu'].sort());
       expect(registry.getDefaultKind()).toBe('deepseek');
-      expect(infos.map((i) => i.kind).sort()).toEqual(
-        [
-          'anthropic',
-          'deepseek',
-          'ollama',
-          'openai',
-          'moonshot',
-          'zhipu',
-          'qwen',
-          'doubao',
-          'siliconflow',
-          'openrouter',
-        ].sort(),
+      // 非预设 kind 的工厂仍注册（runtime_models 自定义路由）——openai 工厂返回
+      // provider.chat，mock 的 createOpenAI 返回 mockProviderFactory（函数无 chat 属性），
+      // 结果为 undefined 是 mock 形态所致；断言「createFactory 被调用且未抛错」即证明路由
+      const factory = registry.createFactory('openai', { apiKey: 'sk' });
+      void factory;
+      expect(mocks.mockCreateOpenAI).toHaveBeenCalledWith(
+        expect.objectContaining({ apiKey: 'sk' }),
       );
     });
 
@@ -334,18 +267,18 @@ describe('ai-provider', () => {
 
       expect(deepseek).toMatchObject({
         kind: 'deepseek',
-        defaultModel: 'deepseek-v4-flash',
+        defaultModel: 'deepseek-flash',
         requiresApiKey: true,
         isDefault: true,
       });
     });
 
-    it('ollama 不需要 API Key 且非默认', () => {
+    it('mimo 需要 API Key 且非默认（预设第二家）', () => {
       const registry = new ProviderRegistry();
-      const ollama = registry.list().find((i) => i.kind === 'ollama');
+      const mimo = registry.list().find((i) => i.kind === 'mimo');
 
-      expect(ollama).toMatchObject({
-        requiresApiKey: false,
+      expect(mimo).toMatchObject({
+        requiresApiKey: true,
         isDefault: false,
       });
     });
@@ -365,19 +298,15 @@ describe('ai-provider', () => {
       resetAIProvider();
 
       await getAIProvider();
-      // 应该重新创建一次 provider
       expect(mocks.mockCreateOpenAICompatible).toHaveBeenCalledTimes(2);
-      // keychain 也应该被重新读一次
       expect(mocks.mockGetSecret).toHaveBeenCalledTimes(2);
     });
 
     it('多次调用幂等（安全）', async () => {
-      // 多次 reset 不应抛错
       resetAIProvider();
       resetAIProvider();
       resetAIProvider();
 
-      // 再次获取应正常工作
       await expect(getAIProvider()).resolves.toBeDefined();
     });
   });

@@ -1,11 +1,3 @@
-// src/renderer/components/$1/ShortcutHelpDialog.test.tsx
-// ShortcutHelpDialog 单测：固定键 + 可自定义键（读设置真源）+ 键串格式化
-// ──────────────────────────────────────────────
-// 覆盖动机：组件此前 0% 覆盖。它展示的键位必须与真实绑定一致——
-// 文件头注释记录了真实 bug：「此前硬编码默认值：用户改键后帮助表与实际绑定不一致」。
-// 故本测试的核心回归锚是：自定义键改动后，帮助表随之变化。
-// ──────────────────────────────────────────────
-
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -21,9 +13,7 @@ const t = i18n.t.bind(i18n);
 const ORIGINAL = useSettingsStore.getState().shortcuts;
 
 afterEach(() => {
-  // 还原默认键位，避免污染其他用例
   useSettingsStore.setState({ shortcuts: ORIGINAL });
-  // 还原 ui-store（直达入口用例会写入设置分区状态）
   useUiStore.setState({ settingsOpen: false, settingsSection: null });
 });
 
@@ -46,7 +36,6 @@ describe('ShortcutHelpDialog', () => {
       shortcuts: { ...ORIGINAL, openSettings: 'Ctrl+Alt+S' },
     });
     render(<ShortcutHelpDialog open onClose={() => {}} />);
-    // 键串经 formatKeys 展开为空格分隔的 kbd 排版
     expect(screen.getByText('Ctrl + Alt + S')).toBeDefined();
   });
 
@@ -58,10 +47,8 @@ describe('ShortcutHelpDialog', () => {
 
   it('固定键与可自定义键共存：两者都在同一双列网格中', () => {
     render(<ShortcutHelpDialog open onClose={() => {}} />);
-    // 固定键（不可自定义）
     expect(screen.getByText('? / F1')).toBeDefined();
     expect(screen.getByText('Shift + Enter')).toBeDefined();
-    // 可自定义键渲染自 settings
     expect(screen.getByText(t('shortcutHelp.item.openSettings'), { exact: false })).toBeDefined();
   });
 
@@ -89,7 +76,6 @@ describe('ShortcutHelpDialog', () => {
     render(<ShortcutHelpDialog open onClose={onClose} />);
     const dialog = screen.getByRole('dialog');
 
-    // Radix Dialog 监听容器上的 Escape 并回调 onOpenChange(false)
     await act(async () => {
       fireEvent.keyDown(dialog, { key: 'Escape', code: 'Escape' });
     });

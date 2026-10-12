@@ -1,13 +1,9 @@
-// src/renderer/components/terminal/TerminalView.test.tsx
-// TerminalView xterm 生命周期测试：挂载/历史 buffer/输出订阅过滤/退出标记与
-// 输入拦截/onData 转发/ResizeObserver 防抖 resize/卸载清理（xterm 外部库 mock）
 import { act, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { TerminalMeta } from '@/stores/transient/terminal-store';
 import { useTerminalStore } from '@/stores/transient/terminal-store';
 import { TerminalView } from './TerminalView';
 
-// ── xterm 外部库 mock（项目已有先例：TerminalPanel.test.tsx）──
 const { MockTerminal, mockTerm, mockFitAddon, fitAddon } = vi.hoisted(() => {
   const mockTerm = {
     write: vi.fn(),
@@ -15,12 +11,10 @@ const { MockTerminal, mockTerm, mockFitAddon, fitAddon } = vi.hoisted(() => {
     loadAddon: vi.fn(),
     open: vi.fn(),
     dispose: vi.fn(),
-    // options 真实 xterm 实例恒有（36-B 字号热更 effect 读写 options.fontSize）
     options: { fontSize: 13 } as { fontSize?: number },
     cols: 80,
     rows: 24,
   };
-  // class 构造返回 mockTerm 对象（new Terminal(...) 得到同一实例）
   class MockTerminalClass {
     static instances = 0;
     constructor() {
@@ -30,7 +24,6 @@ const { MockTerminal, mockTerm, mockFitAddon, fitAddon } = vi.hoisted(() => {
     }
   }
   const mockFitAddon = { fit: vi.fn() };
-  // FitAddon 同样需要可 new 的 class
   class MockFitAddonClass {
     constructor() {
       // biome-ignore lint/correctness/noConstructorReturn: mock 构造返回共享实例（new 语义）
@@ -139,7 +132,6 @@ describe('TerminalView', () => {
     act(() => exitCb({ terminalId: 'term-1', exitCode: 0 }));
     expect(mockTerm.write).toHaveBeenCalledWith(expect.stringContaining('exit code: 0'));
 
-    // onData 回调注册后触发（已退出 → 不发送 input）
     const onDataCb = mockTerm.onData.mock.calls[0]?.[0] as (data: string) => void;
     act(() => onDataCb('ls'));
     expect(window.api.terminal.input).not.toHaveBeenCalled();

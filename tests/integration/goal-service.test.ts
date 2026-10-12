@@ -1,13 +1,9 @@
-// src/main/infra/ai/goal-service.test.ts
-// 目标服务单测：CRUD + 回合结束自动判定（内存 DB + fake judge）
-
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { IAgentService } from '../../src/main/infra/ai/agent/agent-service';
 import type { GoalJudge } from '../../src/main/infra/ai/knowledge/goal-judge';
 import { GoalService } from '../../src/main/infra/ai/knowledge/goal-service';
 import { createTestDb } from '../../src/main/infra/storage/test-utils';
 
-// mock getDb：内存数据库（drizzle 迁移，schema.ts 单一真源）
 function createInMemoryDb() {
   return createTestDb();
 }
@@ -116,7 +112,6 @@ describe('GoalService', () => {
     await service.create(sid, '目标 B');
     const goals = await service.list(sid);
     expect(goals).toHaveLength(2);
-    // 按创建时间倒序：最新目标在前（前端 goals[0] 即当前目标）
     expect(goals[0]?.status).toBe('active');
     expect(goals[0]?.condition).toBe('目标 B');
     expect(goals[1]?.status).toBe('aborted');
@@ -133,7 +128,7 @@ describe('GoalService', () => {
     await service.clear(sid);
     const goals = await service.list(sid);
     expect(goals[0]?.status).toBe('aborted');
-    await service.clear(sid); // 幂等
+    await service.clear(sid);
   });
 
   it('回合结束自动判定：judge 判定满足 → 目标 completed', async () => {

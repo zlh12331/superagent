@@ -1,13 +1,3 @@
-// src/renderer/components/$1/UpdateNotice.test.tsx
-// UpdateNotice 更新提示单测：分阶段 toast + 同阶段防重入 + 静默阶段
-// ──────────────────────────────────────────────
-// 覆盖动机：组件此前 0% 覆盖。它是更新流程的唯一用户可见出口——
-// 阶段 → toast 类型的映射（available→info / downloaded→带安装动作 /
-// not-available→success / error→error）、downloading/checking 静默、
-// lastNotifiedPhaseRef 防重复推送，均无回归锚。
-// 集成方式：mock useUpdate 返回状态（真实 toast 由 sonner mock 断言）。
-// ──────────────────────────────────────────────
-
 import { render } from '@testing-library/react';
 import { toast } from 'sonner';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -154,19 +144,15 @@ describe('UpdateNotice', () => {
   });
 
   it('快照回放记录旧版本后，同阶段的新版本实时推送仍正常提示（去重键含版本）', () => {
-    // 回归锚：去重键曾是纯 phase——回放记下 available@1.2.0 后，1.2.1 的
-    // available 实时推送会被误吞，用户永远看不到新版本提示
     const { rerender } = render(<UpdateNotice />);
     mockState.value = { phase: 'available', version: '1.2.0' };
     mockFromSnapshot.value = true;
     rerender(<UpdateNotice />);
     expect(toast.info).not.toHaveBeenCalled();
-    // 同版本实时推送：去重，不弹
     mockFromSnapshot.value = false;
     mockState.value = { phase: 'available', version: '1.2.0' };
     rerender(<UpdateNotice />);
     expect(toast.info).not.toHaveBeenCalled();
-    // 新版本同阶段实时推送：必须弹
     mockState.value = { phase: 'available', version: '1.2.1' };
     rerender(<UpdateNotice />);
     expect(toast.info).toHaveBeenCalledTimes(1);

@@ -1,6 +1,3 @@
-// src/main/infra/ai/tools/plan-mode.tools.test.ts
-// 计划模式切换工具单测：previousMode 状态恢复 / 幂等 / 模式持久化
-
 import type { ApprovalMode } from '@code-agent/shared/main';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { IPermissionService } from './permission-service';

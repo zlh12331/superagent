@@ -1,24 +1,12 @@
 // scripts/check-native-arch.ts
-// 打包产物原生模块架构断言（防「交叉构建静默产出错误架构二进制」）
-// ──────────────────────────────────────────────────────────────
-// 为什么需要（2026-09-20 实测）：在 x64 runner 上为 arm64 目标打包时，
-// @electron/rebuild 会以 0.4s 完成「编译」（vs 真实编译 9s/98s），实际未产出
-// aarch64 二进制、静默复用 host 架构——构建日志**不报任何错**，产出的 arm64
-// 安装包内是 x64 原生模块（用户装上即崩）。唯一可靠的探针是读二进制头。
-//
-// 检查对象（每个 unpacked 目录内，按目录名推断目标架构）：
-// - app.asar.unpacked/node_modules/node-pty/build/Release/*.{node,exe}
-//   （@electron/rebuild 编译产物，主动加载路径）
-// - app.asar.unpacked/node_modules/better-sqlite3/build/Release/*.node
-//   （同上；若缺失则回退检查其主动加载的 prebuilds/<platform>-<arch>.node）
-// - resources/codegraph/{node.exe,bin/codegraph}（平台捆绑包，extraResources 按
-//   ${arch} 宏选取——架构错配时这里必然暴露）
-//
-// 跳过规则：包自带的多平台 prebuilds 目录（如 better-sqlite3/prebuilds/darwin-*）
-// 不属于本平台运行路径，不参与判定；无法识别格式/架构的文件跳过并计数。
-//
-// 运行：pnpm check:native-arch（CI 的 smoke job 与 release.yml 的 build job 都跑）
-// ──────────────────────────────────────────────────────────────
+// 打包产物原生模块架构断言：防「交叉构建静默产出错误架构二进制」
+// 为什么需要（2026-09-20 实测）：x64 runner 上为 arm64 打包时 @electron/rebuild 以
+// 0.4s「完成」编译（真实需 9s+），实际静默复用 host 架构、日志零报错——装上即崩；
+// 唯一可靠探针是读二进制头
+// 检查对象：node-pty / better-sqlite3 的 .node|.exe（@electron/rebuild 产物，主动加载路径）
+// + codegraph 平台捆绑包（extraResources 按 ${arch} 宏选取，错配必暴露）；
+// 包自带的多平台 prebuilds 目录不在本平台运行路径，不参与判定
+// 运行：pnpm check:native-arch（CI smoke job 与 release.yml build job 都跑）
 
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { basename, join, relative } from 'node:path';
@@ -65,7 +53,7 @@ function findUnpackedDirs(): string[] {
       dirs.push(join(RELEASE_DIR, entry));
       continue;
     }
-    // macOS：mac / mac-arm64 目录内是 <Product>.app（本检查用其 Contents 下的路径）
+    // macOS：mac / mac-arm64 目录内是 <Product>.app（资源路径用其 Contents 推导）
     if (entry === 'mac' || entry === 'mac-x64' || entry === 'mac-arm64') {
       dirs.push(join(RELEASE_DIR, entry));
     }
@@ -118,16 +106,14 @@ function collectFiles(
 export function resourcesDirOf(unpackedDir: string): string {
   const base = basename(unpackedDir);
   if (base.startsWith('mac')) {
-    // mac / mac-arm64 / mac-x64 → <dir>/<Product>.app/Contents/Resources
     try {
       const appDir = readdirSync(unpackedDir).find((e) => e.endsWith('.app'));
       if (appDir !== undefined) {
         return join(unpackedDir, appDir, 'Contents', 'Resources');
       }
-    } catch {
-      // 落到下面回退
-    }
+    } catch {}
   }
+  // 回退：非 macOS 布局（Windows/Linux 的 <dir>/resources）；mac 目录找不到 .app 时也落到这里
   return join(unpackedDir, 'resources');
 }
 
@@ -136,14 +122,11 @@ function targetsFor(unpackedDir: string, expected: 'x64' | 'arm64'): CheckTarget
   const dirName = basename(unpackedDir);
   const label = (p: string): string => relative(ROOT, p).replace(/\\/g, '/');
   const targets: CheckTarget[] = [];
-  // ⚠️ 必须用 resourcesDirOf 而非硬编码 `unpackedDir/resources`：macOS 的资源在
-  // `<dir>/<Product>.app/Contents/Resources`，硬编码路径会让 macOS 上一个都查不到
-  // ——而检查器"0 个也通过"的设计会把它变成静默漏洞（2026-09-20 首次 CD 实测暴露：
-  // macOS job 报「已检查 0 个二进制」仍通过）。
+  // ⚠️ 必须经 resourcesDirOf 而非硬编码 unpackedDir/resources：macOS 资源在
+  // <dir>/<Product>.app/Contents/Resources，硬编码会让 macOS 上一个都查不到
   const resourcesDir = resourcesDirOf(unpackedDir);
   const asarUnpacked = join(resourcesDir, 'app.asar.unpacked', 'node_modules');
 
-  // node-pty：build/Release 下的编译产物（.node 与 winpty-agent.exe）
   for (const pattern of ['node', 'exe']) {
     const base = join(asarUnpacked, 'node-pty', 'build', 'Release');
     for (const file of collectFiles(base, (n) => n.endsWith(`.${pattern}`), 2)) {
@@ -151,7 +134,8 @@ function targetsFor(unpackedDir: string, expected: 'x64' | 'arm64'): CheckTarget
     }
   }
 
-  // better-sqlite3：优先 build/Release（rebuild 产物），缺失则用其主动加载的 prebuild
+  // better-sqlite3：优先查本地编译产物，缺失才查 prebuilds/<platform>-<arch>.node
+  // （后者是多平台分发包的兜底路径，本平台运行时真正加载的就是它）
   const sqliteBase = join(asarUnpacked, 'better-sqlite3');
   const sqliteRelease = collectFiles(
     join(sqliteBase, 'build', 'Release'),
@@ -163,7 +147,7 @@ function targetsFor(unpackedDir: string, expected: 'x64' | 'arm64'): CheckTarget
       targets.push({ label: label(file), path: file, expected });
     }
   } else {
-    // 回退：包内 prebuilds/<platform>-<arch>.node（better-sqlite3 的加载器优先用它）
+    // 产物目录名（win-arm64-unpacked 等）→ prebuilds 的平台目录名
     const platformDir = dirName.startsWith('win')
       ? 'win32'
       : dirName.startsWith('linux')
@@ -174,24 +158,16 @@ function targetsFor(unpackedDir: string, expected: 'x64' | 'arm64'): CheckTarget
       if (statSync(prebuild).isFile()) {
         targets.push({ label: label(prebuild), path: prebuild, expected });
       }
-    } catch {
-      // 未命中：该平台可能用 build/Release 之外的布局，交由"未检查到任何目标"分支报告
-    }
+    } catch {}
   }
 
-  // codegraph 平台捆绑包（extraResources 按 ${arch} 选取）
-  for (const rel of [
-    join('codegraph', 'node.exe'), // Windows
-    join('codegraph', 'bin', 'codegraph'), // 其他平台
-  ]) {
+  for (const rel of [join('codegraph', 'node.exe'), join('codegraph', 'bin', 'codegraph')]) {
     const file = join(resourcesDir, rel);
     try {
       if (statSync(file).isFile()) {
         targets.push({ label: label(file), path: file, expected });
       }
-    } catch {
-      // 不存在即跳过（平台差异）
-    }
+    } catch {}
   }
 
   return targets;
@@ -216,7 +192,6 @@ function checkFile(
   }
   const info = detectBinaryInfo(buf);
   if (info === null) {
-    // 脚本/GZip 等非目标格式：跳过（不误报）
     result.skipped += 1;
     return;
   }
@@ -277,10 +252,6 @@ function main(): void {
     process.exit(1);
   }
 
-  // ⚠️ 0 个检查对象 = 检查器失灵，不是"没有原生模块"
-  // 本应用必然携带 node-pty（终端功能的原生模块），任何平台都应查到至少一个二进制。
-  // 若此处放行，"路径解析写错 → 一个都没查到 → 报通过"就会成为静默漏洞
-  // （2026-09-20 首次 CD 实测：macOS job 正是这样报「已检查 0 个」仍通过）。
   if (result.checked === 0) {
     console.error('[check-native-arch] ❌ 未检查到任何原生二进制——检查器路径解析可能失配：');
     console.error(`  已扫描的产物目录：${dirs.map((d) => basename(d)).join(', ')}`);
@@ -294,8 +265,6 @@ function main(): void {
   console.log('[check-native-arch] ✅ 通过：所有原生模块与目标架构一致');
 }
 
-// 仅在被直接执行时运行主逻辑（被测试 import 时不执行——否则单测会连带扫描
-// 真实 release/ 目录并在无产物时以 exit(1) 中断测试进程）
 if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main();
 }

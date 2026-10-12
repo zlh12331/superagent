@@ -1,15 +1,3 @@
-// src/main/infra/ai/agent-runtime/stream-reader.test.ts
-// stream-reader 单测：空闲超时守卫读流（真实 ReadableStream + fake timers）
-//
-// 测试要点：
-// 1. 流立即完成：正常返回结果 + 清理超时定时器
-// 2. 流挂起超阈值：抛 AI_TIMEOUT + abort controller
-// 3. 流分块读取：多块顺序返回
-// 4. 超时定时器清理：正常路径不残留（finally clearTimeout）
-//
-// 接线背景：生产消费方为 agent-runtime 内部两处（create-stream 首 part
-// 预读 + TurnRunner 循环读流）——本守卫不依赖任何配置，主回合链路恒生效。
-
 import { describe, expect, it, vi } from 'vitest';
 import { readWithIdleTimeout } from './stream-reader';
 
@@ -34,9 +22,7 @@ describe('stream-reader 批次14 缺口补全', () => {
     vi.useFakeTimers();
     try {
       const stream = new ReadableStream<number>({
-        start() {
-          // 永不 enqueue/close：read 永久挂起
-        },
+        start() {},
       });
       const reader = stream.getReader();
       const controller = new AbortController();
@@ -46,7 +32,6 @@ describe('stream-reader 批次14 缺口补全', () => {
       await vi.advanceTimersByTimeAsync(200);
 
       await assertion;
-      // 超时触发后中断底层流
       expect(controller.signal.aborted).toBe(true);
     } finally {
       vi.useRealTimers();
@@ -76,9 +61,7 @@ describe('stream-reader 批次14 缺口补全', () => {
     vi.useFakeTimers();
     try {
       const stream = new ReadableStream<number>({
-        start() {
-          // 永不结束
-        },
+        start() {},
       });
       const reader = stream.getReader();
 

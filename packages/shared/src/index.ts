@@ -1,23 +1,14 @@
-// packages/shared/src/index.ts
-// @code-agent/shared 跨进程共享包统一入口
-// 暴露：错误码 + IPC 类型契约（应用级 + Code Agent 全域）+ zod schema
-//
-// 消费方：
-// - 主进程：import { AppError, ErrorCode, IPC_CHANNELS, ChatSendReqSchema } from '@code-agent/shared'
-// - Preload：import type { IpcApi } from '@code-agent/shared'
-// - 渲染层：import type { IpcResponse, AppStatus } from '@code-agent/shared'
-//
-// P1 改造（Code Agent 架构）：
-// - 新增 6 个域的 zod schema（agent/file/search/terminal/git/session）
-// - 新增对应 IPC payload 类型映射（见 ./ipc/payloads.ts）
-// - 所有 schema 均为单一真源，主进程 IPC handler 用于校验入参，避免类型与 schema 双向漂移
+// index.ts：@code-agent/shared 的包主入口（package.json exports["."]）——常量 / IPC 契约 / zod schema 的再导出，另含手写版本常量
+// 边界：本入口只再导出其中一部分，并非全量——按进程拆分的出口另有 ./main、./renderer、./preload；
+// 本入口再导出 schemas 各模块，随之传递依赖 zod，preload（CJS + 沙箱）不得从主入口导入，须走零 zod 的子路径（./preload、./ipc/meta 等）
+// 排列：整文件按模块路径字母序（biome check 会重排，新增行按序插入即可）
 
 export * from './constants/defaults';
-// 错误处理（§7）
 export * from './constants/errors';
 export * from './constants/protocol';
 
-// IPC 类型契约（§5）
+// IPC 契约：定义表体系——meta（纯字符串，preload 侧可安全引入）→ definitions（meta + zod）→ derive（类型推导），
+// 另有 api / channels / payloads / response 提供 preload API、通道常量与请求响应类型
 export * from './ipc/api';
 export * from './ipc/channels';
 export * from './ipc/definitions';
@@ -26,11 +17,7 @@ export * from './ipc/meta';
 export * from './ipc/payloads';
 export * from './ipc/response';
 
-// zod schema（单一真源，主进程 IPC handler 用于校验入参）
-// 按域分组：agent（Code Agent 核心）/ chat（基础聊天）/ file/search（只读工具）
-// / terminal/git（读写工具）/ codebase（代码智能查询）/ session（持久化）/ tool（工具系统元数据）
-// / system（运行时可观测性）/ settings（API Key 管理）/ devtools（开发者工具集成）
-// 顺序由 Biome organizeImports 规则按字母序维护
+// zod schema：入参/出参校验的单一真源（主进程 IPC 定义表引用，见 src/main/utils/wrap.ts），避免类型与校验双向漂移
 export * from './schemas/agent';
 export * from './schemas/agent-ask';
 export * from './schemas/agent-events';
@@ -60,5 +47,8 @@ export * from './schemas/tool';
 export * from './schemas/update';
 export * from './schemas/whitelist';
 
-// 包版本（供运行时 sanity check）
+/**
+ * 本包手写的版本号常量，与 packages/shared/package.json 的 version 不同源（勿当作应用版本使用）。
+ * 包内仅冒烟用例 packages/shared/src/__tests__/smoke.test.ts 锁定其字面量，改动需同步该断言。
+ */
 export const SHARED_VERSION = '0.1.0' as const;

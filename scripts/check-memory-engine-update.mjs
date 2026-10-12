@@ -1,15 +1,7 @@
 // scripts/check-memory-engine-update.mjs
-// 检查上游记忆引擎是否有新版本
-// ──────────────────────────────────────────────────────────────
-// 数据源：GitHub API 的 tags 列表（只读，无需认证；未认证时 60 次/小时限额足够）。
-// 本脚本**只读**，不改任何文件。
-//
-// ⚠️ 网络说明：部分环境无法访问 GitHub（本项目实测 codeload 不可达）。
-//   此时脚本以退出码 0 优雅提示"无法检查"，不视为失败——同步流程本身
-//   依赖人工下载归档，不依赖本检查。
-//
+// 检查上游记忆引擎是否有新版本（只读，不改文件）：GitHub API tags（未认证 60 次/h 足够）
+// ⚠️ 网络不可达不算失败（exit 0 优雅提示）——同步流程靠人工下载归档，不依赖本检查
 // 用法：node scripts/check-memory-engine-update.mjs
-// ──────────────────────────────────────────────────────────────
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -20,7 +12,6 @@ const VERSIONS_PATH = join(ROOT, 'packages', 'memory-engine', 'versions.json');
 const versions = JSON.parse(readFileSync(VERSIONS_PATH, 'utf8'));
 const { repository, repoTag } = versions;
 
-// 从仓库 URL 提取 owner/repo
 const m = /github\.com\/([^/]+)\/([^/]+?)(?:\.git)?$/.exec(repository);
 if (m === null) {
   console.error(`[memory-engine:check] ❌ 无法从 versions.json 解析仓库地址：${repository}`);

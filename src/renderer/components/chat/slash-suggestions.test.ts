@@ -1,6 +1,3 @@
-// src/renderer/components/chat/slash-suggestions.test.ts
-// 斜杠建议表与过滤纯函数回归（自 ChatInput 提取后的独立验证）
-
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -36,7 +33,7 @@ describe('filterSlashSuggestions', () => {
   it('/in 同时匹配 /interrupt（前缀语义，非包含）', () => {
     const commands = filterSlashSuggestions('in').map((s) => s.command);
     expect(commands).toContain('/interrupt');
-    expect(commands).not.toContain('/demo'); // 非 in 前缀
+    expect(commands).not.toContain('/demo');
   });
 
   it('无匹配返回空数组', () => {

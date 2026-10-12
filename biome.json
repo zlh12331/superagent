@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.5.12/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.5.15/schema.json",
   "vcs": {
     "enabled": true,
     "clientKind": "git",
@@ -195,6 +195,7 @@
       "includes": [
         "**/scripts/check-release-anchor.ts",
         "**/packages/shared/src/constants/errors.ts",
+        "**/packages/shared/src/constants/model-failure.ts",
         "**/packages/shared/src/ipc/channels.ts",
         "**/packages/shared/src/schemas/agent-events.ts",
         "**/packages/shared/src/schemas/im.ts",

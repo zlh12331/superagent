@@ -1,6 +1,3 @@
-// src/main/infra/ai/tools/code-symbols.tool.test.ts
-// code_symbols 工具单测：解析降级 / 空符号 / 行格式化（mock CodeAnalyzer）
-
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createCodeSymbolsTool } from './code-symbols.tool';
 import type { ToolContext } from './tool';

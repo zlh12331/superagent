@@ -1,10 +1,3 @@
-// src/renderer/components/chat/use-vim-mode.ts
-// vim 编辑模式状态 hook（自 ChatInput 拆出：状态 + 键盘处理 + 光标）
-// ──────────────────────────────────────────────
-// 把 vim 模式的状态机从 ChatInput 抽出，让输入组件更精简。
-// 返回 processKey：处理一次按键，返回 true 表示已被 vim 消费（需 preventDefault）。
-// ──────────────────────────────────────────────
-
 import { useState } from 'react';
 
 import { INITIAL_VIM_STATE, type VimState, vimHandleKey } from '@/lib/vim-mode';
@@ -39,7 +32,6 @@ export function useVimMode({ setValue }: UseVimModeDeps): UseVimModeResult {
   const [vimState, setVimState] = useState<VimState>(INITIAL_VIM_STATE);
   const [pendingCursor, setPendingCursor] = useState<number | null>(null);
 
-  // 引用稳定性交给 React Compiler（捕获 state 与 props）
   const processKey = (
     event: { key: string; selectionStart: number | null },
     buffer: string,

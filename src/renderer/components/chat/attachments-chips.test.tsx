@@ -1,5 +1,3 @@
-// attachments-chips.test.tsx
-// 附件 chip 列表单测：空态 / 渲染 / 移除回调 / 无障碍命名
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -54,7 +52,6 @@ describe('AttachmentsChips', () => {
       />,
     );
     const buttons = screen.getAllByRole('button', { name: /readme\.md/ });
-    // 同名文件的移除按钮 label 相同（现实约束）；区分依赖 chip 的 title=完整路径
     expect(buttons).toHaveLength(2);
     expect(screen.getAllByTitle('/x/readme.md')).toHaveLength(1);
     expect(screen.getAllByTitle('/y/readme.md')).toHaveLength(1);

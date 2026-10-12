@@ -1,5 +1,3 @@
-// rate-limit-banner.test.tsx
-// 限流横幅单测：显隐 / 过期 / 手动关闭 / 自动隐藏定时器（fake timers）
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -10,7 +8,6 @@ import { RateLimitBanner } from './rate-limit-banner';
 describe('RateLimitBanner', () => {
   beforeEach(() => {
     vi.useFakeTimers();
-    // triggeredAt 为 number 类型（不可 null），仅重置可见性
     useRateLimitStore.setState({ visible: false });
   });
   afterEach(() => {
@@ -49,30 +46,19 @@ describe('RateLimitBanner', () => {
     act(() => {
       vi.advanceTimersByTime(60_000);
     });
-    // 仅过 1 分钟（< 5 分钟过期线）：横幅仍在
     expect(useRateLimitStore.getState().visible).toBe(true);
   });
-
-  // ── 到期自动隐藏（2026-09 审计修复的回归锚） ───────────────────
-  //
-  // 背景：此前只挂一个固定 60s 的一次性定时器，60s 到点未过期即静默结束、
-  // 定时器不再重排 → 之后永远不会 dismiss，横幅需等无关重渲染才可能消失。
-  // 旧测试用 `setSystemTime(+6min)` + `advanceTimersByTime(60s)` 恰好把这个
-  // 缺陷绕过（跳墙钟后那唯一一次定时器复查刚好看到「已过期」）。
-  // 现按剩余时间精确调度到过期时刻，测试直接推进到过期点。
 
   it('自动隐藏：推进到过期时刻（5 分钟）→ dismiss', () => {
     useRateLimitStore.setState({ visible: true, triggeredAt: Date.now() });
     render(<RateLimitBanner />);
 
     act(() => {
-      // 距过期还差 1ms：仍在
       vi.advanceTimersByTime(AUTO_HIDE_MS - 1);
     });
     expect(useRateLimitStore.getState().visible).toBe(true);
 
     act(() => {
-      // 到点：应自动隐藏
       vi.advanceTimersByTime(1);
     });
     expect(useRateLimitStore.getState().visible).toBe(false);
@@ -85,17 +71,14 @@ describe('RateLimitBanner', () => {
     act(() => {
       vi.advanceTimersByTime(4 * 60_000);
     });
-    // 再触发一次限流（刷新触发时刻）
     act(() => {
       useRateLimitStore.getState().trigger();
     });
-    // 距首次触发已 5 分钟，但距新触发仅 1 分钟 → 不应被清掉
     act(() => {
       vi.advanceTimersByTime(60_000);
     });
     expect(useRateLimitStore.getState().visible).toBe(true);
 
-    // 走到新触发后的 5 分钟 → 隐藏
     act(() => {
       vi.advanceTimersByTime(4 * 60_000);
     });

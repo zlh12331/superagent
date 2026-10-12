@@ -1,22 +1,8 @@
 // scripts/lib/changelog-polish.ts
-// CHANGELOG 润色判定（纯逻辑；供 check-changelog-polish / changelog-draft 共用）
-// ──────────────────────────────────────────────────────────────
-// 背景：release-please 以 **commit** 为粒度产出 CHANGELOG——一个 commit 一条记录，
-// 文案取该 commit 的 subject。项目惯例是 squash 合并，于是无论一个 PR 内含多少
-// 修复，合并后只剩一条提交，CHANGELOG 里就只出现那个 PR 的标题；squash 提交正文
-// 里保存的子提交 bullet 不被解析（release-please 只从正文读破坏性变更 / Release-As
-// 这类 footer 指令）。⇒「合并 Release PR 前人工润色为面向用户文案」是必需步骤
-// （见 RELEASING.md），但此前没有任何机制看守，漏做无人发现。
-//
-// 判定思路（语言无关——不依赖分组标题是否中文，只认提交链接）：
-// conventional-changelog 生成的每条 bullet 都以提交链接结尾，形如
-// `([4f5fa5e](https://github.com/o/r/commit/4f5fa5e...))`。若某版本段的**全部**
-// bullet 都带该链接，说明仍是机器原文；只要有一条不带，即视为人工已介入。
-//
-// ⚠️ 边界（有意为之，勿当缺陷）：本判定只能识别「完全没动」，识别不了「随手敷衍」
-// ——它拦的是「忘」，不是「差」。确实要直接用机器原文时，在版本段内显式写下
-// POLISH_MARKER 即放行（HTML 注释，GitHub 渲染时不可见）。
-// ──────────────────────────────────────────────────────────────
+// CHANGELOG 润色判定（纯逻辑，check-changelog-polish / changelog-draft 共用）。
+// 背景：release-please 按 commit 粒度产出 CHANGELOG，squash 合并后 PR 内的子提交
+// 明细全部丢失（只留标题）⇒「合并 Release PR 前人工润色为面向用户文案」是必需
+// 步骤（RELEASING.md），但此前无机制看守、漏做无人发现——放行标记 + 分段判定成闸
 
 /** 显式放行标记：写在版本段内即视为已确认（GitHub 渲染不可见） */
 export const POLISH_MARKER = '<!-- changelog:polished -->';

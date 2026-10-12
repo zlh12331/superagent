@@ -1,16 +1,3 @@
-// src/renderer/components/$1/file-icon.test.tsx
-// file-icon 单测：扩展名 → 图标 + 配色映射（正向 / 边界 / 异常）
-// ──────────────────────────────────────────────────────────────
-// 重写背景（2026-09 file-tree 审计）：原测试对文件夹只用 style 颜色断言，
-// 注释自认「两个实例图标不同……通过 style 色验证同一规则」——即**没有**断言
-// 图标本身，Folder/FolderOpen 互换也照样通过，是假绿。
-// 现按 lucide 渲染出的类名（.lucide-*）直接断言图标身份（同类断言先例：
-// components/$1/layout-gaps.test.tsx 的 .lucide-sun/.lucide-moon）。
-//
-// 另：isFolder / expanded 两个 prop 已随死代码清理移除（生产零使用，
-// 唯一调用点固定 isFolder={false}），故不再有文件夹用例。
-// ──────────────────────────────────────────────────────────────
-
 import { render } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
@@ -43,8 +30,6 @@ describe('FileIcon · 扩展名映射', () => {
 
   it('json：FileJson 图标 + 黄（amber）', () => {
     const { classes, color } = renderIcon('package.json');
-    // lucide 当前把 FileJson 渲染为 .lucide-file-braces（图标名与类名不一致，
-    // 故此处按实测类名断言；换图标时本用例会失败并要求同步核实）
     expect(classes).toContain('lucide-file-braces');
     expect(color).toContain('--amber');
   });
@@ -73,7 +58,6 @@ describe('FileIcon · 扩展名映射', () => {
     for (const name of ['Makefile', 'unknown.xyz', '.env', '']) {
       const { classes, color } = renderIcon(name);
       expect(classes, name).toContain('lucide-file');
-      // 不能命中其它类型的图标（lucide-file-code 也含 lucide-file 前缀，故反查排除）
       expect(classes, name).not.toContain('lucide-file-code');
       expect(color, name).toContain('--text-faint');
     }
@@ -106,7 +90,6 @@ describe('FileIcon · 边界与异常', () => {
   });
 
   it('目录名含点但文件名无扩展名：不误判中间的点', () => {
-    // 本组件的入参是「名称」不是路径，此用例锁定「只看最后一段的点」的行为
     const { color } = renderIcon('v1.2');
     expect(color).toContain('--text-faint');
   });

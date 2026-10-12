@@ -1,49 +1,144 @@
-// src/main/infra/ai/middleware/model-observability.ts
-// 模型调用级统一观测中间件（LanguageModelMiddleware）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - wrapGenerate / wrapStream 处统一记录每次模型调用的耗时与结果
-// - 成功路径打 debug（高频场景不进生产落盘，避免噪声）
-// - 失败路径打 warn（生产可查：任何模型调用失败都在此集中可见）
-//
-// 接入方式：
-// - 常规链路（agent 主回合 / side query）：LlmClient.getModel 内 wrap，
-//   per-model 缓存的就是 wrapped 实例，所有调用方零改动即可获得观测
-// - 覆盖路径（kind/apiKey 覆盖直出 providerRegistry.createFactory）不观察测：
-//   该路径当前生产零调用（仅单测；连通性测试走 models:test 裸 HTTP 探测，
-//   不经 LlmClient）——包装会引入对模型接口形态的无谓耦合，观测收益趋零
-//
-// 边界（实事求是）：
-// - wrapStream 的 doStream 只 resolve 到「流头建立」，latencyMs 语义是
-//   首响应建立耗时（TTFB），不是整个流传输时长（流中途错误由消费端守卫）
-// - 本中间件不吞错、不改参数、不注入信号：只观测，错误原样抛给上层
-// ──────────────────────────────────────────────────────────────
-
+// model-observability.ts：AI SDK 中间件——generate/stream 前后记延迟与用量。
+// 双轨：Attempt span（OTel，OTLP/Console 导出；未初始化 no-op）+ debug 日志（本地可读性）。
+// 挂载点：llm-client wrapLanguageModel——所有经过实例的调用自动覆盖。
+// Call 级聚合（一次逻辑调用的全部重试归一棵树）需要跨层传 attempt 关联 ID，
+// 留待真实诊断需求驱动（见 model-observability 提交说明）。
 import type { LanguageModelMiddleware } from 'ai';
 import { logger } from '../../../utils/logger';
+import { getTracer } from '../../telemetry/otel';
 
-/** 提取错误可读信息（保持与原 logger 用法一致，不吞真实错误对象） */
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-/**
- * 模型调用级观测中间件（模块级单例常量）
- *
- * 挂到 getModel 出口后，agent 主回合与 side query（generateText/generateJson）
- * 的每个模型调用都会经过这里打点：provider / modelId / 耗时 / token 用量。
- */
+/** 活跃 Attempt span 上限（防泄漏：异常路径 end 丢失时最旧者被顶掉） */
+const MAX_ACTIVE_SPANS = 64;
+
+/** 活跃 Attempt span 登记（Map 保序——最旧在前） */
+const activeSpans = new Map<import('@opentelemetry/api').Span, { readonly registeredAt: number }>();
+
+function registerActiveSpan(span: import('@opentelemetry/api').Span): void {
+  activeSpans.set(span, { registeredAt: Date.now() });
+  while (activeSpans.size > MAX_ACTIVE_SPANS) {
+    const oldest = activeSpans.entries().next().value;
+    if (oldest === undefined) {
+      break;
+    }
+    const [expiredSpan] = oldest;
+    activeSpans.delete(expiredSpan);
+    expiredSpan.setStatus({ code: 2, message: 'span evicted (active table overflow)' });
+    expiredSpan.end();
+  }
+}
+
+function unregisterActiveSpan(span: import('@opentelemetry/api').Span): void {
+  activeSpans.delete(span);
+}
+
+/** 开一个 Attempt span（遥测未初始化时返回 null——调用方容忍） */
+function startAttemptSpan(
+  kind: 'generate' | 'stream',
+  model: { provider: string; modelId: string },
+): import('@opentelemetry/api').Span | null {
+  const tracer = getTracer();
+  if (tracer === null) {
+    return null;
+  }
+  const span = tracer.startSpan(`model.attempt.${kind}`, {
+    attributes: {
+      'model.provider': model.provider,
+      'model.id': model.modelId,
+    },
+  });
+  registerActiveSpan(span);
+  return span;
+}
+
+function endAttemptSpan(
+  span: import('@opentelemetry/api').Span | null,
+  attrs: Record<string, string | number | boolean>,
+): void {
+  if (span === null) {
+    return;
+  }
+  unregisterActiveSpan(span);
+  for (const [key, value] of Object.entries(attrs)) {
+    span.setAttribute(key, value);
+  }
+  span.setStatus({ code: 1 });
+  span.end();
+}
+
+/** usage → span 属性（只取数值字段；对象字段展平为点路径——OTel 属性须标量） */
+function usageAttrs(
+  usage:
+    | {
+        inputTokens?: { total?: number | undefined };
+        outputTokens?: { total?: number | undefined };
+      }
+    | undefined,
+): Record<string, number> {
+  if (usage === undefined) {
+    return {};
+  }
+  const attrs: Record<string, number> = {};
+  if (usage.inputTokens?.total !== undefined) {
+    attrs['usage.inputTokens'] = usage.inputTokens.total;
+  }
+  if (usage.outputTokens?.total !== undefined) {
+    attrs['usage.outputTokens'] = usage.outputTokens.total;
+  }
+  return attrs;
+}
+
+function failAttemptSpan(
+  span: import('@opentelemetry/api').Span | null,
+  latencyMs: number,
+  error: unknown,
+): void {
+  if (span === null) {
+    return;
+  }
+  unregisterActiveSpan(span);
+  span.setAttribute('latencyMs', latencyMs);
+  span.recordException(error instanceof Error ? error : new Error(errorMessage(error)));
+  span.setStatus({ code: 2, message: errorMessage(error) });
+  span.end();
+}
+
+/** 从 CallOptions.providerOptions 提取逻辑调用 ID（L3 每次 generateText/streamText 生成，
+ * codeagent 命名空间由 AI SDK 剥除不发给 provider）——Attempt span 借它与 model.call 父 span join */
+function callIdFromParams(params: {
+  readonly providerOptions?: Record<string, unknown> | undefined;
+}): string | undefined {
+  const codeagent = params.providerOptions?.['codeagent'];
+  if (typeof codeagent !== 'object' || codeagent === null) {
+    return undefined;
+  }
+  const callId = (codeagent as { callId?: unknown }).callId;
+  return typeof callId === 'string' && callId.length > 0 ? callId : undefined;
+}
+
 export const modelObservabilityMiddleware: LanguageModelMiddleware = {
-  wrapGenerate({ doGenerate, model }) {
+  wrapGenerate({ doGenerate, model, params }) {
     const startedAt = Date.now();
-    // doGenerate 为 0 参闭包：wrapLanguageModel 已捕获转译后的 params
+    const span = startAttemptSpan('generate', model);
+    const callId = callIdFromParams(params);
+    if (callId !== undefined && span !== null) {
+      span.setAttribute('model.callId', callId);
+    }
     return doGenerate().then(
       (result) => {
+        const latencyMs = Date.now() - startedAt;
+        endAttemptSpan(span, {
+          latencyMs,
+          ...usageAttrs(result.usage),
+        });
         logger.debug(
           {
             provider: model.provider,
             modelId: model.modelId,
-            latencyMs: Date.now() - startedAt,
+            latencyMs,
             ...(result.usage?.inputTokens !== undefined
               ? { inputTokens: result.usage.inputTokens }
               : {}),
@@ -56,6 +151,7 @@ export const modelObservabilityMiddleware: LanguageModelMiddleware = {
         return result;
       },
       (error) => {
+        failAttemptSpan(span, Date.now() - startedAt, error);
         logger.warn(
           {
             provider: model.provider,
@@ -70,11 +166,18 @@ export const modelObservabilityMiddleware: LanguageModelMiddleware = {
     );
   },
 
-  wrapStream({ doStream, model }) {
+  wrapStream({ doStream, model, params }) {
     const startedAt = Date.now();
-    // doStream 为 0 参闭包：wrapLanguageModel 已捕获转译后的 params
+    const span = startAttemptSpan('stream', model);
+    const callId = callIdFromParams(params);
+    if (callId !== undefined && span !== null) {
+      span.setAttribute('model.callId', callId);
+    }
     return doStream().then(
       (result) => {
+        // 流「建立成功」≠ 消费完成——Attempt span 在建立时即 end（attrs 标 established=true），
+        // 流中途失败的观测属消费侧（TurnRunner），此处不越界
+        endAttemptSpan(span, { latencyMs: Date.now() - startedAt, established: true });
         logger.debug(
           {
             provider: model.provider,
@@ -86,6 +189,7 @@ export const modelObservabilityMiddleware: LanguageModelMiddleware = {
         return result;
       },
       (error) => {
+        failAttemptSpan(span, Date.now() - startedAt, error);
         logger.warn(
           {
             provider: model.provider,

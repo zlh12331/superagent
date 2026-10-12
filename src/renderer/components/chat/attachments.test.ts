@@ -1,6 +1,3 @@
-// src/renderer/components/chat/attachments.test.ts
-// 附件内容拼接回归（file:read 拼装 + 失败降级标注）
-
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { attachmentName, buildTextWithAttachments, type ChatAttachment } from './attachments';
@@ -56,7 +53,6 @@ describe('buildTextWithAttachments', () => {
     stubFileRead(() => ({ data: { content: 'x'.repeat(5000) } }));
     const text = await buildTextWithAttachments('m', [{ path: '/r/big', name: 'big' }], label);
     const body = (text.split('```')[1] ?? '').trim();
-    // 正文 4000 字符 + 截断标注行（此前静默截断，模型/用户会误以为拿到完整文件）
     expect(body).toContain('x'.repeat(4000));
     expect(body).toContain('原始 5000 字符');
   });

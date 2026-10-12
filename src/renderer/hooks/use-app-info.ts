@@ -1,11 +1,3 @@
-// src/renderer/hooks/use-app-info.ts
-// 应用版本/环境信息 hook（app:getInfo IPC 统一入口）
-// ──────────────────────────────────────────────────────────────
-// 背景：Topbar brand-telemetry 与侧栏账户菜单此前硬编码 'v0.1.0'，
-// 与 about-section 的 app:getInfo 三处双写；版本升级后前两处必然失实。
-// 统一走主进程 package.json version（单一真源）。
-// ──────────────────────────────────────────────────────────────
-
 import type { AppInfoRes } from '@code-agent/shared/renderer';
 import { useEffect, useState } from 'react';
 import { unwrap } from '@/lib/ipc';
@@ -20,17 +12,12 @@ import { useLatestRef } from './use-latest-ref';
  */
 export function useAppInfo(onError?: (error: unknown) => void): AppInfoRes | null {
   const [info, setInfo] = useState<AppInfoRes | null>(null);
-  // 最新回调经 ref 读取：避免把 onError 放进依赖导致调用方改动即重新请求
-  // （统一 useLatestRef：写入在 effect 阶段，避免渲染期写 ref）
   const onErrorRef = useLatestRef(onError);
 
-  // useLatestRef 惯用法：onError 经 ref 读取，调用方改动回调不重新请求
   // biome-ignore lint/correctness/useExhaustiveDependencies: ref.current 是受控的 latest-ref 读取
   useEffect(() => {
     let cancelled = false;
     const api = typeof window !== 'undefined' ? window.api : undefined;
-    // 防御：浏览器模式（无主进程）或测试环境 mock 未注入 app.getInfo 时返回占位。
-    // 必须先取方法引用再判断——直接调用不存在的方法会同步抛错，无法被 .catch 捕获
     const getInfo = api?.app?.getInfo;
     if (typeof getInfo !== 'function') {
       setInfo({
@@ -50,7 +37,6 @@ export function useAppInfo(onError?: (error: unknown) => void): AppInfoRes | nul
         try {
           setInfo(unwrap(res));
         } catch (error: unknown) {
-          // error 响应 / 协议异常：与 IPC 失败同策略（调用方自兜底占位）
           setInfo(null);
           onErrorRef.current?.(error);
         }

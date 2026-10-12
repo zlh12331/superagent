@@ -1,7 +1,3 @@
-// src/main/infra/ai/tools/tools-gaps-7b.test.ts
-// 工具域 7b 缺口补全：list_directory 类型分支、lsp_definition 空/非 Error、
-// run_command 输出组合/退出码/截断/abort、grep 多路径/上下文、command-classifier 参数透传/缓存上限
-
 import { join, resolve } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LspServerManager } from '../../lsp/lsp-server-manager';
@@ -37,7 +33,6 @@ function createCtx(overrides?: { aborted?: boolean }): ToolContext {
   };
 }
 
-/** 构造可解析的 spawn mock（stdout/stderr/close/error 可控） */
 function mockSpawnChild(options: {
   stdout?: string;
   stderr?: string;
@@ -118,7 +113,6 @@ describe('工具域 7b 缺口补全', () => {
       } as unknown as LspServerManager;
       const tool = createLspDefinitionTool(manager);
 
-      // 路径经 resolveWithinWorkspace 收口（2026-09-08）：须用工作区内路径
       const result = await tool.execute({ filePath: 'a.ts', line: 0, character: 0 }, createCtx());
 
       expect(result.output).toContain('未找到声明位置');
@@ -174,8 +168,6 @@ describe('工具域 7b 缺口补全', () => {
       await tool.execute({ ...baseInput, paths: ['src', 'test'] }, createCtx());
 
       const args = grepMock.grep.mock.calls[0]?.[0] as { paths: string[] } | undefined;
-      // createCtx workingDir 固定为 Windows 盘符路径：POSIX 上 resolve 会把它当作相对段
-      // 拼到 cwd 下，win32 上则按绝对路径使用——按平台计算期望值使断言跨平台成立
       const base = resolve(process.cwd(), 'C:\\projects\\my-app');
       expect(args?.paths).toEqual([join(base, 'src'), join(base, 'test')]);
     });
@@ -266,7 +258,6 @@ describe('工具域 7b 缺口补全', () => {
       );
 
       const stdout = (result.metadata as { stdout?: string }).stdout ?? '';
-      // 单块超限 → 不追加（截断语义：超过阈值的块整体丢弃）
       expect(stdout.length).toBeLessThan(big.length);
     });
   });
@@ -312,11 +303,9 @@ describe('工具域 7b 缺口补全', () => {
       }
       expect(llm.generateJson).toHaveBeenCalledTimes(200);
 
-      // 第 201 条触发缓存清空（FIFO 清空），随后重复判定会重新调用
       await classifier.classify('cmd-200', undefined, undefined);
       await classifier.classify('cmd-0', undefined, undefined);
 
-      // 清空后 cmd-0 的缓存丢失 → 重新调用
       expect(llm.generateJson).toHaveBeenCalledTimes(202);
     });
   });

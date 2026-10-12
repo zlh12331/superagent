@@ -1,11 +1,3 @@
-// src/renderer/components/common/ModelSelector.tsx
-// 模型选择器（composer 项目栏）
-// ──────────────────────────────────────────────────────────────
-// 数据源：models:list IPC——主进程 modelRegistry 真实清单
-// （内置 + 运行时自定义合并，单一真源）。渲染层零硬编码模型表：
-// 后端没有就是没有（浏览器模式无 window.api 时降级为空列表）。
-// ──────────────────────────────────────────────────────────────
-
 import type { ApiKeyProvider, AvailableModelInfo } from '@code-agent/shared/renderer';
 import { ChevronDown } from 'lucide-react';
 import { type ReactElement, useEffect, useRef, useState } from 'react';
@@ -66,12 +58,10 @@ export function ModelSelector({
   open: controlledOpen,
   onOpenChange: controlledOnOpenChange,
 }: ModelSelectorProps): ReactElement {
-  // 本地化文案
   const { t } = useTranslation();
   const [internalOpen, setInternalOpen] = useState(false);
   const isControlled = controlledOpen !== undefined;
   const open = isControlled ? controlledOpen : internalOpen;
-  // 引用稳定性交给 React Compiler（捕获受控 props）
   const setOpen = (next: boolean): void => {
     if (isControlled) {
       controlledOnOpenChange?.(next);
@@ -79,27 +69,18 @@ export function ModelSelector({
       setInternalOpen(next);
     }
   };
-  // 外点/Esc 监听 effect 用 ref 调 setOpen：函数每 render 新建，进依赖会反复装卸监听
-  // ——统一走 useLatestRef（写入在 effect 阶段，避免渲染期写 ref）
   const setOpenRef = useLatestRef(setOpen);
   const containerRef = useRef<HTMLDivElement>(null);
-  // 触发按钮 ref：菜单关闭后把焦点还给它（roving focus 的收尾契约）
   const triggerRef = useRef<HTMLButtonElement>(null);
-  // 模型清单：共享 useModelsQuery（P3 修复：与 ModelsSection 同源同 key，
-  // 新增运行时模型后 composer 下拉即时刷新）
   const { data: modelsData } = useModelsQuery();
   const allModels = modelsData?.models ?? [];
 
-  // 当前模型展示名（来自后端清单；未知 id 回退原始 id）——纯派生，交给 React Compiler
   const currentModelName = allModels.find((m) => m.id === model)?.label ?? model;
 
-  // 当前选中模型的实际供应商（来自清单数据；未知回退 settings 值）——纯派生
   const currentProvider = allModels.find((m) => m.id === model)?.providerKind ?? provider;
 
-  // 是否已配置可用模型（空清单 = 未配置：按钮显示占位，不渲染默认配置名）
   const hasConfiguredModels = allModels.length > 0;
 
-  // 供应商分组（按数据动态生成，顺序 = 后端返回顺序）——纯派生，交给 React Compiler
   const groups = new Map<string, AvailableModelInfo[]>();
   for (const m of allModels) {
     const list = groups.get(m.providerKind) ?? [];
@@ -108,7 +89,6 @@ export function ModelSelector({
   }
   const providerGroups = [...groups.entries()];
 
-  // useLatestRef 惯用法：经 ref 调最新闭包，effect 只随 open 重订阅
   // biome-ignore lint/correctness/useExhaustiveDependencies: ref.current 是受控的 latest-ref 读取
   useEffect(() => {
     if (!open) return;
@@ -121,7 +101,6 @@ export function ModelSelector({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [open]);
 
-  // useLatestRef 惯用法：经 ref 调最新闭包，effect 只随 open 重订阅
   // biome-ignore lint/correctness/useExhaustiveDependencies: ref.current 是受控的 latest-ref 读取
   useEffect(() => {
     if (!open) return;
@@ -129,7 +108,6 @@ export function ModelSelector({
       if (event.key === 'Escape') setOpenRef.current(false);
     };
     document.addEventListener('keydown', handleKeyDown);
-    // 打开时聚焦选中项（无选中取第一项）——键盘用户可直接 ↑↓ 导航
     const container = containerRef.current;
     if (container !== null) {
       const items = [...container.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')];
@@ -138,13 +116,10 @@ export function ModelSelector({
     }
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
-      // 关闭时把焦点还给触发按钮（2026-09 审计修复）：此前焦点留在被卸载的
-      // 菜单项上 → 落到 body，键盘用户丢失位置、需从头 Tab 回来
       triggerRef.current?.focus();
     };
   }, [open]);
 
-  // 引用稳定性交给 React Compiler
   const handleModelSelect = (providerKind: string, modelId: string) => {
     onProviderChange(providerKind as ApiKeyProvider);
     onModelChange(modelId);
@@ -180,7 +155,6 @@ export function ModelSelector({
           className="folder-dropdown-menu show model-selector-menu"
           role="menu"
           aria-label={t('common.modelSelector')}
-          // roving focus：↑/↓ 循环 · Home/End 首尾（此前仅 Tab 逐个停留，menu 键盘语义缺失）
           onKeyDown={(event) => {
             const items = [
               ...event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'),
@@ -194,7 +168,6 @@ export function ModelSelector({
           }}
         >
           <div className="fdm-scroll">
-            {/* 分组：按后端返回的 providerKind 动态生成（无数据 = 空菜单 + 提示） */}
             {providerGroups.length === 0 ? (
               <div className="text-muted-foreground px-3 py-2 text-xs">{t('common.noModels')}</div>
             ) : (

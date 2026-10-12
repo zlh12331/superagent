@@ -1,18 +1,8 @@
 // scripts/check-memory-engine-integrity.mjs
-// 记忆引擎 vendored 源码完整性校验（接 check:static）
-// ──────────────────────────────────────────────────────────────
-// 目的：packages/memory-engine/MemoryCore 是第三方源码（vendored 上游），
-//   任何直接修改都会让"上游改了什么"与"我们改了什么"混在一起。
-//   本脚本比对源码树与 versions.json 锚点记录，发现手改即失败，
-//   强制走 patches/ 补丁通道（见 packages/memory-engine/patches/README.md）。
-//
-// 校验方式：对源码树（MemoryCore/src + package.json + pnpm-lock.yaml）
-//   计算聚合 sha256，与 memory-engine.lock.json 中记录比对。
-//
-// 用法：
-//   node scripts/check-memory-engine-integrity.mjs
-//   node scripts/check-memory-engine-integrity.mjs --update   # 重新生成记录（仅 sync 后使用）
-// ──────────────────────────────────────────────────────────────
+// 记忆引擎 vendored 源码完整性校验（接 check:static）：MemoryCore 是第三方源码，
+// 任何手改都会让「上游改了什么」与「我们改了什么」混淆——比对源码树聚合 sha256
+// 与 integrity.lock.json 记录，发现手改即失败，强制走 patches/ 补丁通道
+// 用法：node scripts/check-memory-engine-integrity.mjs [--update]（--update 仅 sync 后使用）
 
 import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';

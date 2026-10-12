@@ -1,31 +1,12 @@
-// src/main/ipc/settings.handler.test.ts
-// settings.handler 单测：settings:* 方法（三件套）
-// ──────────────────────────────────────────────────────────────
-// 测试策略（遵循"业务逻辑不 mock、外部依赖注入 fake"）：
-// - keychain/telemetry-pref/approval-pref/runtimeModelStore 为文件存储
-//   外部依赖（与 fetch/WebSocket 同类）→ vi.mock
-// - toKeychainKey（纯函数）保持真实实现
-// - permissionService 经 deps 注入 fake
-// - settings-io（导出组装/白名单过滤/写入）保持真实实现，仅 mock 其
-//   依赖 settings-pref（文件存储外部依赖）——白名单语义经 handler 全链验证
-// ──────────────────────────────────────────────────────────────
-
 import { ErrorCode, ListRuntimeModelsResSchema, SETTING_KEYS } from '@code-agent/shared/main';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createSettingsHandlers } from './settings.handler';
 
-// window-theme.ts（settings.handler 依赖的主题联动）import electron 的
-// BrowserWindow/nativeTheme——测试环境无 Electron 运行时，按 config.test.ts
-// 既定模式 mock（Electron 属于外部依赖，见本文件头部测试策略注释）。
-// vi.mock 工厂被 hoist，mock 对象必须经 vi.hoisted 定义（不能引用外部变量）；
-// 用 Record 字符串键规避 biome strictCase 对字面对象的检查。
 const { mockElectronApi, dialogs, broadcast } = vi.hoisted(() => {
   const api: Record<string, unknown> = {};
   api['BrowserWindow'] = { getAllWindows: () => [] };
   api['nativeTheme'] = { shouldUseDarkColors: false };
-  // settings:export 的 defaultPath 走 app.getPath('documents')
   api['app'] = { getPath: () => 'C:\\Users\\test\\Documents' };
-  // resetAll 新走 applyProxyChange（34 号）→ 需要 session 分区 mock（setProxy 可 await）
   const setProxy = vi.fn(async () => {});
   const fakeSession = () => ({ setProxy });
   api['session'] = {
@@ -33,7 +14,6 @@ const { mockElectronApi, dialogs, broadcast } = vi.hoisted(() => {
     fromPartition: vi.fn(() => fakeSession()),
   };
   const dialogFns = {
-    // 泛型标注放宽默认实现推断（filePath 允许写入字符串路径供正向用例覆盖）
     showSaveDialog: vi.fn<() => Promise<{ canceled: boolean; filePath?: string | undefined }>>(
       async () => ({ canceled: true, filePath: undefined }),
     ),
@@ -83,7 +63,6 @@ const mocks = vi.hoisted(() => ({
   readAllSettings: vi.fn(() => ({})),
   writeSetting: vi.fn(() => {}),
   writeSettings: vi.fn(() => {}),
-  // 泛型标注：调用参数入 tuple，供 mock.calls 断言
   writeFile: vi.fn<(path: string, data: string, encoding: string) => Promise<void>>(async () => {}),
   readFile: vi.fn<(path: string, encoding: string) => Promise<string>>(async () => '{}'),
   stat: vi.fn<(path: string) => Promise<{ size: number }>>(async () => ({ size: 10 })),
@@ -121,8 +100,6 @@ vi.mock('../infra/ai/llm-client/ai-provider', () => ({
     update: mocks.runtimeUpdate,
     list: mocks.runtimeList,
   },
-  // resetAll → applyProxyChange → resetAIProvider（34 号代理收口链）
-  // setApiKey/deleteApiKey → resetAIProvider（换 Key 后重建 provider 缓存）
   resetAIProvider: mocks.resetAIProvider,
 }));
 
@@ -170,7 +147,6 @@ describe('settings.handler API Key（三件套）', () => {
     const res = await handlers.getApiKey({ provider: 'deepseek' }, EMPTY_CTX);
     expect(mocks.getSecret).toHaveBeenCalledWith('deepseek-api-key');
     expect(res).toEqual({ configured: true, keychainAvailable: true });
-    // P0 安全：响应中不得包含明文
     expect(JSON.stringify(res)).not.toContain('sk-123');
   });
 
@@ -355,8 +331,6 @@ describe('settings.handler 运行时模型（三件套）', () => {
   });
 
   it('listRuntimeModels：DB 可空列（baseUrl/displayName 为 null）→ 归一为 undefined，契约校验可通过', async () => {
-    // 回归（2026-09-04）：DB 未填 base_url/display_name 时返回 NULL，渲染层
-    // resSchema 用 .optional()（只放行 undefined）会校验失败 → 前端看不到已配置模型。
     mocks.runtimeList.mockResolvedValueOnce([
       {
         modelId: 'm2',
@@ -380,7 +354,6 @@ describe('settings.handler 运行时模型（三件套）', () => {
         },
       ],
     });
-    // 渲染层契约原样校验（还原"null 直出"会在此失败——回归保障）
     expect(ListRuntimeModelsResSchema.safeParse(res).success).toBe(true);
   });
 });
@@ -445,7 +418,6 @@ describe('settings.handler 导出/导入（keychain 凭据除外）', () => {
 
     expect(res).toEqual({ imported: 1, skipped: 1 });
     expect(mocks.writeSettings).toHaveBeenCalledWith([{ key: 'theme', value: 'dark' }]);
-    // 主进程主动写入必须广播（P2-6 丢更新防线）：渲染层 store 收到即应用
     expect(broadcast.settingChanged).toHaveBeenCalledWith('theme', 'dark');
   });
 

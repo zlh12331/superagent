@@ -1,19 +1,3 @@
-// src/renderer/stores/transient/file-viewer-store.ts
-// 文件查看器状态管理（L2 客户端共享状态层 - transient）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 维护当前打开的文件路径（FileTreePanel / 命令面板点击文件时设置）
-// - 提供 openFile（唯一入口；常驻右面板无关闭动作，故不提供 close）
-// - 维护编辑模式状态：editMode / isDirty / originalContent / editedContent
-// - 不持久化：查看文件是即时操作，跨重启保留无意义
-//
-// 设计：
-// - 纯状态容器，不调用 IPC（FileViewerPanel 组件订阅状态后自行 useQuery 拉取内容）
-// - 与 file-tree-store 解耦：文件树只负责导航，查看器只负责展示
-// - open 为 false 时 filePath 仍保留（重新打开前渲染上次内容，避免空态闪烁）
-// - 编辑态内容缓存在 store，避免组件卸载丢失未保存内容
-// ──────────────────────────────────────────────────────────────
-
 import { create } from 'zustand';
 
 import { i18n } from '@/i18n';
@@ -29,7 +13,6 @@ interface FileViewerState {
   /** 当前查看的文件绝对路径（重开前仍保留，用于渲染上次内容避免空态闪烁） */
   readonly filePath: string | null;
 
-  // ── 编辑模式状态 ────────────────────────────────────
   /** 是否处于编辑模式（false = 只读查看模式） */
   readonly editMode: boolean;
   /** 原始文件内容（从 IPC 拉取后缓存，用于脏数据比较和取消恢复） */
@@ -39,14 +22,12 @@ interface FileViewerState {
   /** 是否有未保存的修改（editedContent !== originalContent） */
   readonly isDirty: boolean;
 
-  // ── 操作方法 ────────────────────────────────────────
   /**
    * 打开指定文件（FileTreePanel / 命令面板 / 引用文件跳转共用），自动重置编辑态。
    * 脏数据保护：当前文件有未保存修改时先确认，取消则保持当前文件。
    */
   readonly openFile: (filePath: string) => Promise<void>;
 
-  // ── 全局保存桥接（AppShell Ctrl+S 快捷键 → 查看器实例） ──
   /** 注册当前查看器实例的保存处理器（编辑态打开时注册，关闭/卸载时注销） */
   readonly registerSaveHandler: (handler: (() => void) | null) => void;
   /** 触发保存（无处理器时 no-op；处理器内部自带 isDirty/保存中防重） */
@@ -106,7 +87,6 @@ export const useFileViewerStore = create<FileViewerState>()((set) => ({
   open: false,
   filePath: null,
 
-  // 编辑模式初始状态
   editMode: false,
   originalContent: '',
   editedContent: '',
@@ -114,7 +94,6 @@ export const useFileViewerStore = create<FileViewerState>()((set) => ({
 
   openFile: async (filePath) => {
     const current = useFileViewerStore.getState();
-    // 脏数据保护：切换文件前确认未保存修改（重复打开同一文件不提示）
     if (current.open && current.isDirty && current.filePath !== filePath) {
       const ok = await confirm({
         title: i18n.t('fileViewer.unsaved'),
@@ -123,9 +102,6 @@ export const useFileViewerStore = create<FileViewerState>()((set) => ({
       });
       if (!ok) return;
     }
-    // 幂等：已打开同一文件且无未保存修改 → 不重置内容，只确保面板可见。
-    // 此前重复触发（双击/事件重放）会清空 originalContent，而 FileViewerPanel
-    // 的同步 effect 依赖 [data,...] 不变化不重跑 → 内容已加载却卡在「空文件」（实测 bug）
     if (current.open && current.filePath === filePath && !current.isDirty) {
       useUiStore.getState().setRightPanelCollapsed(false);
       useUiStore.getState().setDevPanelTab('file');
@@ -134,13 +110,11 @@ export const useFileViewerStore = create<FileViewerState>()((set) => ({
     set({
       open: true,
       filePath,
-      // 切换文件时重置编辑态，避免上一个文件的未保存修改残留
       editMode: false,
       originalContent: '',
       editedContent: '',
       isDirty: false,
     });
-    // 右侧面板显示（用户要求：点击文件在右侧边栏显示内容——展开右面板并切到"文件"tab）
     useUiStore.getState().setRightPanelCollapsed(false);
     useUiStore.getState().setDevPanelTab('file');
   },
@@ -165,7 +139,6 @@ export const useFileViewerStore = create<FileViewerState>()((set) => ({
   exitEditMode: () =>
     set((state) => ({
       editMode: false,
-      // 恢复到原始内容，丢弃未保存修改
       editedContent: state.originalContent,
       isDirty: false,
     })),

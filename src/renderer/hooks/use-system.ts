@@ -1,19 +1,3 @@
-// src/renderer/hooks/use-system.ts
-// System 域数据查询 hook（运行时可观测性）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 通过 TanStack Query 调用 system:getStatus / logs:read IPC
-// - system:getStatus 用于 DevPanel Metrics tab（内存/CPU/uptime 实时展示）
-// - logs:read 用于 DevPanel Logs tab（最近 N 行日志查看）
-//
-// 设计：
-// - system:getStatus staleTime 5s（指标变化较快，但避免过频拉取拖慢渲染层）
-// - logs:read staleTime 0（日志查看器每次都需要最新数据，用户手动刷新触发 refetch）
-// - logs:read placeholderData: keepPreviousData（级别/行数切换是同一日志文件的
-//   不同切片，旧切片驻留作占位，isPlaceholderData=true 供消费方降透明过渡）
-// - enabled 参数：面板折叠时不查询，节省 IPC 调用
-// ──────────────────────────────────────────────────────────────
-
 import type { ReadLogsRes, SystemStatusRes } from '@code-agent/shared/renderer';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 
@@ -96,8 +80,7 @@ export function useLogsReadQuery(
       return unwrap(response);
     },
     enabled,
-    staleTime: 0, // 日志查看器每次都需要最新数据
-    // 过滤切换防闪空屏：见函数 JSDoc 与文件头设计注释
+    staleTime: 0,
     placeholderData: keepPreviousData,
   });
 }

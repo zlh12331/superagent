@@ -1,17 +1,3 @@
-// tests/integration/session.test.ts
-// Session 域集成测试（batch 1/9 · 核心链路）
-// ──────────────────────────────────────────────────────────────
-// 链路：IPC handler（真实）→ SessionService（真实）→ SQLite（真实，临时 userData）
-// 替身：仅 electron.app.getPath（SDK 边界 → 临时目录）+ dialog（exportAll 保存路径）
-//
-// 维度覆盖（链路级口径）：
-//   核心：接口契约（handler 返回 ↔ service 落库一致）/ 时序编排（create→get 顺序）/
-//         状态一致性（DB ↔ service 查询）/ 错误传播（SESSION_NOT_FOUND 穿透）/
-//         资源生命周期（withTempUserData 自动清理）
-//   场景：幂等（重复 delete / pin 不存在）/ 持久化往返（重开 DB 数据完整）/
-//         并发（并行 create）/ 事务原子性（create 带 messages 无孤立行）
-// ──────────────────────────────────────────────────────────────
-
 import { readFileSync } from 'node:fs';
 import type { ChatMessage } from '@code-agent/shared/main';
 import { describe, expect, it } from 'vitest';
@@ -54,12 +40,9 @@ describe('session 域集成链路（batch 1）', () => {
       const handlers = createSessionHandlers({ sessionService: svc });
 
       const msgs = [makeMessage('你好，帮我看看这个项目'), makeMessage('好的，正在分析')];
-      // handler.create 为 IPC 语义（空会话）；带消息走 service.create 内部 API 链路（AgentService 用法）
       const sessionId = await svc.create({ workingDir: '/proj', title: undefined, messages: msgs });
-      // P2-28：契约默认翻转为仅元数据，断言全量消息须显式传 includeMessages: true
       const detail = await handlers.get({ id: sessionId, includeMessages: true });
       expect(detail.messages).toHaveLength(2);
-      // 标题从首条 user 消息预览生成（50 字符内）
       expect(detail.session.title).toBe('你好，帮我看看这个项目');
       expect(detail.session.messageCount).toBe(2);
     });
@@ -79,7 +62,6 @@ describe('session 域集成链路（batch 1）', () => {
       expect(detail.session.title).toBe('新名');
       expect(detail.session.pinned).toBe(true);
 
-      // 置顶会话在列表排序在前（与未置顶会话对比）
       const { sessionId: sid2 } = await handlers.create({ workingDir: '/proj2', title: '普通' });
       await handlers.pin({ id: sessionId, pinned: true });
       const list = await handlers.list({ limit: 50, offset: 0 });
@@ -132,7 +114,6 @@ describe('session 域集成链路（batch 1）', () => {
       const handlers = createSessionHandlers({ sessionService: svc });
 
       await handlers.create({ workingDir: '/a', title: '1' });
-      // 同毫秒时间戳排序不稳：2ms 延迟区分 updatedAt（时序敏感用例，余量充足）
       await new Promise((resolve) => setTimeout(resolve, 2));
       await handlers.create({ workingDir: '/b', title: '2' });
       await new Promise((resolve) => setTimeout(resolve, 2));
@@ -140,7 +121,6 @@ describe('session 域集成链路（batch 1）', () => {
 
       const { dirs } = await handlers.listRecentDirs({ limit: 10 });
       expect(dirs).toHaveLength(2);
-      // 去重 + 倒序（/a 最近使用——第三会话 updatedAt 最新）
       expect(dirs[0]?.workingDir).toBe('/a');
       expect(dirs[1]?.workingDir).toBe('/b');
     });
@@ -265,7 +245,6 @@ describe('session 域集成链路（batch 1）', () => {
 
       expect((await handlers.delete({ id: 'ghost' })).ok).toBe(true);
       expect((await handlers.pin({ id: 'ghost', pinned: true })).ok).toBe(false);
-      // 重复 delete 幂等
       const { sessionId } = await handlers.create({ workingDir: '/proj', title: 't' });
       await handlers.delete({ id: sessionId });
       expect((await handlers.delete({ id: sessionId })).ok).toBe(true);
@@ -284,7 +263,6 @@ describe('session 域集成链路（batch 1）', () => {
         messages: [makeMessage('第一')],
       });
 
-      // 模拟重启：关闭连接后重新初始化（同一 userData 目录）
       await closeDb();
       initDb();
       const svc2 = getSessionService() as SessionService;
@@ -324,7 +302,6 @@ describe('session 域集成链路（batch 1）', () => {
       });
       const detail = await handlers.get({ id: sessionId, includeMessages: true });
       expect(detail.messages).toHaveLength(3);
-      // 消息顺序与 seq 一致（时序编排）
       expect((detail.messages[0] as { content: string }).content).toBe('m1');
       expect((detail.messages[2] as { content: string }).content).toBe('m3');
     });

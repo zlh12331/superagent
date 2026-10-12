@@ -1,13 +1,3 @@
-// src/renderer/hooks/hooks-gaps.test.ts
-// hooks 层批次2 缺口补全：tool-bridge 事件桥接、conversation-search 边界、
-// api-key 查询与 mutation、sessions 查询与乐观更新
-//
-// 测试要点（真实 hook + window.api 按用例注入；QueryClient wrapper）：
-// 1. useToolBridge：事件订阅 → store 写入 / terminal 副作用 / 卸载清理
-// 2. findMessageMatches：大小写/空查询/无匹配/多匹配
-// 3. useApiKey：查询成功/守卫/mutation 成功失败
-// 4. useSessions：list/get 成功错误/delete rename 乐观更新与回滚/create/pin
-
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
@@ -27,7 +17,6 @@ import {
 } from './use-sessions';
 import { useToolBridge } from './use-tool-bridge';
 
-// sonner toast 外部依赖 mock（业务逻辑真实）
 vi.mock('sonner', () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }));
@@ -246,10 +235,8 @@ describe('hooks 批次2 缺口补全', () => {
       expect(result.current.currentMatch).toBe(1);
       act(() => result.current.actions.navigate(1));
       expect(result.current.currentMatch).toBe(2);
-      // 循环：下一个回到 0
       act(() => result.current.actions.navigate(1));
       expect(result.current.currentMatch).toBe(0);
-      // 上一个：从 0 回到 2
       act(() => result.current.actions.navigate(-1));
       expect(result.current.currentMatch).toBe(2);
     });
@@ -280,7 +267,6 @@ describe('hooks 批次2 缺口补全', () => {
       const { result } = renderHook(() => useConversationSearch(messages));
       act(() => result.current.actions.search('不存在的词'));
       expect(result.current.matchIndexes).toEqual([]);
-      // search 非空查询时 currentMatch=0；无匹配时 navigate 直接返回（保持 0）
       act(() => result.current.actions.navigate(1));
       act(() => result.current.actions.navigate(-1));
       expect(result.current.currentMatch).toBe(0);
@@ -336,7 +322,6 @@ describe('hooks 批次2 缺口补全', () => {
       });
       const { wrapper } = createWrapper();
       const { result } = renderHook(() => useSessionsQuery(), { wrapper });
-      // P3：无限分页——断言 pages 结构
       await waitFor(() =>
         expect(result.current.data?.pages[0]?.sessions).toEqual([{ id: 's1', title: '会话' }]),
       );
@@ -350,7 +335,6 @@ describe('hooks 批次2 缺口补全', () => {
       });
       const { wrapper } = createWrapper();
       const { result } = renderHook(() => useSessionsQuery(), { wrapper });
-      // P3：无限分页——空列表为 pages 结构
       await waitFor(() => expect(result.current.data?.pages).toEqual([{ sessions: [], total: 0 }]));
     });
 
@@ -519,7 +503,6 @@ describe('hooks 批次2 缺口补全', () => {
       await act(async () => {
         await result.current.mutateAsync('s1').catch(() => {});
       });
-      // onError 回滚：乐观移除的 s1 恢复（invalidate refetch 前快照）
       const cached = queryClient.getQueryData<{ sessions: { id: string }[] }>(['sessions']);
       expect(cached?.sessions.map((s) => s.id).sort()).toEqual(['s1', 's2']);
     });

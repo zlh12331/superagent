@@ -1,13 +1,3 @@
-// src/main/infra/telemetry/sdk-telemetry.test.ts
-// sdk-telemetry 单测：AI SDK telemetry integration（模型调用级 span）
-// ──────────────────────────────────────────────────────────────
-// 覆盖：
-// - onLanguageModelCallStart → startSpan（provider/modelId/callId attributes）
-// - onLanguageModelCallEnd → 补 usage / finishReason 并 end
-// - end 未配对 start → 静默跳过（不 end 不抛）
-// - getTracer 为 null（OTel 未初始化）→ 不创建 span
-// ──────────────────────────────────────────────────────────────
-
 import type { Tracer } from '@opentelemetry/api';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 

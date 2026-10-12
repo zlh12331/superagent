@@ -1,39 +1,18 @@
-// src/main/infra/im/adapters/dingtalk-stream.ts
-// 钉钉 Stream 模式接收器：企业应用长连接（对齐钉钉开放平台 Stream 协议收敛）
-// ──────────────────────────────────────────────────────────────
-// 协议流程（钉钉开放平台文档）：
-// 1. POST /v1.0/oauth2/accessToken（appKey/appSecret）→ accessToken
-// 2. GET  /v1.0/gateway/connections/open（Bearer token）→ { endpoint, ticket }
-// 3. WebSocket 连接 endpoint → 发 register 帧（ticket）→ 收 registered
-// 4. 收 data 帧（事件体）→ 解析为 ChannelIncomingMessage
-// 5. 心跳：每 30s 发 nop 帧（对齐网关保活要求）
-//
-// 设计：
-// - apiBaseUrl 可注入（测试用本地 HTTP 服务器；生产默认钉钉网关）
-// - 帧解析（parseDingTalkEvent）为纯函数（导出可测）
-// - 失败分类：token 无效 → IM_CHANNEL_INVALID_TOKEN；网络 → IM_CHANNEL_REQUEST_FAILED
-// - WS 层用 Node 22+ 全局 WebSocket（零依赖）
-// ──────────────────────────────────────────────────────────────
-
+// dingtalk-stream.ts：钉钉 Stream 模式——官方 openconnection 换 WebSocket 端点 + 事件解析接收
 import { AppError, type ChannelKind, ErrorCode } from '@code-agent/shared/main';
 import { logger } from '../../../utils/logger';
 import { proxiedFetch } from '../../network/proxied-fetch';
 import type { ChannelIncomingMessage } from '../channel/types';
 
-/** 钉钉 Stream 配置 */
 export interface DingTalkStreamConfig {
   readonly appKey: string;
   readonly appSecret: string;
-  /** 网关基地址（测试注入；缺省钉钉官方） */
   readonly apiBaseUrl?: string;
 }
 
-/** 心跳间隔（毫秒；网关保活要求） */
 const HEARTBEAT_INTERVAL_MS = 30_000;
-/** HTTP 超时（毫秒） */
 const HTTP_TIMEOUT_MS = 10_000;
 
-/** 钉钉事件帧（协议形状） */
 export interface DingTalkEventFrame {
   readonly type: string;
   readonly headers?: Record<string, string>;
@@ -45,7 +24,6 @@ export interface DingTalkEventFrame {
   };
 }
 
-/** 文本消息事件体（chatbot 回调形状） */
 interface ChatbotMessageBody {
   readonly senderStaffId?: string;
   readonly senderId?: string;
@@ -56,7 +34,6 @@ interface ChatbotMessageBody {
   readonly msgtype?: string;
 }
 
-/** 解析结果：null = 非文本消息事件（忽略） */
 export interface ParsedDingTalkMessage {
   readonly text: string;
   readonly chatId: string;
@@ -65,23 +42,14 @@ export interface ParsedDingTalkMessage {
   readonly timestamp: number;
 }
 
-/** 当前时间戳（可测性：非必要不注入） */
 function now(): number {
   return Date.now();
 }
 
-/**
- * 钉钉 Stream 事件帧解析（纯函数，可测）
- *
- * 支持的事件：
- * - ChatbotMessage（群聊机器人消息）：data.msgtype === 'text'
- * - 其余事件（成员加入/审批等）返回 null（忽略）
- */
 export function parseDingTalkEvent(frame: DingTalkEventFrame): ParsedDingTalkMessage | null {
   if (frame.type !== 'data' || frame.body === undefined) {
     return null;
   }
-  // 仅处理机器人消息事件（其余事件类型忽略）
   if (frame.body.eventType !== 'ChatbotMessage') {
     return null;
   }
@@ -89,7 +57,6 @@ export function parseDingTalkEvent(frame: DingTalkEventFrame): ParsedDingTalkMes
   if (data === undefined || typeof data !== 'object') {
     return null;
   }
-  // 文本消息判定：msgtype 或 content 形状
   const isText = data.msgtype === 'text' || data.msgtype === undefined;
   if (!isText) {
     return null;
@@ -110,21 +77,12 @@ export function parseDingTalkEvent(frame: DingTalkEventFrame): ParsedDingTalkMes
   };
 }
 
-/**
- * 钉钉 Stream 接收器（长连接；生命周期 open/close）
- */
 export class DingTalkStreamReceiver {
   readonly kind: ChannelKind = 'dingtalk';
   private readonly apiBaseUrl: string;
   private readonly appKey: string;
   private readonly appSecret: string;
 
-  /**
-   * 外部依赖注入点（测试传 fake，生产默认实现）：
-   * - fetchFn：HTTP 请求（网络）
-   * - wsCtor：WebSocket 长连接（网络）
-   * - httpTimeoutMs / heartbeatMs：时间参数（测试缩短验证超时/心跳路径）
-   */
   private readonly fetchFn: typeof fetch;
   private readonly wsCtor: typeof WebSocket;
   private readonly httpTimeoutMs: number;
@@ -157,23 +115,16 @@ export class DingTalkStreamReceiver {
     return this.opened;
   }
 
-  /** 订阅入站消息（单订阅者：适配器转发用） */
   onMessage(handler: (message: ChannelIncomingMessage) => void): void {
     this.messageHandler = handler;
   }
 
-  /**
-   * 打开长连接（token 获取 → 网关连接 → register → 事件监听）
-   */
   async open(): Promise<void> {
     if (this.opened) {
       return;
     }
-    // 1. accessToken
     const accessToken = await this.fetchAccessToken();
-    // 2. 网关连接参数（endpoint + ticket）
     const { endpoint, ticket } = await this.fetchConnection(accessToken);
-    // 3. WebSocket 连接 + register
     const ws = new this.wsCtor(endpoint);
     this.ws = ws;
     await new Promise<void>((resolve, reject) => {
@@ -198,7 +149,6 @@ export class DingTalkStreamReceiver {
           resolve();
           logger.info({ kind: this.kind }, '钉钉 Stream 已注册（接收就绪）');
         }
-        // data 帧：解析并转发入站消息
         if (frame?.type === 'data') {
           this.dispatchFrame(frame);
         }
@@ -206,7 +156,6 @@ export class DingTalkStreamReceiver {
     });
   }
 
-  /** 关闭长连接（幂等） */
   close(): void {
     if (this.heartbeatTimer !== null) {
       clearInterval(this.heartbeatTimer);
@@ -219,7 +168,6 @@ export class DingTalkStreamReceiver {
     this.opened = false;
   }
 
-  /** accessToken：POST /v1.0/oauth2/accessToken */
   private async fetchAccessToken(): Promise<string> {
     const response = await this.postJson(`${this.apiBaseUrl}/v1.0/oauth2/accessToken`, {
       appKey: this.appKey,
@@ -235,7 +183,6 @@ export class DingTalkStreamReceiver {
     return body.accessToken;
   }
 
-  /** 网关连接参数：GET /v1.0/gateway/connections/open */
   private async fetchConnection(
     accessToken: string,
   ): Promise<{ endpoint: string; ticket: string }> {
@@ -257,7 +204,6 @@ export class DingTalkStreamReceiver {
     return { endpoint: entry.endpoint, ticket: entry.ticket };
   }
 
-  /** POST JSON（超时） */
   private async postJson(url: string, body: unknown): Promise<unknown> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort('timeout'), this.httpTimeoutMs);
@@ -274,7 +220,6 @@ export class DingTalkStreamReceiver {
     }
   }
 
-  /** GET（Bearer 鉴权 + 超时） */
   private async getJson(url: string, accessToken: string): Promise<unknown> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort('timeout'), this.httpTimeoutMs);
@@ -289,14 +234,12 @@ export class DingTalkStreamReceiver {
     }
   }
 
-  /** 心跳：每 30s nop 帧 */
   private startHeartbeat(): void {
     this.heartbeatTimer = setInterval(() => {
       this.ws?.send(JSON.stringify({ type: 'nop' }));
     }, this.heartbeatMs);
   }
 
-  /** data 帧分发：解析 → 转发入站消息 */
   private dispatchFrame(frame: DingTalkEventFrame): void {
     if (frame.type !== 'data') {
       return;
@@ -315,7 +258,6 @@ export class DingTalkStreamReceiver {
   }
 }
 
-/** WS 消息 → 帧（JSON 解析容错） */
 function parseFrame(event: MessageEvent): DingTalkEventFrame | null {
   try {
     const parsed = JSON.parse(event.data as string) as DingTalkEventFrame;

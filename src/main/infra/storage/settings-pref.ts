@@ -1,45 +1,26 @@
-// src/main/infra/storage/settings-pref.ts
-// 渲染层用户设置持久化（app_settings 表，SQLite 单一真源）
-// ──────────────────────────────────────────────────────────────
-// S1 设计（settings 下沉 SQLite，用户决策）：
-// - 此前 settings 只活在 renderer localStorage（清缓存即丢、主进程读不到）
-// - 现收敛为 SQLite app_settings 表：key → JSON value
-// - 渲染层 settings-store 保持内存态即时性，写穿透经 settings:set IPC 落库；
-//   启动时经 settings:getAll 拉取快照（main.tsx 顶层 await，无主题闪烁）
-// - 主进程不解析 value 结构（结构契约由渲染层 settings-store 定义）
-// ──────────────────────────────────────────────────────────────
-
+// settings-pref.ts：用户设置持久化（SQLite app_settings 表）——key 白名单校验 + JSON 值存取
+// 真源即本表：渲染层 settings-store 写穿透到这里；draft/sidebar 等纯 UI 态不走这里
 import { eq, sql } from 'drizzle-orm';
 
 import { getDb } from './db';
 import { appSettings } from './schema';
 
-/** 设置域 key 校验（防御：仅允许字母开头 + 字母数字/点/下划线/连字符） */
+// key 形态白名单：字母开头 + 字母数字点横下划线 ≤64——表键是用户可控字符串，防注入/垃圾键
 const KEY_PATTERN = /^[A-Za-z][A-Za-z0-9._-]{0,63}$/;
 
-/**
- * 同步读取全部设置（key → 已解析 JSON 值；单条损坏跳过不阻断整体）
- *
- * drizzle better-sqlite3 驱动为同步 API：启动时由 settings:getAll handler 调用。
- */
+/** 读全部设置（值 JSON 反序列化；损坏条目静默剔除不炸启动快照） */
 export function readAllSettings(): Record<string, unknown> {
   const rows = getDb().select().from(appSettings).all();
   const settings: Record<string, unknown> = {};
   for (const row of rows) {
     try {
       settings[row.key] = JSON.parse(row.value);
-    } catch {
-      // 损坏条目：跳过（单条损坏不阻断整体读取）
-    }
+    } catch {}
   }
   return settings;
 }
 
-/**
- * 同步读取单个设置（未设置返回 undefined；损坏值视为未设置）
- *
- * 用于高频读取场景（如 file:list 每次调用读忽略配置）：仅查单行，避免全表扫描。
- */
+/** 读单个设置（缺失或值损坏返回 undefined——调用方走自己的默认值） */
 export function readSetting(key: string): unknown {
   assertKey(key);
   const rows = getDb().select().from(appSettings).where(eq(appSettings.key, key)).all();
@@ -50,35 +31,20 @@ export function readSetting(key: string): unknown {
   try {
     return JSON.parse(row.value);
   } catch {
-    // 损坏条目：视为未设置（调用方走默认值）
     return undefined;
   }
 }
 
-/** 单条设置值序列化后的字符数上限（256K chars；UTF-8 下 CJK 至多 3 字节/字符） */
+// 单值 256KB 上限：设置表不承载大对象（会话正文有专门的表），超限直接拒写
 const MAX_SETTING_VALUE_CHARS = 256 * 1024;
 
-/**
- * 同步写入单个设置（upsert；value 为 JSON 可序列化结构）
- *
- * 渲染层写穿透：每次内存态变更后 fire-and-forget 调用。
- * P2 修复：value 无大小约束时，渲染层 bug 可把任意大 JSON 写入 app_settings，
- * 之后每次启动全表加载 parse（readAllSettings）——此处按序列化尺寸硬上限拒绝。
- */
+/** 写单个设置（upsert） */
 export function writeSetting(key: string, value: unknown): void {
   assertKey(key);
   writeSettings([{ key, value }]);
 }
 
-/**
- * 批量写入设置（单事务原子提交）
- *
- * 设置导入（settings:import）使用：逐键过白名单后的写入走本方法——
- * 任一键值非法（超尺寸/不可序列化）→ 整批回滚，不产生"半截导入"。
- * 幂等：upsert 语义，重复导入同一文件结果一致。
- *
- * @throws Error key 非法（assertKey）或任一 value 序列化超限（事务整体回滚）
- */
+/** 批量写（事务包裹：部分失败整体回滚，不出现半新半旧的设置集） */
 export function writeSettings(entries: ReadonlyArray<{ key: string; value: unknown }>): void {
   if (entries.length === 0) {
     return;
@@ -105,20 +71,13 @@ export function writeSettings(entries: ReadonlyArray<{ key: string; value: unkno
   });
 }
 
-/** 删除单个设置（当前无消费方，预留 API；幂等） */
+/** 删除单个设置 */
 export function deleteSetting(key: string): void {
   assertKey(key);
   getDb().delete(appSettings).where(eq(appSettings.key, key)).run();
 }
 
-/**
- * 批量删除设置（单事务原子提交）
- *
- * 恢复默认设置（settings:resetAll）使用：按 SETTING_KEYS 白名单传入键清单，
- * 白名单外的键（如未来新增的主进程内部配置组）不受影响。幂等：删除不存在的
- * 键无副作用。键缺失即默认——主进程各 readSetting 消费方均有 undefined→默认
- * 兜底（readCloseAction/isAutoCheckEnabled 等，见各自注释）。
- */
+/** 批量删除（白名单键集——settings:resetAll 用；事务保证原子） */
 export function deleteSettings(keys: ReadonlyArray<string>): void {
   if (keys.length === 0) {
     return;
@@ -133,7 +92,6 @@ export function deleteSettings(keys: ReadonlyArray<string>): void {
   });
 }
 
-/** key 合法性校验 */
 function assertKey(key: string): void {
   if (!KEY_PATTERN.test(key)) {
     throw new Error(`非法设置 key: ${key}`);

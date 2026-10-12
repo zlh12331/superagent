@@ -1,17 +1,8 @@
-// src/main/infra/ai/models/runtime-model-store.test.ts
-// RuntimeModelStore 单测：持久化 / keychain / 注册 / 启动加载
-//
-// 接线背景：生产消费方 = settings.handler（模型配置 add/update/remove/list）
-// + models.handler（list）+ ServiceContainer init（loadAll，LLM 首次调用前）。
-// 本文件用内存 DB + mock electron/safeStorage（基础设施 mock），停用/重启
-// 恢复语义（clearRuntimeModels + loadAll）是生产启动路径的结构性回归。
-
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-// mock electron：safeStorage（keychain 依赖）+ app.getPath（db 依赖）
 const mocks = vi.hoisted(() => ({
   mockEncrypt: vi.fn((value: string) => Buffer.from(`enc:${value}`)),
   mockDecrypt: vi.fn((buffer: Buffer) => buffer.toString().replace(/^enc:/, '')),
@@ -31,7 +22,6 @@ vi.mock('electron', () => ({
   },
 }));
 
-// mock getDb：内存数据库（drizzle 迁移，schema.ts 单一真源）
 import { createTestDb } from '../../storage/test-utils';
 
 function createInMemoryDb() {
@@ -64,13 +54,11 @@ describe('RuntimeModelStore', () => {
 
   beforeAll(() => {
     resetDb();
-    // keychain 写真实文件：指向临时目录（避免污染 userData）
     mocks.mockApp.getPath.mockReturnValue(mkdtempSync(join(tmpdir(), 'code-agent-rtm-test-')));
   });
 
   beforeEach(() => {
     resetDb();
-    // 清理 modelRegistry 单例的运行时快照（跨测试污染）
     modelRegistry.clearRuntimeModels();
     store = new RuntimeModelStore();
     vi.clearAllMocks();
@@ -83,7 +71,6 @@ describe('RuntimeModelStore', () => {
       baseUrl: 'https://custom.api.com',
     });
 
-    // 持久化列表
     const list = await store.list();
     expect(list).toHaveLength(1);
     expect(list[0]).toMatchObject({
@@ -92,7 +79,6 @@ describe('RuntimeModelStore', () => {
       baseUrl: 'https://custom.api.com',
     });
 
-    // 注册后按模型 id 解析为运行时模型
     const resolved = modelRegistry.resolve('my-coder');
     expect(resolved.isRuntime).toBe(true);
     expect(resolved.providerKind).toBe('deepseek');
@@ -100,7 +86,6 @@ describe('RuntimeModelStore', () => {
   });
 
   it('add 带 apiKey：写入 keychain（runtime:<modelId>）', async () => {
-    // 占位值刻意避开真实密钥形态（sk- 前缀等）：测试只验证「存什么返回什么」
     const placeholderKey = 'test-only-placeholder-key';
     await store.add({
       modelId: 'my-coder',
@@ -109,7 +94,6 @@ describe('RuntimeModelStore', () => {
     });
 
     expect(mocks.mockEncrypt).toHaveBeenCalled();
-    // keychain 写入的 key 应含模型 id（加密前字符串）
     const encryptedInput = mocks.mockEncrypt.mock.calls[0]?.[0] as string | undefined;
     expect(encryptedInput).toBe(placeholderKey);
   });
@@ -142,10 +126,108 @@ describe('RuntimeModelStore', () => {
   it('add 不带 apiFormat（存量语义）：记录无该字段 + resolve 为 undefined（工厂按 kind 默认）', async () => {
     await store.add({ modelId: 'legacy-model', providerKind: 'deepseek' });
 
-    // undefined 而非 'openai-chat'：把「未表态」与「显式选 chat」区分开，
-    // 前者交 providerKind 决定（服务商模式语义）
     expect((await store.list())[0]?.apiFormat).toBeUndefined();
     expect(modelRegistry.resolve('legacy-model').apiFormat).toBeUndefined();
+  });
+
+  it('add 带 capabilitiesOverride：JSON 落库 + 记录/快照携带（resolve 并入 capabilities）', async () => {
+    await store.add({
+      modelId: 'my-coder',
+      providerKind: 'deepseek',
+      capabilitiesOverride: { contextWindowSize: 512_000, vision: false },
+    });
+
+    expect((await store.list())[0]).toMatchObject({
+      capabilitiesOverride: { contextWindowSize: 512_000, vision: false },
+    });
+    const resolved = modelRegistry.resolve('my-coder');
+    expect(resolved.capabilities.contextWindowSize).toBe(512_000);
+    expect(resolved.capabilities.vision).toBe(false);
+  });
+
+  it('存量双重编码行兼容读取（修复前手动 stringify + drizzle json 模式再 stringify）', async () => {
+    const { getDb } = await import('../../storage/db');
+    await store.add({ modelId: 'legacy-dbl', providerKind: 'deepseek' });
+    // 修复前存储文本 = JSON.stringify(JSON.stringify(obj))——双层编码形态
+    const legacyText = JSON.stringify(JSON.stringify({ contextWindowSize: 131_072 }));
+    const db = getDb();
+    const rawDb = (db as unknown as { $client: import('better-sqlite3').Database }).$client;
+    rawDb
+      .prepare("UPDATE runtime_models SET capabilities = ? WHERE model_id = 'legacy-dbl'")
+      .run(legacyText);
+
+    expect((await store.list())[0]).toMatchObject({
+      capabilitiesOverride: { contextWindowSize: 131_072 },
+    });
+  });
+
+  it('capabilities 畸形值：list 不抛错（纯 text 列不做 drizzle 内层 parse）、覆盖按缺省处理', async () => {
+    const { getDb } = await import('../../storage/db');
+    await store.add({ modelId: 'legacy-bad', providerKind: 'deepseek' });
+    const db = getDb();
+    const rawDb = (db as unknown as { $client: import('better-sqlite3').Database }).$client;
+    rawDb
+      .prepare("UPDATE runtime_models SET capabilities = 'not-json' WHERE model_id = 'legacy-bad'")
+      .run();
+
+    expect((await store.list())[0]?.capabilitiesOverride).toBeUndefined();
+  });
+
+  it('update：capabilities 三态（覆盖写入 / null 清除 / 省略不改）', async () => {
+    await store.add({
+      modelId: 'my-coder',
+      providerKind: 'deepseek',
+      capabilitiesOverride: { contextWindowSize: 512_000 },
+    });
+
+    await store.update({
+      modelId: 'my-coder',
+      capabilitiesOverride: { contextWindowSize: 256_000, maxOutputTokens: 16_000 },
+    });
+    expect((await store.list())[0]).toMatchObject({
+      capabilitiesOverride: { contextWindowSize: 256_000, maxOutputTokens: 16_000 },
+    });
+    expect(modelRegistry.resolve('my-coder').capabilities.contextWindowSize).toBe(256_000);
+
+    await store.update({ modelId: 'my-coder', capabilitiesOverride: null });
+    expect((await store.list())[0]?.capabilitiesOverride).toBeUndefined();
+    expect(modelRegistry.resolve('my-coder').capabilities.contextWindowSize).toBeUndefined();
+
+    // 省略 = 不修改：先写覆盖再省略更新，覆盖应保留
+    await store.add({
+      modelId: 'my-coder-2',
+      providerKind: 'deepseek',
+      capabilitiesOverride: { vision: true },
+    });
+    await store.update({ modelId: 'my-coder-2', displayName: '视觉模型' });
+    expect((await store.list())[1]).toMatchObject({ capabilitiesOverride: { vision: true } });
+  });
+
+  it('DB 脏值（畸形 capabilities JSON）：按未设置处理（丢弃不抛错）', async () => {
+    await store.add({ modelId: 'my-coder', providerKind: 'deepseek' });
+    const { getDb } = await import('../../storage/db');
+    const { runtimeModels } = await import('../../storage/schema');
+    const { eq } = await import('drizzle-orm');
+    getDb()
+      .update(runtimeModels)
+      .set({ capabilities: 'not-json{{' })
+      .where(eq(runtimeModels.modelId, 'my-coder'))
+      .run();
+
+    expect((await store.get('my-coder'))?.capabilitiesOverride).toBeUndefined();
+  });
+
+  it('loadAll：capabilitiesOverride 随快照恢复（重启后能力覆盖仍生效）', async () => {
+    await store.add({
+      modelId: 'my-coder',
+      providerKind: 'deepseek',
+      capabilitiesOverride: { contextWindowSize: 512_000 },
+    });
+
+    modelRegistry.clearRuntimeModels();
+    await new RuntimeModelStore().loadAll();
+
+    expect(modelRegistry.resolve('my-coder').capabilities.contextWindowSize).toBe(512_000);
   });
 
   it('update：apiFormat 落库 + 注册表重建为最新值', async () => {
@@ -164,7 +246,6 @@ describe('RuntimeModelStore', () => {
       apiFormat: 'openai-responses',
     });
 
-    // 模拟重启：清空注册表内存态后 loadAll 从 DB 重建
     modelRegistry.clearRuntimeModels();
     await new RuntimeModelStore().loadAll();
 
@@ -173,7 +254,6 @@ describe('RuntimeModelStore', () => {
 
   it('DB 脏值（非法 apiFormat）：按未设置处理（回落 kind 默认，不抛错）', async () => {
     await store.add({ modelId: 'my-coder', providerKind: 'deepseek' });
-    // 直接写非法值模拟历史脏数据（绕过入参校验）
     const { getDb } = await import('../../storage/db');
     const { runtimeModels } = await import('../../storage/schema');
     const { eq } = await import('drizzle-orm');
@@ -189,17 +269,14 @@ describe('RuntimeModelStore', () => {
   it('update：timeoutMs 三态（设置 / null 清除 / 省略不改）', async () => {
     await store.add({ modelId: 'my-coder', providerKind: 'deepseek' });
 
-    // 设置
     await store.update({ modelId: 'my-coder', timeoutMs: 300_000 });
     expect((await store.list())[0]).toMatchObject({ timeoutMs: 300_000 });
     expect(modelRegistry.resolve('my-coder').generationConfig).toEqual({ timeoutMs: 300_000 });
 
-    // 清除（null → 落 NULL，回不限制）
     await store.update({ modelId: 'my-coder', timeoutMs: null });
     expect((await store.list())[0]?.timeoutMs).toBeUndefined();
     expect(modelRegistry.resolve('my-coder').generationConfig).toBeUndefined();
 
-    // 省略不改（更新其他字段时超时保持）
     await store.update({ modelId: 'my-coder', timeoutMs: 300_000 });
     await store.update({ modelId: 'my-coder', displayName: '编码器' });
     expect((await store.list())[0]).toMatchObject({ timeoutMs: 300_000, displayName: '编码器' });
@@ -215,7 +292,6 @@ describe('RuntimeModelStore', () => {
     await store.remove('my-coder');
 
     expect(await store.list()).toHaveLength(0);
-    // 注销后：显式解析回退默认供应商透传（非运行时）
     const resolved = modelRegistry.resolve('my-coder');
     expect(resolved.isRuntime).toBe(false);
   });
@@ -239,7 +315,6 @@ describe('RuntimeModelStore', () => {
       displayName: '我的编码器',
       baseUrl: 'https://updated.api.com',
     });
-    // 注册表已重建为最新 baseUrl
     const resolved = modelRegistry.resolve('my-coder');
     expect(resolved.isRuntime).toBe(true);
     expect(resolved.explicitBaseUrl).toBe('https://updated.api.com');
@@ -251,7 +326,6 @@ describe('RuntimeModelStore', () => {
     await store.update({ modelId: 'my-coder', isEnabled: false });
 
     expect((await store.get('my-coder'))?.isEnabled).toBe(false);
-    // 停用后注销快照 + 登记停用身份：resolve 返回 available=false（不再透传兜底）
     const resolved = modelRegistry.resolve('my-coder');
     expect(resolved.isRuntime).toBe(false);
     expect(resolved.available).toBe(false);
@@ -287,7 +361,6 @@ describe('RuntimeModelStore', () => {
 
   it('loadAll：启动时注册全部已保存模型', async () => {
     await store.add({ modelId: 'my-coder', providerKind: 'openai' });
-    // 模拟重启：新 store 实例 loadAll
     const freshStore = new RuntimeModelStore();
     await freshStore.loadAll();
 
@@ -299,7 +372,6 @@ describe('RuntimeModelStore', () => {
     await store.add({ modelId: 'my-coder', providerKind: 'deepseek' });
     await store.update({ modelId: 'my-coder', isEnabled: false });
 
-    // 模拟重启：新 store 实例 + 清空注册表（内存态丢失）后 loadAll 恢复
     modelRegistry.clearRuntimeModels();
     const freshStore = new RuntimeModelStore();
     await freshStore.loadAll();

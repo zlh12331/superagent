@@ -1,27 +1,7 @@
 // scripts/scaffold/scaffold-ipc.ts
-// IPC 脚手架：从定义表体系生成新域/新方法的代码骨架
-// ──────────────────────────────────────────────────────────────
-// 用法：
-//   pnpm scaffold:ipc --domain <name> --method <method> [--kind request|event]
-//
-// 示例：
-//   pnpm scaffold:ipc --domain bookmark --method list        # 新建 bookmark 域（request）
-//   pnpm scaffold:ipc --domain file --method watchPause --kind event
-//
-// 自动完成：
-//   1. packages/shared/src/ipc/meta.ts 插入通道元数据
-//   2. packages/shared/src/ipc/definitions.ts 插入占位 schema（TODO 待替换）
-//   3. src/main/ipc/{domain}.handler.ts 生成骨架（不存在时）
-//
-// 手动完成（打印指引）：
-//   - src/main/index.ts 注册 handler
-//   - definitions.ts 占位替换为真实 schema / res 类型
-//   - handler 测试
-//
-// 红利说明（定义表体系）：
-//   IPC_CHANNELS / window.api（preload）/ IpcApi 类型 / registerIpcHandlers
-//   全部由定义表自动推导，本脚手架只补齐"骨架文件"一环。
-// ──────────────────────────────────────────────────────────────
+// IPC 脚手架：从定义表体系生成新域/新方法骨架，自动完成 meta.ts 插通道元数据、
+// definitions.ts 插 schema、handler 生成、测试骨架
+// 用法：pnpm scaffold:ipc --domain <name> --method <method> [--kind request|event]
 
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
@@ -209,7 +189,6 @@ function main(): void {
   const channel = `${spec.domain}:${spec.method}`;
   const domainHeader = `  ${spec.domain}: {`;
 
-  // 1. meta.ts：插入通道元数据（幂等检查用 request('x')/event('x') 完整形式）
   const metaPath = 'packages/shared/src/ipc/meta.ts';
   const metaSource = readSource(metaPath);
   assertChannelAbsent(metaSource, metaPath, `('${channel}')`, channel);
@@ -222,7 +201,6 @@ function main(): void {
   writeFileSync(path.join(REPO_ROOT, metaPath), metaUpdated, 'utf8');
   console.log(`[更新] ${metaPath}（${channel}）`);
 
-  // 2. definitions.ts：插入占位 schema（幂等检查用 IPC_META 引用形式）
   const defsPath = 'packages/shared/src/ipc/definitions.ts';
   const defsSource = readSource(defsPath);
   assertChannelAbsent(defsSource, defsPath, `IPC_META.${spec.domain}.${spec.method}`, channel);
@@ -235,7 +213,6 @@ function main(): void {
   writeFileSync(path.join(REPO_ROOT, defsPath), defsUpdated, 'utf8');
   console.log(`[更新] ${defsPath}（占位 schema，TODO 待替换）`);
 
-  // 3. handler 骨架
   writeHandlerSkeleton(spec);
 
   printManualSteps(spec);

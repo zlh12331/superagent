@@ -1,5 +1,3 @@
-// src/renderer/components/settings/sections/rules-memory-section.test.tsx
-// RulesMemorySection 测试：规则说明与记忆面板挂载点渲染
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react';
 import type { ReactElement } from 'react';

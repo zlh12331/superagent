@@ -1,12 +1,8 @@
 // scripts/check-release-anchor.test.ts
-// 锚点检查单测（fetch 注入，不发真实网络请求）：
-//   - fail-closed 回归（2026-10-06）：网络失败必须计 ❌，禁止静默落入「正常」分支
-//     （首版两处 catch 曾把 API 抖动当「近期无 Release PR」放过——发版事故场景
-//     恰是本检查最该工作的时候）
-//   - 404 → null 合法路径（无 open PR 等）
-//   - post-merge 模式（CD gate）：manifest 一致性 + tag 不存在断言；
-//     刚合并 PR 停在 pending 不参与判定（收尾在 release job 末尾）
-//   - compareVersions 方向性判定（含 prerelease 序）
+// 锚点检查单测（fetch 注入，不发真实网络请求）：fail-closed 回归（2026-10-06——
+// 首版两处 catch 曾把 API 抖动当「近期无 Release PR」放过）+ 404→null 合法路径 +
+// post-merge 模式（manifest 一致 + tag 不存在；刚合并 PR 停 pending 不参与判定）+
+// compareVersions 方向性判定（含 prerelease 序）
 
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -85,7 +81,6 @@ function ghPull(
     title: `chore(main): release ${version}`,
     head: ghRecord({ ref: 'release-please--branches--main' }),
   });
-  // merged_at 是 GitHub API wire 字段名（snake_case 不可改），经索引写入
   base['merged_at'] = options.open === true ? null : '2026-10-06T00:00:00Z';
   if (options.labels !== undefined) {
     base['labels'] = options.labels.map((name) => ghRecord({ name }));
@@ -272,7 +267,6 @@ describe('compareVersions（方向性判定）', () => {
   });
 
   it('prerelease 标识符追加（冻结基底首例：beta → beta.1）——回归 2026-10-08 方向写反事故', () => {
-    // 前缀相同时，标识符更多者优先级更高（SemVer 11.4：位数多者为更大）
     expect(compareVersions('1.8.0-beta.1', '1.8.0-beta')).toBeGreaterThan(0);
     expect(compareVersions('1.8.0-beta', '1.8.0-beta.1')).toBeLessThan(0);
     expect(compareVersions('1.7.1-beta.1', '1.7.1-beta')).toBeGreaterThan(0);

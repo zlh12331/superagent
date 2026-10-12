@@ -1,25 +1,15 @@
-// packages/shared/src/constants/defaults.ts
-// 默认 AI 供应商与默认模型的「单一真源」
-// ──────────────────────────────────────────────
-// 定位：默认供应商 + 默认模型为跨进程共享的权威常量，供
-// - 主进程：@code-agent/shared/main（src/main/infra/ai/models/builtin-models.ts）
-// - 渲染层：@code-agent/shared/renderer（src/renderer/stores/persistent/settings-store.ts）
-// 共同引用，避免双源漂移（此前两端各自写死 'deepseek' / 'deepseek-v4-flash'）。
-//
-// 变更：改默认供应商/模型只改这一处即可。
-// ──────────────────────────────────────────────
-
+// defaults.ts：跨进程共享的默认值单一真源（默认供应商/模型 + 消息、附件、终端上限）
+// 默认供应商/模型被两端共同引用——主进程 src/main/infra/ai/models/builtin-models.ts、
+// 渲染层 src/renderer/stores/persistent/settings-store.ts；改默认值只改这一处（避免双源漂移）。
 /** 默认 AI 供应商（未指定模型/供应商时的全局回退） */
 export const DEFAULT_PROVIDER = 'deepseek' as const;
 
-/** 默认聊天 / Agent 模型 id */
-export const DEFAULT_MODEL = 'deepseek-v4-flash' as const;
+/** 默认聊天 / Agent 模型 id（DeepSeek V4.1-Flash，官方模型名 deepseek-flash） */
+export const DEFAULT_MODEL = 'deepseek-flash' as const;
 
-// ── 消息/附件/终端 UI 限制（渲染层 UX 拦截的权威数值） ──────────
-// 说明：这些限制是渲染层输入/展示层的 UX 拦截，单一真源收敛于此，
-// 供 ChatInput / attachments / TerminalPanel 引用，避免魔法值双写。
-// 服务端 schema 不做强校验（LLM 工具输出等长内容不应被误伤）。
-
+// ── 消息/附件/终端上限：渲染层 UX 拦截的权威数值 ──────────────────────────
+// 供 ChatInput / attachments / TerminalPanel 引用，避免魔法值双写；上限只作用于渲染层入口，
+// 服务端 schema 不做强校验（历史中 LLM 工具输出等长内容不应被误伤）。
 /** 单条消息最大字符数（ChatInput 发送前拦截，对齐原型 8000） */
 export const MAX_MESSAGE_LENGTH_CHARS = 8000;
 
@@ -36,8 +26,8 @@ export const ATTACHMENT_MAX_CHARS = 4000;
  */
 export const MAX_USER_INPUT_HARD_CAP = MAX_MESSAGE_LENGTH_CHARS * 4;
 
-/** 终端创建时默认列数（缺省 dimensions 时使用） */
+/** 终端创建默认列数（初始几何；首次 FitAddon 适配后经 resizeTerminal 同步真实尺寸） */
 export const TERMINAL_DEFAULT_COLS = 80;
 
-/** 终端创建时默认行数（缺省 dimensions 时使用） */
+/** 终端创建默认行数（初始几何；首次 FitAddon 适配后经 resizeTerminal 同步真实尺寸） */
 export const TERMINAL_DEFAULT_ROWS = 24;

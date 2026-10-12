@@ -1,10 +1,7 @@
-// src/main/ipc/update.handler.test.ts
-// update.handler 单测：check/install/cancel/getStatus 转发（fake UpdateService DI 注入）
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createUpdateHandlers, type UpdateHandlerDeps } from './update.handler';
 
-/** 创建 fake UpdateService */
 function createFakeUpdateService() {
   return {
     start: vi.fn(),

@@ -1,16 +1,5 @@
-// src/main/infra/storage/approval-pref.ts
-// 工具审批模式持久化（用户偏好，JSON 文件）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 读写 ApprovalMode 配置（plan / ask / auto / yolo）
-// - 存储位置：userData/approval-pref.json（与 telemetry-pref 同模式）
-// - 读取失败回退 'ask'（保守默认：写操作需审批）
-//
-// 设计：
-// - 与 telemetry-pref 对齐：无状态模块函数 + 同步/异步读写
-// - 启动时由 PermissionService 读取并应用（setApprovalMode）
-// ──────────────────────────────────────────────────────────────
-
+// approval-pref.ts：审批模式持久化（JSON 文件而非 SQLite）——容器初始化 PermissionService 时
+// DB 可能尚未就绪，此文件必须可同步读取；值为共享 ApprovalMode 四态
 import { mkdirSync, readFileSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -18,14 +7,11 @@ import { type ApprovalMode, DEFAULT_APPROVAL_MODE } from '@code-agent/shared/mai
 import { app } from 'electron';
 import { logger } from '../../utils/logger';
 
-/** 偏好文件路径（userData 目录） */
 function approvalPrefPath(): string {
   return join(app.getPath('userData'), 'approval-pref.json');
 }
 
-/**
- * 同步读取审批模式（启动时用；文件缺失/损坏回退默认）
- */
+/** 同步读审批模式（损坏/缺失回落默认）；值域窄校验，未知值不采纳 */
 export function readApprovalModeSync(): ApprovalMode {
   try {
     const raw = readFileSync(approvalPrefPath(), 'utf8');
@@ -38,15 +24,11 @@ export function readApprovalModeSync(): ApprovalMode {
     ) {
       return parsed.mode;
     }
-  } catch {
-    // 文件不存在 / 解析失败：回退默认
-  }
+  } catch {}
   return DEFAULT_APPROVAL_MODE;
 }
 
-/**
- * 异步写入审批模式（设置页变更时调用）
- */
+/** 写审批模式（settings:setApprovalMode 与渲染层切换入口共用） */
 export async function writeApprovalMode(mode: ApprovalMode): Promise<void> {
   const filePath = approvalPrefPath();
   mkdirSync(join(filePath, '..'), { recursive: true });

@@ -1,11 +1,7 @@
-// src/main/infra/lsp/lsp-client.test.ts
-// LSP 客户端单测：fake 语言服务器（真实 JSON-RPC 子进程，无 mock 框架）
-
 import { spawn } from 'node:child_process';
 import { afterEach, describe, expect, it } from 'vitest';
 import { LspClient, type LspPosition } from './lsp-client';
 
-/** fake 语言服务器脚本（真实 JSON-RPC 2.0 over stdio） */
 const FAKE_SERVER_SCRIPT = `
 let buffer = '';
 let serverState = null;
@@ -59,7 +55,6 @@ process.stdin.on('data', (chunk) => {
 });
 `;
 
-/** 启动 fake 服务器并创建客户端 */
 async function createTestClient(timeoutMs = 3_000): Promise<LspClient> {
   const child = spawn(process.execPath, ['-e', FAKE_SERVER_SCRIPT]);
   const client = new LspClient({
@@ -110,8 +105,6 @@ describe('LspClient', () => {
   });
 
   it('请求超时：无响应超阈值拒绝', async () => {
-    // 用默认超时构造（全量并发下 200ms 会让 initialize 握手先超时，测试在构造阶段即炸）；
-    // 通过耗时断言确认 stall 请求确实走超时拒绝路径（约等于 timeoutMs）
     const client = await createTestClient();
     clients.push(client);
     const startedAt = Date.now();

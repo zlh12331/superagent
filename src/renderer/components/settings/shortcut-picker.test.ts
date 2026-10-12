@@ -1,5 +1,3 @@
-// src/renderer/components/settings/shortcut-picker.test.ts
-// formatShortcut 纯函数测试（快捷键字符串格式化：修饰键 + 主键）
 import { describe, expect, it } from 'vitest';
 
 import { formatShortcut } from './shortcut-picker';

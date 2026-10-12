@@ -1,6 +1,3 @@
-// src/renderer/lib/working-dir.test.ts
-// resolveWorkingDir 纯函数测试：knownDir 优先 / 索引回退 / 未知返回 null
-
 import { describe, expect, it } from 'vitest';
 
 import { resolveWorkingDir } from './working-dir';

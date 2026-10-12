@@ -1,6 +1,7 @@
-# 08 · 渲染进程（React）
+# 渲染层规范（React 架构现状）
 
 > 覆盖：`src/renderer/` —— 入口、路由、组件树、hooks、stores、lib、providers、i18n。
+> 自 code-wiki 08 合并升格为主题命名规范（2026-10-12，编号规范 01~24 已固化）。
 
 ## 1. 入口与启动
 
@@ -23,7 +24,7 @@
 
 **chat/**：`ChatPanel`、`ChatInput`、`ChatMessageList`、`message-item`、`Markdown`（shiki 高亮 + DOMPurify 消毒）、`message-actions`、`GoalBar`（会话目标栏）、`tool-call-view`、`conversation-search-bar`、`file-change-card`、`streaming-cursor`、`streaming-footer`、`rate-limit-banner`、`attachments(-chips)`（附件链路）、`slash-commands` / `slash-suggest-panel`（斜杠命令）、`question-jump-bar`、`chat-status-bar`、`panel-notice`；composer 拆分 hooks（`use-composer-*` 五件）+ `use-vim-mode` / `use-message-nav-rail` / `use-auto-compact` / `use-session-compact` / `use-mention-files` / `use-chat-goals`。
 
-**agent/**：审批 UI——`inline-approval-card`（内联审批卡）、`approval-preview`（预览弹层）、`ask-dialog`（提问框）、`approval-utils`。配合 AI 审批流（见 04/05）。
+**agent/**：审批 UI——`inline-approval-card`（内联审批卡）、`approval-preview`（预览弹层）、`ask-dialog`（提问框）、`approval-utils`。配合 AI 审批流（见 agent-runtime-spec 与 22 号）。
 
 **browser/**：`browser-pane`（WebContentsView 承载壳）、`browser-toolbar`、`browser-device-bar`、`browser-url`、`browser-geometry`、`use-browser-viewport`——右面板浏览器视图（主进程 preview-service 配套）。
 
@@ -68,10 +69,10 @@
 
 ## 6. Stores（`stores/`）
 
-**状态管理分工铁律**：IPC `invoke` server state → TanStack Query；IPC `on` 推送事件 → Zustand。
+**状态管理分工铁律**：IPC `invoke` server state → TanStack Query；IPC `on` 推送事件 → Zustand（详见 21 号状态管理规范）。
 
 - `persistent/`：`create-persistent-store`（持久化基座）、`sessions-store`、`settings-store`、`draft-store`、`sidebar-pref-store`。
-- `transient/`（2026-09-30 实测 14 个）：`agent-ask-store`、`agent-run-store`、`approvals-store`、`confirm-dialog-store`、`file-tree-store`、`file-viewer-store`、`pending-message-store`、`rate-limit-store`、`reasoning-collapse-store`、`terminal-store`、`tool-store`、`ui-store`、`update-store`、`welcome-store`。
+- `transient/`（实测 15 个）：`agent-ask-store`、`agent-run-store`、`approvals-store`、`confirm-dialog-store`、`file-tree-store`、`file-viewer-store`、`pending-message-store`、`rate-limit-store`、`reasoning-collapse-store`、`terminal-store`、`tool-store`、`ui-store`、`update-store`、`welcome-store`。
 
 ## 7. lib（`lib/`）
 

@@ -1,7 +1,3 @@
-// src/renderer/components/ui/switch.tsx
-// 开关组件（shadcn/ui new-york 风格，基于 @radix-ui/react-switch）
-// 设计文档 §2.3 shadcn/ui 组件库
-
 import * as SwitchPrimitive from '@radix-ui/react-switch';
 import type * as React from 'react';
 

@@ -1,32 +1,11 @@
-// src/main/infra/ai/agent-runtime/loop-detector.ts
-// 回合循环检测（对齐 qwen-code loopDetectionService）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 连续相同工具调用（同 name + 同入参）≥ 阈值 → 判定循环（重复调用
-//   必然产生相同结果，是永远无产出的模式，先于服务端拒绝整个会话断开）
-// - 连续相同文件读取 ≥ 阈值 → 判定循环（"总结这个项目"等合法场景
-//   会并行 read_file，因此文件读取阈值放宽）
-//
-// 接线现状（重要）：
-// - recordToolCall 已接线：TurnRunner 读流时对每个 tool-call 事件记录
-// - recordFileRead 未接线：生产代码零调用（TurnRunner 不记录文件读取，
-//   agent-service executeHook 也未接），当前仅单测覆盖，属预留能力；
-//   接线点应在 executeHook 的 read_file 分支，补齐前文件读取循环不设防
-//
-// 语义：
-// - recordToolCall 抛 LoopDetectedError = 触发循环（agent-service 按
-//   AI_LOOP_DETECTED 分类终止回合）
-// - 单回合实例（TurnRunner 每次 run 创建），回合结束自然释放
-// ──────────────────────────────────────────────────────────────
-
+// loop-detector.ts：Agent 死循环检测——连续相同工具调用 / 连续读同一文件超阈值即抛错终止回合
 import { AppError, ErrorCode } from '@code-agent/shared/main';
 
-/** 连续相同工具调用阈值（同 name + 同入参；低于服务端重复调用拒绝阈值） */
+// 工具连续 5 次（同入参）或同文件连读 15 次：模型抽风但用户文件可能确实需要多次读——阈值留了余量
 const TOOL_CALL_LOOP_THRESHOLD = 5;
-/** 连续相同文件读取阈值（合法场景常连续读文件，阈值放宽） */
 const FILE_READ_LOOP_THRESHOLD = 15;
 
-/** 循环检测错误（agent-service 分类为 AI_LOOP_DETECTED 回合终止） */
+/** 循环检测错误（AI_LOOP_DETECTED 码——渲染层可按此提示「检测到循环已终止」） */
 export class LoopDetectedError extends AppError {
   constructor(detail: string) {
     super(ErrorCode.AI_LOOP_DETECTED, `检测到回合循环：${detail}`, undefined);
@@ -34,14 +13,13 @@ export class LoopDetectedError extends AppError {
   }
 }
 
-/** 单回合循环检测器 */
+/** 死循环检测器：每回合一个实例（reset 清 streak）；record* 命中阈值直接抛 */
 export class LoopDetector {
   private lastToolCall: { name: string; inputHash: string } | null = null;
   private toolCallStreak = 0;
   private lastReadPath: string | null = null;
   private readStreak = 0;
 
-  /** 重置（回合开始调用） */
   reset(): void {
     this.lastToolCall = null;
     this.toolCallStreak = 0;
@@ -49,12 +27,6 @@ export class LoopDetector {
     this.readStreak = 0;
   }
 
-  /**
-   * 记录一次工具调用；连续相同（name + 入参 JSON）超阈值抛 LoopDetectedError
-   *
-   * @param name 工具名
-   * @param inputJson 入参 JSON 字符串（哈希源）
-   */
   recordToolCall(name: string, inputJson: string): void {
     if (
       this.lastToolCall !== null &&
@@ -71,9 +43,6 @@ export class LoopDetector {
     }
   }
 
-  /**
-   * 记录一次文件读取；连续相同路径超阈值抛 LoopDetectedError
-   */
   recordFileRead(path: string): void {
     if (this.lastReadPath === path) {
       this.readStreak += 1;

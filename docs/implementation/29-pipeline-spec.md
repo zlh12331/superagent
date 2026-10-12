@@ -198,7 +198,7 @@ flowchart TB
 
 | job | 实例 | 步骤 |
 |---|---|---|
-| **quality** | 1 | ① `pnpm typecheck` ② `pnpm lint` ③ gitleaks 密钥扫描（依赖 `fetch-depth: 0`，浅克隆会假绿）④ `pnpm check:static`（16 项静态审计）⑤ `pnpm tokens:check` ⑥ `pnpm knip` ⑦ `pnpm depcruise` ⑧ `pnpm check:schema-drift`（与本地 verify:local 共用同一脚本，2026-09-22 起）⑨ `pnpm test:scripts` ⑩ `pnpm audit` ⑪ **`pnpm check:changelog-polish`（仅 Release PR：`if: startsWith(github.head_ref, 'release-please--')`）** ⑫ **`pnpm check:release-pr-scope --branch <headRef>` + `pnpm check:release-anchor`（仅 Release PR，2026-10-06 护栏 C+B：内容边界白名单 + 锚点三态自洽，GITHUB_TOKEN 注入；其余 Release PR 重步骤 ①-⑩ 全跳，2026-10-05 瘦身）** |
+| **quality** | 1 | ① `pnpm typecheck` ② `pnpm lint` ③ gitleaks 密钥扫描（依赖 `fetch-depth: 0`，浅克隆会假绿；仅 `pull_request` 事件跑，merge_group 队列树无对应 PR diff 区间故跳过）④ `pnpm check:static`（16 项静态审计）⑤ `pnpm tokens:check` ⑥ `pnpm knip` ⑦ `pnpm depcruise` ⑧ `pnpm check:schema-drift`（与本地 verify:local 共用同一脚本，2026-09-22 起）⑨ `pnpm test:scripts` ⑩ `pnpm audit` ⑪ **`pnpm check:changelog-polish`（仅 Release PR：`if: startsWith(github.head_ref, 'release-please--')`）** ⑫ **`pnpm check:release-pr-scope --branch <headRef>` + `pnpm check:release-anchor`（仅 Release PR，2026-10-06 护栏 C+B：内容边界白名单 + 锚点三态自洽，GITHUB_TOKEN 注入；其余 Release PR 重步骤 ①-⑩ 全跳，2026-10-05 瘦身）** |
 | **unit** | 6 | `pnpm test:main` + `pnpm test:renderer`；**ubuntu-latest 实例改跑 `pnpm test:coverage`**（覆盖率阈值唯一把关点，覆盖率产物也从这里上传）；其余 5 个平台跑不带阈值的同套用例。`test:scripts` 不在此 job（与平台无关，留在 quality 单次执行，避免 6 倍重复） |
 | **integration** | 1 | `pnpm test:integration`（`tests/integration/`，20+ 文件；用户决策不扩平台） |
 | **e2e-browser** | 1 | `playwright install --with-deps chromium` → `playwright test --config e2e/playwright.config.ts --retries=2` |
@@ -527,7 +527,7 @@ artifacts/mac-arm64/latest-mac.yml
 | 文件 | 过期内容 | 应改为 |
 |---|---|---|
 | `AGENTS.md`「CI 触发策略」段 | 称 ruleset 必需检查「现 **8 项**」，实测为 **6 项**（早先的记载已过期） | 按实施后的真实值写 **5 项**，并列出 5 个 context 字符串 |
-| `docs/design/27-auto-update-spec.md` §14.11 | 称 CD「**四个变体**」覆盖更全（§1 已声明该段为历史阶段记录） | 补一句指向本文档：CD 已扩为 **6 个 job**，smoke 覆盖 6/6 |
+| `docs/implementation/27-auto-update-spec.md` §14.11 | 称 CD「**四个变体**」覆盖更全（§1 已声明该段为历史阶段记录） | 补一句指向本文档：CD 已扩为 **6 个 job**，smoke 覆盖 6/6 |
 | `.github/workflows/release.yml:128-152` 的矩阵注释块 | 称「基础的 `windows-11-arm` 镜像不含 Visual Studio」「Windows 不能像 Linux 那样拆 job」 | 前半句删除或改为「含 VS2022 + `VC.Tools.ARM64`，正迁移至 VS2026」；后半句保留（该结论仍成立，是 merge job 的存在理由） |
 
 ## 7. 风险与应对（均已核实，如实记录）
@@ -691,7 +691,7 @@ pnpm verify:local:full   # 追加产物层（含 build:win:x64 + smoke），约 
 
 **两个必须知晓的约束**：
 
-1. **推送仍会触发云端 workflow 并消耗配额**（`ci.yml` 由 `pull_request` 触发、`release.yml`/`release-please.yml` 由 `push: main` 触发、`codeql.yml` 三种都有）。仅"本地验证"不能阻止派发；需要控量时用 commit message 加 `[skip ci]`（官方支持 `[skip ci]` / `[ci skip]` / `[no ci]` / `[skip actions]` / `[actions skip]`，仅作用于 `push` 与 `pull_request`，`pull_request_target` 例外）。
+1. **推送仍会触发云端 workflow 并消耗配额**（`ci.yml` 由 `pull_request` / `merge_group` 触发、`release.yml`/`release-please.yml` 由 `push: main` 触发、`codeql.yml` 三种都有）。仅"本地验证"不能阻止派发；需要控量时用 commit message 加 `[skip ci]`（官方支持 `[skip ci]` / `[ci skip]` / `[no ci]` / `[skip actions]` / `[actions skip]`，仅作用于 `push` 与 `pull_request`，`pull_request_target` 例外）。
 2. **ruleset 的 5 项必需检查由云端产生**（用户决定暂不动 ruleset）。配额恢复前 PR 会卡在 pending；`.workbuddy-ai/` 等本地产物的提交也需按此策略权衡。
 
 **顺带发现的可优化项**（本次未改，供配额恢复后参考）：

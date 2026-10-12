@@ -1,11 +1,8 @@
 // scripts/check-native-arch.test.ts
-// 产物 resources 路径推导单测（macOS 与其余平台）
-// ──────────────────────────────────────────────────────────────
-// 覆盖动机（2026-09-20 首次 CD 实测事故）：resourcesDirOf 曾对 macOS 返回
-// `<dir>/resources`（而实际是 `<dir>/<App>.app/Contents/Resources`），导致
-// macOS job 报「已检查 0 个二进制」却仍然通过——一个静默漏洞：架构错配在 macOS
-// 上完全不被检测。本用例用真实临时目录树锚定该路径推导。
-// ──────────────────────────────────────────────────────────────
+// 产物 resources 路径推导单测（macOS 与其余平台）。覆盖动机（2026-09-20 首次 CD
+// 事故）：resourcesDirOf 曾对 macOS 返回 <dir>/resources（实际在
+// <dir>/<App>.app/Contents/Resources），macOS 报「已检查 0 个二进制」却通过——
+// 架构错配在 macOS 完全不被检测的静默漏洞；用真实临时目录树锚定该路径推导
 
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -33,7 +30,6 @@ describe('resourcesDirOf', () => {
 
       const result = resourcesDirOf(dir);
       expect(result).toBe(join(dir, appName, 'Contents', 'Resources'));
-      // 关键断言：不能回退成 <dir>/resources（那会让检查器一个都查不到）
       expect(result).not.toBe(join(dir, 'resources'));
     });
 

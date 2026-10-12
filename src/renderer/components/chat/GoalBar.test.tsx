@@ -1,11 +1,3 @@
-// src/renderer/components/chat/GoalBar.test.tsx
-// 会话目标栏（GoalBar 组件，经 ChatPanel 挂载驱动）：goal 命令创建 → 输入框上方显示 → 编辑/删除操作
-//
-// 测试要点：
-// 1. 无目标不显示目标栏；有目标显示 GOAL 标签 + 条件 + 暂停/恢复 · 编辑 · 删除
-// 2. 暂停/恢复本地切换；编辑预填 /goal 条件；删除调 goal:clear
-// 3. /goal 前缀发送：只创建目标不进对话；普通消息正常发送；裸 /goal 预填引导
-
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -16,7 +8,6 @@ import { ThemeProvider } from '@/providers/ThemeProvider';
 import { useDraftStore } from '@/stores/persistent/draft-store';
 import { ChatPanel } from './ChatPanel';
 
-// useAgentWithIpc 外壳：目标栏测试只关心目标状态，不关心 agent 流式链路
 const { sendMessageMock } = vi.hoisted(() => ({ sendMessageMock: vi.fn() }));
 vi.mock('@/hooks/use-agent', () => ({
   useAgentWithIpc: () => ({
@@ -41,12 +32,10 @@ describe('会话目标栏（ChatPanel 内联）', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    // 清草稿：注入预填会写入 draft-store，避免跨测试残留（chatId 相同恢复旧草稿）
     useDraftStore.setState({ drafts: {} });
     goalCreateMock.mockResolvedValue({ data: { ok: true } });
     goalClearMock.mockResolvedValue({ data: { ok: true } });
     goalListMock.mockResolvedValue({ data: { goals: [] } });
-    // window.api 空骨架（setup.ts afterEach 重建），注入 goal/models 域
     window.api.goal = {
       create: goalCreateMock,
       list: goalListMock,
@@ -72,7 +61,6 @@ describe('会话目标栏（ChatPanel 内联）', () => {
         <MemoryRouter>
           <ThemeProvider>
             <ChatPanel chatId="chat-1" workingDir="D:\\proj" />
-            {/* 确认对话框宿主：删除目标走 confirm-dialog-store 命令式确认，需真实渲染 */}
             <DialogHost />
           </ThemeProvider>
         </MemoryRouter>
@@ -87,7 +75,6 @@ describe('会话目标栏（ChatPanel 内联）', () => {
 
   it('仅 aborted 目标（已清除/被覆盖）：不显示目标栏', async () => {
     renderPanel([{ condition: '旧目标', status: 'aborted' }]);
-    // query 异步：等待后确认不显示
     await waitFor(() => {
       expect(screen.queryByText('目标')).toBeNull();
     });
@@ -116,7 +103,6 @@ describe('会话目标栏（ChatPanel 内联）', () => {
     renderPanel([{ condition: '修复登录页 500 错误', status: 'active' }]);
     expect(await screen.findByText('目标')).toBeInTheDocument();
     expect(screen.getByText('修复登录页 500 错误')).toBeInTheDocument();
-    // P2 修复：假「暂停」按钮已移除——goal:pause IPC 未实现，本地翻转纯欺骗
     expect(screen.queryByLabelText('暂停目标')).toBeNull();
     expect(screen.getByLabelText('编辑目标')).toBeInTheDocument();
     expect(screen.getByLabelText('删除目标')).toBeInTheDocument();
@@ -133,7 +119,6 @@ describe('会话目标栏（ChatPanel 内联）', () => {
     const user = userEvent.setup();
     renderPanel([{ condition: '目标A', status: 'active' }]);
     await user.click(await screen.findByLabelText('编辑目标'));
-    // 预填 "/goal 目标A" 到输入框（用户修改后回车即覆盖创建）
     await waitFor(() => {
       expect(screen.getByRole('textbox')).toHaveValue('/goal 目标A');
     });
@@ -144,7 +129,6 @@ describe('会话目标栏（ChatPanel 内联）', () => {
     const user = userEvent.setup();
     renderPanel([{ condition: '目标A', status: 'active' }]);
     await user.click(await screen.findByLabelText('删除目标'));
-    // 破坏性操作走命令式确认（confirm-dialog-store → DialogHost）
     expect(await screen.findByText('删除会话目标')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: '确认' }));
     await waitFor(() => {
@@ -164,7 +148,6 @@ describe('会话目标栏（ChatPanel 内联）', () => {
   it('删除后：目标栏消失（clear 后 list 返回 aborted 不再展示）', async () => {
     const user = userEvent.setup();
     renderPanel([{ condition: '目标A', status: 'active' }]);
-    // 先更新 mock：clear 后 list 返回 aborted（真实环境后端同步落库，invalidate 拉取新数据）
     goalListMock.mockResolvedValue({
       data: { goals: [{ condition: '目标A', status: 'aborted' }] },
     });
@@ -205,7 +188,6 @@ describe('会话目标栏（ChatPanel 内联）', () => {
     renderPanel();
     await user.type(screen.getByRole('textbox'), '/goal');
     await user.keyboard('{Enter}');
-    // 建议面板拦截 Enter → 填入 "/goal "（用户补需求后发送）
     await waitFor(() => {
       expect(screen.getByRole('textbox')).toHaveValue('/goal ');
     });

@@ -1,18 +1,3 @@
-// src/renderer/components/$1/file-tree-create-edit.integration.test.tsx
-// 文件树「新建 → 呈现 → 打开 → 编辑 → 保存」端到端集成测试（正向 / 边界 / 异常）
-// ──────────────────────────────────────────────────────────────
-// 与 file-tree-viewer.integration 互补：那份覆盖「点击已有文件 → 查看」，
-// 本份覆盖**写路径**——从工具栏新建（真实 useFileTreeOps → file:create IPC）
-// 经 watch 事件落地到树，再打开、编辑、保存（真实 useFileWrite → file:write IPC）。
-//
-// mock 边界（单元/集成分层原则）：
-// - 仅 mock useFileTree（IPC + watch 订阅的数据生命周期，其内部由 hooks 测试覆盖）
-//   与 shiki（重依赖）。watch 事件在此**手工派发**（模拟 useFileTree 的订阅回调
-//   把事件写进 store），因此被测链路是 store + 组件 + useFileTreeOps +
-//   useFileContent/useFileWrite 的真实组合。
-// - window.api（file.create / file.read / file.write）为内存假实现。
-// ──────────────────────────────────────────────────────────────
-
 import type { FileEntry } from '@code-agent/shared/renderer';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -111,12 +96,10 @@ describe('文件树 → 查看器 · 新建/编辑/保存链路', () => {
   it('正向：工具栏新建文件 → 落盘 → watch 落地到树 → 打开 → 编辑 → 保存', async () => {
     renderTreeAndViewer();
 
-    // 1. 工具栏新建文件 → 出现内联输入框
     await clickMoreMenuItem(i18n.t('fileTree.addFile'));
     const input = screen.getByRole('textbox');
     fireEvent.change(input, { target: { value: 'new.ts' } });
 
-    // 2. Enter 提交 → 真实 useFileTreeOps 调 file:create（路径由 joinPath 拼接）
     fireEvent.keyDown(input, { key: 'Enter' });
     await waitFor(() =>
       expect(window.api.file.create).toHaveBeenCalledWith({
@@ -124,14 +107,11 @@ describe('文件树 → 查看器 · 新建/编辑/保存链路', () => {
         createDirs: false,
       }),
     );
-    // 成功后内联新建态收起
     await waitFor(() => expect(useFileTreeStore.getState().creatingEntry).toBeNull());
 
-    // 3. watch create 事件把新条目写入父目录缓存（模拟 useFileTree 订阅处理器）
     emitWatchCreate(ROOT, { name: 'new.ts', path: NEW_FILE, type: 'file', size: 0, modifiedAt: 0 });
     expect(await screen.findByText('new.ts')).toBeDefined();
 
-    // 4. 点击新文件 → 打开查看器（内容为空文件态）
     const fileButton = screen.getAllByRole('button').find((b) => b.textContent === 'new.ts');
     expect(fileButton).toBeDefined();
     fireEvent.click(fileButton as HTMLElement);
@@ -139,13 +119,11 @@ describe('文件树 → 查看器 · 新建/编辑/保存链路', () => {
     await waitFor(() => expect(useFileViewerStore.getState().open).toBe(true));
     expect(await screen.findByText(i18n.t('common.emptyFile'))).toBeDefined();
 
-    // 5. 进入编辑态并输入内容
     fireEvent.click(screen.getByLabelText(i18n.t('fileViewer.switchToEdit')));
     const textarea = await screen.findByLabelText(i18n.t('chat.editFileLabel', { name: 'new.ts' }));
     fireEvent.change(textarea, { target: { value: 'export const x = 1;' } });
     expect(useFileViewerStore.getState().isDirty).toBe(true);
 
-    // 6. 保存 → file:write 落盘 + dirty 复位 + 缓存失效回读
     fireEvent.click(screen.getByLabelText(i18n.t('common.save')));
     await waitFor(() =>
       expect(window.api.file.write).toHaveBeenCalledWith(
@@ -171,7 +149,6 @@ describe('文件树 → 查看器 · 新建/编辑/保存链路', () => {
   });
 
   it('正向边界：新建在途期间父目录行带 pending 类（状态抵达 UI），完成后移除', async () => {
-    // 受控 create：不立即 resolve，以便观察在途态
     let resolveCreate!: (value: unknown) => void;
     window.api.file = {
       ...(window.api.file ?? {}),
@@ -189,7 +166,6 @@ describe('文件树 → 查看器 · 新建/编辑/保存链路', () => {
     fireEvent.change(input, { target: { value: 'new.ts' } });
     fireEvent.keyDown(input, { key: 'Enter' });
 
-    // 在途：根目录行 pending（新建的 fullPath 不在 entries 中，若按它标记则永不命中）
     await waitFor(() => expect(container.querySelector('.ft-dir.pending')).not.toBeNull());
 
     resolveCreate({ data: { path: NEW_FILE } });
@@ -210,7 +186,6 @@ describe('文件树 → 查看器 · 新建/编辑/保存链路', () => {
     fireEvent.change(input, { target: { value: 'new.ts' } });
     fireEvent.keyDown(input, { key: 'Enter' });
 
-    // 失败后输入框仍在（可改名重试），且不写入树
     await waitFor(() => expect(window.api.file.create).toHaveBeenCalledTimes(1));
     expect(useFileTreeStore.getState().creatingEntry).not.toBeNull();
     expect(useFileTreeStore.getState().entries.get(ROOT)).toEqual([]);

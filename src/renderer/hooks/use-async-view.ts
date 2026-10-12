@@ -1,21 +1,3 @@
-// src/renderer/hooks/use-async-view.ts
-// 异步视图状态契约层（L3 服务端数据 → 视图状态机）
-// ──────────────────────────────────────────────────────────────
-// 设计动机：
-// - 组件里散落 `if isLoading / if error / if empty` 的 if 链，各写各的，
-//   骨架屏样式、错误处理、空态行为互不一致。
-// - 本 hook 把 TanStack Query 结果映射为一个 discriminated union（AsyncView），
-//   这即"轻量状态机"：TS 穷尽性检查强制消费方处理每个状态。
-// - 渲染由 AsyncBoundary 组件负责（见 components/common/AsyncBoundary.tsx）。
-//
-// 五态语义：
-// - loading    首次加载、无数据（渲染骨架屏，配合 skeletonDelay 防闪烁）
-// - refreshing 已有数据、后台刷新（保留旧数据，绝不闪骨架屏）
-// - error      加载失败（保留上一次成功数据 + 可操作重试）
-// - empty      加载成功但为空（由 isEmpty 谓词判定）
-// - ready      加载成功且有数据
-// ──────────────────────────────────────────────────────────────
-
 import type { UseQueryResult } from '@tanstack/react-query';
 
 /**
@@ -61,7 +43,6 @@ export function useAsyncView<T>(
 ): AsyncView<T> {
   const { status, fetchStatus, data, error, refetch } = query;
 
-  // 成功（含后台刷新）
   if (status === 'success' && data !== undefined) {
     if (fetchStatus === 'fetching') {
       return { state: 'refreshing', data };
@@ -72,7 +53,6 @@ export function useAsyncView<T>(
     return { state: 'ready', data };
   }
 
-  // 失败：保留可能存在的旧数据，retry 指向 refetch
   if (status === 'error') {
     const normalizedError = error instanceof Error ? error : new Error(String(error));
     const retry = (): void => {
@@ -84,6 +64,5 @@ export function useAsyncView<T>(
     return { state: 'error', error: normalizedError, retry };
   }
 
-  // pending：尚无数据（首次加载）
   return { state: 'loading' };
 }

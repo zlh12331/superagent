@@ -1,21 +1,4 @@
-// src/main/infra/storage/session-io.ts
-// 会话导出/导入的存储层（SessionExportFile v1 文件格式 ↔ SQLite 四表）
-// ──────────────────────────────────────────────────────────────
-// 职责（自 session-service.ts 提取，SessionService 委托至此，文件大小棘轮考量）：
-// - exportAllSessions：聚合 sessions / messages / turns / token_usage → 版本化 payload
-// - importSessionsFromPayload：zod 校验 → 同 id 跳过 → 每会话事务落库
-//
-// 数据完整性设计：
-// - 每会话一个事务：单会话失败只回滚该会话，绝不产生"半截会话"（有 sessions 行
-//   无 messages 行之类）；其余会话不受影响
-// - 导入幂等：同 id 会话整体跳过并计数——同一文件重复导入结果为全 skipped，
-//   不会触发 uq_messages_session_seq / uq_turns_turn_id 唯一约束冲突
-// - uq_turns_turn_id 是全局唯一（跨会话），文件内两个会话携带同 turnId 时按
-//   "先到先得"跳过后到者（记 warn），不使整个会话失败
-// - messages 的 role 列有 CHECK 约束且 NOT NULL：无法解析出合法 role 的损坏
-//   消息跳过（记 warn），不阻断会话导入
-// ──────────────────────────────────────────────────────────────
-
+// session-io.ts：会话全量导出/导入——自描述 JSON 载荷（schema 版本号 + 批量取数控内存）
 import type { SessionImportRes, TurnSummary } from '@code-agent/shared/main';
 import {
   AppError,
@@ -46,27 +29,15 @@ import {
 import { rowToMeta } from './session-helpers';
 import type { SessionExportPayload } from './session-types';
 
-/** 导出侧 app 标识（文件头字段，供人工辨认来源） */
+// 导出载荷标识（导入时校验非本应用文件直接拒）
 const EXPORT_APP_ID = 'code-agent-desktop';
 
-/** 分批 IN 查询的会话 id 上限（远低于 SQLite 变量上限，防 SQLITE_MAX_VARIABLE_NUMBER） */
+// 关联表按 500 会话一批 IN 查询：SQLite 变量数上限与内存双保险
 const EXPORT_BATCH_SIZE = 500;
 
-/**
- * 导出全部会话（元数据 + 消息 + 回合 + token 用量），输出 version=1 文件格式
- *
- * P2-29（自 session-service 内联实现移植）：原实现每会话三条查询（N+1，重度
- * 使用时数千次查询）；改为按会话 id 分批 IN 查询 + 内存分组。sessions 一次
- * 查询按 updatedAt 倒序；messages/turns/token_usage 各按批分片拉取（批内
- * ORDER BY 保证组内相对顺序），SQLITE 变量上限由 EXPORT_BATCH_SIZE 防住。
- *
- * 消息 content 为 JSON.parse 后的 ModelMessage 值；DB 内容损坏无法解析时
- * 保留原始字符串（导出不丢数据），导入侧对该形态原样回写（见 resolveMessageInserts）。
- */
 export async function exportAllSessions(): Promise<SessionExportPayload> {
   const db = getDb();
   const rows = db.select().from(sessions).orderBy(desc(sessions.updatedAt)).all();
-  // 分批 IN 拉取三类子行并按会话分组（批内 ORDER BY 保证组内升序）
   const messagesBySession = new Map<string, MessageRow[]>();
   const turnsBySession = new Map<string, TurnRow[]>();
   const usageBySession = new Map<string, TokenUsageRow[]>();
@@ -131,25 +102,21 @@ export async function exportAllSessions(): Promise<SessionExportPayload> {
   };
 }
 
-/** messages 行 → 导出消息条目（seq/turnId/createdAt 全量保留，round-trip 无损） */
 function toExportMessage(row: MessageRow): SessionExportMessage {
   let content: unknown;
   try {
     content = JSON.parse(row.content);
   } catch {
-    // 损坏的 content 保留原始字符串（导出不丢数据）
     content = row.content;
   }
   return {
     seq: row.seq,
-    // exactOptionalPropertyTypes：未归属回合（NULL）时不携带该字段
     ...(row.turnId !== null ? { turnId: row.turnId } : {}),
     content,
     createdAt: row.createdAt,
   };
 }
 
-/** turns 行 → 导出回合条目（TurnSummary 形态，sessionId 由外层会话提供） */
 function toExportTurn(row: TurnRow): TurnSummary {
   return {
     turnId: row.turnId,
@@ -164,7 +131,6 @@ function toExportTurn(row: TurnRow): TurnSummary {
   };
 }
 
-/** token_usage 行 → 导出用量条目 */
 function toExportUsage(row: TokenUsageRow): SessionExportUsage {
   return {
     modelId: row.modelId,
@@ -177,13 +143,6 @@ function toExportUsage(row: TokenUsageRow): SessionExportUsage {
   };
 }
 
-/**
- * 导入会话（只接受 version=1 导出文件格式）
- *
- * 冲突策略：同 id 会话已存在则整体跳过并计数（不合并、不覆盖）。
- *
- * @throws AppError(INVALID_INPUT) 文件格式校验失败（版本不匹配 / 字段缺失 / 非对象）
- */
 export async function importSessionsFromPayload(payload: unknown): Promise<SessionImportRes> {
   const parsed = SessionExportFileSchema.safeParse(payload);
   if (!parsed.success) {
@@ -216,12 +175,6 @@ export async function importSessionsFromPayload(payload: unknown): Promise<Sessi
   return { imported, skipped };
 }
 
-/**
- * 导入单个会话（独立事务）
- *
- * 事务内步骤：sessions 行 → messages 批量 → turns（预查全局 turnId 冲突）→ token_usage。
- * 任一步失败整体回滚，该会话在库中零残留；错误向上抛由调用方中止本次导入。
- */
 function importOneSession(item: SessionExportItemShape): void {
   const db = getDb();
   const meta = item.meta;
@@ -232,7 +185,6 @@ function importOneSession(item: SessionExportItemShape): void {
     createdAt: meta.createdAt,
     updatedAt: meta.updatedAt,
     ...(meta.lastMessage !== undefined ? { lastMessage: meta.lastMessage } : {}),
-    // 以实际入库条数为准：损坏消息被跳过时，冗余计数与 messages 表保持自洽
     messageCount: messageInserts.length,
     workingDir: meta.workingDir,
     lastRunStatus: meta.lastRunStatus,
@@ -261,13 +213,6 @@ function importOneSession(item: SessionExportItemShape): void {
   });
 }
 
-/**
- * 事务内写入回合（uq_turns_turn_id 全局唯一防冲突）
- *
- * 事务内预查已存在的 turnId（可见同批次先导入会话的未提交行）+ 会话内去重，
- * 冲突者跳过并记 warn——"先到先得"，不因个别回合冲突失败整个会话。
- * 文件内同会话重复 seq 仍会触发 uq_turns_session_seq 回滚（异常文件兜底）。
- */
 function insertTurnsSkippingConflicts(
   tx: Omit<ReturnType<typeof getDb>, 'transaction' | '$client'>,
   sessionId: string,
@@ -311,13 +256,6 @@ function insertTurnsSkippingConflicts(
   }
 }
 
-/**
- * 解析消息插入行（role 列 CHECK + NOT NULL 约束）
- *
- * content 为对象 → 取 role 字段；content 为字符串（导出侧损坏兜底形态）→
- * 尝试解析取 role，且落库时保留原始字符串（不二次编码）。解析不出合法
- * role 的损坏消息跳过（记 warn），不阻断会话导入。
- */
 function resolveMessageInserts(
   sessionId: string,
   items: readonly SessionExportMessage[],
@@ -342,7 +280,6 @@ function resolveMessageInserts(
   return inserts;
 }
 
-/** 从导入消息 content 解析 role（合法枚举之外 / 结构损坏 → null 跳过） */
 function resolveImportedRole(content: unknown): MessageRole | null {
   const candidate = typeof content === 'string' ? parseJsonSafe(content) : content;
   if (candidate === null || typeof candidate !== 'object') {
@@ -354,7 +291,6 @@ function resolveImportedRole(content: unknown): MessageRole | null {
     : null;
 }
 
-/** JSON.parse 安全封装（损坏字符串返回 null） */
 function parseJsonSafe(raw: string): unknown {
   try {
     return JSON.parse(raw);

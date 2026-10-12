@@ -1,20 +1,5 @@
-// src/main/infra/im/im-service.ts
-// IM 渠道聚合服务：配置 / 生命周期 / 消息桥接挂载点
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 渠道注册表管理（createAllAdapters 统一实例化）
-// - 启动/停止（keychain 读 token → adapter.connect；失败分类）
-// - 入站消息统一入口（消息 → agent 的桥接挂载点）
-// - 渠道状态查询（设置页列表）
-//
-// 设计：
-// - 敏感配置（token）存 keychain（key = `im:${kind}`），不落库
-// - 桥接层（消息 → agent 回合）依赖"无 webContents 的 agent 执行"：
-//   AgentCore 抽取（agent-service 组装逻辑独立化）后在此接入，
-//   当前阶段入站消息仅记录日志 + 透传状态事件（桥接挂载点就绪）
-// - 启动时自动恢复：已配置渠道自动 connect（应用启动时调用 restore()）
-// ──────────────────────────────────────────────────────────────
-
+// im-service.ts：IM 渠道服务——7 渠道适配器编排（启停/状态/token 持久化到 keychain）+ 消息分发
+// 边界：适配器只管协议连接，命令执行在 ImAgentBridge；准入白名单见 im-allowlist-pref
 import type { ChannelKind, IChannelInfo } from '@code-agent/shared/main';
 import { INVALIDATION_DOMAINS } from '@code-agent/shared/main';
 import { logger } from '../../utils/logger';
@@ -23,34 +8,26 @@ import { getSecret, setSecret } from '../storage/keychain';
 import { createAllAdapters } from './adapters';
 import type { ChannelIncomingMessage, IChannelAdapter } from './channel/types';
 
-/** keychain key 约定：im:${kind}（渠道 token 不落库） */
+/** 渠道 token 的 keychain 键（im:<kind>） */
 export function channelKeychainKey(kind: ChannelKind): string {
   return `im:${kind}`;
 }
 
-/**
- * IM 渠道服务（模块单例，与 ServiceContainer 生命周期一致）
- */
+/** IM 渠道服务：适配器列表可注入（测试）；启停广播 im 失效域刷新渲染层列表 */
 export class ImService {
   private readonly adapters: IChannelAdapter[];
-  /** 渠道消息监听器（桥接层挂载点） */
   private readonly messageListeners = new Set<(message: ChannelIncomingMessage) => void>();
-  /** 已启动渠道集合 */
   private readonly started = new Set<ChannelKind>();
 
-  /**
-   * 构造注入（测试可控；缺省 createAllAdapters 全部渠道）
-   */
   constructor(adapters?: readonly IChannelAdapter[]) {
     this.adapters = adapters !== undefined ? [...adapters] : createAllAdapters();
   }
 
   /**
-   * 启动渠道（token 优先取入参；否则读 keychain；骨架渠道抛 NOT_IMPLEMENTED）
+   * 启动渠道：token 显式传入时同步落 keychain（持久化），否则读存量 token 重连
    */
   async start(kind: ChannelKind, token?: string): Promise<void> {
     const adapter = this.getAdapter(kind);
-    // 首次启动提供的 token 存入 keychain（后续启动免填）
     if (token !== undefined && token.length > 0) {
       await setSecret(channelKeychainKey(kind), token);
     }
@@ -58,7 +35,6 @@ export class ImService {
       token !== undefined && token.length > 0 ? token : await getSecret(channelKeychainKey(kind));
     await adapter.connect(stored ?? undefined);
     if (adapter.isConnected) {
-      // 失效域声明（31 号 spec S10）：仅真实状态迁移（重复 start 已在跑则不声明）
       const wasRunning = this.started.has(kind);
       this.started.add(kind);
       logger.info({ kind }, 'IM 渠道已启动');
@@ -68,13 +44,9 @@ export class ImService {
     }
   }
 
-  /**
-   * 停止渠道（幂等）
-   */
   async stop(kind: ChannelKind): Promise<void> {
     const adapter = this.getAdapter(kind);
     await adapter.disconnect();
-    // 失效域声明（31 号 spec S10）：仅真实停止时声明（重复 stop 幂等不声明）
     const wasRunning = this.started.delete(kind);
     logger.info({ kind }, 'IM 渠道已停止');
     if (wasRunning) {
@@ -82,9 +54,6 @@ export class ImService {
     }
   }
 
-  /**
-   * 渠道状态列表（设置页展示）
-   */
   async list(): Promise<IChannelInfo[]> {
     return Promise.all(
       this.adapters.map(async (adapter) => ({
@@ -98,12 +67,8 @@ export class ImService {
     );
   }
 
-  /**
-   * 订阅入站消息（桥接层接入点；返回取消订阅）
-   */
   onMessage(handler: (message: ChannelIncomingMessage) => void): () => void {
     this.messageListeners.add(handler);
-    // 渠道层消息 → 统一入口（去重由渠道层负责）
     const unsubscribes = this.adapters.map((adapter) =>
       adapter.onMessage((message) => {
         for (const listener of this.messageListeners) {
@@ -123,9 +88,6 @@ export class ImService {
     };
   }
 
-  /**
-   * 回发消息到指定渠道（桥接层调用；失败记录日志不抛）
-   */
   async send(kind: ChannelKind, chatId: string, text: string): Promise<void> {
     const adapter = this.getAdapter(kind);
     if (!adapter.isConnected) {
@@ -139,9 +101,6 @@ export class ImService {
     }
   }
 
-  /**
-   * 应用启动时恢复：已配置渠道自动连接（ServiceContainer init 调用）
-   */
   async restore(): Promise<void> {
     const channels = await this.list();
     for (const channel of channels) {
@@ -156,14 +115,10 @@ export class ImService {
     }
   }
 
-  /**
-   * 全部渠道停止（应用退出）
-   */
   async stopAll(): Promise<void> {
     const hadRunning = this.started.size > 0;
     await Promise.allSettled(this.adapters.map((adapter) => adapter.disconnect()));
     this.started.clear();
-    // 失效域声明（31 号 spec S10）：退出路径窗口已销毁时广播为 no-op
     if (hadRunning) {
       broadcastInvalidation([INVALIDATION_DOMAINS.im]);
     }
@@ -178,7 +133,6 @@ export class ImService {
   }
 }
 
-/** 渠道描述（各适配器自带配置说明 configHint；骨架渠道显示待接入原因） */
 function adapterDescription(adapter: IChannelAdapter): string {
   if (!adapter.implemented) {
     return `待接入：${adapter.configHint}`;

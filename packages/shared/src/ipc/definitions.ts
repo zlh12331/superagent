@@ -1,15 +1,5 @@
-// packages/shared/src/ipc/definitions.ts
-// IPC 定义表：在 IPC_META 基础上合并 zod schema 与类型标记（完整单一真源）
-// ──────────────────────────────────────────────────────────────
-// 设计：
-// - channel + kind 来自 IPC_META（纯字符串，preload 沙箱安全）
-// - 本文件追加 schema（入参校验）与 res/payload 类型标记
-// - 从本表推导：IpcApi（api.ts）、IpcRequestMap/IpcEventMap（payloads.ts）
-// - preload 生成器消费 IPC_META，主进程注册表消费本文件
-//
-// 依赖方向：meta（零依赖）← definitions（+schema）← payloads/api（类型推导）
-// ──────────────────────────────────────────────────────────────
-
+// definitions.ts：IPC 定义表——在 IPC_META 的纯字符串元数据上合并 zod schema 与 res/payload 类型标记
+// 派生 IpcApi（api.ts）与 IpcRequestMap/IpcEventMap（payloads.ts）；依赖方向 meta（零依赖）← definitions（+schema）← payloads/api
 import { z } from 'zod';
 
 import {
@@ -360,7 +350,7 @@ export function withSchema<
     ...meta,
     schema,
     res: undefined as unknown as R,
-    // 条件展开：resSchema 为 undefined 时不携带字段（exactOptionalPropertyTypes）
+    // 条件展开而非直接赋值：exactOptionalPropertyTypes 下「显式 undefined」与「字段缺席」不等价
     ...(resSchema !== undefined ? { resSchema } : {}),
   } as M & { readonly schema: S; readonly res: R; readonly resSchema?: RS };
 }
@@ -396,8 +386,7 @@ export function withPayload<
  * preload 生成器自动同步（消费 IPC_META），handler 缺失在编译期报错（InferHandlers）。
  */
 
-// ─── 事件 payload zod schema（主进程发送侧 dev 校验，envelope 级） ───
-
+// ───── 事件 payload zod schema（主进程发送侧 dev 校验，仅到 envelope 级） ─────
 /** agent:stream:part 事件 envelope（part 为 SDK 结构，仅校验 sessionId） */
 const StreamPartPayloadSchema = z.object({
   sessionId: z.string().min(1),
@@ -478,20 +467,20 @@ export const IPC_DEFINITIONS = {
       LoginItemSettingsResSchema,
     ),
     quit: withSchema(IPC_META.app.quit, null, {} as { ok: boolean }, OkResSchema),
-    // 诊断包导出：无入参，响应（saved/path）
+    // 无入参：主进程收集诊断信息并弹保存对话框；取消时响应为 saved=false（无 path）
     exportDiagnostics: withSchema(
       IPC_META.app.exportDiagnostics,
       null,
       {} as ExportDiagnosticsRes,
       ExportDiagnosticsResSchema,
     ),
-    // 深度链接事件：主进程广播协议唤起（payload 由渲染层消费）
+    // 协议唤起事件（code-agent://）：主进程收到外链唤起后广播，payload 由渲染层消费
     subscribeDeepLink: withPayload(
       IPC_META.app.subscribeDeepLink,
       {} as DeepLinkPayload,
       DeepLinkPayloadSchema,
     ),
-    // 登录项变更事件：主进程主动写入后广播真实回读值（托盘改自启 → 设置页回显）
+    // 开机自启变更事件：写入后广播真实回读值——托盘与设置页两个入口靠它互相回显
     subscribeLoginItemChanged: withPayload(
       IPC_META.app.subscribeLoginItemChanged,
       {} as LoginItemChangedPayload,
@@ -524,7 +513,7 @@ export const IPC_DEFINITIONS = {
       {} as AgentStreamPartPayload,
       StreamPartPayloadSchema,
     ),
-    // D4A：回合开始事件——渲染层据此点亮侧栏跨会话运行徽标
+    // 回合开始事件（agent:run 发起成功后推送）：渲染层据此点亮侧栏跨会话运行徽标（D4A）
     subscribeStreamStart: withPayload(
       IPC_META.agent.subscribeStreamStart,
       {} as AgentStreamStartPayload,
@@ -591,7 +580,7 @@ export const IPC_DEFINITIONS = {
       {} as SessionDeleteRes,
       SessionDeleteResSchema,
     ),
-    // 清空全部会话（36-D）：无入参；运行中回合守卫在 handler（SESSION_IN_USE）
+    // 清空全部会话：无入参；运行中回合守卫在 handler（SESSION_IN_USE，与关窗协商同一「运行中」真源）
     clearAll: withSchema(
       IPC_META.session.clearAll,
       SessionClearAllReqSchema,
@@ -628,8 +617,8 @@ export const IPC_DEFINITIONS = {
       {} as { saved: boolean; path?: string },
       z.object({ saved: z.boolean(), path: z.string().optional() }),
     ),
-    // 导入会话：dialog 选文件（主进程内完成读文件 + 解析），入参为空；
-    // zod 文件格式校验在 SessionService.importAll 内（INVALID_ERROR 语义见 service）
+    // 无入参：主进程内弹文件对话框并完成读文件 + 解析；
+    // 文件格式校验在 SessionService.importAll（版本不匹配 → INVALID_INPUT），同 id 跳过
     importAll: withSchema(
       IPC_META.session.importAll,
       null,
@@ -748,13 +737,13 @@ export const IPC_DEFINITIONS = {
       OkResSchema,
     ),
     getState: withSchema(IPC_META.browser.getState, null, {} as BrowserState, BrowserStateSchema),
-    // 状态推送（URL/标题/加载中/历史能力）：主进程 webContents 事件统一收敛后广播
+    // 状态推送（URL/标题/isLoading/canGoBack/canGoForward）：主进程把 webContents 事件统一收敛后广播
     subscribeState: withPayload(
       IPC_META.browser.subscribeState,
       {} as BrowserState,
       BrowserStateSchema,
     ),
-    // 主框架加载失败推送（Chromium 原始错误码，渲染层显示内联错误态）
+    // 主框架加载失败推送（Chromium 原始错误码），渲染层据此显示内联错误态
     subscribeLoadFailed: withPayload(
       IPC_META.browser.subscribeLoadFailed,
       {} as BrowserLoadFailedPayload,
@@ -836,11 +825,11 @@ export const IPC_DEFINITIONS = {
   },
 
   backup: {
-    // 备份恢复点列表（37 号 B）：无入参；健康度由主进程 quick_check 给出
+    // 恢复点列表：无入参；每一项的健康度由主进程 quick_check 给出（不健康的恢复点会被 restore 拒绝）
     list: withSchema(IPC_META.backup.list, null, {} as BackupListRes, BackupListResSchema),
-    // 手动立即备份：无入参；name = 新备份文件名（进同一轮转环）
+    // 立即备份：无入参；响应 name = 新备份文件名（与启动备份同处一个轮转环，超量删最旧）
     create: withSchema(IPC_META.backup.create, null, {} as BackupCreateRes, BackupCreateResSchema),
-    // 从指定恢复点恢复：name 为裸文件名（路径穿越防御在主进程）
+    // 恢复：name 必须是裸文件名（路径穿越防御在主进程），暂存后由下次启动应用
     restore: withSchema(
       IPC_META.backup.restore,
       BackupRestoreReqSchema,
@@ -943,21 +932,21 @@ export const IPC_DEFINITIONS = {
       {} as UpdateRuntimeModelRes,
       UpdateRuntimeModelResSchema,
     ),
-    // 设置导出：dialog 选保存路径（主进程内聚合 app_settings 全表），无入参
+    // 无入参：主进程聚合 app_settings 全表并弹保存对话框
     exportSettings: withSchema(
       IPC_META.settings.exportSettings,
       null,
       {} as { saved: boolean; path?: string },
       SettingsExportResSchema,
     ),
-    // 设置导入：dialog 选文件（主进程内读文件 + 白名单过滤 + 事务写入），无入参
+    // 无入参：主进程弹文件对话框读文件 → 逐键过 SETTING_KEYS 白名单（域外键计入 skipped）→ 单事务写入
     importSettings: withSchema(
       IPC_META.settings.importSettings,
       null,
       {} as { imported: number; skipped: number },
       SettingsImportResSchema,
     ),
-    // 设置变更事件：主进程主动写入某域后广播（payload = 该域完整新值）
+    // 设置变更事件：主进程写入某域后广播（payload = 域 key + 该域完整新值，渲染层按域合并）
     subscribeChanged: withPayload(
       IPC_META.settings.subscribeChanged,
       {} as SettingsChangedPayload,
@@ -1031,8 +1020,7 @@ export const IPC_DEFINITIONS = {
     ),
     listLearned: withSchema(
       IPC_META.skill.listLearned,
-      // P2 修复：无参方法统一 null 约定（与 skill.list 等其余 7 处一致）；
-      // wrap 对 null schema 强制 input === undefined，z.object({}) 旧写法放行任意对象
+      // 无参方法统一用 null：wrap 对 null schema 拒绝任何非 undefined 入参（INVALID_INPUT），z.object({}) 则会放行任意对象
       null,
       {} as Array<{ name: string; description: string; prompt: string }>,
       SkillListLearnedResSchema,
@@ -1179,12 +1167,11 @@ export type IpcDefinitions = typeof IPC_DEFINITIONS;
 /** 元数据表类型透传（供 preload 生成器类型约束） */
 export type { IpcMeta };
 
-// ─── 编译期双向同步检查（P2 修复） ─────────────────────────────────────
-// 此前 "definitions ⊆ meta" 靠构造方式保证（definitions 引用 meta 条目），
-// 但 "meta ⊆ definitions"（meta 多写一个方法）没有任何编译期检查——
-// preload 会照常暴露该方法，register 却不注册，运行时 "No handler registered"。
-// 此处的类型相等检查让两个方向都在编译期成立：任何一侧漂移直接报错。
-// 注意：const 声明只是占位（typeof 推断），不产生运行时代码。
+// ───── 编译期双向同步检查：meta 与 definitions 的方法集合必须一致 ─────
+// "definitions ⊆ meta" 由构造方式天然保证（definitions 逐条引用 meta 条目）；
+// 反向的 "meta ⊆ definitions" 没有结构保证——meta 多写一个方法时 preload 会照常暴露它、
+// register 却不注册，直到运行时调用才失败。这里的类型相等检查把两个方向都钉在编译期。
+// 注意：const 声明只是类型推断占位，不产生运行时代码。
 type _MissingMethods<A, B> = {
   [K in keyof A]: K extends keyof B
     ? Exclude<keyof A[K], keyof B[K]> extends never
@@ -1197,6 +1184,6 @@ type _MissingMethods<A, B> = {
 const _metaCoversDefs: _MissingMethods<typeof IPC_META, typeof IPC_DEFINITIONS> = true;
 // definitions ⊆ meta（definitions 多写方法 → 编译失败）
 const _defsCoversMeta: _MissingMethods<typeof IPC_DEFINITIONS, typeof IPC_META> = true;
-// 占位使用，避免 noUnusedLocals（类型检查即价值所在）
+// 占位使用，避免 noUnusedLocals（类型检查本身即价值所在）
 void _metaCoversDefs;
 void _defsCoversMeta;

@@ -1,10 +1,3 @@
-// src/main/infra/storage/backup-store.test.ts
-// backup-store 单测（37 号 B：恢复点列表/手动备份/暂存恢复/启动应用）
-// ──────────────────────────────────────────────────────────────
-// 测试策略：真实 better-sqlite3 + 临时目录（对齐 db.test.ts 同款手法）——
-// 备份文件操作是 fs 语义，mock 会掩盖原子落盘/轮转/替换行为。
-// ──────────────────────────────────────────────────────────────
-
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -29,7 +22,6 @@ import {
 let tempDir: string;
 let dbPath: string;
 
-/** 建一个真实 SQLite 库文件（可选写入一行以区分内容） */
 function makeDbFile(path: string, marker?: string): Database.Database {
   const db = new Database(path);
   db.exec('CREATE TABLE IF NOT EXISTS t (v TEXT)');
@@ -39,7 +31,6 @@ function makeDbFile(path: string, marker?: string): Database.Database {
   return db;
 }
 
-/** 读库内的 marker（验证恢复点内容确实生效） */
 function readMarker(path: string): string | null {
   const db = new Database(path, { readonly: true });
   try {
@@ -57,14 +48,10 @@ beforeAll(() => {
 afterAll(() => {
   try {
     rmSync(tempDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
-  } catch {
-    // Windows 句柄延迟释放：清理失败不阻塞
-  }
+  } catch {}
 });
 
 beforeEach(() => {
-  // 每个用例独立子目录：备份目录按主库所在目录推导（dirname(dbPath)/backups），
-  // 共享 tempDir 会让用例间轮转环互相污染（前例的备份被后例 listBackupNames 读到）
   const caseDir = mkdtempSync(join(tempDir, 'case-'));
   dbPath = join(caseDir, 'sessions.db');
 });
@@ -94,7 +81,6 @@ describe('createBackupFile（热备份 + 轮转）', () => {
         (n) => n.startsWith('sessions-') && n.endsWith('.db'),
       );
       expect(names).toHaveLength(BACKUP_KEEP);
-      // 无 .db.tmp 残片
       expect(names.some((n) => n.endsWith('.tmp'))).toBe(false);
     } finally {
       db.close();
@@ -111,7 +97,6 @@ describe('listBackups（恢复点列表）', () => {
     const db = makeDbFile(dbPath, 'x');
     try {
       await createBackupFile(db, dbPath);
-      // 手工补一份更早的备份（时间戳前缀编码时间序）
       const dir = backupDirPath(dbPath);
       mkdirSync(dir, { recursive: true });
       const older = join(dir, 'sessions-2020-01-01T00-00-00.db');
@@ -119,12 +104,10 @@ describe('listBackups（恢复点列表）', () => {
 
       const entries = listBackups(dbPath);
       expect(entries).toHaveLength(2);
-      // 最新在前
       expect(entries[0]?.name.startsWith('sessions-20')).toBe(true);
       expect(entries[0]?.createdAtMs).toBeGreaterThan(entries[1]?.createdAtMs ?? 0);
       expect(entries[0]?.sizeBytes).toBeGreaterThan(0);
       expect(entries[0]?.healthy).toBe(true);
-      // 非 SQLite 文件 → 不健康
       expect(entries[1]?.healthy).toBe(false);
     } finally {
       db.close();
@@ -146,7 +129,6 @@ describe('isBackupHealthy', () => {
   });
 
   it('伴生文件清理：WAL 备份被探针只读打开后不留 -shm/-wal（探针副作用）', async () => {
-    // WAL 模式库的备份副本形态（sqlite.backup 产物自包含，无伴生文件）
     const db = makeDbFile(dbPath, 'x');
     try {
       const name = await createBackupFile(db, dbPath);
@@ -154,7 +136,6 @@ describe('isBackupHealthy', () => {
       expect(existsSync(`${backupPath}-shm`)).toBe(false);
       expect(existsSync(`${backupPath}-wal`)).toBe(false);
 
-      // 探针（list 会触发）：打开 WAL 库会在同目录新建伴生文件，探针负责清理
       expect(isBackupHealthy(backupPath)).toBe(true);
 
       expect(existsSync(`${backupPath}-shm`)).toBe(false);
@@ -172,10 +153,8 @@ describe('stageRestore（暂存 + 重启生效）', () => {
       const name = await createBackupFile(db, dbPath);
       stageRestore(dbPath, name);
 
-      // 暂存与主库同目录（dirname(dbPath)），由启动期 applyPendingRestore 消费
       const pending = join(dirname(dbPath), RESTORE_PENDING_FILENAME);
       expect(existsSync(pending)).toBe(true);
-      // 暂存副本内容正确
       expect(readMarker(pending)).toBe('original');
     } finally {
       db.close();
@@ -209,7 +188,6 @@ describe('stageRestore（暂存 + 重启生效）', () => {
       const first = await createBackupFile(db, dbPath);
       stageRestore(dbPath, first);
 
-      // 改库内容再备份，暂存第二份
       db.prepare('DELETE FROM t').run();
       db.prepare('INSERT INTO t (v) VALUES (?)').run('second');
       await createBackupFile(db, dbPath);
@@ -244,7 +222,6 @@ describe('applyPendingRestore（启动期应用）', () => {
     expect(applied).toBe(true);
     expect(existsSync(join(dirname(dbPath), RESTORE_PENDING_FILENAME))).toBe(false);
     expect(readMarker(dbPath)).toBe('recovered');
-    // 幂等：再调 no-op（暂存已消费）
     expect(applyPendingRestore(dbPath)).toBe(false);
   });
 });

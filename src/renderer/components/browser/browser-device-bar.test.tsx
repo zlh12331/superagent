@@ -1,14 +1,3 @@
-// src/renderer/components/$1/browser-device-bar.test.tsx
-// DeviceBar 单测（正向 / 边界 / 异常）
-// ──────────────────────────────────────────────────────────────
-// 重点守护一个真实缺陷：`Number('')` 为 0 而非 NaN，此前守卫只判 NaN，
-// 导致「清空宽高输入框」把值置 0 → 视口矩形宽高非正 → 违反
-// BrowserRectSchema.positive() → IPC 校验失败且被静默吞掉（视口同步无声失效）。
-//
-// 另外锁住档位来自共享真源（lib/browser/presets）：预设顺序/文案与
-// 缩放档位一旦与设置页分叉，在此失败。
-// ──────────────────────────────────────────────────────────────
-
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 

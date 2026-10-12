@@ -1,20 +1,3 @@
-// src/main/infra/ai/agent-runtime/agent-turn-machine.test.ts
-// Agent 回合状态机单测：转换表全表断言（合法转换 + 决策链顺序 + 非法转换护栏）
-// ──────────────────────────────────────────────────────────────
-// 验证目标：
-// 1. 合法路径：resolving → queued → running{streaming⇄waitingApproval/waitingInput} → deciding → 三终态
-// 2. deciding 决策链顺序：isTimeout ▶ isEmptyResponse ▶ isAborted ▶ completed
-//    （2026-09-28 顺序坑的结构性回归锚：终态吞事件类 bug 在此拦下）
-// 3. 终态 entry 顺序：flushForwarder 先于 finalize 先于 cleanup（P2-31 保序）
-// 4. running.exit 顺序：releaseGate 先于 clearModelTimeout
-// 5. 非法转换：未声明事件被 XState 忽略；终态后事件无效
-//
-// 测试手法：deps 全部走 deferred（手工 resolve/reject 控制时序）+ 调用日志数组
-// 断言相对顺序——不 mock 模块（机器纯层，deps 注入即全部效果面）。
-// after 超时测试用**真实 timer 短值**（20ms）而非 fake timers：XState actor
-// 信箱调度跨宏任务，fake timers 下推进不会触发 after 转换的派发（实测死锁）。
-// ──────────────────────────────────────────────────────────────
-
 import { AppError, ErrorCode } from '@code-agent/shared/main';
 import { describe, expect, it } from 'vitest';
 import {
@@ -24,7 +7,6 @@ import {
   type TurnDeps,
 } from './agent-turn-machine';
 
-/** 手工控时的 deferred promise */
 function createDeferred<T>(): {
   promise: Promise<T>;
   resolve: (value: T) => void;
@@ -39,7 +21,6 @@ function createDeferred<T>(): {
   return { promise, resolve, reject };
 }
 
-/** 标准 runDone 输出（按需覆盖字段） */
 function runOutput(overrides?: Partial<Parameters<typeof Object.assign>[0]>): {
   reason: 'completed' | 'aborted' | 'timeout';
   durationMs: number;
@@ -57,7 +38,6 @@ function runOutput(overrides?: Partial<Parameters<typeof Object.assign>[0]>): {
   };
 }
 
-/** 测试夹具：deferred deps + 调用日志（可选注入超时短值供 after 测试） */
 function createTurn(approvalTimeoutMs?: number, askTimeoutMs?: number) {
   const resolveModel = createDeferred<string>();
   const acquireGate = createDeferred<void>();
@@ -118,12 +98,10 @@ function createTurn(approvalTimeoutMs?: number, askTimeoutMs?: number) {
     ...(approvalTimeoutMs !== undefined ? { approvalTimeoutMs } : {}),
     ...(askTimeoutMs !== undefined ? { askTimeoutMs } : {}),
   });
-  // 快照 value 的类型由 XState 从机器定义推导；此处断言为领域字面量联合便于断言
   const state = (): AgentTurnState => actor.getSnapshot().value as AgentTurnState;
   return { actor, state, resolveModel, acquireGate, executeTurn, log, deps };
 }
 
-/** 等待 invoked service 的 onDone/onError 处理（宏任务级：一次 setTimeout 清空全部微任务链） */
 async function settle(_actor: AgentTurnActor): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
 }
@@ -180,7 +158,6 @@ describe('AgentTurnMachine（编排者）', () => {
   });
 
   it('决策链·顺序（2026-09-28 回归锚）：timeout ▶ 空回复 ▶ aborted ▶ completed', async () => {
-    // timeout reason → error(AI_TIMEOUT)，即便 rawPartCount=0 也不走空回复
     const t1 = createTurn();
     t1.resolveModel.resolve('m');
     await settle(t1.actor);
@@ -193,7 +170,6 @@ describe('AgentTurnMachine（编排者）', () => {
     expect(err1).toBeInstanceOf(AppError);
     expect((err1 as AppError).code).toBe(ErrorCode.AI_TIMEOUT);
 
-    // completed 形态超时竞态（timeoutSignalAborted）→ error(AI_TIMEOUT)
     const t2 = createTurn();
     t2.resolveModel.resolve('m');
     await settle(t2.actor);
@@ -204,7 +180,6 @@ describe('AgentTurnMachine（编排者）', () => {
     expect(t2.state()).toBe('error');
     expect((t2.actor.getSnapshot().context.error as AppError).code).toBe(ErrorCode.AI_TIMEOUT);
 
-    // completed + 零 part → error(AI_EMPTY_RESPONSE)，即便 timeoutSignalAborted=false
     const t3 = createTurn();
     t3.resolveModel.resolve('m');
     await settle(t3.actor);
@@ -254,7 +229,6 @@ describe('AgentTurnMachine（编排者）', () => {
     t.actor.send({ type: 'approval.responded', approvalId: 'ap-1', decision: 'approved' });
     expect(t.state()).toEqual({ running: 'streaming' });
     expect(t.actor.getSnapshot().context.approvalDecision).toBe('approved');
-    // responded 清空等待标记（无残留 pending id）
     expect(t.actor.getSnapshot().context.pendingApprovalIds).toEqual([]);
     t.executeTurn.resolve(runOutput());
     await settle(t.actor);
@@ -262,7 +236,6 @@ describe('AgentTurnMachine（编排者）', () => {
   });
 
   it('after 超时（38 号收尾）：waitingApproval 到期 → 回 streaming + expireApproval + 决策入 context', async () => {
-    // 真实 timer 短值（20ms）：fake timers 与 actor 信箱调度死锁（前述实测坑）
     const t = createTurn(20);
     t.resolveModel.resolve('m');
     await settle(t.actor);
@@ -289,12 +262,9 @@ describe('AgentTurnMachine（编排者）', () => {
 
     await new Promise((resolve) => setTimeout(resolve, 60));
     expect(t.state()).toEqual({ running: 'streaming' });
-    // 决策保持 responded 的值（若 after 未取消，会被改写成 timed-out）
     expect(t.actor.getSnapshot().context.approvalDecision).toBe('denied');
     expect(t.log.some((x) => x.startsWith('expireApproval'))).toBe(false);
   });
-
-  // ── 并行审批（2026-10-08 修复：一轮多 ask 工具，AI SDK 以 Promise.all 并发执行）──
 
   it('并行审批：两条同时待决 → 全部记账；批准一条仍留在 waitingApproval', async () => {
     const t = createTurn();
@@ -307,17 +277,14 @@ describe('AgentTurnMachine（编排者）', () => {
     t.actor.send({ type: 'approval.requested', approvalId: 'ap-2' });
     await settle(t.actor);
 
-    // 两条都被记账（缺陷版：第 2 条被状态机静默忽略，其工具 Promise 永不 settle）
     expect(t.state()).toEqual({ running: 'waitingApproval' });
     expect(t.actor.getSnapshot().context.pendingApprovalIds).toEqual(['ap-1', 'ap-2']);
 
-    // 批准第 1 条：仍有待决 → 留在等待态（否则第 2 条的 after 计时会丢失）
     t.actor.send({ type: 'approval.responded', approvalId: 'ap-1', decision: 'approved' });
     await settle(t.actor);
     expect(t.state()).toEqual({ running: 'waitingApproval' });
     expect(t.actor.getSnapshot().context.pendingApprovalIds).toEqual(['ap-2']);
 
-    // 批准第 2 条：全部决出 → 回 streaming
     t.actor.send({ type: 'approval.responded', approvalId: 'ap-2', decision: 'approved' });
     await settle(t.actor);
     expect(t.state()).toEqual({ running: 'streaming' });
@@ -338,7 +305,6 @@ describe('AgentTurnMachine（编排者）', () => {
 
     expect(t.state()).toEqual({ running: 'streaming' });
     expect(t.actor.getSnapshot().context.approvalDecision).toBe('timed-out');
-    // 两条都要被 expire——第 2 条此前无任何计时源（permission-service 已不自设 setTimeout）
     expect(t.log).toContain('expireApproval:ap-1');
     expect(t.log).toContain('expireApproval:ap-2');
     expect(t.actor.getSnapshot().context.pendingApprovalIds).toEqual([]);
@@ -354,13 +320,11 @@ describe('AgentTurnMachine（编排者）', () => {
     t.actor.send({ type: 'approval.requested', approvalId: 'ap-2' });
     await settle(t.actor);
 
-    // 用户先批准 ap-1（仍有 ap-2 待决 → 留在等待态，after 计时继续）
     t.actor.send({ type: 'approval.responded', approvalId: 'ap-1', decision: 'approved' });
     await settle(t.actor);
     expect(t.state()).toEqual({ running: 'waitingApproval' });
 
     await new Promise((resolve) => setTimeout(resolve, 60));
-    // ap-2 到期被过期；ap-1 已决不应被重复过期
     expect(t.log).toContain('expireApproval:ap-2');
     expect(t.log).not.toContain('expireApproval:ap-1');
   });
@@ -384,7 +348,6 @@ describe('AgentTurnMachine（编排者）', () => {
   });
 
   it('提问 after 超时：waitingInput 到期 → 回 streaming + expireAsk + decision=timed-out', async () => {
-    // createTurn 第二参为 askTimeoutMs（20ms 真实 timer）
     const t = createTurn(undefined, 20);
     t.resolveModel.resolve('m');
     await settle(t.actor);

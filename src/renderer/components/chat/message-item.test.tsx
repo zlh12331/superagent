@@ -1,12 +1,3 @@
-// src/renderer/components/$1/message-item.test.tsx
-// MessageItem 直测（列表层测试 mock 了 MessageItem，此处补真实渲染护栏）
-// ──────────────────────────────────────────────────────────────
-// 测试要点：
-// 1. ToolCallView：title 会话作用域查找（活跃会话命中 / 跨会话不串扰 / 无记录回退工具名）
-// 2. 状态徽章：output-error → chat.statusError 本地化文案
-// 3. 渲染结构：user 文本气泡 / assistant 角色行 / reasoning 折叠块
-// ──────────────────────────────────────────────────────────────
-
 import { render, screen } from '@testing-library/react';
 import type { UIMessage } from 'ai';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -129,7 +120,6 @@ describe('MessageItem（直测）', () => {
         disableActions={false}
       />,
     );
-    // 状态徽章文本可能与 error 代码块的标签同文案（'错误'），故按类名精确定位徽章
     expect(document.querySelector('.card-status.error')?.textContent).toBe(t('chat.statusError'));
   });
 
@@ -150,7 +140,6 @@ describe('MessageItem（直测）', () => {
       parts: [{ type: 'text', text: '回复内容' }],
     } as unknown as UIMessage;
     render(<MessageItem message={msg} onRegenerate={undefined} disableActions={false} />);
-    // 角色行实际渲染 `chat.assistant · 模型名` 拼接文本，用子串匹配
     expect(screen.getByText(t('chat.assistant'), { exact: false })).toBeDefined();
     expect(screen.getByText('回复内容')).toBeDefined();
   });

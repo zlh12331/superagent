@@ -1,12 +1,3 @@
-// src/renderer/components/$1/AsyncSection.test.tsx
-// AsyncSection 四态包装器 + QueryErrorRow/QueryPendingRow 行内形态单测
-// ──────────────────────────────────────────────
-// 覆盖动机：组件此前 0% 覆盖，而它有 9 个 settings section 调用方——
-// 四态优先级（pending > error > empty > ready）、空态文案缺省不渲染、
-// 重试按钮可选、error 详情截断（title 承载完整内容）均无回归锚。
-// 本文件同时守护 2026-09-15 的 ErrorRowBody 提取（两个导出共用同一内容）。
-// ──────────────────────────────────────────────
-
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -32,7 +23,6 @@ describe('AsyncSection', () => {
         <div data-testid="content">内容</div>
       </AsyncSection>,
     );
-    // Spinner 自身也带 role=status，故用 getAllByRole 断言存在含加载文案的那一个
     const statuses = screen.getAllByRole('status');
     expect(statuses.some((el) => el.textContent?.includes(t('common.loading')))).toBe(true);
     expect(screen.queryByTestId('content')).toBeNull();
@@ -53,7 +43,6 @@ describe('AsyncSection', () => {
       </AsyncSection>,
     );
     expect(screen.getByRole('alert').textContent).toContain(t('common.sectionLoadFailed'));
-    // 详情通过 title 承载完整内容（可见文本可能被 CSS 截断）
     expect(screen.getByTitle(longMessage)).toBeDefined();
     fireEvent.click(screen.getByRole('button', { name: t('common.retry') }));
     expect(onRetry).toHaveBeenCalledTimes(1);
@@ -65,7 +54,6 @@ describe('AsyncSection', () => {
         <div>内容</div>
       </AsyncSection>,
     );
-    // 空串：只有失败文案，无 title 详情节点
     expect(screen.getByRole('alert').querySelectorAll('span')).toHaveLength(1);
     unmount();
     render(

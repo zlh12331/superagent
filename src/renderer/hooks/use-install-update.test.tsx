@@ -1,10 +1,3 @@
-// src/renderer/hooks/use-install-update.test.tsx
-// use-install-update 单测：无回合直接安装 / 有回合先确认（确认与取消两条路径）
-//
-// 用真实 confirm store（而非 mock confirm 函数）：验证的是"是否真的弹了确认、
-// 用户选择是否真的决定安装"，这正是该 hook 的语义所在。
-// 安装动作断言打在下游 IPC 上（window.api.update.install）——本 hook 不经过
-// useUpdate，避免同一组件挂两份更新状态订阅（见 hook 头注释）。
 import { renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -33,7 +26,6 @@ describe('use-install-update', () => {
     useAgentRunStore.setState({ running: true });
     const { result } = renderHook(() => useInstallUpdate());
     const pending = result.current();
-    // 弹窗已入队（等待用户选择），此时不得安装
     expect(useConfirmDialogStore.getState().currentRequest).not.toBeNull();
     expect(installSpy).not.toHaveBeenCalled();
     useConfirmDialogStore.getState()._resolve(true);

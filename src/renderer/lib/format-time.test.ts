@@ -1,6 +1,3 @@
-// src/renderer/lib/format-time.test.ts
-// formatRelativeTime（相对时间格式化）单测
-
 import type { TFunction } from 'i18next';
 import { describe, expect, it } from 'vitest';
 

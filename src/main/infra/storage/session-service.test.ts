@@ -1,13 +1,6 @@
-// src/main/infra/storage/session-service.test.ts
-// session-service 单测：create + listRecentDirs + rowToMeta
-//
-// 测试维度：正向用例 / 边界用例 / 异常用例
-// 使用内存 SQLite 避免文件系统依赖
-
 import type { ChatMessage } from '@code-agent/shared/main';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-// mock electron（app.getPath 在 db.ts 中使用；BrowserWindow 供失效域广播捕获——31 号 spec §5.1）
 const { mockGetPath, mockInvalidationSends } = vi.hoisted(() => ({
   mockGetPath: vi.fn(() => '/tmp/test-userdata'),
   mockInvalidationSends: [] as Array<[string, unknown]>,
@@ -18,7 +11,6 @@ vi.mock('electron', () => ({
     getPath: mockGetPath,
     isPackaged: false,
   },
-  // 方括号键：规避 useNamingConvention 对 electron API 名（PascalCase）的误报
   ['BrowserWindow']: {
     getAllWindows: vi.fn(() => [
       {
@@ -34,7 +26,6 @@ vi.mock('electron', () => ({
   },
 }));
 
-/** 最近一次失效广播的 payload（broadcastInvalidation 每次调用恰好 send 一窗） */
 function lastInvalidationPayload(): { domains: string[]; sessionId?: string } | undefined {
   const last = mockInvalidationSends.at(-1);
   return last?.[1] as { domains: string[]; sessionId?: string } | undefined;
@@ -46,19 +37,16 @@ import { resetDb } from './db';
 import { SessionService } from './session-service';
 import { createTestDb } from './test-utils';
 
-/** 创建内存数据库 + drizzle 实例（绕过 app.getPath） */
 function createInMemoryDb() {
   return createTestDb();
 }
 
-// mock getDb 返回内存数据库
 vi.mock('./db', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./db')>();
   let memoryDb: ReturnType<typeof createInMemoryDb> | null = null;
 
   return {
     ...actual,
-    // VACUUM 类 pragma 依赖真实初始化的连接（内存库无需页回收），置为 no-op
     reclaimFreePages: vi.fn(),
     getDb: () => {
       if (memoryDb === null) {
@@ -84,8 +72,6 @@ describe('SessionService', () => {
     service = new SessionService();
   });
 
-  // ── 6.1.1 create 方法 ──────────────────────────────
-
   describe('create', () => {
     it('正向：传入 workingDir(空会话) → sessions 行写入 working_dir, messageCount=0, 返回 UUID', async () => {
       const sessionId = await service.create({
@@ -96,7 +82,6 @@ describe('SessionService', () => {
 
       expect(sessionId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
 
-      // 验证写入的数据
       const detail = await service.get(sessionId);
       expect(detail.session.workingDir).toBe('f:\\proj');
       expect(detail.session.messageCount).toBe(0);
@@ -118,7 +103,6 @@ describe('SessionService', () => {
       expect(detail.session.workingDir).toBe('D:\\project');
       expect(detail.session.messageCount).toBe(2);
       expect(detail.messages).toHaveLength(2);
-      // title 取首条 user 消息前 50 字符
       expect(detail.session.title).toBe('帮我读取 package.json 文件内容');
     });
 
@@ -138,7 +122,6 @@ describe('SessionService', () => {
       expect(metaOnly.session.messageCount).toBe(2);
       expect(metaOnly.messages).toEqual([]);
 
-      // 默认（不传 / 显式 true）仍返回全量消息
       const full = await service.get(sessionId);
       expect(full.messages).toHaveLength(2);
       const explicit = await service.get(sessionId, { includeMessages: true });
@@ -181,8 +164,6 @@ describe('SessionService', () => {
       expect(sessionId).toBeDefined();
     });
   });
-
-  // ── 6.1.2 listRecentDirs 方法 ──────────────────────
 
   describe('listRecentDirs', () => {
     it('正向：3 个不同 workingDir(updatedAt 递增) → 返回 3 条,按 lastUsed 倒序', async () => {
@@ -239,8 +220,6 @@ describe('SessionService', () => {
     });
   });
 
-  // ── 6.1.3 rowToMeta(通过 list/get 间接验证) ────────
-
   describe('rowToMeta (via list/get)', () => {
     it('正向：正常 row(workingDir 非空) → SessionMeta.workingDir 透传原值', async () => {
       const sessionId = await service.create({
@@ -296,14 +275,12 @@ describe('SessionService', () => {
 
       const summary = await service.getUsageSummary();
 
-      // 总量：2 次调用
       expect(summary.total).toEqual({
         calls: 2,
         inputTokens: 300,
         outputTokens: 150,
         totalTokens: 450,
       });
-      // 按模型聚合
       expect(summary.byModel).toHaveLength(1);
       expect(summary.byModel[0]).toMatchObject({
         modelId: 'deepseek-v4-flash',
@@ -312,7 +289,6 @@ describe('SessionService', () => {
         cacheReadTokens: 30,
         reasoningTokens: 20,
       });
-      // 按日聚合（当天日期）
       const today = new Date();
       const date = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
       expect(summary.byDay).toHaveLength(1);
@@ -354,7 +330,6 @@ describe('SessionService', () => {
 
       const summary = await service.getUsageSummary();
       expect(summary.byModel).toHaveLength(2);
-      // 按 totalTokens 倒序：gpt-4o(30) 在前
       expect(summary.byModel[0]?.modelId).toBe('gpt-4o');
       expect(summary.byModel[1]?.modelId).toBe('deepseek-v4-flash');
     });
@@ -403,7 +378,6 @@ describe('SessionService', () => {
         durationMs: 2000,
       });
       expect(res.turns[1]).toMatchObject({ turnId: 'turn-2', seq: 1, status: 'aborted' });
-      // 可空字段转 undefined
       expect(res.turns[1]?.totalTokens).toBeUndefined();
     });
 
@@ -449,7 +423,6 @@ describe('SessionService', () => {
 
       const res = await service.getRecentTurns({ limit: 10 });
       expect(res.turns).toHaveLength(2);
-      // 按 createdAt 倒序：后写入的 t-b1 在前
       expect(res.turns[0]?.turnId).toBe('t-b1');
       expect(res.turns[0]?.sessionId).toBe(sessionB);
       expect(res.turns[1]?.turnId).toBe('t-a1');
@@ -477,7 +450,6 @@ describe('SessionService', () => {
         turnId: 'turn-x',
         messages: [{ role: 'assistant', content: '收到' }],
       });
-      // 其他回合的消息不应混入
       await service.appendMessage({
         sessionId,
         turnId: 'turn-y',
@@ -522,7 +494,6 @@ describe('SessionService', () => {
           { role: 'user', content: 'a3' },
         ],
       });
-      // 2ms 间隔区分 updatedAt（与 listRecentDirs 时序用例同一策略）
       await new Promise((resolve) => setTimeout(resolve, 2));
       const second = await service.create({
         workingDir: 'D:\\b',
@@ -534,10 +505,8 @@ describe('SessionService', () => {
       expect(payload.app).toBe('code-agent-desktop');
       expect(payload.exportedAt).toBeGreaterThan(0);
       expect(payload.sessions).toHaveLength(2);
-      // updatedAt 倒序：后建的会话二在前
       expect(payload.sessions[0]?.meta.id).toBe(second);
       expect(payload.sessions[1]?.meta.id).toBe(first);
-      // 组内消息按 seq 升序（t2 起 messages 为 version=1 信封形态：seq/content/createdAt）
       expect(payload.sessions[1]?.messages).toHaveLength(3);
       expect(payload.sessions[0]?.messages).toEqual([
         { seq: 0, content: { role: 'user', content: 'b1' }, createdAt: expect.any(Number) },
@@ -549,8 +518,6 @@ describe('SessionService', () => {
       expect(payload.sessions).toEqual([]);
     });
   });
-
-  // ── 失效域声明（31 号 spec §2.4 S1–S6：写路径声明受影响域） ──────────
 
   describe('失效域声明', () => {
     beforeEach(() => {
@@ -653,12 +620,10 @@ describe('SessionService', () => {
       const file = await service.exportAll();
       mockInvalidationSends.length = 0;
 
-      // 同 id 已存在 → 跳过，库未变 ⇒ 不声明
       const skipped = await service.importAll(structuredClone(file));
       expect(skipped).toEqual({ imported: 0, skipped: 1 });
       expect(mockInvalidationSends).toHaveLength(0);
 
-      // 换空库导入 → 真实写入 ⇒ 声明列表域（不含 session:<id>）
       resetDb();
       const imported = await service.importAll(structuredClone(file));
       expect(imported).toEqual({ imported: 1, skipped: 0 });
@@ -680,8 +645,6 @@ describe('SessionService', () => {
       expect(mockInvalidationSends).toHaveLength(0);
     });
   });
-
-  // ── 清空全部会话（36 号 D） ─────────────────────────────────────
 
   describe('clearAll（36-D）', () => {
     beforeEach(() => {
@@ -713,7 +676,6 @@ describe('SessionService', () => {
       const res = await service.clearAll();
 
       expect(res.deleted).toBe(2);
-      // 级联：消息已随会话删除（get 抛 SESSION_NOT_FOUND）
       await expect(service.get(s1, { includeMessages: true })).rejects.toMatchObject({
         code: ErrorCode.SESSION_NOT_FOUND,
       });

@@ -1,19 +1,9 @@
-// src/main/infra/telemetry/event-loop-lag.test.ts
-// 事件循环延迟监控单测（P2-36：monitorEventLoopDelay 直方图分位语义）
-// ──────────────────────────────────────────────────────────────
-// - 直方图注入 fake：分位值可编程（纳秒），enable/disable/reset 记录调用
-// - 真实直方图用例：start() 空闲连续 tick 不误报（语义继承，fake timers 下
-//   真实延迟 ≈ 0 → 分位值远低于阈值）
-// - 阈值语义与旧实现一致：lagMs > warnThresholdMs 才告警（相等不告警）
-// ──────────────────────────────────────────────────────────────
-
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { EventLoopLagMonitor, type LagHistogram } from './event-loop-lag';
 
 const monitors: EventLoopLagMonitor[] = [];
 
-/** 直方图 fake：percentile 返回可编程纳秒值 */
 function createFakeHistogram(initialNs = 0) {
   const calls = { enable: 0, disable: 0, reset: 0 };
   let valueNs = initialNs;
@@ -35,7 +25,6 @@ function createFakeHistogram(initialNs = 0) {
   return {
     histogram,
     calls,
-    /** 设置下一采样将读到的分位值（纳秒） */
     setNs: (v: number) => {
       valueNs = v;
     },
@@ -65,7 +54,7 @@ describe('EventLoopLagMonitor（直方图分位语义）', () => {
       createHistogram: () => fake.histogram,
       onLag: (sample) => fired.push({ lagMs: sample.lagMs }),
     });
-    fake.setNs(1.5e9); // 1500ms
+    fake.setNs(1.5e9);
     const sample = monitor.sample(1000);
     expect(sample.lagMs).toBeCloseTo(1500, 6);
     expect(sample.exceeded).toBe(true);
@@ -74,7 +63,7 @@ describe('EventLoopLagMonitor（直方图分位语义）', () => {
   });
 
   it('阈值边界语义与旧实现一致：lagMs == 阈值不告警（严格大于）', () => {
-    const fake = createFakeHistogram(1e9); // 恰好 1000ms
+    const fake = createFakeHistogram(1e9);
     const fired: number[] = [];
     const monitor = createMonitor({
       warnThresholdMs: 1000,
@@ -90,17 +79,16 @@ describe('EventLoopLagMonitor（直方图分位语义）', () => {
   it('采样后 reset 直方图（lag 恒反映最近窗口；未 start 采样不告警）', () => {
     const fake = createFakeHistogram();
     const monitor = createMonitor({ createHistogram: () => fake.histogram });
-    fake.setNs(100e6); // 100ms（远低于阈值）
+    fake.setNs(100e6);
     monitor.sample();
     expect(fake.calls.reset).toBe(1);
-    // reset 后分位归零：再次采样 lagMs ≈ 0
     const second = monitor.sample();
     expect(second.lagMs).toBe(0);
     expect(second.exceeded).toBe(false);
   });
 
   it('onLag：unsubscribe 生效', () => {
-    const fake = createFakeHistogram(2e9); // 2000ms，恒超阈值
+    const fake = createFakeHistogram(2e9);
     const fired: number[] = [];
     const monitor = createMonitor({ createHistogram: () => fake.histogram });
     const unsubscribe = monitor.onLag(() => fired.push(1));
@@ -127,12 +115,12 @@ describe('EventLoopLagMonitor（直方图分位语义）', () => {
     monitor.start();
     expect(monitor.running).toBe(true);
     expect(fake.calls.enable).toBe(1);
-    monitor.start(); // 幂等
+    monitor.start();
     expect(fake.calls.enable).toBe(1);
     monitor.stop();
     expect(monitor.running).toBe(false);
     expect(fake.calls.disable).toBe(1);
-    monitor.stop(); // 幂等
+    monitor.stop();
     expect(fake.calls.disable).toBe(1);
   });
 
@@ -150,7 +138,6 @@ describe('EventLoopLagMonitor（直方图分位语义）', () => {
 
   it('回归（语义继承）：start() 空闲环境连续 tick 不误报', () => {
     vi.useFakeTimers();
-    // 真实直方图：fake timers 下真实事件循环延迟 ≈ 0 → 分位值远低于阈值
     const monitor = createMonitor({ intervalMs: 1000, warnThresholdMs: 100 });
     const fired: number[] = [];
     monitor.onLag(() => fired.push(1));

@@ -1,10 +1,3 @@
-// src/main/infra/network/proxied-fetch.test.ts
-// Node 栈代理 fetch 单测（34 号 §2.7：spy dispatcher 断言调用参数，不真连）
-// ──────────────────────────────────────────────────────────────
-// 探针已证：npm undici 的 fetch 接受 dispatcher 并按其路由；全局 fetch 不认。
-// 本测试通过 mock undici 模块断言「dispatcher 是否被传入」，不发起真实网络。
-// ──────────────────────────────────────────────────────────────
-
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -19,7 +12,6 @@ vi.mock('undici', () => {
       mocks.proxyAgentCtor(uri);
     }
   }
-  // 字符串键：规避 useNamingConvention 对 PascalCase 属性名的检查（window-show.test 同法）
   return { fetch: mocks.undiciFetch, ['ProxyAgent']: FakeProxyAgent };
 });
 
@@ -99,7 +91,6 @@ describe('proxiedFetch', () => {
 
     setProxyFetchConfig({ mode: 'fixed', url: 'http://p2:2' });
     await proxiedFetch('https://a.example.com');
-    // 旧 agent（p1）被替换：ctor 共两次（p1 一次 + p2 一次），最后一次是 p2
     expect(mocks.proxyAgentCtor).toHaveBeenCalledTimes(2);
     expect(mocks.proxyAgentCtor).toHaveBeenNthCalledWith(2, 'http://p2:2');
   });

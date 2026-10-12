@@ -1,6 +1,3 @@
-// src/main/infra/ai/tools/run-subagent.tool.test.ts
-// run_subagent 工具单测：委派 + 有无文本输出分支 + 异常降级（mock SubagentManager 单例）
-
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRunSubagentTool } from './run-subagent.tool';
 import type { ToolContext } from './tool';

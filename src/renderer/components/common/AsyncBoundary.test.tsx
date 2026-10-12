@@ -1,7 +1,3 @@
-// src/renderer/components/$1/AsyncBoundary.test.tsx
-// AsyncBoundary 渲染层单测：五态渲染 + 防闪烁 + 可操作错误 + a11y
-// 直接构造 AsyncView（discriminated union）驱动各状态，无需真实 query。
-
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AsyncView } from '@/hooks/use-async-view';
@@ -12,7 +8,6 @@ const skeleton = <div data-testid="skeleton">骨架</div>;
 const empty = <div data-testid="empty">空态</div>;
 
 afterEach(() => {
-  // 重置全局 ui-store，避免「去配置」用例的打开状态污染后续用例
   useUiStore.setState({ settingsOpen: false });
 });
 
@@ -33,7 +28,6 @@ describe('AsyncBoundary', () => {
   it('refreshing：保留旧数据渲染内容 + 顶部进度条指示刷新中', () => {
     renderView({ state: 'refreshing', data: ['x'] });
     expect(screen.getByTestId('content').textContent).toBe('x');
-    // 进度条存在且对读屏隐藏（aria-hidden，不干扰 role=status/alert 语义）
     const bar = screen.getByTestId('refreshing-bar');
     expect(bar.getAttribute('aria-hidden')).toBe('true');
   });
@@ -56,7 +50,6 @@ describe('AsyncBoundary', () => {
       retry: () => {},
     });
     expect(screen.getByRole('alert')).toBeTruthy();
-    // i18n 固定 zh-CN（setup-lang.ts），common.retry = "重试"
     expect(screen.getByText('重试')).toBeTruthy();
   });
 
@@ -86,7 +79,6 @@ describe('AsyncBoundary', () => {
       error: new Error('[AI_API_KEY_MISSING] no key'),
       retry: () => {},
     });
-    // 错误码 → 恢复动作按钮（common.goToSettings = "去配置"），点击打开全局设置入口
     fireEvent.click(screen.getByRole('button', { name: /去配置/ }));
     expect(useUiStore.getState().settingsOpen).toBe(true);
   });
@@ -113,7 +105,6 @@ describe('AsyncBoundary', () => {
           {(data) => <div>{data.join(',')}</div>}
         </AsyncBoundary>,
       );
-      // 加载态容器已在（aria-busy/role=status），但延迟未到不出骨架屏
       expect(screen.getByRole('status')).toBeTruthy();
       expect(screen.queryByTestId('skeleton')).toBeNull();
 
@@ -143,7 +134,6 @@ describe('AsyncBoundary', () => {
       await act(async () => {
         vi.advanceTimersByTime(200);
       });
-      // 定时器已清理 ⇒ 不再 setState，React 不会报卸载后更新警告
       expect(consoleError).not.toHaveBeenCalled();
     } finally {
       consoleError.mockRestore();

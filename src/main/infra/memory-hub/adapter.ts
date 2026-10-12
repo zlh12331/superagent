@@ -1,12 +1,5 @@
-// src/main/infra/memory-hub/adapter.ts
-// HttpMemoryPort：MemoryPort 的 HTTP 实现（对上游 gateway v1 数据面的薄封装）
-// ──────────────────────────────────────────────────────────────
-// 边界纪律：
-// - 本文件是全项目唯一允许知晓上游 HTTP 细节（路径 / 鉴权头 / 响应形状）的模块
-// - 上游 v1 端点返回裸 JSON（无 envelope）；鉴权 = Bearer + x-tdai-service-id
-// - 所有调用带超时；capture/recall 失败降级为失败结果而非抛错（记忆故障不拖垮回合）
-// ──────────────────────────────────────────────────────────────
-
+// adapter.ts：记忆引擎 HTTP 协议适配——全仓唯一知晓上游 gateway 请求/响应形状的文件
+// ⚠️ 上游字段是 snake_case（协议面）；本文件转成 camelCase 端口对象，改协议先改这里
 import { logger } from '../../utils/logger';
 import type {
   MemoryCaptureInput,
@@ -19,21 +12,16 @@ import type {
   MemorySearchResult,
 } from './types';
 
-/** 单次 HTTP 调用超时（毫秒） */
+// 单请求 8s 超时：记忆调用不能拖住回合主流程
 const REQUEST_TIMEOUT_MS = 8000;
 
-/** HttpMemoryPort 构造选项 */
+/** HTTP 端口配置（baseUrl 已含 token 鉴权路径语义，apiKey 走 Bearer） */
 export interface HttpMemoryPortOptions {
-  /** gateway 基地址（http://127.0.0.1:<port>） */
   readonly baseUrl: string;
-  /** Bearer apiKey（与 sidecar 启动配置一致） */
   readonly apiKey: string;
 }
 
-/**
- * 记忆引擎 HTTP 适配器（MemoryPort 实现）：对 gateway REST API 的唯一封装点
- * （health / capture / recall / 检索 / 清除），8s 请求超时
- */
+/** 引擎 HTTP 端口实现（MemoryPort 的协议侧；每个方法自带降级——失败返回空/假值不抛） */
 export class HttpMemoryPort implements MemoryPort {
   private readonly baseUrl: string;
   private readonly apiKey: string;
@@ -94,7 +82,6 @@ export class HttpMemoryPort implements MemoryPort {
         code?: number;
         message?: string;
       };
-      // 上游结构化失败信号：code 非 0 / 缺省视为成功
       if (typeof data.code === 'number' && data.code !== 0) {
         return {
           ok: false,
@@ -170,9 +157,6 @@ export class HttpMemoryPort implements MemoryPort {
 
   async clear(sessionKey: string): Promise<MemoryClearResult> {
     try {
-      // 上游 v2 envelope：成功 { code:0, message:'ok', data:{ deleted_count } }
-      // 删除映射 l0_conversations.session_key = sessionId（capture 写入的字段）
-      // 注意：不传 message_ids（空数组会触发 zod .min(1) 校验失败 → 400）
       const data = (await this.requestJson('POST', '/v2/conversation/delete', {
         // biome-ignore lint/style/useNamingConvention: 上游 gateway 协议字段（snake_case）
         session_ids: [sessionKey],
@@ -201,7 +185,6 @@ export class HttpMemoryPort implements MemoryPort {
     }
   }
 
-  /** 发起请求并解析裸 JSON（非 2xx 抛错） */
   private async requestJson(method: string, path: string, body?: unknown): Promise<unknown> {
     const res = await this.request(method, path, body);
     if (!res.ok) {
@@ -210,7 +193,6 @@ export class HttpMemoryPort implements MemoryPort {
     return (await res.json()) as unknown;
   }
 
-  /** 底层 fetch（统一超时与鉴权头） */
   private request(method: string, path: string, body?: unknown): Promise<Response> {
     const headers: Record<string, string> = {
       // biome-ignore lint/style/useNamingConvention: HTTP 标准头名

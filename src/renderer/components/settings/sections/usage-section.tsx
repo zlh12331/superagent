@@ -1,16 +1,3 @@
-// usage-section.tsx（自 SettingsDialog 拆分）
-// 设置全屏页 · UsageSection 用量统计面板
-// ──────────────────────────────────────────────
-// 设计（对齐同类桌面 LLM 客户端用量页 + GitHub 贡献热力图）：
-// - ① 时间维度三卡：今日 / 近 30 天 / 累计（按日聚合前端计算）
-// - ② 消耗热力图：近 30 天按日网格（6×5），色档 5 级，hover 显示日期+token
-// - ③ 按模型占比：横向条形 + 百分比（一眼看出消耗分布）
-// - ④ 按日明细列表（热力图数值兜底）
-// - ⑤ 回合记录（并入用量：最近 Agent 回合的终止原因与 token 消耗）
-//
-// 数据源：session:getUsageSummary（byDay 近 30 天倒序）
-// ──────────────────────────────────────────────
-
 import type { UsageDaySummary, UsageSummaryRes } from '@code-agent/shared/renderer';
 import { useQuery } from '@tanstack/react-query';
 import { BarChart3 } from 'lucide-react';
@@ -80,18 +67,15 @@ export function buildHeatValue(
   heatEndIso: string,
 ): HeatValueItem[] {
   const days = byDay ?? [];
-  // 空数据兑底：近 90 天 0 值（ActivityCalendar 不允许 data 为空，否则抛错）
   if (days.length === 0) {
     return recentDays(90).map((date) => ({ date, count: 0, level: 0 }));
   }
-  // 当日最大值（全 0 时所有格子取最低档）
   const heatMax = days.reduce((m, d) => Math.max(m, d.totalTokens), 0);
   const first = days[days.length - 1];
   const last = days[0];
   const items: HeatValueItem[] = [...days]
     .reverse()
     .map((d) => ({ date: d.date, count: d.totalTokens, level: heatLevel(d.totalTokens, heatMax) }));
-  // 首尾空条目（范围锚点）：仅当数据未覆盖边界时补
   if (first !== undefined && items[0]?.date !== heatStartIso) {
     items.unshift({ date: heatStartIso, count: 0, level: 0 });
   }
@@ -145,7 +129,6 @@ function ModelUsageList({
                 {formatCompactNumber(m.tokens, locale)} · {formatPercent(m.share, locale)}
               </span>
             </div>
-            {/* 占比条（accent 宽度 = 占比） */}
             <div className="bg-muted/30 mt-1 h-[5px] w-full overflow-hidden rounded-full">
               <div
                 className="bg-accent h-full rounded-full"
@@ -164,8 +147,6 @@ export function UsageSection(): ReactElement {
   const { t, i18n } = useTranslation();
   const { getErrorMessage } = useErrorMessage();
 
-  // 用量汇总：TanStack Query（L3 服务端数据；浏览器模式守卫返回空骨架）
-  // 失败态以 QueryErrorRow 呈现（此前静默渲染成全零骨架，误导用户）
   const {
     data: summary,
     isPending,
@@ -176,8 +157,6 @@ export function UsageSection(): ReactElement {
     queryKey: USAGE_SUMMARY_QUERY_KEY,
     queryFn: async (): Promise<UsageSummaryRes> => {
       const res = await getUsageSummary();
-      // 无桥（dev 预览）：渲染空数据 UI 骨架
-      // （0 值三卡 + 近 90 天 0 值热力图格子，形态完整可见）
       return (
         res ?? {
           total: { calls: 0, inputTokens: 0, outputTokens: 0, totalTokens: 0 },
@@ -188,7 +167,6 @@ export function UsageSection(): ReactElement {
     },
   });
 
-  // 挂载时刻快照（非响应式）：必须 useMemo 空依赖，交给 Compiler 会每渲染重算 new Date()
   const heatEnd = useMemo(() => new Date(), []);
   const heatStart = useMemo(() => {
     const d = new Date();
@@ -202,13 +180,11 @@ export function UsageSection(): ReactElement {
   /** 热力图数据（色档按当日最大值分位；纯派生，抽 buildHeatValue 便于测试） */
   const heatValue = buildHeatValue(summary?.byDay, heatStartIso, heatEndIso);
 
-  // 近 30 天合计（"本月"近似：byDay 为近 90 天倒序，取前 30 项）
   const monthTokens = (summary?.byDay ?? [])
     .slice(0, 30)
     .reduce((sum, d) => sum + d.totalTokens, 0);
   const todayTokens = summary?.byDay[0]?.totalTokens ?? 0;
 
-  // 模型占比：占总量百分比
   const modelRows = (() => {
     const total = summary?.total.totalTokens ?? 0;
     if (total <= 0) return [];
@@ -221,10 +197,6 @@ export function UsageSection(): ReactElement {
     }));
   })();
 
-  // 空态：查询尚无数据（undefined）。**不是** null——此前写成 `=== null` 恒假，
-  // 导致「空数据」文案（settings.usageEmpty）永不显示、且 loading/error 时
-  // 仍会渲染全 0 看板，与上方 QueryErrorRow 的注释（"此前静默渲染成全零骨架，
-  // 误导用户"）自相矛盾。改判 undefined 后空态分支才真正可达。
   const isEmpty = summary === undefined;
 
   return (
@@ -246,7 +218,6 @@ export function UsageSection(): ReactElement {
         <p className="text-xs text-muted-foreground font-sans">{t('settings.usageEmpty')}</p>
       ) : (
         <div className="flex flex-col gap-4 font-sans">
-          {/* ① 时间维度四卡：今日 / 近 30 天（本月近似）/ 累计 / 总调用次数 */}
           <div className="grid grid-cols-4 gap-2 text-xs">
             <div className="rounded-md border border-border p-2.5">
               <p className="text-muted-foreground">{t('settings.usageToday')}</p>
@@ -275,7 +246,6 @@ export function UsageSection(): ReactElement {
             </div>
           </div>
 
-          {/* ②③ 双列：消耗热力图（近 90 天，左） + 按模型占比（右） */}
           <div className="grid grid-cols-[1.4fr_1fr] gap-3">
             <div className="rounded-md border border-border p-3">
               <p className="text-xs font-medium text-muted-foreground">
@@ -313,7 +283,6 @@ export function UsageSection(): ReactElement {
         </div>
       )}
 
-      {/* ⑤ 回合记录（并入用量：最近 Agent 回合的终止原因与 token 消耗） */}
       <TurnsSection />
     </div>
   );

@@ -1,6 +1,3 @@
-// src/renderer/lib/pending-message.test.ts
-// 欢迎页首条消息透传解析规则单测（含陈旧性防护）
-
 import { describe, expect, it } from 'vitest';
 
 import { PENDING_MESSAGE_TTL_MS, resolvePendingMessage } from './pending-message';

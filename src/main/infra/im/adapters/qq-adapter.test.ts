@@ -1,18 +1,9 @@
-// src/main/infra/im/adapters/qq-adapter.test.ts
-// QqAdapter 单测：QQ 渠道适配器（正向/边界/异常三件套）
-// ──────────────────────────────────────────────────────────────
-// 测试策略（遵循"业务逻辑不 mock、外部依赖注入 fake"）：
-// - fetchTokenFn / Receiver / fetchFn 经构造注入 fake（网络/WS 外部依赖）
-// - 消息路由（chatTypeMap 学习）、token 刷新窗口、错误分类全部真实实现
-// ──────────────────────────────────────────────────────────────
-
 import { ErrorCode } from '@code-agent/shared/main';
 import { describe, expect, it, vi } from 'vitest';
 import type { ChannelIncomingMessage } from '../channel/types';
 import { QqAdapter } from './qq-adapter';
 import type { QqStreamReceiver } from './qq-stream';
 
-/** fake 接收器：捕获 onMessage handler 可手动触发 */
 class FakeQqReceiver {
   handler: ((message: ChannelIncomingMessage) => void) | undefined;
   readonly open = vi.fn(async () => {});
@@ -27,14 +18,11 @@ class FakeQqReceiver {
   }
 }
 
-/** 默认成功响应体（err_code 用索引赋值绕开命名检查） */
 const errOkBody: Record<string, number> = {};
 errOkBody['err_code'] = 0;
 
-/** 当前测试的共享 receiver（SharedQqReceiver 构造返回它，保持 adapter 的 new 语义） */
 let currentReceiver: FakeQqReceiver;
 
-/** 测试桩：new 返回共享 receiver 实例 */
 class SharedQqReceiver {
   constructor() {
     // biome-ignore lint/correctness/noConstructorReturn: 测试桩返回共享实例（保持 new 语义）
@@ -42,7 +30,6 @@ class SharedQqReceiver {
   }
 }
 
-/** fake fetch：可编程响应 */
 function makeFetch(ok = true, body: unknown = errOkBody): ReturnType<typeof vi.fn> {
   return vi.fn(async () => ({
     ok,
@@ -51,7 +38,6 @@ function makeFetch(ok = true, body: unknown = errOkBody): ReturnType<typeof vi.f
   }));
 }
 
-/** 构造注入全部依赖的适配器 */
 function makeAdapter(): {
   adapter: QqAdapter;
   fetchToken: ReturnType<typeof vi.fn>;
@@ -64,7 +50,6 @@ function makeAdapter(): {
   const fetchFn = makeFetch();
   const adapter = new QqAdapter({
     fetchToken: fetchToken as unknown as typeof import('./qq-stream').fetchQqAccessToken,
-    // 测试桩构造返回共享实例：adapter 内 new ReceiverCtor 得到同一对象
     Receiver: SharedQqReceiver as unknown as typeof QqStreamReceiver,
     fetchFn: fetchFn as unknown as typeof fetch,
   });
@@ -138,7 +123,6 @@ describe('QqAdapter 消息分发（chatTypeMap 学习）', () => {
     expect(handler).toHaveBeenCalledWith(
       expect.objectContaining({ chatId: 'g-openid', text: 'hello' }),
     );
-    // 学习后：回发走群聊端点
     await adapter.sendMessage({ chatId: 'g-openid' }, 'reply');
     const url = adapter as unknown as { fetchFn: ReturnType<typeof vi.fn> };
     expect(String(url.fetchFn.mock.calls[0]?.[0])).toContain('/v2/groups/g-openid/messages');
@@ -147,7 +131,6 @@ describe('QqAdapter 消息分发（chatTypeMap 学习）', () => {
   it('正向：无 channelType 消息 → 不学习（回发默认单聊）', async () => {
     const { adapter, receiver } = makeAdapter();
     await adapter.connect('app123:secret456');
-    // exactOptionalPropertyTypes：channelType 省略等价 undefined（不显式传 undefined）
     receiver.emit(incoming({}));
     await adapter.sendMessage({ chatId: 'unknown-id' }, 'reply');
     const url = adapter as unknown as { fetchFn: ReturnType<typeof vi.fn> };
@@ -181,7 +164,6 @@ describe('QqAdapter 消息分发（chatTypeMap 学习）', () => {
 describe('QqAdapter.sendMessage（三件套）', () => {
   it('异常：accessToken 为 null（未连接成功）→ NOT_CONFIGURED', async () => {
     const { adapter } = makeAdapter();
-    // 不调用 connect：accessToken 保持 null
     await expect(adapter.sendMessage({ chatId: 'x' }, 'hi')).rejects.toMatchObject({
       code: ErrorCode.IM_CHANNEL_NOT_CONFIGURED,
     });
@@ -223,11 +205,10 @@ describe('QqAdapter.sendMessage（三件套）', () => {
 
   it('边界：token 临近过期（剩余 <60s）→ 发送前自动刷新', async () => {
     const { adapter, fetchToken } = makeAdapter();
-    // expiresIn=1 → 过期时间 = now + 1s，立即进入刷新窗口
     fetchToken.mockImplementationOnce(async () => ({ accessToken: 't1', expiresIn: 1 }));
     await adapter.connect('app123:secret456');
     await adapter.sendMessage({ chatId: 'u1' }, 'hi');
-    expect(fetchToken).toHaveBeenCalledTimes(2); // connect 1 次 + 刷新 1 次
+    expect(fetchToken).toHaveBeenCalledTimes(2);
   });
 });
 

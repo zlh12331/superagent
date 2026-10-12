@@ -1,26 +1,13 @@
-// packages/shared/src/schemas/git.ts
-// Git 域 zod schema 单一真源
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 定义 git:status / git:diff 请求-响应 zod schema
-// - 供主进程 GitService 校验入参，封装 git CLI 子进程调用
-//
-// 设计：
-// - GitService 通过 child_process.spawn('git', [...args]) 调用 git CLI
-// - path 必须为绝对路径，GitService 内部校验为 git 仓库根目录
-// - status 返回结构化数据（非 git status 原始文本），便于渲染层消费
-// - diff 返回 unified diff 原始文本 + 结构化统计（additions/deletions/filesChanged）
-// ──────────────────────────────────────────────────────────────
+// git.ts：Git 域 IPC 契约单一真源——git:status / diff / add / commit / push 的入参 zod schema、
+// 响应接口与响应契约 schema，以及 git 引用 / 远程参数的安全校验器。
+// 边界：只定义契约（校验 + 默认值）；git 命令的拼装与执行在 src/main/infra/git/git-service.ts。
 
 import { z } from 'zod';
 
-// ── Git 引用/远程安全校验（P0 收口共享工具） ──────────────────
-//
-// 背景：git remote/refspec/ref 曾为自由字符串透传。git 对位置参数处的
-// `--flag` 按选项解析（option implantation），且 `ext::<cmd>` 远程传输会
-// 由 git 直接运行本地命令——IPC 边界与 agent 工具层都必须拦截。
-// 本组校验器同时被 zod schema（IPC 边界）与 GitService（服务层 choke
-// point，覆盖 agent git 工具的直连调用）消费。
+// ── Git 引用 / 远程安全校验（IPC schema 与服务层共用）───────────────────
+// 拦两类参数注入：位置参数处的 `--flag` 被 git 按选项解析（option implantation）；
+// `<transport>::<addr>` 让 git 运行 git-remote-<transport> helper（ext:: 直接执行本地命令）。
+// 两个校验器被本文件 schema 与 GitService 共用，后者覆盖 agent git 工具不经 IPC 的直连路径。
 
 /** Git 引用段合法字符集（分支/tag/sha 通用）：字母数字与 . _ / - ~ ^ * @ { } */
 const GIT_REF_SEGMENT = /^[A-Za-z0-9._~^*@{}/-]+$/;
@@ -38,6 +25,7 @@ export function isSafeGitRefValue(value: string): boolean {
   if (value === '') {
     return true;
   }
+  // 先剥离 `+` 强制前缀再逐段校验：否则 `+--upload-pack=evil` 可借前缀绕过「段首不得为 -」
   const spec = value.startsWith('+') ? value.slice(1) : value;
   const parts = spec.split(':');
   if (parts.length > 2) {
@@ -63,13 +51,15 @@ export function isSafeGitRemote(value: string): boolean {
   if (value === '' || value.startsWith('-') || value.includes('::')) {
     return false;
   }
-  // 控制字符检测不用 \s（空格是合法路径成分），仅拒换行/NUL
+  // 控制字符检测不用 \s：空格是合法本地路径成分，仅拒换行 / NUL
   return !/[\n\r\0]/.test(value);
 }
 
+// ── 读操作（status / diff）────────────────────────────────
+
 /** git:status 入参 zod schema */
 export const GitStatusReqSchema = z.object({
-  // Git 仓库路径（绝对路径，可为仓库根或子目录，GitService 内部解析根目录）
+  // Git 仓库路径（绝对路径；可为仓库根或子目录）
   path: z.string().min(1),
 });
 
@@ -89,9 +79,9 @@ export const GitStatusReqSchema = z.object({
 export const GitFileStatusSchema = z.object({
   path: z.string(),
   status: z.enum(['modified', 'added', 'deleted', 'renamed', 'untracked', 'conflicted']),
-  // 是否已暂存（git add 过）
   staged: z.boolean(),
-  // rename 时的原路径（仅 status='renamed' 时有值）
+  // 用 .optional().transform 而非裸 .optional()：推断结果是「必填属性、值可为 undefined」，
+  // 在 exactOptionalPropertyTypes 下可直接喂给 GitFileStatus 消费方；值仅 status='renamed' 时有意义
   oldPath: z
     .string()
     .optional()
@@ -108,7 +98,7 @@ export type GitFileStatus = z.infer<typeof GitFileStatusSchema>;
  * clean=true 表示工作区无变更（files 为空数组）。
  */
 export interface GitStatusRes {
-  /** 当前分支名（如 'master' / 'feature/agent'） */
+  /** 当前分支名（如 'master' / 'feature/agent'；git 读不到分支信息时回落为字面量 '(unknown)'） */
   readonly branch: string;
   /** 领先远程的 commit 数 */
   readonly ahead: number;
@@ -120,7 +110,7 @@ export interface GitStatusRes {
   readonly clean: boolean;
 }
 
-/** git:status 响应 zod schema（响应契约校验用） */
+/** git:status 响应 zod schema（响应契约校验用：wrap 校验 handler 返回值，防手写接口漂移） */
 export const GitStatusResSchema = z.object({
   branch: z.string(),
   ahead: z.number().int().nonnegative(),
@@ -132,15 +122,14 @@ export const GitStatusResSchema = z.object({
 /** git:diff 入参 zod schema */
 export const GitDiffReqSchema = z.object({
   path: z.string().min(1),
-  // 对比的 ref（默认 'HEAD'，可为分支名、commit hash、'HEAD~1' 等）
-  // 安全：拒绝 `--` 开头的选项形参数（git diff --output=<file> 可任意写文件）
+  // 拒绝选项形 ref：`git diff --output=<file>` 可被 git 当选项解析并任意写文件
   ref: z
     .string()
     .default('HEAD')
     .refine(isSafeGitRefValue, 'ref 含非法字符或选项形参数（- 开头 / 空白）'),
   // 是否只看暂存区（git diff --cached）
   staged: z.boolean().default(false),
-  // 指定文件路径（可选，省略时查看整个仓库 diff）
+  // 指定文件路径（可选；省略时查看整个仓库 diff）
   filePath: z
     .string()
     .optional()
@@ -150,7 +139,8 @@ export const GitDiffReqSchema = z.object({
 /**
  * git:diff 响应 payload
  *
- * diff 为 unified diff 原始文本，渲染层用自研 DiffRowsTable 渲染（shiki 行高亮）。
+ * diff 为 unified diff 原始文本，渲染层用 DiffRowsTable
+ * （src/renderer/components/common/diff/DiffRowsTable.tsx）渲染（shiki 行高亮）。
  * additions/deletions/filesChanged 为结构化统计，便于顶部摘要展示。
  */
 export interface GitDiffRes {
@@ -172,7 +162,7 @@ export const GitDiffResSchema = z.object({
   filesChanged: z.number().int().nonnegative(),
 });
 
-// ── Git 写操作（add / commit / push）──────────────────────
+// ── 写操作（add / commit / push）──────────────────────────
 
 /**
  * git:add 入参 zod schema
@@ -180,14 +170,10 @@ export const GitDiffResSchema = z.object({
  * 将工作区改动添加到暂存区。可指定 paths（相对仓库根或绝对路径），
  * 省略 paths 时执行 `git add -A`（暂存所有改动，含新增/修改/删除）。
  *
- * path 为仓库根或子目录（GitService 内部解析根目录）。
- * paths 内若含相对路径，则相对于 path 解析。
+ * path 为仓库根或子目录；paths 内若含相对路径，则相对于 path 解析。
  */
 export const GitAddReqSchema = z.object({
-  // 仓库路径（绝对路径，可为仓库根或子目录）
   path: z.string().min(1),
-  // 要暂存的路径列表（相对 path 或绝对路径）
-  // 省略或空数组时执行 git add -A（暂存所有改动）
   paths: z.array(z.string().min(1)).default([]).describe('要暂存的路径列表（省略时暂存所有改动）'),
 });
 
@@ -199,7 +185,7 @@ export interface GitAddRes {
   readonly stdout: string;
 }
 
-/** git:add 响应 zod schema（R2：响应契约校验） */
+/** git:add 响应 zod schema（响应契约校验用） */
 export const GitAddResSchema = z.object({
   stagedCount: z.number().int().nonnegative(),
   stdout: z.string(),
@@ -208,18 +194,16 @@ export const GitAddResSchema = z.object({
 /**
  * git:commit 入参 zod schema
  *
- * 提交暂存区改动。message 为必填，支持多行（用 \n 分隔）。
+ * 提交暂存区改动。message 为必填（支持多行，用 \n 分隔）。
  *
- * 注意：本工具只执行 `git commit -m <message>`，不会自动 git add。
- * 调用方应先调用 git:add 暂存改动，再调用 git:commit 提交。
+ * 只提交已暂存内容，不会自动 git add——调用方须先经 git:add 暂存改动。
  *
- * amend=true 时执行 `git commit --amend --no-edit`（保留原 message），
- * 此时 message 可省略；若同时提供 message 则覆盖原 message。
+ * amend=true 时执行 `git commit --amend -m <message>`（message 覆盖原提交信息，
+ * 不豁免必填）。
  */
 export const GitCommitReqSchema = z.object({
   path: z.string().min(1),
   message: z.string().min(1).describe('提交信息（支持多行，用 \\n 分隔）'),
-  // 是否追加到上一次提交（amend），默认 false
   amend: z.boolean().default(false).describe('是否追加到上一次提交（git commit --amend）'),
 });
 
@@ -227,7 +211,7 @@ export const GitCommitReqSchema = z.object({
 export interface GitCommitRes {
   /** 新提交的 SHA（完整 40 字符） */
   readonly sha: string;
-  /** 新提交的简短 SHA（前 7 字符） */
+  /** 新提交的简短 SHA（前 7 字符；SHA 不足 7 位时原样返回） */
   readonly shortSha: string;
   /** 提交的分支 */
   readonly branch: string;
@@ -236,11 +220,11 @@ export interface GitCommitRes {
   /** 本次提交的增删行数统计（additions/deletions） */
   readonly additions: number;
   readonly deletions: number;
-  /** git commit 原始 stdout（用于调试） */
+  /** git commit 原始 stdout（GitService 以空串填充：结果已由上方结构化字段表达，勿依赖此字段） */
   readonly stdout: string;
 }
 
-/** git:commit 响应 zod schema（R2：响应契约校验） */
+/** git:commit 响应 zod schema（响应契约校验用） */
 export const GitCommitResSchema = z.object({
   sha: z.string().min(1),
   shortSha: z.string().min(1),
@@ -254,44 +238,37 @@ export const GitCommitResSchema = z.object({
 /**
  * git:push 入参 zod schema
  *
- * 推送本地提交到远程。可指定 remote（默认 'origin'）和 refspec（默认当前分支）。
+ * 推送本地提交到远程。可指定 remote（默认 'origin'）和 refspec（默认空串 = 推送当前分支）。
  *
- * setUpstream=true 时附加 `--set-upstream`（首次推送时建立追踪关系）。
- * force=true 时执行 `git push --force-with-lease`（更安全的强制推送，
- * 若远程有他人新提交则会失败，避免覆盖他人工作）。
+ * setUpstream=true 时附加 `--set-upstream`（首次推送建立追踪关系）。
+ * force=true 时执行 `git push --force-with-lease`（比 `--force` 安全：远程有他人
+ * 新提交即失败，不覆盖他人工作）；本 schema 不提供裸 `--force` 通道。
  *
- * 安全策略：
- * - 禁止 `--force` 直接推送（用 `--force-with-lease` 替代）
- * - 禁止推送到 protected 分支（由调用方业务层校验，本 schema 不约束）
+ * 失败不抛错属响应侧约定：ok=false + stderr 供 UI 提示（见 GitPushRes）。
  */
 export const GitPushReqSchema = z.object({
   path: z.string().min(1),
-  // 远程名（默认 'origin'）
-  // 安全：拒绝 `::` 传输语法（ext::<cmd> 会让 git 直接运行本地命令）
-  // 与 `-` 开头的选项形参数；远程名/URL/本地路径均合法
+  // 拒绝 `::` 传输语法（ext::<cmd> 让 git 直接运行本地命令）与 `-` 开头选项；远程名 / URL / 本地路径均合法
   remote: z
     .string()
     .default('origin')
     .refine(isSafeGitRemote, 'remote 含非法形态（:: 传输语法 / - 开头选项 / 空串 / 换行）')
     .describe('远程名，默认 origin'),
-  // 引用规格（默认当前分支，可为 'master'、'feature/x' 等）
-  // 安全：拒绝选项形参数与空白（位置参数处的 --flag 会被 git 按选项解析）
+  // 拒绝选项形参数与空白（位置参数处的 --flag 会被 git 按选项解析）
   refspec: z
     .string()
     .default('')
     .refine(isSafeGitRefValue, 'refspec 含非法字符或选项形参数（- 开头 / 空白 / 多个冒号）')
     .describe('引用规格（省略时推送当前分支到同名远程分支）'),
-  // 是否设置上游（首次推送时使用），默认 false
   setUpstream: z.boolean().default(false).describe('是否设置上游（git push -u）'),
-  // 是否使用 --force-with-lease（更安全的强制推送），默认 false
   force: z.boolean().default(false).describe('是否使用 --force-with-lease 强制推送'),
 });
 
 /** git:push 响应 payload */
 export interface GitPushRes {
-  /** 推送是否成功（exit code === 0） */
+  /** 推送是否成功（exit code === 0；失败为 false 而非抛错） */
   readonly ok: boolean;
-  /** 推送的提交数（从 git push 输出解析） */
+  /** 推送的提交数（推送前后远程 HEAD SHA 对比得出；无法对比时为 0） */
   readonly pushedCount: number;
   /** 推送的目标远程 */
   readonly remote: string;
@@ -303,7 +280,7 @@ export interface GitPushRes {
   readonly stderr: string;
 }
 
-/** git:push 响应 zod schema（R2：响应契约校验） */
+/** git:push 响应 zod schema（响应契约校验用） */
 export const GitPushResSchema = z.object({
   ok: z.boolean(),
   pushedCount: z.number().int().nonnegative(),

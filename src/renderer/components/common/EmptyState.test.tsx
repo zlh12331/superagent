@@ -1,7 +1,3 @@
-// src/renderer/components/$1/EmptyState.test.tsx
-// EmptyState 空态组件单测：标题/描述/CTA/自定义图标
-// 纯展示组件（props 驱动），无需 i18n 与 query。
-
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 

@@ -1,15 +1,3 @@
-// src/renderer/components/layout/thread-item.tsx
-// 侧边栏 · 会话线程项（可拖拽 + 内联重命名 + 操作菜单）
-// ──────────────────────────────
-// 拆分背景（2026-08 重构）：自 Sidebar 641 行按职责提取。
-// 结构：
-// - SortableThreadItem：@dnd-kit useSortable 包装（拖拽句柄属性 + 位移样式）
-// - ThreadItem：纯展示行（标题/相对时间/操作菜单/上下文菜单/内联重命名）
-//
-// 说明：元信息只显示相对时间，**不显示消息预览**（用户要求）——
-// 故本组件不接收 lastMessage，勿再加回。
-// ──────────────────────────────
-
 import { useSortable } from '@dnd-kit/sortable';
 import {
   FolderOpen,
@@ -126,8 +114,6 @@ export function SortableThreadItem({
   );
 }
 
-// ── 子组件：会话列表项（对齐原型 thread-item 结构） ──────────────
-
 interface ThreadItemProps {
   /** 会话 id（重命名提交用） */
   readonly sessionId: string;
@@ -172,11 +158,8 @@ function ThreadItem({
   onOpenInExplorer,
   dragHandleProps,
 }: ThreadItemProps): ReactElement {
-  // 本地化文案
   const { t } = useTranslation();
-  // 内联重命名状态（双击标题或更多菜单触发；对齐参考项目 ThreadItem 内联重命名）
   const [renaming, setRenaming] = useState(false);
-  // 重命名提交（useRenameSession：mutation + invalidate 自动刷新列表）
   const { mutateAsync: renameSession } = useRenameSession();
 
   /** 提交重命名：空值/未变化时直接退出编辑态 */
@@ -188,25 +171,20 @@ function ThreadItem({
     }
     void renameSession({ id: sessionId, title: trimmed });
   };
-  // 元信息：仅时间（用户要求——不显示消息预览）
   const metaText = formatRelativeTime(updatedAt, t);
 
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>
-        {/* 会话行：外层为定位/样式容器（普通 div，非可聚焦），交互由各自控件承载，
-            避免外层 role=button 包裹内部按钮造成嵌套交互（axe nested-interactive） */}
         <div
           className={cn(
             'thread-item',
             isActive && 'active',
-            // I-S-001: 搜索防抖后匹配项添加临时高亮环（2 秒后由 Sidebar 清除）
             highlighted && 'ring-1 ring-accent/40',
           )}
           aria-current={isActive ? 'page' : undefined}
         >
           <div className="ti-row">
-            {/* ti-dot：拖拽手柄（dnd-kit），独立可聚焦，不含选择交互（title 提供可访问说明） */}
             <span
               className="ti-dot cursor-grab active:cursor-grabbing"
               title={t('sidebar.dragSort')}
@@ -227,7 +205,6 @@ function ThreadItem({
               }}
             >
               {renaming ? (
-                // 内联重命名输入框（uncontrolled + key：切换标题时重置 defaultValue）
                 <input
                   key={`rename-${title}`}
                   type="text"
@@ -250,7 +227,6 @@ function ThreadItem({
                 />
               ) : (
                 <div className="ti-title" title={`${title}（${t('sidebar.doubleClickRename')}）`}>
-                  {/* D4A：运行徽标——小转圈 + sr-only aria 文案（点对齐 Pin 图标的行内位置） */}
                   {isRunning && (
                     <>
                       <Loader2
@@ -261,9 +237,6 @@ function ThreadItem({
                       <span className="sr-only">{t('sidebar.sessionRunning')}</span>
                     </>
                   )}
-                  {/* 待审批徽标（2026-10-08）：非当前会话的审批请求只在它自己的
-                      ChatPanel 里渲染，切走后无从得知——不响应即 5 分钟超时被拒。
-                      用琥珀色沙漏与运行中转圈区分（前者需用户行动，后者是进度）。 */}
                   {hasPendingApproval && (
                     <>
                       <Hourglass
@@ -274,7 +247,6 @@ function ThreadItem({
                       <span className="sr-only">{t('sidebar.sessionPendingApproval')}</span>
                     </>
                   )}
-                  {/* 置顶标识（用户要求：置顶/未置顶有明显区别） */}
                   {isPinned && (
                     <Pin
                       className="text-accent mr-1 inline size-2.5 shrink-0 -translate-y-px"
@@ -287,7 +259,6 @@ function ThreadItem({
               )}
               <div className="ti-meta">{metaText}</div>
             </div>
-            {/* 重命名中隐藏操作按钮：给输入框让出整行宽度（此前 97px 挤在 52px 操作按钮旁） */}
             <div className={cn('ti-actions', renaming && 'hidden')}>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -346,7 +317,6 @@ function ThreadItem({
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-              {/* 文件树按钮（会话操作之后——用户要求的顺序：操作菜单在左，文件树在右） */}
               <Button
                 variant="ghost"
                 size="icon"

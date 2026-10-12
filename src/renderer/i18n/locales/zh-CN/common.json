@@ -2,15 +2,8 @@
   "$comment": "通用 UI 文案 · 中文（默认语言）",
   "providers": {
     "deepseek": "DeepSeek",
-    "openai": "OpenAI",
-    "anthropic": "Anthropic",
-    "ollama": "Ollama",
-    "moonshot": "Moonshot Kimi",
     "zhipu": "智谱 GLM",
-    "qwen": "通义千问",
-    "doubao": "豆包（火山方舟）",
-    "siliconflow": "硅基流动",
-    "openrouter": "OpenRouter"
+    "mimo": "小米 MiMo"
   },
   "common": {
     "loading": "加载中...",
@@ -642,8 +635,6 @@
     "experimental": {
       "title": "实验功能开关",
       "hint": "以下功能处于实验阶段，可能不稳定。启用后请关注可能的性能影响。",
-      "scanlines": "扫描线叠加",
-      "scanlinesDesc": "致敬终端 CRT 的扫描线视觉叠加",
       "reasoningCollapsed": "推理块默认折叠",
       "reasoningCollapsedDesc": "助手思考过程默认折叠展示（关闭 = 默认展开）",
       "autoCompact": "长会话自动压缩",
@@ -676,6 +667,7 @@
       "advancedConfig": "高级配置",
       "contextInputLabel": "上下文窗口（输入）",
       "contextOutputLabel": "上下文窗口（输出）",
+      "contextFormatError": "上下文窗口需为 Token 数或 k/M 快捷值（≤1000 万，如 872000、384k、1M）",
       "toolCallRoundsLabel": "工具调用轮数",
       "imageSupportLabel": "支持图片输入",
       "imageSupportYes": "支持",

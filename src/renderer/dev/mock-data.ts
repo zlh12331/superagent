@@ -1,11 +1,3 @@
-// src/renderer/dev/mock-data.ts
-// dev mock 响应样板数据（自 mock-api.ts 拆分）
-// ──────────────────────────────────────────────────────────────
-// 背景：mock-api.ts 契约对齐后行数膨胀（新增字段/类型化），超文件棘轮基线。
-// 遂将纯响应样板数据（usage/system/models/git）拆到此模块，mock-api 仅引用。
-// 数据形状与 shared 契约一致（satisfies IpcApi 仍负责最终校验）。
-// ──────────────────────────────────────────────────────────────
-
 import type { GitFileStatus, ModelsListRes, UsageSummaryRes } from '@code-agent/shared/renderer';
 
 /** session:getUsageSummary 样板（近 90 天假数据） */
@@ -14,7 +6,7 @@ export function mockUsageSummary(): UsageSummaryRes {
     total: { calls: 12, inputTokens: 12_000, outputTokens: 28_000, totalTokens: 40_000 },
     byModel: [
       {
-        modelId: 'deepseek-v4-flash',
+        modelId: 'deepseek-flash',
         calls: 8,
         inputTokens: 8_000,
         outputTokens: 20_000,
@@ -68,7 +60,7 @@ export function mockModels(): ModelsListRes {
   return {
     models: [
       {
-        id: 'deepseek-v4-flash',
+        id: 'deepseek-flash',
         label: 'DeepSeek V4 Flash',
         providerKind: 'deepseek',
         isRuntime: false,

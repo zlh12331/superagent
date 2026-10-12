@@ -1,6 +1,3 @@
-// src/main/infra/ai/team-service.test.ts
-// 团队服务单测：并行委派 + 结果汇总 + 失败隔离
-
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createTestDb } from '../../src/main/infra/storage/test-utils';
 
@@ -63,12 +60,10 @@ describe('TeamService', () => {
       '/tmp/proj',
     );
 
-    // 两个成员都被委派（2 次 startAgent）
     await vi.waitFor(() => {
       expect(stubs.mockStartAgent).toHaveBeenCalledTimes(2);
     });
 
-    // 完成两个成员回合（各自 sessionId）
     const listeners = stubs.turnListeners;
     const sessionIds = new Set<string>();
     for (const call of stubs.mockStartAgent.mock.calls) {
@@ -107,12 +102,11 @@ describe('TeamService', () => {
 
   it('runTeam：成员失败不阻断团队（失败隔离）', async () => {
     const stubs = createFakeAgent();
-    // 第二个成员回合抛错（模拟异常）
     const service = new TeamService(new SubagentManager(stubs.agentService));
 
     const promise = service.runTeam(
       [
-        { agent: 'nonexistent', task: '任务 A' }, // 未知代理 → run 立即抛错
+        { agent: 'nonexistent', task: '任务 A' },
         { agent: 'nonexistent', task: '任务 B' },
       ],
       '/tmp/proj',
@@ -135,7 +129,6 @@ describe('TeamService', () => {
       agent: 'general',
     });
 
-    // 阶段 1：成员回合委派
     await vi.waitFor(() => {
       expect(stubs.mockStartAgent).toHaveBeenCalledTimes(1);
     });
@@ -162,7 +155,6 @@ describe('TeamService', () => {
       durationMs: 100,
     });
 
-    // 阶段 2：成员完成后领导回合委派
     await vi.waitFor(() => {
       expect(stubs.mockStartAgent).toHaveBeenCalledTimes(2);
     });

@@ -1,6 +1,3 @@
-/* ──────────────────────────────────────────────────────────────
-   卡片系统 · TraeWork（工具调用 / 推理 / Plan / 审批）
-   ────────────────────────────────────────────────────────────── */
 .card {
   margin-top: 10px;
   border: 1px solid var(--border);
@@ -14,7 +11,6 @@
     box-shadow var(--duration-state) ease;
 }
 
-/* 左侧状态光条 */
 .card::before {
   content: "";
   position: absolute;
@@ -83,9 +79,6 @@ button.card-head {
   letter-spacing: 0.04em;
 }
 
-/* 状态色由底色承载、文字保持中性 --text：彩色小字（10px/600）压浅灰卡头
-   在双主题都到不了 AA 4.5（基色实测 2.19-3.8，*-text 深色层也仅 3.6-4.4），
-   色相语义交给徽章底色（对齐 fuzzy/palette 选中态「色由底承载」配方） */
 .card-status.running {
   background: var(--accent-glow);
   position: relative;
@@ -104,7 +97,6 @@ button.card-head {
 }
 
 .card-status.success {
-  /* 回归绿色语义（此前误用品牌紫，与 running 徽章近乎同色难分辨） */
   background: color-mix(in srgb, var(--success) 8%, transparent);
 }
 
@@ -120,7 +112,6 @@ button.card-head {
   padding: 12px;
 }
 
-/* 工具调用卡片（可折叠） */
 .tool-card {
   cursor: pointer;
 }
@@ -150,7 +141,6 @@ button.card-head {
   color: var(--accent);
 }
 
-/* running：图标替换为 spinner */
 .tool-card:has(.card-status.running) .card-icon {
   position: relative;
 }
@@ -173,7 +163,6 @@ button.card-head {
   will-change: transform;
 }
 
-/* running：左侧进度条（quiet，无 blur 发光） */
 .tool-card:has(.card-status.running)::after {
   content: "";
   position: absolute;
@@ -187,7 +176,6 @@ button.card-head {
   pointer-events: none;
 }
 
-/* 成功收束（签名 R2）：左缘收成短点 */
 .tool-card.is-settled::after {
   content: "";
   position: absolute;
@@ -202,7 +190,6 @@ button.card-head {
   animation: toolSettle var(--duration-state) var(--ease-soft) both;
 }
 
-/* 失败（签名 R3）：左缘静态 error 条 */
 .tool-card.is-error::after {
   content: "";
   position: absolute;
@@ -222,7 +209,6 @@ button.card-head {
   padding: 8px 0;
 }
 
-/* 推理块 */
 .reasoning-block {
   margin-top: 8px;
   border: 1px solid var(--border);
@@ -285,8 +271,6 @@ button.card-head {
   display: block;
   animation: reasoningReveal var(--duration-reveal) var(--ease-out);
 }
-
-/* ── 审批卡 Diff 容器（表格样式统一在 styles/diff.css 的 DiffRowsTable）── */
 
 .approval-diff-wrapper {
   font-family: var(--font-mono);

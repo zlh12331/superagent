@@ -1,7 +1,3 @@
-// src/renderer/components/chat/chat-status-bar.tsx
-// 聊天状态条（搜索入口 + 运行状态指示）——自 ChatPanel 提取
-// ──────────────────────────────────────────────────────────────
-
 import { Search } from 'lucide-react';
 import type { ReactElement } from 'react';
 

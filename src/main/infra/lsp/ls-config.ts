@@ -1,29 +1,14 @@
-// src/main/infra/lsp/ls-config.ts
-// 语言服务器解析：扩展名 → 语言 → 服务器命令（内置默认 + 用户覆盖）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 内置默认服务器表（stdio 约定；对齐主流 LSP server 的启动方式）
-// - 文件扩展名 → 语言标识映射（工具入参只有文件路径）
-// - parseServerCommand：用户配置的命令行字符串 → 结构化 spec（空白分隔）
-// - resolveLsServer：按文件解析生效服务器（override 优先，缺省回落内置）
-//
-// 设计原则：
-// - 纯函数无副作用（可测性）；不校验命令存在性（启动失败由 manager/工具层兜底）
-// - 只收录 stdio 模式成熟的主流服务器；未收录语言明确报错（不伪造能力）
-// ──────────────────────────────────────────────────────────────
-
-/** 语言服务器启动规格 */
+// ls-config.ts：语言服务器配置——内置四语言启动规格 + 扩展名映射 + 用户覆盖解析（纯函数）
 export interface LsServerSpec {
   readonly command: string;
   readonly args: readonly string[];
 }
 
-/** 支持的语言标识 */
+// JS 系全走 typescript-language-server（它同时服务 js/jsx——不单列 javascript）
 export const SUPPORTED_LS_LANGUAGES = ['typescript', 'python', 'go', 'rust'] as const;
-/** 支持的语言标识（typescript / python / go / rust，见 SUPPORTED_LS_LANGUAGES） */
 export type LsLanguage = (typeof SUPPORTED_LS_LANGUAGES)[number];
 
-/** 内置默认服务器（stdio 约定；用户可在设置中按语言覆盖） */
+// 内置规格 = PATH 里可执行的标准 LSP 命令（用户机器须自备；不在则该语言 LSP 能力降级）
 const BUILTIN_SERVERS: Readonly<Record<LsLanguage, LsServerSpec>> = {
   typescript: { command: 'typescript-language-server', args: ['--stdio'] },
   python: { command: 'pyright-langserver', args: ['--stdio'] },
@@ -31,7 +16,6 @@ const BUILTIN_SERVERS: Readonly<Record<LsLanguage, LsServerSpec>> = {
   rust: { command: 'rust-analyzer', args: [] },
 };
 
-/** 扩展名 → 语言映射（小写含点；ts/js 家族共用 tsserver 生态） */
 const EXT_TO_LANGUAGE: Readonly<Record<string, LsLanguage>> = {
   '.ts': 'typescript',
   '.tsx': 'typescript',
@@ -47,22 +31,17 @@ const EXT_TO_LANGUAGE: Readonly<Record<string, LsLanguage>> = {
   '.rs': 'rust',
 };
 
-/**
- * 按文件路径解析语言标识（大小写不敏感；无扩展名/未收录返回 undefined）
- */
+/** 扩展名 → 语言（无扩展名/未映射返回 undefined——该文件不走 LSP） */
 export function languageForFile(filePath: string): LsLanguage | undefined {
   const dot = filePath.lastIndexOf('.');
   if (dot === -1) {
     return undefined;
   }
   const ext = filePath.slice(dot).toLowerCase();
-  // 扩展名后缀截断（如 ".d.ts" 命中 .ts；目录段中的点不影响 lastIndexOf 取尾）
   return EXT_TO_LANGUAGE[ext];
 }
 
-/**
- * 解析用户配置的命令行为结构化规格（首个空白前为命令，余为参数；空白串返回 undefined）
- */
+/** 用户配置行 "cmd arg1 arg2" → 启动规格（空白分隔，不处理引号——配置面保持简单） */
 export function parseServerCommand(line: string): LsServerSpec | undefined {
   const parts = line
     .trim()
@@ -75,13 +54,7 @@ export function parseServerCommand(line: string): LsServerSpec | undefined {
   return command !== undefined ? { command, args } : undefined;
 }
 
-/**
- * 按文件解析生效的服务器规格（用户 override 优先，缺省回落内置默认）
- *
- * @param filePath 目标文件绝对路径（决定语言）
- * @param overrides 按语言的服务器规格覆盖（结构化；来自设置经 parseServerCommand 转换）
- * @returns 语言 + 规格；文件类型未收录时 undefined（调用方给出明确错误）
- */
+/** 文件 → 语言 + 启动规格（一步到位入口） */
 export function resolveLsServer(
   filePath: string,
   overrides?: Readonly<Record<string, LsServerSpec>>,
@@ -93,9 +66,7 @@ export function resolveLsServer(
   return { language, spec: serverSpecForLanguage(language, overrides) };
 }
 
-/**
- * 按语言取生效服务器规格（override 优先，缺省回落内置默认）
- */
+/** 语言 → 规格：用户覆盖优先（命令非空才采纳），否则内置 */
 export function serverSpecForLanguage(
   language: LsLanguage,
   overrides?: Readonly<Record<string, LsServerSpec>>,

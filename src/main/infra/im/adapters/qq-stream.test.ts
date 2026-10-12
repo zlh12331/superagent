@@ -1,6 +1,3 @@
-// src/main/infra/im/adapters/qq-stream.test.ts
-// QQ 消息解析单测：Gateway 帧 → 入站消息 + access_token 获取（本地 HTTP 注入）
-
 import { createServer, type Server } from 'node:http';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
@@ -11,7 +8,6 @@ import {
   QqOpCode,
 } from './qq-stream';
 
-/** 构造 Gateway 帧 */
 function frame(t: string, d: unknown): QqGatewayFrame {
   return { op: QqOpCode.DISPATCH, t, d, s: 1 };
 }
@@ -117,7 +113,6 @@ describe('fetchQqAccessToken（access_token 获取）', () => {
     );
     expect(result.accessToken).toBe('tok-123');
     expect(result.expiresIn).toBe(7200);
-    // 请求体校验（appId/clientSecret 协议形状）
     expect(captured[0]?.body).toEqual({ appId: 'app-1', clientSecret: 'sec-1' });
   });
 

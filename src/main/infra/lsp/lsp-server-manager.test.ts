@@ -1,16 +1,7 @@
-// src/main/infra/lsp/lsp-server-manager.test.ts
-// LspServerManager 单测：LSP 服务器懒加载/复用/并发安全（正向/边界/异常三件套）
-// ──────────────────────────────────────────────────────────────
-// 测试策略（遵循"业务逻辑不 mock、外部依赖注入 fake"）：
-// - lspClientCtor 经构造注入 fake（共享实例桩，保持 new 语义）
-// - 懒加载缓存/并发去重/释放幂等全部真实实现
-// ──────────────────────────────────────────────────────────────
-
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LspClient } from './lsp-client';
 import { LspServerManager } from './lsp-server-manager';
 
-/** fake LspClient：initialize/dispose 可编程 */
 class FakeLspClient {
   readonly rootUri: string;
   readonly initialize = vi.fn(async () => {});
@@ -31,7 +22,6 @@ class FakeLspClient {
   static instances: FakeLspClient[] = [];
 }
 
-/** 构造桩：new 返回共享实例（每个 rootUri 一个） */
 class SharedlspClientCtor {
   constructor(options: {
     command: string;
@@ -68,16 +58,14 @@ describe('LspServerManager.getClient（三件套）', () => {
     const manager = makeManager();
     const first = await manager.getClient('file:///repo', '/repo/src/main.ts');
     const second = await manager.getClient('file:///repo', '/repo/src/other.ts');
-    expect(first).toBe(second); // 同根同语言复用
-    expect(FakeLspClient.instances).toHaveLength(1); // 只启动一次
+    expect(first).toBe(second);
+    expect(FakeLspClient.instances).toHaveLength(1);
     expect(FakeLspClient.instances[0]?.initialize).toHaveBeenCalledTimes(1);
-    // 内置默认：typescript → tsserver
     expect(FakeLspClient.instances[0]?.options.command).toBe('typescript-language-server');
   });
 
   it('正向：并发 getClient 共享同一初始化 Promise（防重复握手）', async () => {
     let resolveInit: (() => void) | undefined;
-    // 慢初始化：验证并发共享
     FakeLspClient.instances = [];
     const slowClient = new FakeLspClient({
       command: 'c',
@@ -92,7 +80,6 @@ describe('LspServerManager.getClient（三件套）', () => {
         }),
     );
     FakeLspClient.instances = [slowClient];
-    // 重新构造 manager 使用 slowClient（类构造桩返回共享实例）
     const manager2 = new LspServerManager({
       lspClientCtor: class {
         constructor() {
@@ -103,7 +90,6 @@ describe('LspServerManager.getClient（三件套）', () => {
     });
     const p1 = manager2.getClient('file:///repo', '/repo/a.py');
     const p2 = manager2.getClient('file:///repo', '/repo/b.py');
-    // 两个调用共享 pending promise：只有 1 次构造
     expect(FakeLspClient.instances).toHaveLength(1);
     resolveInit?.();
     const [c1, c2] = await Promise.all([p1, p2]);
@@ -119,7 +105,6 @@ describe('LspServerManager.getClient（三件套）', () => {
   });
 
   it('边界：同根不同语言 → 各自独立客户端（按语言路由）', async () => {
-    // 独立构造桩（Shared 桩按 rootUri 去重，无法体现语言维度）
     FakeLspClient.instances = [];
     const manager = new LspServerManager({
       lspClientCtor: FakeLspClient as unknown as typeof LspClient,
@@ -164,8 +149,7 @@ describe('LspServerManager.getClient（三件套）', () => {
     await expect(manager2.getClient('file:///repo', '/repo/a.ts')).rejects.toThrow(
       'lsp boot failed',
     );
-    expect(badClient.dispose).toHaveBeenCalled(); // 半开资源清理
-    // 不缓存：下次调用重新启动
+    expect(badClient.dispose).toHaveBeenCalled();
     await expect(manager2.getClient('file:///repo', '/repo/a.ts')).rejects.toThrow(
       'lsp boot failed',
     );
@@ -202,7 +186,7 @@ describe('LspServerManager.disposeAll', () => {
     await manager.disposeAll();
     expect(FakeLspClient.instances[0]?.dispose).toHaveBeenCalled();
     expect(FakeLspClient.instances[1]?.dispose).toHaveBeenCalled();
-    await expect(manager.disposeAll()).resolves.toBeUndefined(); // 幂等
+    await expect(manager.disposeAll()).resolves.toBeUndefined();
   });
 
   it('异常：dispose 抛错 → 不阻断其余客户端释放', async () => {
@@ -220,7 +204,6 @@ describe('LspServerManager.disposeAll', () => {
   });
 });
 
-/** 取第 i 个 fake 实例的启动命令（断言辅助） */
 function FakeLpCommand(index: number): string {
   return FakeLspClient.instances[index]?.options.command ?? '';
 }

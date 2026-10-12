@@ -1,13 +1,3 @@
-// src/main/infra/ai/providers/endpoint.test.ts
-// 端点 URL 推导单测（纯函数矩阵）
-//
-// 背景：端点 URL 曾有两份实现（调用路径 registry.ts 幂等、探测路径
-// models.handler.ts 不幂等），用户填 `/v1` 结尾地址时探测 404 拦保存。
-// 本文件锁定收敛后的单一真源语义，并含用户实际场景的回归用例。
-//
-// 与 SDK 的一致性另有独立契约测试（endpoint.contract.test.ts）——用真工厂
-// 捕获 SDK 实际请求 URL 对照本模块预测值，两端不可能静默漂移。
-
 import { describe, expect, it } from 'vitest';
 import {
   defaultApiFormat,
@@ -47,8 +37,6 @@ describe('resolveProviderBaseUrl（交给 SDK 的 baseURL）', () => {
   });
 
   it('已含版本段的供应商（moonshot/zhipu/qwen/doubao/siliconflow/openrouter）：不追加 /v1', () => {
-    // 这些供应商的默认地址自带版本段（/api/paas/v4、/compatible-mode/v1 等），
-    // 无条件补 /v1 会拼出 /v4/v1 这类无效路径
     expect(resolveProviderBaseUrl('zhipu', 'https://open.bigmodel.cn/api/paas/v4')).toBe(
       'https://open.bigmodel.cn/api/paas/v4',
     );
@@ -108,9 +96,6 @@ describe('resolveProviderRequestUrl（探测目标完整 URL）', () => {
   });
 
   it('回归（用户实际场景）：deepseek + http://127.0.0.1:9527/v1 不再拼出 /v1/v1', () => {
-    // 2026-10-08 缺陷：自定义模式 providerKind 恒为 deepseek，用户按
-    // OpenAI 习惯填 `/v1` 结尾地址 → 探测 /v1/v1/chat/completions → 404
-    // → 保存被拦（真实调用经幂等归一化反而是对的）
     const url = resolveProviderRequestUrl('deepseek', 'http://127.0.0.1:9527/v1');
     expect(url).toBe('http://127.0.0.1:9527/v1/chat/completions');
     expect(url).not.toContain('/v1/v1');
@@ -147,7 +132,6 @@ describe('resolveProviderRequestUrl（按 API 格式分派的协议路径）', (
   });
 
   it('anthropic-messages 用 anthropic 的归一化规则（自建网关不补 /v1）', () => {
-    // 若按 OpenAI 族补 /v1 会与 /messages 拼错位——此用例锁定格式与归一化族的绑定
     expect(
       resolveProviderRequestUrl('deepseek', 'https://gw.example.com', 'anthropic-messages'),
     ).toBe('https://gw.example.com/messages');

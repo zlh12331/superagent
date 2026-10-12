@@ -1,11 +1,3 @@
-// src/main/infra/memory-hub/adapter.test.ts
-// HttpMemoryPort 单测：HTTP 请求形状 / 响应解析 / 失败降级
-// ──────────────────────────────────────────────────────────────
-// 测试策略（遵循"外部依赖注入 fake"）：
-// - fetch 为网络边界 → vi.stubGlobal 注入 fake（业务判定逻辑保持真实）
-// - 验证点：路径 / 鉴权头 / snake_case body / 失败降级语义
-// ──────────────────────────────────────────────────────────────
-
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { HttpMemoryPort } from './adapter';
@@ -14,7 +6,6 @@ const mocks = vi.hoisted(() => ({
   fetch: vi.fn(),
 }));
 
-/** 构造 fetch 响应 fake */
 function respond(status: number, body?: unknown): Response {
   return {
     ok: status >= 200 && status < 300,

@@ -1,14 +1,3 @@
-// src/renderer/components/chat/use-message-nav-rail.ts
-// 消息导航轨状态：用户消息锚点 + 滚动联动的活跃圆点（自 ChatMessageList 提取）
-// ──────────────────────────────────────────────
-// 性能：滚动事件不逐条读 offsetTop（旧实现每次滚动强制整列表重排，200 条窗口
-// 下明显掉帧）。改为「一次测量得到有序偏移快照 + 每帧二分查找」，按职责三层拆分：
-// - useQuestionAnchors：每个用户消息派生一个跳转锚点（含预览截断）
-// - useMeasureOffsets：偏移快照与失效——消息集或渲染窗口变化即作废重测
-// - useActiveTurn：视口中线 → 活跃锚点序；rAF 合帧，卸载撤销，挂载先同步一次
-//   （内容不满一屏时不会有滚动事件，挂载不主动算则首帧无高亮且无法补算）
-// ──────────────────────────────────────────────
-
 import type { UIMessage } from 'ai';
 import { type RefObject, useEffect, useRef, useState } from 'react';
 import { useLatestRef } from '@/hooks/use-latest-ref';
@@ -65,8 +54,6 @@ interface NavRailState {
  * @returns 锚点列表、活跃 turn、合帧同步触发器
  */
 export function useMessageNavRail({ messages, scrollerRef }: NavRailOptions): NavRailState {
-  // 圆点代表用户消息而非每条消息（对齐参考项目 VerticalProgressBar）
-  // 纯派生数组：引用稳定性交给 React Compiler（下游 effect 以身份作「集合已变」信号）
   const userMessageIndices = messages
     .map((m, i) => (m.role === 'user' ? i : -1))
     .filter((i) => i >= 0);
@@ -86,7 +73,6 @@ function useQuestionAnchors(
   messages: readonly UIMessage[],
   userMessageIndices: readonly number[],
 ): readonly QuestionAnchor[] {
-  // 纯派生，交给 React Compiler 记忆化
   return userMessageIndices.map((messageIndex, i) => {
     const text = extractText(messages[messageIndex]?.parts ?? []);
     return {
@@ -112,7 +98,6 @@ function useMeasureOffsets({
   useEffect(() => {
     snapshotRef.current = null;
   }, [userMessageIndices]);
-  // 仅捕获 snapshotRef，引用稳定性交给 React Compiler
   return (el: HTMLElement): readonly MeasuredMessage[] => {
     const cached = snapshotRef.current;
     if (cached !== null && isSnapshotFresh(cached, el.scrollHeight)) return cached.measured;
@@ -141,22 +126,18 @@ function useActiveTurn({
   useEffect(() => {
     indicesRef.current = userMessageIndices;
   }, [userMessageIndices]);
-  // 引用稳定性交给 React Compiler（捕获 readMeasured / scrollerRef / ref / setter）
   const sync = (el: HTMLElement): void => {
     const midpoint = el.scrollTop + el.clientHeight / 2;
     const activeMessageIndex = findActiveMessageIndex(readMeasured(el), midpoint);
     const order = findUserOrder(indicesRef.current, activeMessageIndex);
     setActiveTurn((prev) => (prev === order ? prev : order));
   };
-  // sync / scheduleSync 身份不进 effect 依赖：实现经 ref 调最新闭包
-  // （统一 useLatestRef：写入在 effect 阶段，避免渲染期写 ref）
   const syncRef = useLatestRef(sync);
   const frameRef = useRef<number | null>(null);
   const scheduleSync = (): void => {
     if (frameRef.current !== null) return;
     frameRef.current = requestAnimationFrame(() => {
       frameRef.current = null;
-      // 回调延后一帧，容器可能已卸载 → 重新取而非复用旧引用
       const el = scrollerRef.current;
       if (el !== null) syncRef.current(el);
     });
@@ -167,8 +148,6 @@ function useActiveTurn({
     },
     [],
   );
-  // 依赖只留「重新同步」的触发信号；实现经 ref 调最新闭包，effect 体不读 scrollerRef.current
-  // （否则 exhaustive-deps 会要求把 .current 列入依赖——ref 身份本就稳定，属误报）
   const runSync = useRef(() => {
     const el = scrollerRef.current;
     if (el !== null) syncRef.current(el);

@@ -1,21 +1,3 @@
-// src/renderer/stores/transient/welcome-store.ts
-// 欢迎页模式状态管理（L2 客户端共享状态层 - transient）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 维护 isWelcomeMode 标志：决定 .view-chat 是否进入 welcome-mode
-// - 维护 pendingWorkingDir：可选的预设工作目录（如「在此文件夹新建会话」入口）
-// - 提供 enterWelcomeMode / exitWelcomeMode 原子操作
-//
-// 设计：
-// - 纯 UI 状态容器，不调用 IPC（创建会话由 HomePage 在发送消息时触发）
-// - 不持久化：每次启动应回到「无激活会话 → 默认进入欢迎页」的初始态
-//   （activeSessionId 由 sessions-store 持久化，若存在则 ChatPage 进入时退出欢迎模式）
-//
-// 交互对齐原型 docs/prototype/prototype-v2.html：
-// - 原型 setWelcomeMode(true) 在「新建会话」按钮 + 切换到 home 视图时触发
-// - 原型 setWelcomeMode(false) 在选中会话 / 发送消息创建会话后触发
-// ──────────────────────────────────────────────────────────────
-
 import { create } from 'zustand';
 
 import { useActiveSessionStore } from '@/stores/persistent/sessions-store';
@@ -34,7 +16,6 @@ interface WelcomeModeState {
    */
   readonly pendingWorkingDir: string | null;
 
-  // ── 操作方法 ────────────────────────────────────────
   /**
    * 进入欢迎页模式（可携带预设工作目录）
    *
@@ -66,12 +47,10 @@ interface WelcomeModeState {
  * ```
  */
 export const useWelcomeStore = create<WelcomeModeState>()((set) => ({
-  // 默认进入欢迎页模式（首次启动无激活会话）
   isWelcomeMode: true,
   pendingWorkingDir: null,
 
   enterWelcomeMode: (workingDir = null) => {
-    // 一致性约束：欢迎页 + 激活会话不可并存（避免调用方漏清导致状态不一致）
     useActiveSessionStore.getState().clearActiveSession();
     return set(() => ({
       isWelcomeMode: true,
@@ -88,7 +67,6 @@ export const useWelcomeStore = create<WelcomeModeState>()((set) => ({
   setWelcomeMode: (enabled) =>
     set((state) => ({
       isWelcomeMode: enabled,
-      // 退出时清空预设目录；进入时保留现有 pendingWorkingDir（避免误清）
       pendingWorkingDir: enabled ? state.pendingWorkingDir : null,
     })),
 

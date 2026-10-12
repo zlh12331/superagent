@@ -1,11 +1,3 @@
-// src/main/ipc/remote.handler.test.ts
-// remote 域 handler 单测：状态快照组装（启停后回读 / 未运行清空 / 异常态降级 /
-// 绑定范围切换先应用后落库）
-// ──────────────────────────────────────────────────────────────
-// 传输服务与局域网枚举均为注入 fake（网络地址是环境相关，必须桩化才稳定）；
-// remote-pref 为存储外部依赖，按 settings.handler.test 同款 vi.mock 桩化。
-// ──────────────────────────────────────────────────────────────
-
 import type { RemoteBindScope } from '@code-agent/shared/main';
 import { describe, expect, it, vi } from 'vitest';
 import type { IRemoteControlService } from '../infra/remote/remote-control';
@@ -20,7 +12,6 @@ vi.mock('../infra/storage/remote-pref', () => ({
   writeRemoteBindScope: mocks.writeRemoteBindScope,
 }));
 
-/** 构造可控状态的假传输服务 */
 function fakeService(state: {
   running: boolean;
   port: number | null;
@@ -64,7 +55,6 @@ function fakeService(state: {
   return { service, start, stop, setBindScope };
 }
 
-/** 地址枚举桩（固定网卡，避免测试依赖真实网络环境） */
 const network = {
   listAddresses: () => ['192.168.1.10', '10.0.0.5'],
   buildEndpoints: (addresses: readonly string[], port: number) =>
@@ -145,7 +135,6 @@ describe('remote handler', () => {
     expect(setBindScope).toHaveBeenCalledWith('loopback');
     expect(mocks.writeRemoteBindScope).toHaveBeenCalledWith('loopback');
     expect(res.bindScope).toBe('loopback');
-    // 切到仅本机后，快照端点切换为本机回环地址（不再列局域网端点）
     expect(res.addresses).toEqual(['http://127.0.0.1:45918']);
   });
 

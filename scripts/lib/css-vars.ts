@@ -1,9 +1,6 @@
 // scripts/lib/css-vars.ts
-// CSS 变量引用完整性规则核（纯函数层，供 check-css-vars.ts CLI 调用）
-// ──────────────────────────────────────────────────────────────
-// 从 check-css-vars.ts 抽出的原因：判据此前内联零测试（外部审计点名）。
-// 反例 fixture 测试见 css-vars.test.ts。
-// ──────────────────────────────────────────────────────────────
+// CSS 变量引用完整性规则核（纯函数层，供 check-css-vars.ts 调用）——判据从 CLI
+// 抽出以补测试（外部审计点名判据内联零测试）；反例 fixture 见 css-vars.test.ts
 
 /**
  * 允许「被引用但不在本仓定义」的变量前缀（运行时注入，静态扫描必然看不到定义）：
@@ -21,7 +18,6 @@ export const RUNTIME_INJECTED_PREFIXES: readonly string[] = ['--radix-', '--spac
  */
 export function extractRefs(line: string): string[] {
   const trimmed = line.trim();
-  // 单行注释 / 块注释续行（* 开头）/ CSS 注释内容行
   if (trimmed.startsWith('//') || trimmed.startsWith('*') || trimmed.startsWith('/*')) {
     return [];
   }
@@ -30,7 +26,6 @@ export function extractRefs(line: string): string[] {
     const name = match[1];
     const next = match[2];
     if (name === undefined) continue;
-    // 紧跟 ',' 说明有 fallback → 跳过
     if (next === ',') continue;
     refs.push(name);
   }
@@ -53,7 +48,6 @@ export function scanCssVars(content: string): CssVarScan {
   const defined = new Set<string>();
   const references: Array<{ name: string; line: number }> = [];
   content.split(/\r?\n/).forEach((line, i) => {
-    // 定义：`--name:` 形态（CSS 自定义属性声明）
     for (const m of line.matchAll(/(--[a-zA-Z0-9-]+)\s*:/g)) {
       if (m[1] !== undefined) defined.add(m[1]);
     }

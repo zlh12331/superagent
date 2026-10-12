@@ -1,11 +1,6 @@
 // scripts/scaffold/lib/args.ts
-// 极简 CLI 参数解析器（仅支持 --key value 与 --flag，零依赖）
-// ──────────────────────────────────────────────
-// 约束：
-// - 参数格式：--name value / --name=value / --flag
-// - 未知参数报错（防止拼写错误静默吞掉）
-// - 解析结果只读，便于测试
-// ──────────────────────────────────────────────
+// 极简 CLI 参数解析器（--key value / --key=value / --flag，零依赖）；
+// 未知参数报错（防拼写错误静默吞掉）；结果只读便于测试
 
 export interface ParsedArgs {
   /** 已解析的键值对（--key value） */
@@ -34,13 +29,11 @@ export function parseArgs(argv: readonly string[], knownFlags: readonly string[]
       continue;
     }
 
-    // 位置参数（不以 -- 开头）
     if (!raw.startsWith('--')) {
       positionals.push(raw);
       continue;
     }
 
-    // 分离 key 与行内值（--key=value 形式）
     const eqIndex = raw.indexOf('=');
     const key = eqIndex === -1 ? raw.slice(2) : raw.slice(2, eqIndex);
     if (key === '') {
@@ -48,7 +41,6 @@ export function parseArgs(argv: readonly string[], knownFlags: readonly string[]
     }
 
     if (eqIndex !== -1) {
-      // --key=value 形式
       const inlineValue = raw.slice(eqIndex + 1);
       if (inlineValue === '') {
         throw new Error(`参数 ${key} 缺少值（--${key}=<value>）`);
@@ -57,13 +49,11 @@ export function parseArgs(argv: readonly string[], knownFlags: readonly string[]
       continue;
     }
 
-    // --flag 形式：先按布尔处理，无默认值概念
     if (knownFlags.includes(key)) {
       flags.add(key);
       continue;
     }
 
-    // 非 flag：取下一个参数作为值
     const value = argv[i + 1];
     if (value === undefined || value.startsWith('--')) {
       throw new Error(`参数 --${key} 缺少值`);

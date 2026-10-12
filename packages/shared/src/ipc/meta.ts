@@ -1,25 +1,35 @@
-// packages/shared/src/ipc/meta.ts
-// IPC 通道元数据（纯字符串，零依赖，preload 沙箱安全）
-// ──────────────────────────────────────────────────────────────
-// 为什么需要本文件：
-// - preload 运行在 sandbox:true 下，不能 import 纯 ESM 包（如 zod）
-// - definitions.ts 含 zod schema（运行时求值），preload 引入会静默失败
-// - 因此把 channel + kind 提取为纯字符串元数据，preload 生成器只消费本文件
+// meta.ts：IPC 通道元数据表（channel + kind 的纯字符串单一真源，按域分组）
 //
-// 依赖方向：meta（零依赖）← definitions（加 schema）← channels（推导常量）
-// ──────────────────────────────────────────────────────────────
-
-/** 请求-响应方法元数据（channel + kind，无 schema） */
+// 为什么单独成表：preload 运行在 sandbox: true 下，引入含 zod 的 definitions.ts 会静默失败
+// （window.api 变 undefined）——故 channel/kind 抽成零依赖字符串，由 preload 生成器
+// （src/preload/utils/create-api.ts 的 createIpcApi）直接遍历本表，无需加载 zod。
+// 边界：本文件不装 schema 与类型标记（definitions.ts 在其上合并），也不定义失败语义。
+// 依赖方向：meta（本文件）← definitions.ts（+ zod schema）← channels.ts（deriveChannels 推导常量）。
+// 增改约束：域键即 channel 前缀，deriveChannels 在 channel 与域键不匹配时直接抛错；
+// channel 形态：请求 {domain}:{action}，事件 {domain}:event:{name} / {domain}:stream:{event}。
+// 新增一个 IPC 方法 = 本表一行 + definitions.ts 一行 + 主进程 handler 一个方法，其余自动。
+/**
+ * 声明一个请求-响应方法（渲染层调用后等待返回）
+ *
+ * 返回值用 `as const` 保持字面量类型：derive.ts 的通道键名推导与定义表的 kind 判别
+ * 都依赖字面量，一旦被拓宽成 string，IpcApi / InferHandlers 的推导会整体落空。
+ */
 export const request = <C extends string>(channel: C) => ({ kind: 'request', channel }) as const;
 
-/** 事件订阅方法元数据（channel + kind，无 payload 类型） */
+/**
+ * 声明一个事件订阅方法：渲染层订阅并用返回的函数退订
+ *
+ * 与 request 的差别是单向推送（调用不返回结果）；payload 类型由 definitions.ts 的
+ * payload 标记补上，本表不承载。
+ */
 export const event = <C extends string>(channel: C) => ({ kind: 'event', channel }) as const;
 
 /**
- * IPC 通道元数据表（单一真源的 channel 部分）
+ * IPC 通道元数据表（单一真源的 channel 部分，按域分组）
  *
  * definitions.ts 在此基础上合并 zod schema 与类型标记；
  * preload 生成器（createIpcApi）直接遍历本表，无需加载 zod。
+ * 条目一律经 request / event 包裹——kind 字段参与定义表判别，手写对象会破坏类型推导。
  */
 export const IPC_META = {
   app: {
@@ -27,55 +37,53 @@ export const IPC_META = {
     getInfo: request('app:getInfo'),
     openExternal: request('app:openExternal'),
     openDataDir: request('app:openDataDir'),
-    // 诊断包导出（日志 + 版本信息 → 用户选择路径的 zip，支持排障闭环）
+    // 诊断包导出：日志 + 版本信息 → 用户选定路径的 zip（排障闭环的出口）
     exportDiagnostics: request('app:exportDiagnostics'),
-    // 开机自启（读写 OS 登录项，不走 SQLite 设置——托盘菜单与设置页同源）
+    // 开机自启：读写 OS 登录项而非 SQLite 设置——托盘菜单与设置页必须同源
     getLoginItemSettings: request('app:getLoginItemSettings'),
     setLoginItemSettings: request('app:setLoginItemSettings'),
-    // 退出应用（走完整善后链：before-quit 协商 → dispose → 延迟安装）
+    // 退出应用：交给 app.quit 走完整善后链（关窗协商 → dispose 把残留 running 回合标 interrupted）
     quit: request('app:quit'),
-    // 深度链接事件（协议唤起 `code-agent://` 时主进程广播，渲染层导航）
+    // 深链接事件：code-agent:// 协议唤起时主进程广播，渲染层据此导航
     subscribeDeepLink: event('app:event:deepLink'),
-    // 登录项变更事件（主进程主动写入后推送真实回读值——托盘菜单改自启，设置页据此回显）
+    // 登录项变更事件：payload 为写入后的真实回读值（托盘菜单改自启 → 设置页回显）
     subscribeLoginItemChanged: event('app:event:loginItemChanged'),
   },
 
   window: {
-    // 应用界面缩放（35 号：主进程遍历全部 BrowserWindow 执行 setZoomFactor +
-    // Windows titleBarOverlay.height 联动——渲染层无 webContents 句柄，单点收口）
+    // 界面缩放：主进程统一 setZoomFactor（渲染层只管上报档位），并联动 Windows
+    // titleBarOverlay 高度——固定高度不随 CSS 缩放，不联动会与自绘顶栏错位
     applyZoom: request('window:applyZoom'),
   },
 
   backup: {
-    // 备份恢复点列表（37 号 B：backups/ 轮转环 + quick_check 健康度，最新在前）
+    // 恢复点列表：backups/ 轮转环 + quick_check 健康度，最新在前
     list: request('backup:list'),
-    // 手动立即备份（复用启动备份同一路径，进同一轮转环）
+    // 立即备份：与启动备份走同一路径、进同一轮转环（同样会被轮转淘汰）
     create: request('backup:create'),
-    // 从指定恢复点恢复（暂存 + 重启生效；运行中回合拒绝）
+    // 从恢复点恢复：暂存 + 重启生效，有运行中回合先拒绝（SESSION_IN_USE）
     restore: request('backup:restore'),
   },
 
   agent: {
     run: request('agent:run'),
     subscribeAsk: event('agent:event:ask'),
-    // 提问决议事件（含超时等非用户路径）——渲染层据此把提问移出队列，
-    // 与 agent:event:ask 配对：有提问必有决议，前端不会残留「僵尸提问弹窗」，
-    // 队列化后也不会被已超时的队头永久阻塞（2026-10-08）
+    // 提问决议事件（含超时等非用户路径）：与 subscribeAsk 配对——有提问必有决议，
+    // 渲染层据此把提问移出队列，否则残留「僵尸弹窗」并阻塞队头
     subscribeAskResolved: event('agent:event:ask:resolved'),
     respondAsk: request('agent:ask:respond'),
     stop: request('agent:stop'),
     approvalResponse: request('agent:approval:response'),
     subscribeStreamPart: event('agent:stream:part'),
-    // 回合开始事件（D4A：渲染层据此点亮侧栏跨会话运行徽标）
+    // 回合开始事件：把该会话乐观置为 running（侧栏运行徽标），与 stream:end / error 配对收尾
     subscribeStreamStart: event('agent:stream:start'),
     subscribeStreamEnd: event('agent:stream:end'),
     subscribeStreamError: event('agent:stream:error'),
     subscribeToolCall: event('agent:tool:call'),
     subscribeToolResult: event('agent:tool:result'),
     subscribeApprovalRequest: event('agent:approval:request'),
-    // 审批决议事件（含超时/中断等非用户决策路径）——渲染层据此清理待审批条目，
-    // 与 approval:request 配对：有请求必有决议，前端不会残留"僵尸审批卡"
-    // （2026-10-08：此前决议只走进程内 lifecycle，渲染层无从得知超时）
+    // 审批决议事件（含超时/中断等非用户路径）：与 subscribeApprovalRequest 配对——有请求必有决议，
+    // 渲染层据此清掉待审批条目，否则残留「僵尸审批卡」
     subscribeApprovalResolved: event('agent:approval:resolved'),
   },
 
@@ -83,18 +91,21 @@ export const IPC_META = {
     list: request('session:list'),
     get: request('session:get'),
     delete: request('session:delete'),
-    // 清空全部会话（36-D：破坏性批量操作，主进程拒绝运行中回合）
+    // 清空全部会话（破坏性批量操作）：主进程对运行中回合直接拒绝（SESSION_IN_USE）
     clearAll: request('session:clearAll'),
     rename: request('session:rename'),
     pin: request('session:pin'),
     create: request('session:create'),
     listRecentDirs: request('session:listRecentDirs'),
     exportAll: request('session:exportAll'),
-    // 导入会话（JSON 导出文件，version=1 格式；同 id 会话跳过并计数）
+    // 导入会话（只接受 version=1 导出文件）：同 id 已存在则整体跳过并计数——不合并、不覆盖
     importAll: request('session:import'),
     getUsageSummary: request('session:getUsageSummary'),
+    // 单会话回合摘要列表（按 seq 升序）
     getTurns: request('session:getTurns'),
+    // 跨会话最近回合（按 createdAt 倒序；设置页回合记录展示用）
     getRecentTurns: request('session:getRecentTurns'),
+    // 单个回合的消息明细（按 seq 升序）
     getTurnMessages: request('session:getTurnMessages'),
     compact: request('session:compact'),
   },
@@ -122,9 +133,9 @@ export const IPC_META = {
     back: request('browser:back'),
     forward: request('browser:forward'),
     reload: request('browser:reload'),
-    // 视口同步：渲染层测量占位区后推送矩形/缩放/可见性（高频 invoke，页面保活）
+    // 视口同步：渲染层测量占位区后推送矩形/缩放/可见性（高频 invoke；不可见时仅隐藏，页面保活）
     setViewport: request('browser:setViewport'),
-    // 严格模式（禁用预览页 JS）切换：与当前值不同时重建视图
+    // 严格模式切换（禁用预览页 JS）：与当前值不同才销毁重建视图并回放当前 URL
     configure: request('browser:configure'),
     getState: request('browser:getState'),
     subscribeState: event('browser:event:state'),
@@ -167,18 +178,17 @@ export const IPC_META = {
     removeRuntimeModel: request('settings:removeRuntimeModel'),
     listRuntimeModels: request('settings:listRuntimeModels'),
     updateRuntimeModel: request('settings:updateRuntimeModel'),
-    // 设置导出/导入（app_settings 全表 JSON；keychain 凭据除外）
+    // 设置导出/导入（app_settings 全表 JSON，version=1 格式；API Key 等 keychain 凭据不在其中）
     exportSettings: request('settings:export'),
     importSettings: request('settings:import'),
-    // 恢复所有设置为默认（删除 SETTING_KEYS 全部键，app_settings 回到空表）
+    // 恢复全部设置为默认：删除 SETTING_KEYS 全部键（app_settings 回到空表）
     resetAll: request('settings:resetAll'),
-    // 设置变更事件（主进程主动写入某域后推送——托盘菜单改关窗行为，设置页据此更新 store）
+    // 设置变更事件：主进程侧的写入（如托盘菜单改关窗行为）广播该域新值，设置页据此回显
     subscribeChanged: event('settings:event:changed'),
   },
 
   proxy: {
-    // 测试代理连通性（34 号网络代理：主进程经 proxiedFetch 探测轻量端点，
-    // 渲染层测试连接按钮消费；mode 非 fixed 时返回不可测）
+    // 代理连通性探测：主进程先重读库内配置注入 proxiedFetch 再探轻量端点；mode 非 fixed 返回 not-applicable
     test: request('proxy:test'),
   },
 
@@ -195,9 +205,9 @@ export const IPC_META = {
   memory: {
     list: request('memory:list'),
     clear: request('memory:clear'),
-    // 清空全部会话记忆（上游无全清接口，主进程枚举会话后批量删）
+    // 清空全部记忆：上游无全清接口（删除需显式给出 key、单次上限 100），主进程枚举会话后分批删
     clearAll: request('memory:clearAll'),
-    // 引擎状态（配置/运行/健康/数据量）与用户开关状态
+    // 引擎状态：用户开关 / 随包可用性 / sidecar 运行与健康 / 数据量（读审计镜像，不触发引擎）
     status: request('memory:status'),
   },
 
@@ -257,7 +267,7 @@ export const IPC_META = {
   },
 
   invalidation: {
-    // 失效域事件（主进程写路径声明受影响域后广播，渲染层前缀失效缓存——31 号设计文档）
+    // 缓存失效事件：主进程写路径声明受影响域后广播，渲染层按域前缀失效查询缓存
     subscribeDomains: event('invalidation:event:domains'),
   },
 

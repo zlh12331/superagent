@@ -1,15 +1,4 @@
-// src/main/infra/ai/tools/plan-mode.tools.ts
-// 计划模式切换工具（enter_plan_mode / exit_plan_mode，对齐 qwen-code）
-// ──────────────────────────────────────────────────────────────
-// 语义：
-// - enter_plan_mode：切换审批模式为 plan（只读探索：read 类 auto、
-//   写类 deny——permission-service 已实现硬拦截），记录进入前模式
-// - exit_plan_mode：恢复进入前模式（无记录回退 'ask' 保守默认）
-//
-// 子代理继承：子代理回合走同一 PermissionService → plan 模式下
-// 子代理写工具同样被拒（对齐 qwen subagent-plan-tool-policy）
-// ──────────────────────────────────────────────────────────────
-
+// plan-mode.tools.ts：plan 模式进出工具——enter 切 plan 只读态（记住原模式），exit 还原
 import type { ApprovalMode } from '@code-agent/shared/main';
 import { z } from 'zod';
 import { t } from '../../i18n';
@@ -17,22 +6,14 @@ import { writeApprovalMode } from '../../storage/approval-pref';
 import type { IPermissionService } from './permission-service';
 import type { Tool, ToolResult } from './tool';
 
-/** 进入 plan 模式前保存的模式（exit 时恢复；进程内单实例） */
 let previousMode: ApprovalMode | null = null;
 
-/**
- * 创建 enter_plan_mode 工具
- *
- * @param permissionService 权限服务（模式切换 + 持久化）
- */
 export function createEnterPlanModeTool(permissionService: IPermissionService): Tool {
   return {
     name: 'enter_plan_mode',
     description:
       '进入计划模式（只读）：在此模式下所有写操作（编辑/写入/命令执行）会被拒绝，仅允许读取与搜索。适用于先分析、制定方案、再征求用户同意的阶段。完成后调用 exit_plan_mode 恢复原模式。',
     permission: 'auto' as const,
-    // 零副作用控制面（只切换审批模式，不触碰工作区）——plan 模式需可用，
-    // 否则进入计划模式的入口自身被拦（2026-10-08 类别化后脱离名单豁免）
     category: 'control' as const,
     inputSchema: z.object({
       reason: z.string().optional().describe('进入计划模式的原因（记录用）'),
@@ -57,19 +38,12 @@ export function createEnterPlanModeTool(permissionService: IPermissionService): 
   };
 }
 
-/**
- * 创建 exit_plan_mode 工具
- *
- * @param permissionService 权限服务（模式切换 + 持久化）
- */
 export function createExitPlanModeTool(permissionService: IPermissionService): Tool {
   return {
     name: 'exit_plan_mode',
     description:
       '退出计划模式：恢复进入计划模式前的审批模式（未记录则回退 ask 保守默认）。在方案确认、需要执行写操作时调用。',
     permission: 'auto' as const,
-    // 零副作用控制面（只切换审批模式）——与 enter_plan_mode 对称归入 control，
-    // 计划模式放行由类别判据承担（2026-10-08）
     category: 'control' as const,
     inputSchema: z.object({}),
     async execute(): Promise<ToolResult> {

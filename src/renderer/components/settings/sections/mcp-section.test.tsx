@@ -1,6 +1,3 @@
-// src/renderer/components/$1/mcp-section.test.tsx
-// parseHeadersText 纯函数测试（请求头文本解析：Key: Value 每行一条）
-
 import { describe, expect, it } from 'vitest';
 import { parseHeadersText } from './mcp-section';
 

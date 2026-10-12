@@ -1,11 +1,3 @@
-// src/main/infra/ai/tools/tools-gaps.test.ts
-// 工具域 7a 缺口补全：lsp_references 空/非 Error、edit_file 边界全路径、
-// write_file 拦截/追加、glob 省略 path（真实 FileService/SearchService + 临时目录）
-//
-// 豁免说明：read-file/glob 的 zod transform（v ?? undefined）由 tool-executor 的
-// schema.parse 执行，测试直接调 execute 传原始值，transform 分支测试路径不可达
-// （SDK 层行为，非业务逻辑）。
-
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -23,7 +15,6 @@ import { createWriteFileTool } from './write-file.tool';
 let workDir: string;
 let sessionCounter = 0;
 
-/** 每次用例独立 sessionId（readTracker 按 session 隔离，避免跨用例污染） */
 function createCtx(): ToolContext {
   sessionCounter += 1;
   return {
@@ -53,7 +44,6 @@ describe('工具域 7a 缺口补全', () => {
       } as unknown as LspServerManager;
       const tool = createLspReferencesTool(manager);
 
-      // 路径经 resolveWithinWorkspace 收口（2026-09-08）：须用工作区内路径
       const result = await tool.execute({ filePath: 'a.ts', line: 1, character: 2 }, createCtx());
 
       expect(result.output).toContain('未找到引用位置');
@@ -89,7 +79,6 @@ describe('工具域 7a 缺口补全', () => {
   });
 
   describe('edit_file 边界', () => {
-    /** 创建文件并先 read（满足 priorReadEnforcement；read/edit 共享同一 sessionId） */
     async function readThenEdit(file: string): Promise<{
       tool: ReturnType<typeof createEditFileTool>;
       ctx: ToolContext;

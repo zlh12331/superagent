@@ -1,9 +1,3 @@
-// src/renderer/providers/theme-provider.test.tsx
-// ThemeProvider 批次7 缺口补全：主题应用副作用 + system 解析 + matchMedia 监听
-//
-// 测试要点：dark/light 应用到 html class、system 模式按 matchMedia 解析、
-// setTheme 更新 store 与 DOM、Provider 外 useTheme 抛错、matchMedia change 响应
-
 import { act, render, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useSettingsStore } from '@/stores/persistent/settings-store';
@@ -109,7 +103,6 @@ describe('ThemeProvider 批次7 缺口补全', () => {
     );
     expect(document.documentElement.classList.contains('dark')).toBe(true);
     expect(addEventListener).toHaveBeenCalled();
-    // 模拟系统偏好变化：dark → light
     matches = false;
     act(() => {
       changeHandler?.();
@@ -136,7 +129,6 @@ describe('ThemeProvider 批次7 缺口补全', () => {
         <div>内容</div>
       </ThemeProvider>,
     );
-    // dark 主题（非 system）：useEffect 不注册监听
     expect(addEventListener).not.toHaveBeenCalled();
   });
 });

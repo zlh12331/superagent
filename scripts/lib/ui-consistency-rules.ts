@@ -1,13 +1,9 @@
 // scripts/lib/ui-consistency-rules.ts
-// 渲染层写法一致性规则核（纯函数层，供 check-ui-consistency.ts CLI 调用）
-// ──────────────────────────────────────────────────────────────
-// 从 check-ui-consistency.ts 抽出的原因：七条 error 级规则的判据（含豁免语义）
-// 此前内联零测试（外部审计点名）。反例 fixture 测试见 ui-consistency-rules.test.ts
-// ——每条规则都有「最小违规样本必须命中 + 干净/豁免样本必须放过」的双向断言。
-//
-// relFile 口径：posix 相对路径（CLI 侧 relative() 结果需统一转 '/'），
-// 使 fileFilter 与平台无关。
-// ──────────────────────────────────────────────────────────────
+// 渲染层写法一致性规则核（纯函数层，供 check-ui-consistency.ts 调用；从 CLI 抽出
+// 以补测试——外部审计点名判据内联零测试）。relFile 口径为 posix 相对路径（CLI 侧
+// relative() 结果须统一转 '/'），fileFilter 与平台无关。豁免语义：纯注释行跳过 /
+// 上一行 noArrayIndexKey 豁免 index-key / raw-button 看前后 ±3 行内的归属类名或
+// aria 语义 / mutation-on-error 看选项块内有无 onError
 
 export interface UiRule {
   readonly id: string;
@@ -27,7 +23,6 @@ export const UI_RULES: readonly UiRule[] = [
   {
     id: 'join-class',
     desc: "className 内 join(' ') 手工拼接（条件类统一走 cn()）",
-    // 限定 className 上下文：命令参数等业务拼接（如 args.join(' ')）不属样式
     pattern: /className.*\.join\(' '\)|\.join\(' '\).*"/,
     fileFilter: (relFile) => relFile.endsWith('.tsx'),
   },
@@ -45,63 +40,39 @@ export const UI_RULES: readonly UiRule[] = [
   },
   {
     id: 'try-finally',
-    // React Compiler 对含 try/finally 的函数**静默跳过**（bail-out），该组件失去自动
-    // 记忆化——check:compiler 只断言产物整体生效，抓不到单个组件的 bail-out，
-    // 故以静态信号兜住回归（2026-09-11）。
     desc: 'try/finally 语句（React Compiler 不优化，触发组件级 bail-out）——改为 catch 过后统一复位',
-    // 只匹配语句形式 `} finally {`（Biome 固定此格式）；不匹配 Promise 的
-    // `.finally(() => {`（那是合法用法，如 settings-store 的落库静默处理）
     pattern: /\}\s*finally\s*\{/,
   },
   {
     id: 'inline-query-key',
-    // 规范：queryKey 必须是命名常量——域 hook（hooks/use-*.ts）内 export，或集中在
-    // lib/query/keys.ts。内联使**失效点与查询点失去共享引用**，key 形状一变就静默失配。
     desc: '内联 queryKey 字面量（应引用命名常量：域 hook 内 export 或 lib/query/keys.ts）',
     pattern: /queryKey:\s*\[/,
     fileFilter: (relFile) => relFile !== 'lib/query/keys.ts',
   },
   {
     id: 'direct-ipc',
-    // 规范：组件不直连 window.api——IPC 经域 hook 桥接（mock 可替换 + 契约测试可达）。
-    // 边界（2026-09-24 定案）：hooks/*.ts 与 lib/*.ts 是桥接/工具层，直连是其职责，豁免；
-    // 规则只管 .tsx 组件。
     desc: '组件直连 window.api（应经域 hook 桥接；hooks/lib 层豁免）',
     pattern: /\bwindow\.api\./,
     fileFilter: (relFile) => relFile.endsWith('.tsx'),
   },
   {
     id: 'legacy-bridge-guard',
-    // 2026-09-26 hasIpcBridge 收口：禁止再写旧字面量守卫（单一真源 lib/ipc.ts）。
-    // 注释中的示例已由「纯注释行跳过」豁免覆盖。
     desc: '旧式 window.api 可用性字面量判断（统一用 hasIpcBridge()，见 src/renderer/lib/ipc.ts）',
     pattern: /typeof window === 'undefined'\s*\|\|\s*window\.api === undefined/,
   },
   {
     id: 'raw-error-toast',
-    // 错误码解析单一真源是 unwrapErrorMessage（lib/ipc.ts）；
-    // toast.error(error.message) 会把 [CODE] 原样甩给用户。
     desc: 'toast 直出 error.message（应经 unwrapErrorMessage(error, getErrorMessage) 本地化）',
     pattern: /toast\.error\(\s*error\.message\s*\)/,
     fileFilter: (relFile) => relFile.endsWith('.ts') || relFile.endsWith('.tsx'),
   },
   {
     id: 'mutation-on-error',
-    // 规范：useMutation 选项对象必须含 onError——写路径失败必须反馈用户
-    //（纯 toast 语义统一 useMutationOnError（hooks/use-mutation-error.ts），
-    // 含回滚等附加逻辑的内联 onError 同样合规）。测试文件沿用 CLI 既有
-    // .test. 排除豁免；选项对象是多行块，「块内有无 onError」无法用单行
-    // 正则表达，与 raw-button 同走 scan 内的块级特判（花括号深度配对）。
     desc: 'useMutation 选项缺 onError（写路径失败必须反馈；纯 toast 语义用 hooks/use-mutation-error）',
     pattern: /useMutation\b.*?\(\s*\{/,
   },
   {
     id: 'render-ref-write',
-    // 2026-09-28 深读发现：7 处渲染期写 ref——React 并发渲染禁止（render 可被
-    // 丢弃，ref 会持被弃渲染的闭包），且组件被 React Compiler 判违规跳出优化。
-    // 已收敛 7 处到 useLatestRef（hooks/use-latest-ref.ts，写入在 effect 阶段）。
-    // 行级正则无法区分 effect 内外，存量的 effect 内写入（FileViewerPanel 先例
-    // 等 ~50 处）走棘轮基线（只降不升），新代码一律 useLatestRef。
     desc: '渲染层直接写 xxxRef.current（统一 useLatestRef；effect 内写入走棘轮基线）',
     pattern: /\b\w+Ref\.current\s*=\s*(?!=)/,
     fileFilter: (relFile) => relFile !== 'hooks/use-latest-ref.ts',
@@ -176,7 +147,6 @@ function findMutationOptionsCode(
     const blockLine = lines[j];
     if (blockLine === undefined) break;
     const trimmed = blockLine.trim();
-    // 注释行不参与深度配对（注释示例里的括号不构成结构信号）
     if (trimmed.startsWith('//') || trimmed.startsWith('*') || trimmed.startsWith('/*')) {
       continue;
     }
@@ -223,7 +193,6 @@ export function scanUiConsistency(files: readonly UiScanFile[]): UiViolation[] {
         if (line === undefined || !rule.pattern.test(line)) {
           continue;
         }
-        // 跳过纯注释行：注释里的用法示例/反例说明不构成实际代码信号
         const trimmed = line.trim();
         if (trimmed.startsWith('//') || trimmed.startsWith('*') || trimmed.startsWith('/*')) {
           continue;
@@ -233,7 +202,6 @@ export function scanUiConsistency(files: readonly UiScanFile[]): UiViolation[] {
         if (prev.includes('noArrayIndexKey')) {
           continue;
         }
-        // raw-button 规则：检测当前按钮开标签块（回溯 3 行）内的归属类名/选择器语义
         if (rule.id === 'raw-button') {
           const blockStart = Math.max(0, i - 3);
           const block = lines.slice(blockStart, i + 4).join('\n');
@@ -249,14 +217,12 @@ export function scanUiConsistency(files: readonly UiScanFile[]): UiViolation[] {
             continue;
           }
         }
-        // mutation-on-error 规则：选项块内（剔除注释行）无 onError → 违规；
-        // 整块消费避免块内行被本规则重复判定
         if (rule.id === 'mutation-on-error') {
           const { end, code } = findMutationOptionsCode(lines, i);
           if (!/\bonError\s*[:,]/.test(code)) {
             violations.push({ rule: rule.id, file: relFile, line: i + 1 });
           }
-          i = end; // 外层 i++ 落到块尾下一行
+          i = end;
           continue;
         }
         violations.push({ rule: rule.id, file: relFile, line: i + 1 });

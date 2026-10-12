@@ -1,6 +1,3 @@
-// src/main/infra/im/im-agent-bridge.test.ts
-// IM → Agent 桥接单测：安全模式检查 / 串行控制 / 回合事件回发
-
 import type { ApprovalMode } from '@code-agent/shared/main';
 import { TurnEventType } from '@code-agent/shared/main';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -10,15 +7,12 @@ import type { ISessionService } from '../storage/session-service';
 import { getImDefaultWorkingDir, ImAgentBridge } from './im-agent-bridge';
 import type { ImService } from './im-service';
 
-// 安全修复：沙箱目录从 homedir() 改为 app.getPath('userData')/im-workspace（使用点求值）
 vi.mock('electron', () => ({
   app: {
     getPath: (name: string) => `/tmp/test-userdata/${name}`,
   },
 }));
 
-// 群聊白名单（2026-09-08 安全修复）：默认空列表 = 群聊全部拒绝。
-// 用 vi.hoisted 暴露可变引用，供用例切换放行集合。
 const allowlistState = vi.hoisted(() => ({ allowed: [] as string[] }));
 vi.mock('../storage/im-allowlist-pref', () => ({
   isImGroupAllowed: (channel: string, chatId: string): boolean =>
@@ -29,12 +23,10 @@ vi.mock('../storage/im-allowlist-pref', () => ({
   },
 }));
 
-/** 桥接依赖的轻量 stub（无 mock 框架：手写最小实现） */
 function createStubs() {
   const sent: Array<{ kind: string; chatId: string; text: string }> = [];
   const messageHandlers: Array<(msg: unknown) => void> = [];
   const turnListeners: Array<(event: unknown) => void> = [];
-  // vi.fn 实例先保存（cast 成接口后 mock 方法被类型收窄）
   const mockSend = vi.fn(async (kind: string, chatId: string, text: string) => {
     sent.push({ kind, chatId, text });
   });
@@ -77,7 +69,6 @@ function createStubs() {
   return stubs;
 }
 
-/** 模拟渠道入站消息 */
 function incoming(
   overrides: Partial<{
     text: string;
@@ -100,7 +91,6 @@ function incoming(
 describe('ImAgentBridge', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // 白名单默认清空（群聊全部拒绝）；私聊不受影响
     allowlistState.allowed = [];
   });
 
@@ -189,7 +179,6 @@ describe('ImAgentBridge', () => {
       expect(stubs.mockStartAgent).toHaveBeenCalledTimes(1);
     });
 
-    // 断言无头调用：不传 webContents + 用户主目录
     const callArgs = stubs.mockStartAgent.mock.calls[0]?.[0] as {
       webContents?: unknown;
       workingDir: string;
@@ -199,7 +188,6 @@ describe('ImAgentBridge', () => {
     expect(callArgs.webContents).toBeUndefined();
     expect(callArgs.sessionId).toBeTruthy();
 
-    // 模拟回合事件：回合开始（捕获 turnId）→ 文本增量 → 工具调用 → 回合结束
     const listener = stubs.turnListeners[0];
     expect(listener).toBeDefined();
     listener?.({
@@ -235,17 +223,11 @@ describe('ImAgentBridge', () => {
     });
 
     await vi.waitFor(() => {
-      // 结束汇总回发（含工具 + tokens）
       expect(stubs.sent.some((s) => s.text.includes('✅ 完成'))).toBe(true);
       expect(stubs.sent.some((s) => s.text.includes('🔧 read_file'))).toBe(true);
       expect(stubs.sent.some((s) => s.text.includes('Tokens: 150'))).toBe(true);
     });
 
-    // Transcript 落库：**桥接不再落库**（2026-09-08 修复 S1 重复落库）
-    // AgentService 是唯一写入方：回合开始落 user、结束落 assistant 富 parts。
-    // 桥接若再写一遍会让同一条消息带不同 seq 落库两次（UNIQUE 不冲突 → 静默重复）。
-    // 这里断言桥接不再自行调用 appendMessage（mock 的 agentService 不会落库，
-    // 所以调用次数必须为 0）。
     await vi.waitFor(() => {
       expect(stubs.sent.some((s) => s.text.includes('✅ 完成'))).toBe(true);
     });
@@ -262,18 +244,15 @@ describe('ImAgentBridge', () => {
     );
     bridge.mount();
 
-    // 第一条消息开始执行（startAgent 不 resolve 完成信号——事件驱动）
     stubs.messageHandlers[0]?.(incoming({ messageId: 'm1' }));
     await vi.waitFor(() => {
       expect(stubs.mockStartAgent).toHaveBeenCalledTimes(1);
     });
 
-    // 执行中第二条消息：排队提示
     stubs.messageHandlers[0]?.(incoming({ messageId: 'm2', text: '再来一条' }));
     await vi.waitFor(() => {
       expect(stubs.sent.some((s) => s.text.includes('执行中'))).toBe(true);
     });
-    // startAgent 只被调用一次
     expect(stubs.mockStartAgent).toHaveBeenCalledTimes(1);
   });
 
@@ -301,8 +280,6 @@ describe('ImAgentBridge', () => {
 
   it('会话 id 取自 create 返回值：startAgent 与落库共用落库行 id（防幽灵会话）', async () => {
     const stubs = createStubs();
-    // 真实 create 内部自行生成 UUID 并以返回值给出——stub 必须返回不同 id
-    // 才能暴露"自造 id 与落库行不一致"的缺陷
     stubs.mockSessionCreate.mockResolvedValue('db-session-uuid');
     const bridge = new ImAgentBridge(
       stubs.imService,
@@ -319,8 +296,6 @@ describe('ImAgentBridge', () => {
     const runArgs = stubs.mockStartAgent.mock.calls[0]?.[0] as { sessionId: string };
     expect(runArgs.sessionId).toBe('db-session-uuid');
 
-    // 桥接不再自行落库（2026-09-08 修复 S1）：sessionId 的正确性由
-    // startAgent 入参保证（AgentService 用它作为唯一写入方的会话标识）
     stubs.turnListeners[0]?.({
       type: TurnEventType.TURN_END,
       sessionId: 'db-session-uuid',
@@ -354,7 +329,6 @@ describe('ImAgentBridge', () => {
     const firstSessionId = firstRunArgs.sessionId;
     expect(firstSessionId).toBeTruthy();
 
-    // 结束回合，释放串行锁
     stubs.turnListeners[0]?.({
       type: TurnEventType.TURN_END,
       sessionId: firstSessionId,
@@ -365,11 +339,8 @@ describe('ImAgentBridge', () => {
     await vi.waitFor(() => {
       expect(stubs.sent.some((s) => s.text.includes('✅ 完成'))).toBe(true);
     });
-    // 让出一个宏任务：汇总回发在 TURN_END 回调内同步完成，串行锁在其后
-    // 的微任务链末尾才释放——不等会导致第二条消息命中排队分支
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    // 第二条消息：重新尝试建会话（失败 id 不入 sessionMap）
     stubs.messageHandlers[0]?.(incoming({ chatId: 'chat-f', messageId: 'm2' }));
     await vi.waitFor(() => {
       expect(stubs.mockSessionCreate).toHaveBeenCalledTimes(2);
@@ -396,7 +367,6 @@ describe('ImAgentBridge 回合事件与边界补充', () => {
     bridge.mount();
     stubs.messageHandlers[0]?.(incoming());
     await vi.waitFor(() => expect(stubs.mockStartAgent).toHaveBeenCalled());
-    // 事件序列：START → TOOL_CALL → ERROR → TEXT_DELTA → END
     stubs.turnListeners[0]?.({ type: TurnEventType.TURN_START, turnId: 't-1' });
     stubs.turnListeners[0]?.({ type: TurnEventType.TOOL_CALL, toolName: 'grep' });
     stubs.turnListeners[0]?.({ type: TurnEventType.ERROR, message: 'boom' });
@@ -415,10 +385,8 @@ describe('ImAgentBridge 回合事件与边界补充', () => {
     expect(summary?.text).toContain('🔧 grep');
     expect(summary?.text).toContain('❌ boom');
     expect(summary?.text).toContain('Tokens: 123');
-    // TEXT_DELTA 经 flush 分条回发（间隔内合并、TURN_END 收尾 flush）
     expect(stubs.sent.some((s) => s.text === 'hello ')).toBe(true);
     expect(stubs.sent.some((s) => s.text === 'world')).toBe(true);
-    // 落库由 AgentService 负责（2026-09-08 修复 S1）：桥接不再自行落库
     await vi.waitFor(() => {
       const summary2 = stubs.sent.find((s) => s.text.includes('完成'));
       expect(summary2).toBeDefined();
@@ -455,7 +423,6 @@ describe('ImAgentBridge 回合事件与边界补充', () => {
       sessionId: 'session-1',
       reason: 'completed',
     });
-    // 汇总仍回发（桥接职责），但不再自行落库
     await vi.waitFor(() => {
       expect(stubs.sent.some((s) => s.text.includes('完成'))).toBe(true);
     });
@@ -476,7 +443,6 @@ describe('ImAgentBridge 回合事件与边界补充', () => {
     await vi.waitFor(() => {
       expect(stubs.sent.some((s) => s.text.includes('执行异常'))).toBe(true);
     });
-    // 会话已释放：第二条消息可执行（不再排队）
     stubs.messageHandlers[0]?.(incoming());
     await vi.waitFor(() => expect(stubs.mockStartAgent.mock.calls.length).toBe(2));
   });

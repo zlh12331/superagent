@@ -1,5 +1,3 @@
-// src/renderer/components/chat/streaming-footer.test.tsx
-// StreamingFooter 单测：status 播报 + typing-indicator 三点占位
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
@@ -15,7 +13,6 @@ describe('StreamingFooter', () => {
     expect(screen.getByText(t('chat.assistant'), { exact: false })).toBeDefined();
     const indicator = screen.getByRole('status');
     expect(indicator.getAttribute('aria-label')).toBe(t('chat.assistantTyping'));
-    // 三点弹跳占位
     expect(indicator.querySelectorAll('.ti-dot')).toHaveLength(3);
   });
 

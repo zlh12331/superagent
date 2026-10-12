@@ -1,12 +1,8 @@
-// src/renderer/components/settings/sections/dialogs/model-config-dialog.tsx
-// 模型配置弹窗（统一表单 · 服务商/自定义/编辑三模式）
-// ──────────────────────────────────────────────────────────────
-// 保存流程（文档 3.3.3 已定）：校验 → 连通性测试（失败阻止提交并标红）
-// → add/update → 失效 RUNTIME_MODELS_QUERY_KEY + MODELS_QUERY_KEY。
-// 高级配置区字段首版不持久化（文档 3.3.4 字段映射），仅表单交互。
-// ──────────────────────────────────────────────────────────────
-
-import type { ApiKeyProvider, RuntimeModelInfo } from '@code-agent/shared/renderer';
+import type {
+  ApiKeyProvider,
+  ModelCapabilitiesOverride,
+  RuntimeModelInfo,
+} from '@code-agent/shared/renderer';
 import { Loader2, TriangleAlert } from 'lucide-react';
 import { type ReactElement, useEffect, useState } from 'react';
 import { toast } from 'sonner';
@@ -22,6 +18,8 @@ import {
 import { useSetApiKey } from '@/hooks/use-api-key';
 import { useBuiltinModelsQuery } from '@/hooks/use-models';
 import {
+  type AddRuntimeModelInput,
+  type UpdateRuntimeModelInput,
   useAddRuntimeModel,
   useTestModel,
   useUpdateRuntimeModel,
@@ -30,9 +28,11 @@ import { useTranslation } from '@/i18n/use-translation';
 import { openExternal } from '@/lib/app-actions';
 import { providerApiKeyUrl } from '../provider-labels';
 import {
+  formatTokenLabel,
   ModelConfigFields,
   type ModelConfigFormValues,
   type ModelConfigMode,
+  parseTokenLabel,
 } from './model-config-fields';
 
 /** 模型配置弹窗 props（新增/编辑双模式，mode 与 editingModel 联动见字段注释） */
@@ -59,7 +59,6 @@ function createDefaultValues(): ModelConfigFormValues {
     displayName: '',
     requestUrl: '',
     apiKey: '',
-    // 默认 Chat Completions：兼容面最广，也是本字段引入前的历史行为
     apiFormat: 'openai-chat',
     timeoutSeconds: '',
     contextInput: '',
@@ -80,6 +79,8 @@ function createDefaultValues(): ModelConfigFormValues {
  * 集中一处后各保存分支只做 `...fields.displayName` 这类展开，不再重复写三元。
  * `apiKeyValue` 单独给出原始值（服务商模式需先单独调 setApiKey mutation）。
  */
+type TrimmedFields = ReturnType<typeof trimOptionalFields>;
+
 function trimOptionalFields(values: ModelConfigFormValues): {
   readonly displayName: Record<string, string>;
   readonly requestUrl: Record<string, string>;
@@ -97,12 +98,135 @@ function trimOptionalFields(values: ModelConfigFormValues): {
   const timeoutRaw = values.timeoutSeconds.trim();
   return {
     displayName: displayName !== '' ? { displayName } : {},
-    // update / add 契约里请求地址字段名是 baseUrl
     requestUrl: requestUrl !== '' ? { baseUrl: requestUrl } : {},
     apiKey: apiKey !== '' ? { apiKey } : {},
     apiKeyValue: apiKey !== '' ? apiKey : undefined,
     timeoutMs: timeoutRaw !== '' ? Math.round(Number(timeoutRaw) * 1000) : null,
   };
+}
+
+/**
+ * 高级配置表单值 → 能力覆盖 payload（k 字符串解析回 tokens）
+ *
+ * - 上下文输入/输出：非空且可解析才携带（解析失败由 validate 拦截，此处不触发）
+ * - 视觉（vision）：自定义模式无内置清单兜底，表单是唯一真源，'support'/'unsupport' 都携带；
+ *   服务商/编辑模式的预设以内置清单权威（默认值会误标文本模型为支持视觉），
+ *   仅 'unsupport' 携带 false（显式关闭）
+ * - 三项全空：编辑模式原覆盖存在 → null（显式清除，Update 三态语义）；
+ *   其余（新增模式 / 编辑但原无覆盖）→ undefined（不携带）
+ */
+function buildCapabilitiesOverride(
+  values: ModelConfigFormValues,
+  isCustom: boolean,
+  hadOverride: boolean,
+): ModelCapabilitiesOverride | null | undefined {
+  const contextWindowSize = parseTokenLabel(values.contextInput);
+  const maxOutputTokens = parseTokenLabel(values.contextOutput);
+  const vision =
+    isCustom || values.imageSupport === 'unsupport' ? values.imageSupport === 'support' : undefined;
+  if (contextWindowSize === undefined && maxOutputTokens === undefined && vision === undefined) {
+    return hadOverride ? null : undefined;
+  }
+  return {
+    ...(contextWindowSize !== undefined ? { contextWindowSize } : {}),
+    ...(maxOutputTokens !== undefined ? { maxOutputTokens } : {}),
+    ...(vision !== undefined ? { vision } : {}),
+  };
+}
+
+/** 编辑模式保存 payload（复用 trimOptionalFields 的预组装结果，避免分支内重复展开） */
+function buildUpdatePayload(
+  values: ModelConfigFormValues,
+  fields: TrimmedFields,
+  capabilities: ModelCapabilitiesOverride | null | undefined,
+): UpdateRuntimeModelInput {
+  return {
+    modelId: values.modelId.trim(),
+    ...fields.displayName,
+    ...fields.requestUrl,
+    ...fields.apiKey,
+    timeoutMs: fields.timeoutMs,
+    apiFormat: values.apiFormat,
+    ...(capabilities !== undefined ? { capabilities } : {}),
+  };
+}
+
+/** 新增（服务商模式）保存 payload：密钥走厂商级 keychain，不随模型落库 */
+function buildProviderAddPayload(
+  values: ModelConfigFormValues,
+  fields: TrimmedFields,
+  effectiveModelId: string,
+  capabilities: ModelCapabilitiesOverride | undefined,
+): AddRuntimeModelInput {
+  return {
+    modelId: effectiveModelId,
+    providerKind: values.providerKind,
+    ...fields.displayName,
+    timeoutMs: fields.timeoutMs,
+    ...(capabilities !== undefined ? { capabilities } : {}),
+  };
+}
+
+/** 新增（自定义模式）保存 payload：requestUrl / apiKey / apiFormat 随模型落库 */
+function buildCustomAddPayload(
+  values: ModelConfigFormValues,
+  fields: TrimmedFields,
+  effectiveModelId: string,
+  capabilities: ModelCapabilitiesOverride | undefined,
+): AddRuntimeModelInput {
+  return {
+    modelId: effectiveModelId,
+    providerKind: values.providerKind,
+    ...fields.requestUrl,
+    ...fields.apiKey,
+    ...fields.displayName,
+    timeoutMs: fields.timeoutMs,
+    apiFormat: values.apiFormat,
+    ...(capabilities !== undefined ? { capabilities } : {}),
+  };
+}
+
+/**
+ * 编辑模式表单值（已有配置 + 能力覆盖回显预填）
+ *
+ * 能力覆盖回显：tokens → K/M 显示（与保存侧 parseTokenLabel 双向换算）；
+ * vision 未覆盖（undefined）按默认「支持」显示——覆盖语义仅在用户改选时落库。
+ */
+function buildEditValues(editingModel: RuntimeModelInfo): ModelConfigFormValues {
+  const caps = editingModel.capabilities;
+  return {
+    ...createDefaultValues(),
+    providerKind: editingModel.providerKind,
+    modelId: editingModel.modelId,
+    displayName: editingModel.displayName ?? '',
+    requestUrl: editingModel.baseUrl ?? '',
+    apiFormat: editingModel.apiFormat ?? 'openai-chat',
+    timeoutSeconds:
+      editingModel.timeoutMs !== undefined ? String(editingModel.timeoutMs / 1000) : '',
+    ...(caps?.contextWindowSize !== undefined
+      ? { contextInput: formatTokenLabel(caps.contextWindowSize) }
+      : {}),
+    ...(caps?.maxOutputTokens !== undefined
+      ? { contextOutput: formatTokenLabel(caps.maxOutputTokens) }
+      : {}),
+    ...(caps?.vision === false ? { imageSupport: 'unsupport' } : {}),
+  };
+}
+
+/**
+ * 上下文窗口格式校验（非空必须可解析：纯 Token 数或 k/M 快捷值，≤ schema 上限）
+ *
+ * 独立成函数动机：validate 的 6 项范围校验已贴近阈值 15，这两个
+ * 「非空 && 不可解析」条件此前把认知复杂度推到 19。
+ */
+function contextFormatErrorOf(values: ModelConfigFormValues): string | null {
+  if (values.contextInput.trim() !== '' && parseTokenLabel(values.contextInput) === undefined) {
+    return 'settings.modelMgmt.contextFormatError';
+  }
+  if (values.contextOutput.trim() !== '' && parseTokenLabel(values.contextOutput) === undefined) {
+    return 'settings.modelMgmt.contextFormatError';
+  }
+  return null;
 }
 
 /**
@@ -131,8 +255,6 @@ export function ModelConfigDialog({
   const [advancedExpanded, setAdvancedExpanded] = useState(false);
   const [testing, setTesting] = useState(false);
 
-  // 服务商模式：厂商内置模型全集（listBuiltin，不依赖 keychain——
-  // 配置页为未配置用户服务；此前误用 models:list 的"已配置才显示"过滤导致死锁）
   const { data: builtinData } = useBuiltinModelsQuery(
     mode === 'provider' ? values.providerKind : undefined,
   );
@@ -141,22 +263,10 @@ export function ModelConfigDialog({
   const isCustom = mode === 'custom';
   const isProviderMode = mode === 'provider';
 
-  // 打开时按模式初始化表单（编辑模式预填；切换弹窗重置）
   useEffect(() => {
     if (!open) return;
     if (isEdit && editingModel !== undefined) {
-      setValues({
-        ...createDefaultValues(),
-        providerKind: editingModel.providerKind,
-        modelId: editingModel.modelId,
-        displayName: editingModel.displayName ?? '',
-        requestUrl: editingModel.baseUrl ?? '',
-        // 记录值回填；未设置（存量行）→ 默认 openai-chat（与历史行为一致）
-        apiFormat: editingModel.apiFormat ?? 'openai-chat',
-        // 毫秒 → 秒回显（1500 → '1.5'）；未设置 → 空串（= 不限制）
-        timeoutSeconds:
-          editingModel.timeoutMs !== undefined ? String(editingModel.timeoutMs / 1000) : '',
-      });
+      setValues(buildEditValues(editingModel));
     } else {
       setValues({
         ...createDefaultValues(),
@@ -209,6 +319,10 @@ export function ModelConfigDialog({
     if (!inRange(values.topK, 1, 100)) {
       return t('settings.modelMgmt.topKRange');
     }
+    const contextError = contextFormatErrorOf(values);
+    if (contextError !== null) {
+      return t(contextError);
+    }
     return null;
   };
 
@@ -219,12 +333,8 @@ export function ModelConfigDialog({
       const res = await testMutation.mutateAsync({
         providerKind: values.providerKind,
         ...(effectiveModelId !== '' ? { modelId: effectiveModelId } : {}),
-        // 表单里填了请求地址就传给主进程探测——编辑模式下改地址同样要测新地址
-        // （此前 !isEdit 守卫导致编辑模式永远测默认端点，改了地址不生效）
         ...(values.requestUrl.trim() !== '' ? { baseUrl: values.requestUrl.trim() } : {}),
         ...(values.apiKey.trim() !== '' ? { apiKey: values.apiKey.trim() } : {}),
-        // 自定义模式带上所选格式：探测须按该格式的协议路径与请求体发起，
-        // 否则会「按 Chat Completions 测 Responses/Anthropic 端点」而假红
         ...(isCustom ? { apiFormat: values.apiFormat } : {}),
       });
       if (!res.ok) {
@@ -235,7 +345,6 @@ export function ModelConfigDialog({
       setTesting(false);
       return true;
     } catch (err) {
-      // 连通性测试抛错（网络/权限）：视为测试失败，阻止提交
       setErrors((prev) => ({ ...prev, test: err instanceof Error ? err.message : String(err) }));
       setTesting(false);
       return false;
@@ -264,52 +373,41 @@ export function ModelConfigDialog({
     }
   };
 
-  /** 按模式分发保存：服务商模式密钥走厂商级 keychain，其余走模型级 */
+  /** 按模式分发保存：服务商模式密钥走厂商级 keychain，其余走模型级；
+   * capabilities 三态同口径携带：编辑模式原覆盖存在且清空三项 = null（显式清除），
+   * 有值 = 覆盖写入，其余 = 不携带（省略不改 / 新增未填）。
+   * 三模式 payload 构造各自提取为模块级纯函数（零分支）——分支内联展开会把
+   * 本函数认知复杂度推到 18（门槛 15），与 handleSave 当初的 40 同一病因 */
   const saveByMode = async (): Promise<void> => {
     const fields = trimOptionalFields(values);
+    const capabilities = buildCapabilitiesOverride(
+      values,
+      isCustom,
+      isEdit && editingModel?.capabilities !== undefined,
+    );
+    // Add 语义无「清除」（覆盖本来就存在才有清除对象）——null 只出现在编辑分支
+    const capabilitiesForAdd = capabilities === null ? undefined : capabilities;
     if (isEdit) {
-      await updateMutation.mutateAsync({
-        modelId: values.modelId.trim(),
-        ...fields.displayName,
-        ...fields.requestUrl,
-        ...fields.apiKey,
-        // '' → null：编辑弹窗清空超时即发送清除语义（回不限制）
-        timeoutMs: fields.timeoutMs,
-        apiFormat: values.apiFormat,
-      });
+      await updateMutation.mutateAsync(buildUpdatePayload(values, fields, capabilities));
       toast.success(t('settings.modelMgmt.modelUpdated'));
       return;
     }
     if (isProviderMode) {
-      // 服务商模式：API 密钥走提供商级 keychain（settings:setApiKey），
-      // 模型添加时省略 apiKey（主进程回退读 keychain 提供商 key）。
-      // 也不传 apiFormat——服务商模式的格式由 providerKind 决定（主进程按
-      // 默认格式路由），显式传会把「按 kind 决定」变成「按用户表单值决定」
       if (fields.apiKeyValue !== undefined) {
         await setApiKeyMutation.mutateAsync({
           provider: values.providerKind,
           apiKey: fields.apiKeyValue,
         });
       }
-      await addMutation.mutateAsync({
-        modelId: effectiveModelId,
-        providerKind: values.providerKind,
-        ...fields.displayName,
-        timeoutMs: fields.timeoutMs,
-      });
+      await addMutation.mutateAsync(
+        buildProviderAddPayload(values, fields, effectiveModelId, capabilitiesForAdd),
+      );
       toast.success(t('settings.modelMgmt.modelAdded'));
       return;
     }
-    // 自定义模式：API 密钥走模型级 keychain（addRuntimeModel 的 apiKey 参数）
-    await addMutation.mutateAsync({
-      modelId: effectiveModelId,
-      providerKind: values.providerKind,
-      ...fields.requestUrl,
-      ...fields.apiKey,
-      ...fields.displayName,
-      timeoutMs: fields.timeoutMs,
-      apiFormat: values.apiFormat,
-    });
+    await addMutation.mutateAsync(
+      buildCustomAddPayload(values, fields, effectiveModelId, capabilitiesForAdd),
+    );
     toast.success(t('settings.modelMgmt.modelAdded'));
   };
 
@@ -343,9 +441,7 @@ export function ModelConfigDialog({
             onOpenApiKeyUrl={() => {
               const url = providerApiKeyUrl(values.providerKind);
               if (url !== '') {
-                openExternal(url).catch(() => {
-                  // 打开失败静默：非关键路径
-                });
+                openExternal(url).catch(() => {});
               }
             }}
           />

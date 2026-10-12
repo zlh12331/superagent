@@ -1,25 +1,10 @@
-// src/main/infra/ai/tools/git-add.tool.ts
-// git_add 工具：暂存工作区改动到暂存区（git add）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 将指定路径的工作区改动添加到暂存区
-// - paths 为空时执行 git add -A（暂存所有改动）
-// - 修改仓库状态，需用户审批后执行
-//
-// 设计：
-// - permission='ask'：修改暂存区会影响后续 commit，需用户确认
-// - 路径基于 ctx.workingDir 解析（与 read_file/edit_file 一致）
-// - 通过 IGitService 注入，便于测试 mock
-// ──────────────────────────────────────────────────────────────
-
+// git-add.tool.ts：git_add 工具——暂存文件（git-service 承载）
 import { z } from 'zod';
 import type { IGitService } from '../../git/git-service';
 import { t } from '../../i18n';
 import type { Tool, ToolContext, ToolResult } from './tool';
 
 const GitAddInputSchema = z.object({
-  // 要暂存的路径列表（相对 workingDir 或绝对路径）
-  // 省略或空数组时暂存所有改动（git add -A）
   paths: z
     .array(z.string().min(1))
     .default([])
@@ -28,11 +13,6 @@ const GitAddInputSchema = z.object({
 
 type GitAddInput = z.infer<typeof GitAddInputSchema>;
 
-/**
- * 创建 git_add 工具（暂存改动到 Git 暂存区：paths 为空数组 = 全部暂存；ask 级审批）
- *
- * @param gitService Git 服务（执行实际暂存）
- */
 export function createGitAddTool(gitService: IGitService): Tool<GitAddInput> {
   return {
     name: 'git_add',
@@ -42,7 +22,6 @@ export function createGitAddTool(gitService: IGitService): Tool<GitAddInput> {
     permission: 'ask',
     category: 'edit',
     execute: async (input: GitAddInput, ctx: ToolContext): Promise<ToolResult> => {
-      // ctx.workingDir 已是绝对路径，作为 Git 仓库根传给 GitService
       const result = await gitService.add({
         path: ctx.workingDir,
         paths: input.paths,

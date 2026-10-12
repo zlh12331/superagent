@@ -1,14 +1,3 @@
-// src/renderer/components/settings/sections/remote-control-section.tsx
-// 设置 · 远程控制面板（局域网移动端配对入口）
-// ──────────────────────────────────────────────────────────────
-// 阶段 2.5 落地：主进程 RemoteControlService（HTTP 桥接 + UDP 发现）与
-// RemoteAgentBridge（无头执行）已就绪，本面板提供启停开关与配对凭据展示。
-// 阶段 3 追加：配对二维码——编码「端点#令牌」，手机相机扫开即进入内置控制页。
-// 令牌放 fragment 是有意的：fragment 不随请求发往服务端，也不进日志与 Referer。
-// 安全基线：令牌仅在运行期由 remote:getStatus 快照下发（停止后主进程置 null），
-// 面板不持久化令牌；关闭服务即撤销全部局域网入口。
-// ──────────────────────────────────────────────────────────────
-
 import type { RemoteBindScope, RemoteStatusRes } from '@code-agent/shared/renderer';
 import { Copy, Loader2, ShieldAlert, Smartphone } from 'lucide-react';
 import { toDataURL } from 'qrcode';
@@ -62,7 +51,6 @@ function PairingQrCode({ payload }: { readonly payload: string }): ReactElement 
   }
   return (
     <div className="flex flex-col items-center gap-1">
-      {/* 二维码白底由 PNG 自身携带（深色主题下反色码大多扫不出来） */}
       <img src={dataUrl} alt={t('settings.remote.qrAlt')} className="size-36 rounded" />
       <span className="text-muted-foreground text-2xs">{t('settings.remote.qrHint')}</span>
     </div>
@@ -140,7 +128,6 @@ export function RemoteControlSection(): ReactElement {
     startMutation.isPending || stopMutation.isPending || setBindScopeMutation.isPending;
 
   const handleToggle = (checked: boolean): void => {
-    // 失败反馈由 hook 层 onError 统一 toast（本地化错误文案），此处只处理成功
     if (checked) {
       startMutation.mutate(undefined, {
         onSuccess: () => toast.success(t('settings.remote.started')),
@@ -152,7 +139,6 @@ export function RemoteControlSection(): ReactElement {
     }
   };
 
-  // 失败反馈由 hook 层 onError 统一 toast；成功后快照已写入缓存（含新范围与端点）
   const handleBindScopeChange = (value: string): void => {
     setBindScopeMutation.mutate(value as RemoteBindScope, {
       onSuccess: () => toast.success(t('settings.remote.bindScopeChanged')),
@@ -211,7 +197,6 @@ export function RemoteControlSection(): ReactElement {
         onChange={(checked) => void handleToggle(checked)}
       />
 
-      {/* 绑定范围（lan=局域网可连 / loopback=仅本机；运行中切换即时生效，见 28-spec 两态 SegControl 形态） */}
       {data !== undefined && (
         <SettingRow
           label={t('settings.remote.bindScopeLabel')}

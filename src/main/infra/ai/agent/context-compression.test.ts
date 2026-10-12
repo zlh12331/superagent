@@ -1,16 +1,3 @@
-// src/main/infra/ai/agent/context-compression.test.ts
-// context-compression 单测：token 估算口径 / 上下文裁剪 / 预算压缩 / 窗口感知调度
-//
-// 测试要点（纯函数模块，真实实现 + gpt-tokenizer + SDK pruneMessages）：
-// 1. estimateTokenCount / estimateMessagesTokens：估算口径必须覆盖 provider
-//    真实可见文本（text / reasoning / tool-call 入参 / tool-result 输出 / 多模态）
-// 2. pruneContext：旧推理块回收、窗口外工具上下文成对删除（不留孤儿）、空消息清理
-// 3. compressByTokenBudget：预算内不动 / 两档压缩（先裁剪后丢弃）/ system 扣额
-//    / 切点不制造孤儿 tool_result（供应商 400）/ 兜底永不返回空列表
-// 4. compressContext：数量压缩（system 保留 + early 切片 + 工具消息合并）
-// 5. getCompactionBudget：大/中/小/极小窗口预算
-// 6. getCompactionDecision / getTokenBudgetDecision：四档判定与边界
-
 import type { ModelMessage } from 'ai';
 import { describe, expect, it } from 'vitest';
 import {
@@ -31,7 +18,6 @@ const user = (content: string): ModelMessage => ({ role: 'user', content });
 const assistant = (content: string): ModelMessage => ({ role: 'assistant', content });
 const system = (content: string): ModelMessage => ({ role: 'system', content });
 
-/** assistant 消息：任意 content parts（text / reasoning / tool-call 混排） */
 const assistantParts = (parts: unknown[]): ModelMessage =>
   ({ role: 'assistant', content: parts }) as unknown as ModelMessage;
 
@@ -42,7 +28,6 @@ const toolCallPart = (id: string, input: unknown = { path: 'src/a.ts' }): unknow
   input,
 });
 
-/** SDK v7 工具结果消息（tool-result part + output 判别联合） */
 const toolResult = (id: string, value: string): ModelMessage =>
   ({
     role: 'tool',
@@ -56,7 +41,6 @@ const toolResult = (id: string, value: string): ModelMessage =>
     ],
   }) as unknown as ModelMessage;
 
-/** v7 允许一条 tool 消息携带多个 tool-result 段 */
 const toolResults = (ids: string[]): ModelMessage =>
   ({
     role: 'tool',
@@ -68,7 +52,6 @@ const toolResults = (ids: string[]): ModelMessage =>
     })),
   }) as unknown as ModelMessage;
 
-/** 带工具调用的 assistant 消息（旧版 toolCalls 字段形态，供 compressContext 用例） */
 const assistantCall = (id: string): ModelMessage =>
   ({
     role: 'assistant',
@@ -76,11 +59,9 @@ const assistantCall = (id: string): ModelMessage =>
     toolCalls: [{ type: 'function', id, function: { name: 'grep', arguments: '{}' } }],
   }) as unknown as ModelMessage;
 
-/** 工具结果消息（旧版形态） */
 const legacyToolResult = (id: string): ModelMessage =>
   ({ role: 'tool', content: 'ok', toolCallId: id }) as unknown as ModelMessage;
 
-/** 收集消息里所有 tool-call / tool-result 的 id，用于校验配对完整性 */
 function collectToolIds(messages: ModelMessage[]): { calls: string[]; results: string[] } {
   const calls: string[] = [];
   const results: string[] = [];
@@ -277,7 +258,6 @@ describe('pruneContext（SDK pruneMessages 封装）', () => {
     const { calls, results } = collectToolIds(pruned);
     expect(calls).toEqual([]);
     expect(results).toEqual([]);
-    // 调用方与结果方一起消失 → 长度少 2
     expect(pruned).toHaveLength(TOOL_CONTEXT_KEEP_MESSAGES);
     expect(JSON.stringify(pruned)).not.toContain('很久以前的输出');
   });
@@ -337,7 +317,6 @@ describe('compressByTokenBudget（两档预算压缩）', () => {
   });
 
   it('超出预算：丢弃前缀，保留最新消息', () => {
-    // 预算 2：'字字'(2) + '字'(1) 反向累积时 1+2>2 → 只保留最后一条
     const messages: ModelMessage[] = [user('字字'), user('字')];
     expect(compressByTokenBudget(messages, 2)).toEqual([user('字')]);
   });
@@ -353,12 +332,10 @@ describe('compressByTokenBudget（两档预算压缩）', () => {
   it('system 占用先从预算扣除（否则压缩后总上下文仍超窗口）', () => {
     const bigSystem = system('系'.repeat(100));
     const messages: ModelMessage[] = [bigSystem, user('字'.repeat(50))];
-    // 预算恰好等于 system → 对话额度为 0 → 兜底仍保留最后一条 + system 不丢
     expect(compressByTokenBudget(messages, estimateTokenCount('系'.repeat(100)))).toEqual([
       bigSystem,
       user('字'.repeat(50)),
     ]);
-    // 预算小于 system → 对话额度归零，system 依然保留
     expect(compressByTokenBudget(messages, 10)[0]?.role).toBe('system');
   });
 
@@ -372,16 +349,13 @@ describe('compressByTokenBudget（两档预算压缩）', () => {
       toolResult('c1', huge),
       ...fillers,
     ];
-    // 预算 = 裁剪后的实际占用（早期 + filler）+ 余量
     const budget = estimateMessagesTokens([...early, ...fillers]) + 50;
     const result = compressByTokenBudget(messages, budget);
 
     expect(JSON.stringify(result)).not.toContain(huge);
-    // 没有第一档裁剪时，drop-oldest 会在巨型消息处 break 而丢掉更早的轮次
     expect(result).toContainEqual(user('最早的问题'));
     expect(result).toContainEqual(user('最早的追问'));
     expect(result).toHaveLength(messages.length - 2);
-    // coverage 插桩放大 gpt-tokenizer 编码 5K 字符多次遍历的耗时，放宽超时
   }, 20_000);
 
   it('裁剪后仍超预算：继续从后往前整条丢弃', () => {
@@ -412,7 +386,6 @@ describe('compressByTokenBudget（两档预算压缩）', () => {
     const call = assistantParts([toolCallPart('c1')]);
     const result = toolResult('c1', '工具输出');
     const tail = user('最新问题');
-    // 预算刚好够 result + tail → call 被切掉，result 成了无主孤儿
     const compressed = compressByTokenBudget(
       [call, result, tail],
       estimateMessagesTokens([result, tail]),
@@ -552,7 +525,6 @@ describe('getCompactionBudget（窗口感知预算）', () => {
 });
 
 describe('getCompactionDecision / getTokenBudgetDecision（四档判定）', () => {
-  // 100K 窗口：compactAt = 70000，warn 线 = 65000，hardLimit = 95000
   const Window = 100_000;
 
   it('ok：远低于压缩线', () => {

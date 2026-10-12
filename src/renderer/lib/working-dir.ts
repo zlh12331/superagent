@@ -1,13 +1,3 @@
-// src/renderer/lib/working-dir.ts
-// 会话工作目录解析（纯函数，可单测）
-// ──────────────────────────────────────────────────────────────
-// 唯一权威来源：会话元数据的 workingDir（后端落库值）。
-// 其余出现 workingDir 的地方都必须经此函数派生，不允许各组件自行读镜像：
-// - fileTreeStore.rootPath 是文件树内部缓存（仅 FileTreePanel 挂载时同步），
-//   终端 / Git 面板曾直接读它，导致侧栏未停留在文件视图时拿到 null
-// - welcomeStore.pendingWorkingDir 是「会话创建前的草稿目录」，不是会话属性
-// ──────────────────────────────────────────────────────────────
-
 /** 解析入参 */
 export interface WorkingDirSources {
   /** 调用方已持有的权威目录（如路由层从会话详情拿到的 session.workingDir） */

@@ -1,16 +1,6 @@
-// packages/shared/src/schemas/settings.ts
-// Settings 域 zod schema 单一真源（用户设置 / 敏感数据管理）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 集中定义 Settings 域 zod schema，作为 IPC 入参运行时校验的单一真源
-// - 当前仅提供 API Key 管理（getSecret / setSecret / deleteSecret）
-//   敏感数据通过主进程 safeStorage 加密存储，渲染层只读写明文
-//
-// 设计：
-// - provider 字段标识 API 提供商（如 'deepseek'），作为 keychain 的 key
-// - apiKey 明文由渲染层传入，主进程加密后存储
-// - getApiKeyRes 返回 string | null（未设置时为 null，不返回 undefined 避免 IPC 序列化问题）
-// ──────────────────────────────────────────────────────────────
+// settings.ts：Settings 域 IPC 契约（zod 入参/响应 schema + 类型）的单一真源——API Key 管理、设置持久化键
+// 白名单、遥测/审批模式、运行时自定义模型、设置导出导入
+// 边界：只定义形状与值域；落库（app_settings）/凭据（keychain）/代理、缩放等主进程应用点都在各自模块
 
 import { z } from 'zod';
 
@@ -32,8 +22,8 @@ import { ZOOM_LEVELS } from '../constants/zoom';
  * 仅用于「自定义模式」（手动填请求地址）的模型；服务商模式的格式由
  * providerKind 决定，不暴露本字段。
  *
- * ⚠️ 存储默认值为 `openai-chat`：历史上自定义模型一律按 Chat Completions
- * 调用，迁移时不得改变存量模型行为（2026-10-08 引入本字段）。
+ * ⚠️ 存储默认值为 `openai-chat`：自定义模型历史上一律按 Chat Completions
+ * 调用，迁移存量行（apiFormat 为 NULL）时不得改变既有模型的调用协议。
  */
 export const ModelApiFormatSchema = z.enum([
   'openai-chat',
@@ -44,7 +34,7 @@ export const ModelApiFormatSchema = z.enum([
 /** 自定义模型的 API 协议格式 */
 export type ModelApiFormat = z.infer<typeof ModelApiFormatSchema>;
 
-/** 全部 API 格式（渲染层下拉数据源；顺序 = 展示顺序） */
+/** 全部 API 格式（顺序 = 展示顺序；主进程读侧校验 DB 脏值时按此表判定成员资格） */
 export const MODEL_API_FORMATS = [
   'openai-chat',
   'openai-responses',
@@ -52,14 +42,17 @@ export const MODEL_API_FORMATS = [
 ] as const satisfies readonly ModelApiFormat[];
 
 /**
- * API Key 提供商标识
+ * API Key 提供商标识（10 家）
  *
- * 用作 keychain 的 key 前缀（如 'deepseek' → 'deepseek-api-key'）。
- * 与主进程 ProviderRegistry（src/main/infra/ai/providers）保持一致：
- * - deepseek：DeepSeek 官方 API（OpenAI Compatible）
+ * 用作 keychain 的 key 前缀（如 'deepseek' → 'deepseek-api-key'，拼法真源为
+ * 主进程 toKeychainKey）。与主进程 ProviderRegistry（src/main/infra/ai/providers）保持一致：
+ * - deepseek / moonshot / zhipu / qwen / doubao / siliconflow / openrouter：OpenAI Compatible 协议
  * - openai：OpenAI 官方 API
- * - anthropic：Anthropic Claude API
+ * - anthropic：Anthropic Claude API（Messages 协议）
  * - ollama：本地 Ollama 服务（无需 API Key，保留枚举项供 UI 展示）
+ *
+ * 扩展新供应商：主进程 PROVIDER_KINDS 与 BUILTIN_DEFINITIONS / BUILTIN_FACTORIES
+ * 同步各加一条，本枚举随之扩展。
  */
 export const ApiKeyProviderSchema = z.enum([
   'deepseek',
@@ -72,6 +65,7 @@ export const ApiKeyProviderSchema = z.enum([
   'doubao',
   'siliconflow',
   'openrouter',
+  'mimo',
 ]);
 
 /** API Key 提供商标识 TypeScript 类型 */
@@ -90,15 +84,14 @@ export const GetApiKeyReqSchema = z.object({
 /**
  * settings:getApiKey 响应 payload
  *
- * P0 安全修复：不再向渲染层回传明文 API Key。
- * 渲染层唯一合法的用途是判断"是否已配置"，明文只存在于主进程 keychain，
- * 经 setApiKey 写入、由主进程内部消费（llmClient）。
+ * 不回传明文 API Key：渲染层唯一合法的用途是判断"是否已配置"，明文只存在于
+ * 主进程 keychain，经 setApiKey 写入、由主进程内部消费（llmClient）。
  */
 export interface GetApiKeyRes {
   /** 是否已配置（true = keychain 中存在该 provider 的 Key） */
   readonly configured: boolean;
   /** 系统加密（safeStorage）是否可用——false 时 configured 恒为 false，
-   * 「密钥不可读」与「未配置」在调用方视角必须可区分（2026-09-28 深读收口） */
+   * 「密钥不可读」与「未配置」在调用方视角必须可区分 */
   readonly keychainAvailable: boolean;
 }
 
@@ -133,16 +126,18 @@ export interface SettingsResetAllRes {
   readonly settings: Record<string, unknown>;
 }
 
+/** settings:resetAll 响应 zod schema（响应契约校验用） */
 export const SettingsResetAllResSchema = z.object({
   settings: z.record(z.string(), z.unknown()),
 });
 
 /**
- * settings:set 可写键白名单（P0 收口）
+ * settings:set 可写键白名单
  *
  * 渲染层 settings-store 的全部持久化分组（persistSetting 的 key 实参集合）。
- * 白名单外的一律拒绝——此前 key 为自由字符串，渲染层可覆写主进程消费的
- * 任意 app_settings 键（如未来新增的 trusted 配置组），且持久化后重启仍生效。
+ * 白名单外的一律拒绝——若 key 为自由字符串，渲染层可覆写主进程消费的任意
+ * app_settings 键（如主进程内部配置组），且持久化后重启仍生效。
+ * 本表同时是 settings:resetAll 的删除范围与设置导入的写入白名单。
  *
  * 注意：'lsp' 是合法 UI 功能（用户按语言覆盖语言服务器命令），值级约束
  * 见 SettingsSetReqSchema 的 superRefine。
@@ -157,14 +152,14 @@ export const SETTING_KEYS = [
   'lsp',
   'workspace',
   'browser',
-  // 自动更新开关（settings.update.autoCheck；默认开，缺失/损坏视为开）
+  // 自动更新开关（settings.update：autoCheck 默认开、allowPrerelease 默认关；缺失/损坏按默认）
   'update',
-  // 关窗行为（settings.window.closeAction；默认 minimize=最小化到托盘，见 28-tray-spec）
+  // 关窗行为（settings.window.closeAction；默认 minimize=最小化到托盘，见 docs/implementation/28-tray-spec.md）
   'window',
   // 记忆功能开关（settings.memory.enabled；关闭后不捕获新记忆、不注入召回）
   'memory',
   // 系统通知（settings.notification：回合结束后台提醒的门控开关组，
-  // 主进程 notification.ts 发送前即时读取；缺失/损坏视为全开——既有行为）
+  // 主进程 notification.ts 发送前即时读取；缺失/损坏视为全开）
   'notification',
   // 网络代理（settings.proxy：{mode, url?, bypass?}；主进程 proxy-applier 四路径
   // 收口应用——启动/settings:set/import/resetAll；缺失/损坏视为 system 直通）
@@ -225,9 +220,9 @@ export const SettingsSetReqSchema = z
     }
   })
   .superRefine((cfg, ctx) => {
-    // 34 号：proxy 值级门禁（V9）——fixed 模式下 url 必须是合法 http(s) URL；
-    // 写拒在前 + resolver fail-open 兜底（导入路径绕过本 schema 时仍有防线），
-    // 无半生效状态
+    // proxy 值级门禁：fixed 模式下 url 必须是合法 http(s) URL。本 schema 只覆盖
+    // settings:set 通道；导入路径（applySettingsImport 白名单直写）不过本 schema，
+    // 那里靠 resolver 的 fail-open 兜底——双防线，写拒在前保证无半生效状态。
     if (cfg.key !== 'proxy') {
       return;
     }
@@ -270,9 +265,8 @@ export const SettingsSetReqSchema = z
     }
   })
   .superRefine((cfg, ctx) => {
-    // 35 号：appearance 值级门禁——zoom 必须是合法档位（ZOOM_LEVELS 单一真源）。
-    // settings:set 通道防御；导入路径不过本 schema，靠渲染层读侧 clampZoom 归一
-    // （双防线，35 号 spec §2.3）
+    // appearance 值级门禁：zoom 必须是合法档位（ZOOM_LEVELS 单一真源）。settings:set
+    // 通道防御；导入路径不过本 schema，靠渲染层读侧 clampZoom 归一——双防线。
     if (cfg.key !== 'appearance') {
       return;
     }
@@ -294,10 +288,10 @@ export const SettingsSetReqSchema = z
     }
   })
   .superRefine((cfg, ctx) => {
-    // 36 号 B：terminal 值级门禁——shell 必须是合法档位（TERMINAL_SHELL_CHOICES
-    // 单一真源，含平台不适用档位：跨平台写入合法、读侧回落是 34 号 fail-open
-    // 同款取舍），fontSize 必须是合法档位。settings:set 通道防御；导入路径不过
-    // 本 schema，靠渲染层读侧 clampFontSize 归一（双防线，35 号 §2.3 同构）
+    // terminal 值级门禁：shell / fontSize 必须是合法档位（TERMINAL_SHELL_CHOICES /
+    // TERMINAL_FONT_SIZES 单一真源）。档位集含平台不适用项——跨平台写入合法，
+    // 平台适用性由主进程读侧收窄（与 proxy fail-open 同款取舍）。settings:set 通道
+    // 防御；导入路径不过本 schema，靠渲染层读侧 clampFontSize 归一——双防线。
     if (cfg.key !== 'terminal') {
       return;
     }
@@ -326,9 +320,9 @@ export const SettingsSetReqSchema = z
     }
   })
   .superRefine((cfg, ctx) => {
-    // 37 号 A：editor 值级门禁——wordWrap/tabSize 字段存在时才校验（部分写入
-    // 合并语义：旧调用方只写 fontSize/vimMode 不受影响）。settings:set 通道
-    // 防御；导入路径不过本 schema，靠渲染层读侧 clamp 兜底（双防线，35 号 §2.3）
+    // editor 值级门禁：wordWrap / tabSize 字段存在时才校验——部分写入合并语义，
+    // 只写 fontSize / vimMode 的调用方不受影响。settings:set 通道防御；导入路径
+    // 不过本 schema，靠渲染层读侧 clampEditorTabSize 兜底——双防线。
     if (cfg.key !== 'editor') {
       return;
     }
@@ -365,10 +359,10 @@ export const SettingsSetResSchema = z.object({
 /**
  * settings:event:changed 事件 payload（主进程主动变更某个设置域后的推送）
  *
- * 为什么需要：正常路径下设置由渲染层写入（`settings:set`），渲染层 store 即真源；
- * 但托盘菜单等**主进程主动写入**（如「关闭时最小化到托盘」改 `window.closeAction`）
- * 绕过了渲染层 store ⇒ 不推送会让设置页显示旧值，且后续任何其它设置变更都会把旧值
- * 写回、静默覆盖（丢更新，见 docs/design/30-residency-fix-spec.md §3 P2-6）。
+ * 正常路径下设置由渲染层写入（`settings:set`），渲染层 store 即真源；但托盘菜单等
+ * **主进程主动写入**（如「关闭时最小化到托盘」改 `window.closeAction`）绕过了渲染层
+ * store ⇒ 不推送会让设置页显示旧值，且后续任何其它设置变更都会把旧值写回、静默覆盖
+ * （丢更新，见 docs/implementation/30-residency-fix-spec.md §3 P2-6）。
  *
  * `key` 复用 `SETTING_KEYS`（与 settings:set 同一域清单），`value` 为该域的完整新值。
  */
@@ -431,11 +425,14 @@ export const DeleteApiKeyResSchema = z.object({
 // ─── Telemetry 用户开关（隐私合规） ─────────────────────────────
 
 /**
- * 遥测级别（对标 VS Code telemetry.telemetryLevel / Cursor 双开关）
+ * 遥测级别（对标 VS Code telemetry.telemetryLevel 三档）
  *
- * - off：完全不初始化 Sentry，不上报任何错误和性能数据
- * - error-only：仅上报错误（tracesSampleRate = 0），不上报性能事务
- * - full：上报错误 + 性能事务（受 tracesSampleRate 采样率控制）
+ * 当前实现只区分「是否初始化 OTel」：off 跳过初始化，其余档位初始化后行为一致
+ * （OTLP 端点未配置则不外发）。
+ *
+ * - off：不初始化 OpenTelemetry，不上报任何数据
+ * - error-only：初始化遥测（语义上仅错误，当前实现与 full 同路径）
+ * - full：初始化遥测（默认档，见主进程 telemetry-pref 的 DEFAULT_LEVEL）
  */
 export const TelemetryLevelSchema = z.enum(['off', 'error-only', 'full']);
 
@@ -480,35 +477,72 @@ export const SetTelemetryLevelResSchema = z.object({
 /**
  * settings:addRuntimeModel 入参 zod schema（自定义模型）
  */
+/**
+ * 能力覆盖（高级配置手填项；省略字段 = 回退内置清单 capabilities）。
+ * 三态语义：Add 省略 = 未填写；Update 省略 = 不修改，null = 清除覆盖。
+ */
+export const ModelCapabilitiesOverrideSchema = z
+  .object({
+    contextWindowSize: z.number().int().positive().max(10_000_000).nullable().optional(),
+    maxOutputTokens: z.number().int().positive().max(10_000_000).nullable().optional(),
+    vision: z.boolean().nullable().optional(),
+  })
+  // null/undefined 字段收敛为缺省（输出干净的可选 number/boolean，兼容 RuntimeCapabilitiesOverride
+  // 的 exactOptionalPropertyTypes 判定）；Update 清除覆盖走外层 capabilities 的 null 三态
+  .transform((v) => {
+    const out: {
+      contextWindowSize?: number;
+      maxOutputTokens?: number;
+      vision?: boolean;
+    } = {};
+    if (typeof v.contextWindowSize === 'number') {
+      out.contextWindowSize = v.contextWindowSize;
+    }
+    if (typeof v.maxOutputTokens === 'number') {
+      out.maxOutputTokens = v.maxOutputTokens;
+    }
+    if (typeof v.vision === 'boolean') {
+      out.vision = v.vision;
+    }
+    return out;
+  });
+
+/** 能力覆盖 TypeScript 类型（transform 收敛后的干净可选字段） */
+export type ModelCapabilitiesOverride = z.infer<typeof ModelCapabilitiesOverrideSchema>;
+
 export const AddRuntimeModelReqSchema = z.object({
   // 模型 id（全局唯一，如 custom-coder）
   modelId: z.string().min(1).max(100),
-  // 所属供应商 kind（决定 SDK 协议）
+  // 所属供应商 kind（决定 SDK 协议与默认端点）
   providerKind: ApiKeyProviderSchema,
-  // 显式 baseUrl（覆盖供应商默认端点；可选）
+  // 显式 baseUrl（覆盖供应商默认端点；省略 = 用默认）
   baseUrl: z
     .string()
     .url()
     .optional()
     .transform((v) => v ?? undefined),
-  // 显式 API Key（可选；省略则走 keychain 默认 key）
+  // 显式 API Key（省略 = 走 keychain 的 <kind>-api-key）
   apiKey: z
     .string()
     .min(1)
     .optional()
     .transform((v) => v ?? undefined),
-  // 展示名称（可选；省略 = 回退 modelId）
+  // 展示名称（省略 = 回退 modelId）
   displayName: z
     .string()
     .max(32)
     .optional()
     .transform((v) => v ?? undefined),
-  // 单回合总时长上限（毫秒；可选；省略 = 不限制，仅流空闲超时兜底）
+  // 单回合总时长上限（毫秒；省略 = 不限制，仅流空闲超时兜底）；上限 86_400_000 = 24h 护栏
   timeoutMs: z.number().int().positive().max(86_400_000).optional(),
-  // 启停状态（可选；省略 = 启用）
+  // 启停状态（省略 = 启用）
   isEnabled: z.boolean().optional(),
-  // API 协议格式（可选；省略 = openai-chat，与存量行为一致——见其注释）
+  // API 协议格式（省略 = openai-chat，与存量行为一致——见 ModelApiFormatSchema）
   apiFormat: ModelApiFormatSchema.optional(),
+  // 能力覆盖（高级配置；省略 = 未填写，resolve 回退内置清单）。
+  // 允许显式 undefined（IPC handler 透传形态）——exactOptionalPropertyTypes 下 handler
+  // 展开字段可能带 undefined 值
+  capabilities: ModelCapabilitiesOverrideSchema.optional(),
 });
 
 /** settings:addRuntimeModel 响应 payload */
@@ -543,31 +577,32 @@ export const RemoveRuntimeModelResSchema = z.object({
  */
 export const UpdateRuntimeModelReqSchema = z.object({
   modelId: z.string().min(1).max(100),
-  // 展示名称（可选；null/undefined = 不修改）
+  // 展示名称（省略 = 不修改）
   displayName: z
     .string()
     .max(32)
     .optional()
     .transform((v) => v ?? undefined),
-  // 显式 baseUrl（可选；不传 = 不修改）
+  // 显式 baseUrl（省略 = 不修改）
   baseUrl: z
     .string()
     .url()
     .optional()
     .transform((v) => v ?? undefined),
-  // 显式 API Key（可选；不传 = 不修改，传入则更新 keychain）
+  // 显式 API Key（省略 = 不修改，传入则更新 keychain）
   apiKey: z
     .string()
     .min(1)
     .optional()
     .transform((v) => v ?? undefined),
-  // 单回合总时长上限（毫秒；三态：省略 = 不修改，null = 清除（回不限制），
-  // number = 设置）
+  // 单回合总时长上限（毫秒；三态：省略 = 不修改，null = 清除（回不限制），number = 设置）
   timeoutMs: z.number().int().positive().max(86_400_000).nullable().optional(),
-  // API 协议格式（可选；省略 = 不修改）
+  // API 协议格式（省略 = 不修改）
   apiFormat: ModelApiFormatSchema.optional(),
-  // 启停状态（可选；不传 = 不修改）
+  // 启停状态（省略 = 不修改）
   isEnabled: z.boolean().optional(),
+  // 能力覆盖（三态：省略 = 不修改，null = 清除覆盖回退内置清单）
+  capabilities: ModelCapabilitiesOverrideSchema.nullable().optional(),
 });
 
 /** settings:updateRuntimeModel 响应 payload */
@@ -590,8 +625,12 @@ export interface RuntimeModelInfo {
   readonly timeoutMs?: number;
   /** API 协议格式（省略 = openai-chat；仅自定义模式写非默认值） */
   readonly apiFormat?: ModelApiFormat;
+  /** 启停状态（false = 已停用，不注册进 ModelRegistry、不可路由） */
   readonly isEnabled: boolean;
+  /** 创建时间（Unix timestamp 毫秒） */
   readonly createdAt: number;
+  /** 能力覆盖（高级配置手填项；省略 = 未覆盖，回退内置清单） */
+  readonly capabilities?: ModelCapabilitiesOverride;
 }
 
 /** settings:listRuntimeModels 响应 payload */
@@ -617,12 +656,13 @@ export const ListRuntimeModelsResSchema = z.object({
       apiFormat: ModelApiFormatSchema.optional(),
       isEnabled: z.boolean(),
       createdAt: z.number().int(),
+      capabilities: ModelCapabilitiesOverrideSchema.optional(),
     }),
   ),
 });
 
 /**
- * 工具审批模式（对齐 qwen ApprovalMode 谱系，配置化替代写死两级）
+ * 工具审批模式（对齐 qwen ApprovalMode 谱系，配置化四档）
  *
  * - plan：只读探索，写工具直接拒绝（Plan/Apply 分离的只读阶段）
  * - ask：写工具均需用户审批（保守默认）
@@ -634,7 +674,7 @@ export const ApprovalModeSchema = z.enum(['plan', 'ask', 'auto', 'yolo']);
 /** 工具审批模式 TypeScript 类型 */
 export type ApprovalMode = z.infer<typeof ApprovalModeSchema>;
 
-/** 默认审批模式（保守：写操作均需审批；主进程偏好文件与权限服务共用） */
+/** 默认审批模式（保守：写操作均需审批；主进程 approval-pref 与权限服务共用此值） */
 export const DEFAULT_APPROVAL_MODE: ApprovalMode = 'ask';
 
 /** settings:getApprovalMode 响应 payload */
@@ -678,6 +718,7 @@ export const SETTINGS_EXPORT_VERSION = 1;
 /** 设置导出文件 schema（version=1；导入逐键过 SETTING_KEYS 白名单后才写入） */
 export const SettingsExportFileSchema = z.object({
   version: z.literal(SETTINGS_EXPORT_VERSION),
+  /** 导出时刻（Unix timestamp 毫秒） */
   exportedAt: z.number().int(),
   settings: z.record(z.string(), z.unknown()),
 });
@@ -687,7 +728,9 @@ export type SettingsExportFile = z.infer<typeof SettingsExportFileSchema>;
 
 /** settings:export 响应 payload（saved/path，与 session:exportAll 同形） */
 export interface SettingsExportRes {
+  /** 是否已写出文件（用户在对话框取消时为 false） */
   readonly saved: boolean;
+  /** 写出路径（仅 saved=true 时存在） */
   readonly path?: string;
 }
 
@@ -703,7 +746,9 @@ export const SettingsExportResSchema = z.object({
  * imported = 通过白名单校验并写入的键数；skipped = 白名单外被跳过的键数。
  */
 export interface SettingsImportRes {
+  /** 通过白名单校验并写入的键数 */
   readonly imported: number;
+  /** 白名单外被跳过的键数 */
   readonly skipped: number;
 }
 

@@ -1,9 +1,3 @@
-// src/renderer/components/settings/sections/general-section.tsx
-// 通用 pane（对齐 Trae Work：语言 / 数据管理 / 遥测聚合）
-// ──────────────────────────────────────────────────────────────
-// 聚合原散落项：语言切换（i18n 真实）+ 数据管理（原 data pane）+ 遥测（原 telemetry pane）
-// ──────────────────────────────────────────────────────────────
-
 import type { LoginItemSettingsRes } from '@code-agent/shared/renderer';
 import { Check, Database, Languages } from 'lucide-react';
 import { type ReactElement, useEffect, useState } from 'react';
@@ -36,8 +30,6 @@ function LanguageRow(): ReactElement {
   const handleSelect = (next: string): void => {
     setLang(next);
     void changeLanguage(next as SupportedLanguage);
-    // P2 修复：语言此前只进 localStorage（detector 缓存），重装/多窗口不同步——
-    // 经 settings-store 写穿透落 SQLite 真源
     useSettingsStore.getState().setLanguage(next as AppLanguage);
   };
 
@@ -75,23 +67,18 @@ export function GeneralSection({ drawerOpen }: { readonly drawerOpen: boolean })
   const { t } = useTranslation();
   const closeAction = useSettingsStore((s) => s.window.closeAction);
   const setWindow = useSettingsStore((s) => s.setWindow);
-  // null = 未读到（隐藏开关，避免误导）；supported=false = 当前环境不支持（禁用 + 说明）
   const [autostart, setAutostart] = useState<LoginItemSettingsRes | null>(null);
 
-  // 开机自启状态挂载时回显（OS 登录项为唯一真源，读取失败隐藏开关避免误导）
   useEffect(() => {
     void (async () => {
       try {
         setAutostart(await getLoginItemSettings());
       } catch {
-        // 读取失败（无桥/旧版本）：隐藏开关避免误导
         setAutostart(null);
       }
     })();
   }, []);
 
-  // 托盘菜单也能改自启（两处开关同源 OS 登录项）：订阅主进程广播，
-  // 设置页正开着时同步回显——否则会一直显示托盘改动前的旧值（30-spec §3 P2-6）。
   useEffect(() => {
     const unsubscribe = subscribeLoginItemChanged((payload) => {
       setAutostart(payload);
@@ -103,7 +90,6 @@ export function GeneralSection({ drawerOpen }: { readonly drawerOpen: boolean })
 
   const handleToggleAutostart = async (checked: boolean): Promise<void> => {
     try {
-      // 响应是写入后回读的真实 OS 状态（注册失败/待审批会如实反映，非入参回显）
       const res = await setLoginItemSettings({ openAtLogin: checked });
       if (res === null) return;
       setAutostart(res);
@@ -121,7 +107,6 @@ export function GeneralSection({ drawerOpen }: { readonly drawerOpen: boolean })
         </div>
       </div>
 
-      {/* 窗口行为（关窗语义 + 开机自启，见 docs/design/28-tray-spec.md） */}
       <div>
         <h3 className="text-foreground text-sm font-semibold">{t('settings.windowTitle')}</h3>
         <div className="mt-2 flex flex-col gap-2">
@@ -154,19 +139,15 @@ export function GeneralSection({ drawerOpen }: { readonly drawerOpen: boolean })
         </div>
       </div>
 
-      {/* 系统通知（回合结束后台提醒门控，33 号 spec；驻留行为域与关窗/自启相邻） */}
       <NotificationSection />
 
-      {/* 界面缩放（35 号：显示域，与窗口行为/系统通知相邻） */}
       <ZoomSection />
 
-      {/* 编辑器 / 提示词（并入通用；快捷键已独立分区，见 shortcuts-section） */}
       <div className="flex flex-col gap-4">
         <EditorSection />
         <PromptSection open={drawerOpen} />
       </div>
 
-      {/* 数据管理（会话导出 + 打开数据目录） */}
       <div>
         <div className="flex items-center gap-2">
           <Database className="text-muted-foreground size-3.5" strokeWidth={1.5} />
@@ -177,7 +158,6 @@ export function GeneralSection({ drawerOpen }: { readonly drawerOpen: boolean })
         </div>
       </div>
 
-      {/* 遥测与隐私 */}
       <div>
         <h3 className="text-foreground text-sm font-semibold">{t('settings.telemetryTitle')}</h3>
         <div className="mt-2">

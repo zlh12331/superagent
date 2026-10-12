@@ -1,6 +1,3 @@
-// src/renderer/stores/persistent/sidebar-pref-store.test.ts
-// 侧栏偏好 store 行为测试：orderOverrides 增/删 + collapsedFolders 切换
-
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { useSidebarPrefStore } from './sidebar-pref-store';

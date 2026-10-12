@@ -1,13 +1,3 @@
-// src/renderer/stores/transient/update-store.ts
-// 更新状态（L2 transient：单订阅写入，多消费点读取）
-// ──────────────────────────────────────────────────────────────
-// 背景：此前 AboutSection / UpdateNotice / UpdateIndicator 各自 useUpdate() 订阅
-// update:event:status —— 同一事件通道被订阅 3 次（每个订阅各发一次 getStatus +
-// 一次 subscribeStatus，dev 下 StrictMode 再翻倍），与项目"单 bridge 挂 AppShell
-// + 写 store"的既有惯例（use-agent-bridge / use-tool-bridge 等 5 个）不符。
-// 现在订阅只发生在 use-update-bridge，本 store 是唯一状态载体。
-// ──────────────────────────────────────────────────────────────
-
 import type { UpdateStatusPayload } from '@code-agent/shared/renderer';
 import { create } from 'zustand';
 

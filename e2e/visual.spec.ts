@@ -1,35 +1,14 @@
-// e2e/visual.spec.ts
-// 视觉回归测试：UI 改动像素级对比
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 用 Playwright 内置 toHaveScreenshot API 对关键界面状态截图
-// - 首次运行生成基线图（提交到仓库），后续运行自动 diff
-// - 允许 1% 像素差异（抗锯齿/字体渲染等微小差异容忍）
+// e2e/visual.spec.ts：视觉回归——欢迎页面板状态 + 品牌区的截图基线对比
 //
-// 基线图存储：
-//   e2e/visual.spec.ts-snapshots/  （自动生成，需提交到仓库）
-//
-// 覆盖的三个状态**必须互不相同**（2026-09-17 修复，原实现三张基线 MD5 相同）：
-//   1. home                  欢迎页默认态（侧栏展开 + 右面板展开）
-//   2. sidebar-collapsed     侧栏折叠态
-//   3. right-panel-collapsed 右面板（DevPanel）折叠态
-//
-// ⚠️ 历史缺陷（勿重蹈）：
-// - 原「侧边栏展开态」「DevPanel 展开态」用例的选择器指向**不存在**的 label
-//   （/展开侧边栏|切换侧边栏/、/展开开发面板|开发者面板|DevPanel/），且用
-//   `if (isVisible) { click }` 静默跳过 ⇒ 三次截图拍的都是同一默认态，三张基线
-//   字节完全相同，门禁形同虚设（叠加 1% 阈值把版本号/mock 数据漂移一并吸收）。
-//   诱因：devpanel 用例的注释称按钮 aria-label 为「展开开发面板」，而 UI 实际用
-//   topbar.expandPanel「展开右侧面板」（panel.expandPanel 该键全仓无使用点）。
-// - 修法：按 aria-expanded 读真实状态 + 必要时点击 + 末尾断言目标态；
-//   面板开关不存在或状态不符一律失败，不再有静默跳过分支。
-// ──────────────────────────────────────────────────────────────
+// 基线存 e2e/visual.spec.ts-snapshots/（生成后须提交仓库）；三张面板态基线必须互不相同，
+// 否则 1% 阈值（SHOT_OPTIONS.maxDiffPixelRatio）会把版本号 / mock 数据漂移一并吸收，门禁形同虚设。
 
 import { expect, type Page, test } from '@playwright/test';
 
 /** 面板开关描述（label 取自真实 i18n：topbar.expandSidebar / topbar.expandPanel） */
 interface PanelToggle {
-  readonly name: string;
+  readonly name: string; // 面板名，仅用于断言失败消息，不参与元素定位
+  // 同一开关按钮两态各持一个 aria-label；定位靠 getByRole 的 accessible name，须与 i18n 实时文案逐字一致
   readonly expandLabel: string;
   readonly collapseLabel: string;
 }
@@ -71,9 +50,7 @@ async function gotoWelcome(page: Page): Promise<void> {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto('/');
   await page.waitForLoadState('networkidle');
-  // 品牌标题（role=heading + aria-level=1）可见 = 欢迎页已挂载
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 15_000 });
-  // 数据就绪：mock 会话条目渲染完成（侧栏默认展开态下可见）
   await expect(page.locator('.thread-item').first()).toBeVisible({ timeout: 15_000 });
 }
 
@@ -90,11 +67,9 @@ async function setPanelExpanded(page: Page, toggle: PanelToggle, expanded: boole
 }
 
 test.describe('视觉回归测试', () => {
-  // 基线仅在 Windows 生成（e2e/visual.spec.ts-snapshots/*-win32.png）。
-  // Playwright 默认快照名含平台后缀，CI 的 e2e-browser job 跑在 ubuntu-latest，
-  // 期望 -linux.png 而基线不存在 → 必然假红。跨平台字体渲染差异无法用阈值抹平，
-  // 故非 win32 平台显式跳过（2026-09-06 审计修复；如需 Linux 基线，
-  // 应在容器内 --update-snapshots 生成并提交）。
+  // 基线仅 win32 生成（Playwright 快照名自带平台后缀，仓内即 -win32.png）；本文件同属浏览器模式套件，
+  // CI 的 e2e-browser job 跑 ubuntu-latest，会期待 -linux.png 而基线不存在 → 必然假红。
+  // 跨平台字体渲染差异无法用阈值抹平；要放开需先在目标平台生成基线并提交。
   test.skip(process.platform !== 'win32', '视觉基线仅 Windows 维护（需在目标平台生成基线后放开）');
 
   test('欢迎页默认态快照', async ({ page }) => {

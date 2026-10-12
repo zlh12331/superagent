@@ -1,6 +1,3 @@
-// src/main/infra/ai/tools/search-tools.test.ts
-// 搜索类工具单测：grep/glob（真实 SearchService + ripgrep）
-
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -71,7 +68,6 @@ describe('搜索类工具（真实 ripgrep）', () => {
         },
         createCtx(),
       );
-      // README.md 不在 .ts 过滤内
       expect(String(result.output)).not.toContain('README.md');
     });
 

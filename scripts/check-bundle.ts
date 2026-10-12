@@ -1,12 +1,6 @@
-// scripts/check-bundle.ts
-// Bundle 体积门槛（工程化强制）：检查构建产物，超限即卡关（exit 1）
-// ──────────────────────────────────────────────────────────────
-// 依据 docs/design/12-performance-spec.md §1.2：
-//   单 chunk ≤ 5MB、渲染层总包 ≤ 16MB（2026-08-11 基线门槛：当前产物 14.5MB，渐进收紧）
-// 产物不存在时仅提示（本地未构建场景不卡关）；CI 中 build 后运行。
-//
-// 运行：pnpm build && pnpm check:bundle
-// ──────────────────────────────────────────────────────────────
+// check-bundle.ts：构建产物体积门槛（工程闸）——检查 out/ 下的产物，超限即 exit 1。
+// 边界：无构建产物（本地未 build）时跳过不卡关；主进程 bundle 与环比趋势只告警不卡关。
+// 门槛依据 docs/design/12-performance-spec.md §1.2；运行 pnpm build && pnpm check:bundle（CI 在 build 后卡关）。
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -22,18 +16,19 @@ const HISTORY_KEEP = 30;
 /** 环比告警阈值（相比上次总包变化，超过即提示，不卡关——门槛已卡关） */
 const TREND_ALERT_RATIO = 0.15;
 
-// 基线门槛（依据 12-performance-spec §1.2，渐进收紧）：
+// ───── 卡关门槛（依据 docs/design/12-performance-spec.md §1.2，随重构后体积下降同步收紧） ─────
 const CHUNK_LIMIT_KB = 5 * 1024;
 const TOTAL_LIMIT_KB = 16 * 1024;
-// 首载同步体积门槛（12-performance-spec §1.2，2026-09 新增）：
-// index.html 的 script/modulepreload 所列 chunk 合计（Electron 首帧需下载的 JS）。
-// shiki 按需加载后 index 4.4MB → ~0.8MB；此门槛防语言包被误打回主入口。
+/** 首载同步体积上限 KB：index.html 引用的 chunk 合计（Electron 首帧必须下载的 JS），防重依赖被静态打回主入口 */
 const INITIAL_LOAD_LIMIT_KB = 3 * 1024;
 
+/** out/renderer/assets 下的单个 JS 产物 */
 interface ChunkInfo {
   readonly name: string;
   readonly sizeKib: number;
 }
+
+// ───── 历史趋势：门槛通过后追加 stats/bundle-history.json，输出环比（参考值，不卡关） ─────
 
 /** 包体积历史记录项 */
 interface BundleHistoryEntry {
@@ -43,7 +38,10 @@ interface BundleHistoryEntry {
   readonly largestKib: number;
 }
 
-/** 追加本次记录到历史并返回上一次（无历史返回 null） */
+/**
+ * 追加本次记录到 stats/bundle-history.json 并返回上一条（无历史返回 null，供环比用）。
+ * 历史文件损坏时按空历史重建——趋势仅作参考，不值得因此让门禁失败。
+ */
 function recordHistory(totalKib: number, chunks: readonly ChunkInfo[]): BundleHistoryEntry | null {
   const entry: BundleHistoryEntry = {
     timestamp: Date.now(),
@@ -57,9 +55,7 @@ function recordHistory(totalKib: number, chunks: readonly ChunkInfo[]): BundleHi
     if (existsSync(HISTORY_PATH)) {
       history = JSON.parse(readFileSync(HISTORY_PATH, 'utf8')) as BundleHistoryEntry[];
     }
-  } catch {
-    // 历史损坏时重置（不影响门禁）
-  }
+  } catch {}
   const previous = history.at(-1) ?? null;
 
   history.push(entry);
@@ -91,13 +87,13 @@ function reportTrend(previous: BundleHistoryEntry | null, totalKib: number): voi
   }
 }
 
-// P5 修复：主进程产物体积报告（此前门槛只测渲染层，主进程 ~250MB 运行时依赖
-// 完全无监控——@cursorless/tree-sitter-wasms 48MB、gpt-tokenizer 50MB、lark SDK 28MB 等）。
-// 第一阶段：out/main/index.js 体积告警不卡关（真实 asar 门禁需依赖清单基线，
-// 避免新门槛误伤 CI；先让膨胀可见，再收紧为卡关门禁）
+// ───── 主进程 bundle 告警（渲染层门槛测不到主进程的运行时重依赖） ─────
+// 只告警不卡关：真实 asar 门禁需要依赖清单基线，先让膨胀可见再谈收紧。
 const MAIN_ENTRY = join(ROOT, 'out', 'main', 'index.js');
+/** 主进程 bundle 告警线 KB（超出仅提示，不卡关） */
 const MAIN_WARN_KB = 5 * 1024;
 
+/** 返回进程退出码：0 = 通过或跳过（无产物），1 = 存在超限项 */
 function main(): number {
   let chunks: ChunkInfo[];
   try {
@@ -112,13 +108,12 @@ function main(): number {
     return 0;
   }
 
-  // 边界：assets 目录存在但无 .js 产物（异常构建）——跳过历史记录避免写入 -Infinity 趋势数据
+  // 边界：assets 存在但无 .js 产物（异常构建）——早退跳过，避免历史把最大 chunk 记成 -Infinity（Math.max 空集）
   if (chunks.length === 0) {
     console.log('[check-bundle] ⏭️ assets 目录无 .js 产物，跳过（异常构建请检查 build 输出）');
     return 0;
   }
 
-  // 主进程产物报告（告警不卡关）
   if (existsSync(MAIN_ENTRY)) {
     const mainKib = statSync(MAIN_ENTRY).size / 1024;
     if (mainKib > MAIN_WARN_KB) {
@@ -135,10 +130,8 @@ function main(): number {
 
   const totalKib = chunks.reduce((sum, c) => sum + c.sizeKib, 0);
 
-  // 首载同步体积（12-performance-spec §1.2，2026-09 新增）：
-  // 解析 index.html 的 <script> / <link rel="modulepreload">，汇总其引用的 chunk——
-  // 即 Electron 首帧必须下载的 JS 集（Vite/Rollup 生成的入口可达链）。
-  // shiki 按需加载后 index 4.4MB → ~0.8MB；此门槛防语言包被误打回主入口。
+  // 首载同步体积 = index.html 的 script/modulepreload 所引 chunk 合计，
+  // 即 Vite/Rollup 入口可达链中 Electron 首帧必须下载的 JS 集。
   let initialLoadKib = 0;
   if (existsSync(RENDERER_HTML)) {
     const html = readFileSync(RENDERER_HTML, 'utf8');
@@ -150,12 +143,11 @@ function main(): number {
       return sum + (f?.sizeKib ?? 0);
     }, 0);
   }
+  // 收集全部超限项后统一报告：一次列出全部问题，便于一轮修复
   const problems: string[] = [];
 
   for (const c of chunks) {
     if (c.sizeKib > CHUNK_LIMIT_KB) {
-      // U1 修复：ChunkInfo 只有 sizeKib 字段，此前引用不存在的 sizeKB——
-      // 单 chunk 超限时抛 TypeError 而非报警（恰在最需要报警时失效）
       problems.push(`${c.name}: ${c.sizeKib.toFixed(0)}KB > ${CHUNK_LIMIT_KB}KB（单 chunk 超限）`);
     }
   }
@@ -176,7 +168,7 @@ function main(): number {
   }
 
   if (problems.length === 0) {
-    // 记录历史趋势（门槛通过后写，避免失败时污染趋势）
+    // 门槛通过才写历史：失败的体积不写入，避免污染环比基线
     const previous = recordHistory(totalKib, chunks);
     reportTrend(previous, totalKib);
     console.log(

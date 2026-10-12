@@ -1,6 +1,3 @@
-// src/renderer/hooks/use-approval-mode.test.tsx
-// Approval mode hook: read success/fallback, optimistic write/rollback, no-bridge
-
 import { renderHook, waitFor } from '@testing-library/react';
 import { toast } from 'sonner';
 import { beforeEach, describe, expect, it, vi } from 'vitest';

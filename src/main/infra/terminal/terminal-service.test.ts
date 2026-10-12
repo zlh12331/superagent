@@ -1,12 +1,3 @@
-// src/main/infra/terminal/terminal-service.test.ts
-// TerminalService 单测：node-pty 终端会话池（正向/边界/异常三件套）
-// ──────────────────────────────────────────────────────────────
-// 测试策略（遵循"业务逻辑不 mock、外部依赖注入 fake"）：
-// - spawnFn 经构造注入 fake（可编程 FakePty），不 mock 业务代码
-// - webContents 用基础设施 stub（isDestroyed/send 记录）
-// - 真实 os.constants.signals 验证信号编号 → 名称转换
-// ──────────────────────────────────────────────────────────────
-
 import { EventEmitter } from 'node:events';
 import { ErrorCode } from '@code-agent/shared/main';
 import type { WebContents } from 'electron';
@@ -25,20 +16,14 @@ vi.mock('../storage/settings-pref', () => ({
   readSetting: vi.fn(),
 }));
 
-/** 输出缓冲上限（与实现 MAX_BUFFER_BYTES 对齐，测环形截断用） */
 const MAX_BUFFER_BYTES = 100 * 1024;
 
-/**
- * 可编程 PTY 模拟：继承 EventEmitter 提供 onData/onExit 事件，
- * write/resize/kill 为 vi.fn 便于断言调用。
- */
 class FakePty extends EventEmitter {
   readonly pid = 4242;
   readonly write = vi.fn();
   readonly resize = vi.fn();
   readonly kill = vi.fn();
 
-  /** 与 node-pty IPty 事件 API 对齐 */
   onData(listener: (data: string) => void): void {
     this.on('data', listener);
   }
@@ -47,18 +32,15 @@ class FakePty extends EventEmitter {
     this.on('exit', listener);
   }
 
-  /** 模拟终端输出 */
   emitData(data: string): void {
     this.emit('data', data);
   }
 
-  /** 模拟进程退出 */
   emitExit(exitCode: number, signal?: number): void {
     this.emit('exit', { exitCode, signal });
   }
 }
 
-/** fake webContents：计数事件推送（基础设施 stub，非业务 mock） */
 function fakeWebContents(destroyed = false): { wc: WebContents; events: unknown[] } {
   const events: unknown[] = [];
   const wc = {
@@ -66,14 +48,12 @@ function fakeWebContents(destroyed = false): { wc: WebContents; events: unknown[
     send: vi.fn((_channel: string, payload: unknown) => {
       events.push(payload);
     }),
-    // P1 生命周期绑定：create/onExit 会注册与移除 destroyed 监听
     once: vi.fn(),
     removeListener: vi.fn(),
   } as unknown as WebContents;
   return { wc, events };
 }
 
-/** 构造注入 fake spawnFn 的服务 + 捕获的 PTY 实例 */
 function makeService(): {
   svc: TerminalService;
   spawnFn: ReturnType<typeof vi.fn>;
@@ -91,7 +71,6 @@ function makeService(): {
   return { svc, spawnFn, ptys };
 }
 
-/** create 入参构造器（webContents 默认可用） */
 function makeOptions(overrides: Partial<TerminalCreateOptions> = {}): TerminalCreateOptions {
   const { wc } = fakeWebContents();
   return {
@@ -105,7 +84,6 @@ function makeOptions(overrides: Partial<TerminalCreateOptions> = {}): TerminalCr
   };
 }
 
-/** 默认 shell 预期（与实现 defaultShell 逻辑一致，跨平台兼容） */
 function expectedDefaultShell(): { file: string } {
   if (process.platform === 'win32') {
     return { file: 'powershell.exe' };
@@ -191,13 +169,11 @@ describe('TerminalService.create（终端创建三件套）', () => {
     );
     expect(res.pid).toBe(4242);
     expect(res.terminalId).toBeTruthy();
-    // spawn 参数断言
     expect(spawnFn).toHaveBeenCalledTimes(1);
     const [file, args, opts] = spawnFn.mock.calls[0] ?? [];
     expect(file).toBe('echo');
     expect(args).toEqual(['hi']);
     expect(opts).toMatchObject({ cwd: 'C:\\work', cols: 100, rows: 40, name: 'xterm-256color' });
-    // CREATED 事件推送
     expect(events).toHaveLength(1);
     const payload = events[0] as { terminalId: string; title: string; pid: number };
     expect(payload.title).toBe('echo hi');
@@ -229,7 +205,6 @@ describe('TerminalService.create（终端创建三件套）', () => {
     vi.mocked(readSetting).mockReturnValue({ shell: 'bash', fontSize: 13 });
     await svc.create(makeOptions());
     const [file] = spawnFn.mock.calls[0] ?? [];
-    // unix 上 /bin/bash 存在（三平台 CI 均满足）；win32 不适用回落平台默认
     const expected = process.platform === 'win32' ? 'powershell.exe' : '/bin/bash';
     expect(file).toBe(expected);
   });
@@ -263,7 +238,6 @@ describe('TerminalService.create（终端创建三件套）', () => {
   it('边界：env 合并——用户 env 覆盖系统同名变量，其余继承', async () => {
     const original = process.env['CODE_AGENT_TEST_TERM'];
     process.env['CODE_AGENT_TEST_TERM'] = 'system-value';
-    // 索引赋值构造 env（避免字面量 key 触发命名检查）
     const userEnv: Record<string, string> = {};
     userEnv['CODE_AGENT_TEST_TERM'] = 'user-value';
     try {
@@ -287,7 +261,6 @@ describe('TerminalService.create（终端创建三件套）', () => {
     try {
       await svc.create(makeOptions({ env: userEnv }));
       const [, , opts] = spawnFn.mock.calls[0] ?? [];
-      // 渲染层注入的 PATH 被拒绝，系统 PATH 保持不变
       expect(opts.env?.['PATH']).toBe('C:\\system-path');
     } finally {
       if (original === undefined) {
@@ -299,7 +272,6 @@ describe('TerminalService.create（终端创建三件套）', () => {
   });
 
   it('边界（P0 安全）：env 覆盖大小写变体（Windows 不敏感）同样被过滤', async () => {
-    // Windows 上 PATH 与 path 等价；POSIX 上小写 path 是普通变量应放行
     const userEnv: Record<string, string> = {};
     userEnv['path'] = 'C:\\evil-path';
     await svc.create(makeOptions({ env: userEnv }));
@@ -327,10 +299,8 @@ describe('TerminalService.create（终端创建三件套）', () => {
 
   it('边界：title 取 command；省略时取 file 文件名', async () => {
     const { wc, events } = fakeWebContents();
-    // command 场景
     await svc.create(makeOptions({ command: 'node server.js', webContents: wc }));
     expect((events[0] as { title: string }).title).toBe('node server.js');
-    // 无 command 场景（单独 webContents 避免事件混叠）
     const { wc: wc2, events: events2 } = fakeWebContents();
     await svc.create(makeOptions({ webContents: wc2 }));
     expect((events2[0] as { title: string }).title).toBe(
@@ -370,7 +340,6 @@ describe('TerminalService 输出缓冲（onData 三件套）', () => {
     const pty = ptys[0] ?? new FakePty();
     pty.emitData('hello\n');
     pty.emitData('world');
-    // created + 2 output 共 3 个事件
     expect(events).toHaveLength(3);
     expect((events[1] as { data: string }).data).toBe('hello\n');
     expect((events[2] as { data: string }).data).toBe('world');
@@ -389,8 +358,6 @@ describe('TerminalService 输出缓冲（onData 三件套）', () => {
   it('边界：累积超 MAX_BUFFER_BYTES → 环形截断保留尾部', async () => {
     const res = await svc.create(makeOptions());
     const pty = ptys[0] ?? new FakePty();
-    // 第一段 60KB 'a' + 第二段 60KB 'b' = 120KB > 100KB
-    // 截断保留尾部 100KB = 40KB 'a' + 60KB 'b'（头部被丢弃）
     pty.emitData('a'.repeat(60 * 1024));
     pty.emitData('b'.repeat(60 * 1024));
     const output = svc.getOutput(res.terminalId);
@@ -401,13 +368,11 @@ describe('TerminalService 输出缓冲（onData 三件套）', () => {
   it('边界（P2-35）：高频小分片超限 → 头部整片丢弃，尾部字节级等价保留', async () => {
     const res = await svc.create(makeOptions());
     const pty = ptys[0] ?? new FakePty();
-    // 300 个 1KB 小分片（分片数组形态的典型负载）：总量 300KB，最终保留尾部 100KB
     for (let i = 0; i < 300; i++) {
       pty.emitData(`${i % 10}`.repeat(1024));
     }
     const output = svc.getOutput(res.terminalId);
     expect(output.length).toBe(MAX_BUFFER_BYTES);
-    // 尾部对齐：最后 100KB 恰为第 200~299 个分片（每片 1KB，'0'-'9' 循环）
     const expectedTail = Array.from({ length: 100 }, (_, k) =>
       `${(200 + k) % 10}`.repeat(1024),
     ).join('');
@@ -444,7 +409,6 @@ describe('TerminalService.onExit（退出事件三件套）', () => {
     expect(exitPayload).toBeDefined();
     expect(exitPayload.signal).toBe('SIGKILL');
     expect(exitPayload.exitCode).toBe(1);
-    // 已移除：input 返回 ok:false
     await expect(svc.input(res.terminalId, 'x')).resolves.toEqual({ ok: false });
   });
 
@@ -580,8 +544,6 @@ describe('TerminalService.dispose（生命周期）', () => {
   let ptys: FakePty[];
 
   beforeEach(() => {
-    // dispose 现在等待 PTY 退出（kill → onExit 早放行 → 3s 强杀兜底），
-    // fake PTY 不会自行退出，用假时钟控制退出时机与升级路径
     vi.useFakeTimers();
     ({ svc, ptys } = makeService());
   });
@@ -595,7 +557,6 @@ describe('TerminalService.dispose（生命周期）', () => {
     await svc.create(makeOptions());
     ptys[0]?.emitData('leftover');
     const disposing = svc.dispose();
-    // 模拟 PTY 响应 kill 正常退出（onExit 早放行，不触发强杀）
     ptys[0]?.emitExit(0);
     ptys[1]?.emitExit(0);
     await disposing;
@@ -625,7 +586,6 @@ describe('TerminalService.dispose（生命周期）', () => {
   });
 
   it('防孤儿：kill 后 3s 未退出 → 升级 SIGKILL 强杀（Unix 语义）', async () => {
-    // 升级路径是平台分支行为：固定为 Unix 语义验证 SIGKILL 升级（跨平台可复现）
     const original = process.platform;
     Object.defineProperty(process, 'platform', { value: 'linux' });
     try {
@@ -718,7 +678,6 @@ describe('resolveShellChoice（36-B：档位 → 可执行文件解析，fs 注�
       file: '/usr/bin/fish',
       args: [],
     });
-    // fish 未安装（unix 常见）→ undefined
     expect(resolveShellChoice('fish', 'linux', existsNone)).toBeUndefined();
   });
 

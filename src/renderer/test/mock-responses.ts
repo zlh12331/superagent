@@ -1,26 +1,6 @@
-// src/renderer/test/mock-responses.ts
-// 统一 IPC mock 响应工厂
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 集中管理所有 window.api 方法的默认 mock 响应
-// - 替代每个测试文件手写 vi.mock('@/hooks/...') 的样板代码
-// - 提供 createMockApi() 工厂，按需覆盖特定方法
-//
-// 设计：
-// - 项目 IPC 不走 HTTP（走 ipcMain.handle），MSW v2 无法直接拦截
-// - 改为封装 mock 工厂模式：集中 IPC 响应数据 + 按 domain 分桶
-// - 每个测试文件仍按需 vi.mock 具体方法，但响应数据从此处导入
-//
-// 命名说明：原名 msw-handlers.ts 系历史残留（MSW 从未实际拦截本项目 IPC），
-// 2026-09-24 更名为 mock-responses.ts 以反映真实职责；MSW 依赖保留——
-// 未来若引入 HTTP 后端（如远程模型代理）可启用 MSW 拦截 HTTP。
-// ──────────────────────────────────────────────────────────────
-
 import type { IpcResponse } from '@code-agent/shared/renderer';
 import { vi } from 'vitest';
 
-// 成功/错误响应工厂收敛到共享单一真源（lib/ipc-factories），
-// 与 dev mock（mock-api.ts）使用同一实现，避免双写。
 import { ipcErr as err, ipcOk as ok } from '@/lib/ipc-factories';
 
 export { err, ok };

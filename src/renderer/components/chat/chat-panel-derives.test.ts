@@ -1,6 +1,3 @@
-// src/renderer/components/chat/chat-panel-derives.test.ts
-// ChatPanel 纯派生单测：状态文本映射 + 历史回显缺口告知
-
 import type { TFunction } from 'i18next';
 import { describe, expect, it } from 'vitest';
 import { collectHistoryNotices, statusLabel } from './chat-panel-derives';

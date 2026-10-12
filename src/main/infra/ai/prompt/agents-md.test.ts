@@ -1,11 +1,3 @@
-// src/main/infra/ai/agents-md.test.ts
-// AGENTS.md 分层发现单测：向上查找 / 大小写 / 字节预算 / 格式化 / 上限
-//  + 进程内 memo（P2-32：mtime 失效语义）
-//
-// 接线背景：唯一生产调用链 = dynamic-context 的 resolveAgentsMd（注入
-// {{agentsMd}}）；本文件用真实文件系统临时目录驱动（仅 fs API，无 mock），
-// memo 新鲜度/mtime 失效语义全在此覆盖。
-
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -21,14 +13,12 @@ let root: string;
 
 beforeAll(() => {
   root = mkdtempSync(join(tmpdir(), 'agents-md-test-'));
-  // 结构：root/sub/proj —— root 与 sub/proj 各放一个
   mkdirSync(join(root, 'sub', 'proj'), { recursive: true });
   writeFileSync(join(root, 'AGENTS.md'), 'ROOT_RULES', 'utf-8');
   writeFileSync(join(root, 'sub', 'proj', 'AGENTS.md'), 'PROJ_RULES', 'utf-8');
 });
 
 beforeEach(() => {
-  // memo 为进程级：每用例前清空，保证用例独立（mtime 粒度不受用例间干扰）
   resetAgentsMdMemo();
 });
 
@@ -69,7 +59,6 @@ describe('discoverAgentsMd（从工作目录向上查找）', () => {
     writeFileSync(join(bigRoot, 'sub', 'AGENTS.md'), 'y'.repeat(64), 'utf-8');
     try {
       const found = discoverAgentsMd(join(bigRoot, 'sub'), 80);
-      // 预算语义：内容本身不截断，扣除后剩余不足则停止继续向上收集
       expect(found.map((f) => f.content)).toEqual(['y'.repeat(64), 'x'.repeat(64)]);
     } finally {
       rmSync(bigRoot, { recursive: true, force: true });
@@ -85,8 +74,6 @@ describe('discoverAgentsMd（从工作目录向上查找）', () => {
       expect(second.map((f) => f.content)).toEqual(first.map((f) => f.content));
       expect(second[0]?.content).toBe('V1');
 
-      // 内容修改 → 文件 mtime 变化 → memo 失效 → 读到新内容
-      // （等 15ms：规避 NTFS/ext4 mtime 粒度内的写覆盖）
       await new Promise((resolve) => setTimeout(resolve, 15));
       writeFileSync(join(dir, 'AGENTS.md'), 'V2', 'utf-8');
       const refreshed = discoverAgentsMd(dir);
@@ -100,7 +87,6 @@ describe('discoverAgentsMd（从工作目录向上查找）', () => {
     const dir = mkdtempSync(join(tmpdir(), 'agents-md-memo-new-'));
     try {
       expect(discoverAgentsMd(dir)).toEqual([]);
-      // 等 15ms 保证目录 mtime 变化可观测
       await new Promise((resolve) => setTimeout(resolve, 15));
       writeFileSync(join(dir, 'AGENTS.md'), 'NEW_RULES', 'utf-8');
       const found = discoverAgentsMd(dir);

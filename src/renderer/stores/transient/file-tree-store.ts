@@ -1,25 +1,3 @@
-// src/renderer/stores/transient/file-tree-store.ts
-// 文件树状态管理（L2 客户端共享状态层 - transient）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 维护当前根目录（绑定到激活会话的 workingDir）
-// - 维护目录展开/折叠状态（path -> 是否展开）
-// - 维护激活的文件路径（高亮当前选中文件）
-// - 缓存已加载的目录条目（path -> FileEntry[]）
-// - 维护加载中目录集合（避免重复请求 + UI 骨架屏）
-// - 提供文件变更事件的增量更新（watch delete 事件 → removeEntry；create/rename 走重载）
-// - 维护新建流程的内联编辑状态（creatingEntry；节点「更多操作」菜单已按用户要求移除）
-// - 维护新建在途的父目录集合（pendingDirs：IPC 未完成期间给出可视反馈）
-//
-// 设计：
-// - 纯状态容器：不持有 IPC 订阅与请求逻辑（由 useFileTree / useFileTreeOps hook 负责）
-// - 扁平化缓存：entries Map 按「父目录路径 -> 子条目数组」组织，避免递归树结构序列化
-// - 排序约定：目录在前、文件在后；同类按名称升序（不区分大小写）
-// - 内联新建：在 UI 显示临时输入节点，用户确认后由 useFileTreeOps 调 IPC 落盘
-//   （输入值由 DOM input 直接持有，不进 store——tempName 曾为此设计但无消费者，已删）
-// - 不持久化：文件树状态随会话切换重置，重启后为空
-// ──────────────────────────────────────────────────────────────
-
 import type { FileEntry } from '@code-agent/shared/renderer';
 import { create } from 'zustand';
 
@@ -74,7 +52,6 @@ interface FileTreeState {
    */
   readonly pendingDirs: ReadonlySet<string>;
 
-  // ── 浏览/加载方法 ──────────────────────────────────
   /** 设置根目录（会切换会话时调用，自动重置状态并展开根目录） */
   readonly setRootPath: (path: string | null) => void;
   /** 切换目录展开/折叠状态 */
@@ -92,20 +69,17 @@ interface FileTreeState {
   /** 设置目录加载状态（list IPC 请求前后调用） */
   readonly setLoading: (path: string, loading: boolean) => void;
 
-  // ── 新建内联编辑方法 ────────────────────────────
   /** 开始新建流程：在指定父目录下显示临时节点 */
   readonly startCreate: (parentDir: string, type: CreateEntryType) => void;
   /** 取消新建流程（用户按 Esc 或失焦时调用） */
   readonly cancelCreate: () => void;
 
-  // ── 新建在途状态方法 ────────────────────────────────
   /** 标记父目录有新建在途（create IPC 发起前调用，完成后清除） */
   readonly setPendingDir: (path: string, pending: boolean) => void;
 
   /** 重置所有状态（会话切换、组件卸载时调用） */
   readonly reset: () => void;
 
-  // ── 搜索方法 ────────────────────────────────────────
   /** 获取所有已加载的文件路径列表（不包含目录） */
   readonly getAllFilePaths: () => readonly string[];
 }
@@ -144,7 +118,6 @@ export const useFileTreeStore = create<FileTreeState>()((set, get) => ({
           pendingDirs: new Set<string>(),
         };
       }
-      // 切换根目录时重置状态，并默认展开根目录
       return {
         rootPath: path,
         expandedPaths: new Set<string>([path]),
@@ -184,7 +157,6 @@ export const useFileTreeStore = create<FileTreeState>()((set, get) => ({
       for (const path of paths) {
         next.add(path);
       }
-      // 无新增时返回原 Set 引用（避免触发下游 effect 空转）
       return next.size === state.expandedPaths.size
         ? { expandedPaths: state.expandedPaths }
         : { expandedPaths: next };
@@ -195,7 +167,6 @@ export const useFileTreeStore = create<FileTreeState>()((set, get) => ({
   setEntries: (path, entries) =>
     set((state) => {
       const next = new Map(state.entries);
-      // 排序后存入，保证 UI 渲染稳定（目录在前，同类按名称升序）
       const sorted = [...entries].sort(compareEntries);
       next.set(path, sorted);
       return { entries: next };
@@ -204,7 +175,6 @@ export const useFileTreeStore = create<FileTreeState>()((set, get) => ({
   removeEntry: (parentDir, entryPath) =>
     set((state) => {
       const existing = state.entries.get(parentDir);
-      // 父目录无缓存：无可移除项，返回空补丁（不产生无谓状态对象）
       if (existing === undefined) return {};
       const next = existing.filter((e) => e.path !== entryPath);
       const entries = new Map(state.entries);
@@ -223,7 +193,6 @@ export const useFileTreeStore = create<FileTreeState>()((set, get) => ({
       return { loadingPaths: next };
     }),
 
-  // ── 新建内联编辑 ─────────────────────────────────
   startCreate: (parentDir, type) =>
     set(() => ({
       creatingEntry: { parentDir, type },
@@ -231,7 +200,6 @@ export const useFileTreeStore = create<FileTreeState>()((set, get) => ({
 
   cancelCreate: () => set(() => ({ creatingEntry: null })),
 
-  // ── 操作中状态 ──────────────────────────────────────
   setPendingDir: (path, pending) =>
     set((state) => {
       const next = new Set(state.pendingDirs);
@@ -273,9 +241,7 @@ export const useFileTreeStore = create<FileTreeState>()((set, get) => ({
  * 用于 setEntries 时保证 UI 渲染稳定。
  */
 function compareEntries(a: FileEntry, b: FileEntry): number {
-  // 目录在前
   if (a.type === 'directory' && b.type !== 'directory') return -1;
   if (a.type !== 'directory' && b.type === 'directory') return 1;
-  // 同类按名称（不区分大小写）
   return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
 }

@@ -1,13 +1,3 @@
-// src/renderer/lib/file-search.test.ts
-// 文件名搜索纯函数单测（glob 模式构造 / 目录派生）
-// ──────────────────────────────────────────────────────────────
-// 三个函数此前内联在 fuzzy-search-dialog 组件里、零直接覆盖：
-// - escapeGlob 决定「用户输入是否被当字面量」（漏转义会让 `a*` 退化为通配）
-// - toCaseInsensitiveGlob 决定「搜索是否大小写不敏感」（rg glob 默认敏感）
-// - buildFileSearchPattern 的两步顺序敏感——反序会破坏转义
-// - extractDir 仅用于展示副标题，边界（根级/无分隔符）必须返回空串
-// ──────────────────────────────────────────────────────────────
-
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -42,7 +32,6 @@ describe('escapeGlob', () => {
   });
 
   it('异常：反斜杠不在转义集合内（输入已含转义符时不双重转义）', () => {
-    // 反斜杠本身按字面量保留，只有其后的 `*` 被转义 → 结果含两个反斜杠 + 一个星号
     expect(escapeGlob('\\*')).toBe('\\\\*');
     expect(escapeGlob('\\')).toBe('\\');
   });
@@ -84,7 +73,6 @@ describe('buildFileSearchPattern', () => {
   it('异常关键点：先转义再展开（`*` 被转义为字面量，不得退化为通配）', () => {
     const pattern = buildFileSearchPattern('*');
     expect(pattern).toBe('**/*\\**');
-    // 若两步顺序反了，转义符会被当作字母展开 → 出现 `[\\]` 这类畸形字符类
     expect(pattern).not.toContain('[\\]');
   });
 
@@ -107,8 +95,6 @@ describe('extractDir', () => {
   });
 
   it('边界：绝对路径根级文件返回空串', () => {
-    // '/App.tsx' 的目录部分是 '/'，但本函数只做「取最后一段之前」，
-    // 结果是空串——调用方以 falsy 判断决定是否渲染副标题
     expect(extractDir('/App.tsx')).toBe('');
   });
 

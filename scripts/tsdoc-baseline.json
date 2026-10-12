@@ -1,1 +1,404 @@
-{}
+{
+  "src/main/infra/ai/agent-runtime/agent-turn-machine.ts": {
+    "count": 5
+  },
+  "src/main/infra/ai/agent-runtime/create-stream.ts": {
+    "count": 1
+  },
+  "src/main/infra/ai/agent-runtime/text-delta-batcher.ts": {
+    "count": 3
+  },
+  "src/main/infra/ai/agent-runtime/turn-runner.ts": {
+    "count": 1
+  },
+  "src/main/infra/ai/agent-runtime/turn-transcript.ts": {
+    "count": 2
+  },
+  "src/main/infra/ai/agent-runtime/turn-translator.ts": {
+    "count": 2
+  },
+  "src/main/infra/ai/agent/branch-service.ts": {
+    "count": 4
+  },
+  "src/main/infra/ai/agent/context-compression.ts": {
+    "count": 10
+  },
+  "src/main/infra/ai/agent/cron-service.ts": {
+    "count": 1
+  },
+  "src/main/infra/ai/agent/hook-registry.ts": {
+    "count": 6
+  },
+  "src/main/infra/ai/agent/repair-tool-call.ts": {
+    "count": 3
+  },
+  "src/main/infra/ai/agent/stall-watchdog.ts": {
+    "count": 2
+  },
+  "src/main/infra/ai/agent/stream-part-forward.ts": {
+    "count": 2
+  },
+  "src/main/infra/ai/agent/subagent-manager.ts": {
+    "count": 4
+  },
+  "src/main/infra/ai/agent/task-service.ts": {
+    "count": 2
+  },
+  "src/main/infra/ai/agent/team-service.ts": {
+    "count": 3
+  },
+  "src/main/infra/ai/agent/token-overhead.ts": {
+    "count": 3
+  },
+  "src/main/infra/ai/agent/turn-assembly.ts": {
+    "count": 4
+  },
+  "src/main/infra/ai/agent/turn-subscriptions.ts": {
+    "count": 3
+  },
+  "src/main/infra/ai/agent/turn-usage-report.ts": {
+    "count": 3
+  },
+  "src/main/infra/ai/agent/workflow-service.ts": {
+    "count": 7
+  },
+  "src/main/infra/ai/knowledge/goal-judge.ts": {
+    "count": 1
+  },
+  "src/main/infra/ai/knowledge/learn-skill-agent.ts": {
+    "count": 3
+  },
+  "src/main/infra/ai/knowledge/session-title.ts": {
+    "count": 3
+  },
+  "src/main/infra/ai/llm-client/ai-provider.ts": {
+    "count": 3
+  },
+  "src/main/infra/ai/llm-client/llm-client.ts": {
+    "count": 1
+  },
+  "src/main/infra/ai/llm-client/retry.ts": {
+    "count": 6
+  },
+  "src/main/infra/ai/mcp/mcp-client.ts": {
+    "count": 3
+  },
+  "src/main/infra/ai/mcp/mcp-service.ts": {
+    "count": 2
+  },
+  "src/main/infra/ai/mcp/mcp-tool-adapter.ts": {
+    "count": 5
+  },
+  "src/main/infra/ai/mcp/mcp-types.ts": {
+    "count": 6
+  },
+  "src/main/infra/ai/models/generation-options.ts": {
+    "count": 1
+  },
+  "src/main/infra/ai/models/reasoning-effort.ts": {
+    "count": 4
+  },
+  "src/main/infra/ai/models/runtime-model-store.ts": {
+    "count": 3
+  },
+  "src/main/infra/ai/models/types.ts": {
+    "count": 7
+  },
+  "src/main/infra/ai/prompt/agents-md.ts": {
+    "count": 4
+  },
+  "src/main/infra/ai/prompt/dynamic-context.ts": {
+    "count": 4
+  },
+  "src/main/infra/ai/prompt/prompt-service.ts": {
+    "count": 1
+  },
+  "src/main/infra/ai/providers/endpoint.ts": {
+    "count": 4
+  },
+  "src/main/infra/ai/providers/registry.ts": {
+    "count": 1
+  },
+  "src/main/infra/ai/providers/types.ts": {
+    "count": 4
+  },
+  "src/main/infra/ai/skills/skill-registry.ts": {
+    "count": 1
+  },
+  "src/main/infra/ai/tools/ask-user-question.tool.ts": {
+    "count": 1
+  },
+  "src/main/infra/ai/tools/code-review.tool.ts": {
+    "count": 1
+  },
+  "src/main/infra/ai/tools/code-symbols.tool.ts": {
+    "count": 1
+  },
+  "src/main/infra/ai/tools/codebase.tool.ts": {
+    "count": 1
+  },
+  "src/main/infra/ai/tools/command-classifier.ts": {
+    "count": 3
+  },
+  "src/main/infra/ai/tools/command-guards.ts": {
+    "count": 7
+  },
+  "src/main/infra/ai/tools/cron-create.tool.ts": {
+    "count": 1
+  },
+  "src/main/infra/ai/tools/cron-delete.tool.ts": {
+    "count": 1
+  },
+  "src/main/infra/ai/tools/cron-list.tool.ts": {
+    "count": 1
+  },
+  "src/main/infra/ai/tools/dangerous-commands.ts": {
+    "count": 3
+  },
+  "src/main/infra/ai/tools/denial-tracking.ts": {
+    "count": 5
+  },
+  "src/main/infra/ai/tools/edit-file.tool.ts": {
+    "count": 1
+  },
+  "src/main/infra/ai/tools/git-add.tool.ts": {
+    "count": 1
+  },
+  "src/main/infra/ai/tools/git-commit.tool.ts": {
+    "count": 1
+  },
+  "src/main/infra/ai/tools/git-push.tool.ts": {
+    "count": 1
+  },
+  "src/main/infra/ai/tools/glob.tool.ts": {
+    "count": 1
+  },
+  "src/main/infra/ai/tools/grep.tool.ts": {
+    "count": 1
+  },
+  "src/main/infra/ai/tools/list-directory.tool.ts": {
+    "count": 1
+  },
+  "src/main/infra/ai/tools/load-skill.tool.ts": {
+    "count": 1
+  },
+  "src/main/infra/ai/tools/lsp-definition.tool.ts": {
+    "count": 1
+  },
+  "src/main/infra/ai/tools/lsp-hover.tool.ts": {
+    "count": 1
+  },
+  "src/main/infra/ai/tools/lsp-references.tool.ts": {
+    "count": 1
+  },
+  "src/main/infra/ai/tools/path-guard.ts": {
+    "count": 1
+  },
+  "src/main/infra/ai/tools/permission-service.ts": {
+    "count": 1
+  },
+  "src/main/infra/ai/tools/permission-types.ts": {
+    "count": 4
+  },
+  "src/main/infra/ai/tools/plan-mode.tools.ts": {
+    "count": 2
+  },
+  "src/main/infra/ai/tools/read-file.tool.ts": {
+    "count": 1
+  },
+  "src/main/infra/ai/tools/recall-memory.tool.ts": {
+    "count": 1
+  },
+  "src/main/infra/ai/tools/run-command.tool.ts": {
+    "count": 1
+  },
+  "src/main/infra/ai/tools/run-subagent.tool.ts": {
+    "count": 1
+  },
+  "src/main/infra/ai/tools/run-team.tool.ts": {
+    "count": 1
+  },
+  "src/main/infra/ai/tools/run-workflow.tool.ts": {
+    "count": 1
+  },
+  "src/main/infra/ai/tools/save-memory.tool.ts": {
+    "count": 1
+  },
+  "src/main/infra/ai/tools/stable-stringify.ts": {
+    "count": 1
+  },
+  "src/main/infra/ai/tools/task-create.tool.ts": {
+    "count": 1
+  },
+  "src/main/infra/ai/tools/task-list.tool.ts": {
+    "count": 1
+  },
+  "src/main/infra/ai/tools/task-stop.tool.ts": {
+    "count": 1
+  },
+  "src/main/infra/ai/tools/task-update.tool.ts": {
+    "count": 1
+  },
+  "src/main/infra/ai/tools/terminal.tool.ts": {
+    "count": 1
+  },
+  "src/main/infra/ai/tools/tool-executor.ts": {
+    "count": 3
+  },
+  "src/main/infra/ai/tools/tool-registry.ts": {
+    "count": 1
+  },
+  "src/main/infra/ai/tools/url-guard.ts": {
+    "count": 5
+  },
+  "src/main/infra/ai/tools/web-fetch.tool.ts": {
+    "count": 1
+  },
+  "src/main/infra/ai/tools/write-file.tool.ts": {
+    "count": 1
+  },
+  "src/main/infra/autostart/autostart.ts": {
+    "count": 3
+  },
+  "src/main/infra/code-analysis/code-analyzer.ts": {
+    "count": 2
+  },
+  "src/main/infra/codebase/codebase-service.ts": {
+    "count": 6
+  },
+  "src/main/infra/file/file-service.ts": {
+    "count": 11
+  },
+  "src/main/infra/git/git-service.ts": {
+    "count": 6
+  },
+  "src/main/infra/i18n/dictionaries.ts": {
+    "count": 1
+  },
+  "src/main/infra/im/adapters/dingtalk-stream.ts": {
+    "count": 5
+  },
+  "src/main/infra/im/adapters/feishu-stream.ts": {
+    "count": 5
+  },
+  "src/main/infra/im/adapters/qq-stream.ts": {
+    "count": 9
+  },
+  "src/main/infra/im/adapters/telegram-adapter.ts": {
+    "count": 1
+  },
+  "src/main/infra/im/adapters/wecom-adapter.ts": {
+    "count": 1
+  },
+  "src/main/infra/im/adapters/wecom-stream.ts": {
+    "count": 4
+  },
+  "src/main/infra/im/adapters/weixin-stream.ts": {
+    "count": 8
+  },
+  "src/main/infra/im/channel/types.ts": {
+    "count": 1
+  },
+  "src/main/infra/lsp/ls-config.ts": {
+    "count": 2
+  },
+  "src/main/infra/lsp/lsp-client.ts": {
+    "count": 5
+  },
+  "src/main/infra/memory-hub/l0-inspect.ts": {
+    "count": 4
+  },
+  "src/main/infra/memory-hub/l0-rewrite.ts": {
+    "count": 1
+  },
+  "src/main/infra/memory-hub/llm-config.ts": {
+    "count": 1
+  },
+  "src/main/infra/memory-hub/memory-hub-service.ts": {
+    "count": 2
+  },
+  "src/main/infra/memory-hub/node-launcher.ts": {
+    "count": 1
+  },
+  "src/main/infra/memory-hub/prewarm.ts": {
+    "count": 2
+  },
+  "src/main/infra/memory-hub/types.ts": {
+    "count": 7
+  },
+  "src/main/infra/network/proxy-resolver.ts": {
+    "count": 1
+  },
+  "src/main/infra/remote/remote-control.ts": {
+    "count": 4
+  },
+  "src/main/infra/search/search-service.ts": {
+    "count": 5
+  },
+  "src/main/infra/storage/backup-store.ts": {
+    "count": 1
+  },
+  "src/main/infra/storage/db.ts": {
+    "count": 1
+  },
+  "src/main/infra/storage/keychain.ts": {
+    "count": 2
+  },
+  "src/main/infra/storage/schema.ts": {
+    "count": 25
+  },
+  "src/main/infra/storage/session-helpers.ts": {
+    "count": 2
+  },
+  "src/main/infra/storage/session-io.ts": {
+    "count": 2
+  },
+  "src/main/infra/storage/session-service.ts": {
+    "count": 3
+  },
+  "src/main/infra/storage/session-types.ts": {
+    "count": 2
+  },
+  "src/main/infra/storage/settings-io.ts": {
+    "count": 4
+  },
+  "src/main/infra/storage/test-utils.ts": {
+    "count": 2
+  },
+  "src/main/infra/storage/usage-turn-store.ts": {
+    "count": 2
+  },
+  "src/main/infra/telemetry/event-loop-lag.ts": {
+    "count": 3
+  },
+  "src/main/infra/telemetry/memory-monitor.ts": {
+    "count": 3
+  },
+  "src/main/infra/terminal/terminal-service.ts": {
+    "count": 6
+  },
+  "src/main/infra/update/update-cache.ts": {
+    "count": 2
+  },
+  "src/main/infra/update/update-service.ts": {
+    "count": 9
+  },
+  "src/main/ipc/agent-approval.handler.ts": {
+    "count": 1
+  },
+  "src/main/ipc/file.handler.ts": {
+    "count": 1
+  },
+  "src/main/ipc/mcp.handler.ts": {
+    "count": 1
+  },
+  "src/main/ipc/session.handler.ts": {
+    "count": 1
+  },
+  "src/main/service-container.ts": {
+    "count": 2
+  },
+  "src/main/utils/logger.ts": {
+    "count": 2
+  }
+}

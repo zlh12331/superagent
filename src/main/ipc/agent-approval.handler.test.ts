@@ -1,6 +1,3 @@
-// src/main/ipc/agent-approval.handler.test.ts
-// agent-approval.handler 单测：approvalResponse 回传（fake PermissionService DI 注入）
-
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -8,7 +5,6 @@ import {
   createAgentApprovalHandlers,
 } from './agent-approval.handler';
 
-/** 创建 fake PermissionService */
 function createFakePermissionService() {
   return {
     handleApprovalResponse: vi.fn(),

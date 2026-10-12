@@ -1,18 +1,3 @@
-// src/renderer/components/$1/layout-utils.test.ts
-// 面板宽度纯函数测试（正向 / 边界 / 异常）
-// ──────────────────────────────────────────────────────────────
-// 覆盖此前基本无覆盖的 parseClamp（内联在 layout-utils 的 CSS 令牌桥）：
-// 设计原则是「CSS 自定义属性是宽度唯一数据源」，JS 从 clamp() 字符串解析出
-// min/max/首选比例——故解析失败必须**静默回退到与 aurora.json 对齐的安全值**，
-// 绝不能抛错或产出 NaN（否则拖拽上下限变成 NaN，clamp 失效）。
-//
-// 测试要点：
-// 1. 正向：合法 clamp(px, vw, px) → 解析出正确上下限并参与计算
-// 2. 容错：空格变体 / 大写 CLAMP 均可解析
-// 3. 回退：变量缺失 / 非 clamp 格式 / 单位不符 / 数字非法 → 安全默认值
-// 4. 边界：resolveClamp 的三段语义（低于 min / 区间内 / 高于 max）
-// ──────────────────────────────────────────────────────────────
-
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -49,7 +34,6 @@ describe('computeInitialSidebarWidth / computeInitialRightPanelWidth', () => {
   });
 
   it('正向：从 CSS 令牌解析 clamp 并按视口计算（区间内取首选值）', () => {
-    // 1000px 视口 × 20vw = 200px，落在 [150, 400] 内
     stubComputedStyle({ '--sidebar-w': 'clamp(150px, 20vw, 400px)' });
     stubViewport(1000);
 
@@ -64,7 +48,6 @@ describe('computeInitialSidebarWidth / computeInitialRightPanelWidth', () => {
   });
 
   it('边界：首选值低于下限 → 取下限', () => {
-    // 100px 视口 × 1vw = 1px，低于 min 150
     stubComputedStyle({ '--sidebar-w': 'clamp(150px, 1vw, 400px)' });
     stubViewport(100);
 
@@ -72,7 +55,6 @@ describe('computeInitialSidebarWidth / computeInitialRightPanelWidth', () => {
   });
 
   it('边界：首选值高于上限 → 取上限', () => {
-    // 5000px × 90vw = 4500px，高于 max 400
     stubComputedStyle({ '--sidebar-w': 'clamp(150px, 90vw, 400px)' });
     stubViewport(5000);
 
@@ -87,7 +69,6 @@ describe('computeInitialSidebarWidth / computeInitialRightPanelWidth', () => {
   });
 
   it('边界：结果取整（Math.round）', () => {
-    // 1000 × 20.55vw = 205.5 → 206
     stubComputedStyle({ '--sidebar-w': 'clamp(150px, 20.55vw, 400px)' });
     stubViewport(1000);
 
@@ -99,7 +80,6 @@ describe('computeInitialSidebarWidth / computeInitialRightPanelWidth', () => {
       stubComputedStyle({});
       stubViewport(1440);
 
-      // 回退值 {200,280,0.17} → 1440×0.17=244.8 → 245
       const width = computeInitialSidebarWidth();
       expect(width).toBe(245);
       expect(Number.isNaN(width)).toBe(false);
@@ -130,7 +110,6 @@ describe('computeInitialSidebarWidth / computeInitialRightPanelWidth', () => {
       stubComputedStyle({ '--right-panel-w': 'garbage' });
       stubViewport(1440);
 
-      // 右面板回退 {260,360,0.22} → clamp(260, 1440×0.22=316.8, 360) = 316.8 → 317
       expect(computeInitialRightPanelWidth()).toBe(317);
     });
   });

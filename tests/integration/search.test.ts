@@ -1,13 +1,3 @@
-// tests/integration/search.test.ts
-// Search 域集成测试（batch 7/9）
-// ──────────────────────────────────────────────────────────────
-// 链路：IPC handler（真实）→ SearchService（真实）→ ripgrep（真实 rg 子进程）→ 临时目录
-// 替身：无（rg 为真实外部工具；spawnFn DI 默认真实）
-//
-// 维度覆盖：接口契约 / 错误传播（rg 失败分类）
-// 场景：并发（并行 grep）/ 边界（大小写/无命中）
-// ──────────────────────────────────────────────────────────────
-
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -87,7 +77,6 @@ describe('search 域集成链路（batch 7）', () => {
   });
 
   it('异常：目录不存在 → 错误传播', async () => {
-    // 2026-09-08：注入该路径为工作区根，使收口放行、由 ripgrep 报「目录不存在」
     const handlers = createSearchHandlers({
       searchService: new SearchService(),
       workspaceRoots: async () => ['/'],

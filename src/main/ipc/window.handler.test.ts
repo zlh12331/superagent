@@ -1,14 +1,6 @@
-// src/main/ipc/window.handler.test.ts
-// window:applyZoom handler 单测（35 号 §2.7：V2/V7/V8 断言）
-// ──────────────────────────────────────────────────────────────
-// mock electron BrowserWindow（多窗口遍历/销毁守卫/setZoomFactor）+
-// process.platform（win32 overlay 联动分支）。
-// ──────────────────────────────────────────────────────────────
-
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => {
-  /** 伪窗口集合：每项含 setZoomFactor/setTitleBarOverlay 的 spy */
   const windows: {
     destroyed: boolean;
     setZoomFactor: ReturnType<typeof vi.fn>;
@@ -17,13 +9,11 @@ const mocks = vi.hoisted(() => {
   return { windows };
 });
 
-/** process.platform stub（handler 读真实 process.platform，不可用内部变量） */
 function setPlatform(p: string): void {
   Object.defineProperty(process, 'platform', { value: p, configurable: true });
 }
 
 vi.mock('electron', () => ({
-  // 字符串键：规避 useNamingConvention 对 PascalCase 属性名的检查（window-show.test 同法）
   ['BrowserWindow']: {
     getAllWindows: () =>
       mocks.windows.map((w) => ({
@@ -80,13 +70,10 @@ describe('window:applyZoom handler（35 号界面缩放）', () => {
   });
 
   it('V8 构造性隔离：仅遍历 BrowserWindow（WebContentsView 不在 mock 集，构造上不可达）', async () => {
-    // 本测试的隔离证明是构造性的：handler 只调 BrowserWindow.getAllWindows()，
-    // WebContentsView（浏览器预览分区）不是 BrowserWindow，无法出现在遍历集。
     addWindow();
     addWindow();
     const res = await createWindowHandlers().applyZoom({ zoom: 1.5 });
     expect(res).toEqual({ ok: true });
-    // 每个窗口都被应用一次
     for (const w of mocks.windows) {
       expect(w.setZoomFactor).toHaveBeenCalledTimes(1);
     }

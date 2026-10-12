@@ -1,27 +1,5 @@
-// src/main/infra/ai/agent/cron-service.ts
-// 定时任务服务：cron 表达式调度 + sqlite 持久化（对齐 qwen cronScheduler durable 语义收敛）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - create/delete/list：cron 任务管理（sqlite 持久化，重启保留）
-// - 调度：croner 成熟库（v10）实例化调度——每个任务一个 Cron 实例，
-//   秒级内部精度、分钟级表达式天然不重复触发（替代原自研 30s tick）
-// - 触发语义：fire 时更新 next_fire_at（下次触发时间）
-//
-// 归属与消费方（原位于 ai/ 根，2026-10-03 迁入 agent/——fire 驱动 agent 回合，
-// 与 agent-ask-service 同为「模块级单例、非容器 accessor」模式）：
-// - ServiceContainer：initCronScheduler 订阅 onFire（fire → runCronTurn 无头
-//   执行 agent 回合）+ start；dispose/reset 走 stop（先于 AgentService 收尾）
-// - tools/cron-create / cron-list / cron-delete：任务管理入口
-//
-// 借鉴声明：
-// 本模块参考 qwen-code 参考项目 packages/core/src/services/cronScheduler.ts
-// （Copyright 2026 Qwen Team，SPDX-License-Identifier: Apache-2.0）的
-// 调度语义，按我们的技术栈收敛重写：
-// - 文件持久化改 sqlite（对齐项目存储体系）
-// - 自写 cron-parser 替换为 croner（成熟调度库：校验/时区/秒级精度）
-// - 保留核心：表达式调度 + durable 任务 + 到期触发
-// ──────────────────────────────────────────────────────────────
-
+// cron-service.ts：定时任务服务——croner 表达式调度（内存 job 表）+ cron_tasks 表持久化，
+// 触发经 onFire 回调（容器 initCronScheduler 订阅后转 Agent 回合）；模块级单例导出
 import { randomUUID } from 'node:crypto';
 import { Cron } from 'croner';
 import { eq } from 'drizzle-orm';
@@ -30,7 +8,7 @@ import { getDb } from '../../storage/db';
 import type { CronTaskRow } from '../../storage/schema';
 import { cronTasks } from '../../storage/schema';
 
-/** cron 任务（领域类型） */
+/** 定时任务记录（表行 + 运行时 nextFireAt 快照） */
 export interface CronTask {
   readonly id: string;
   readonly sessionId: string;
@@ -41,27 +19,14 @@ export interface CronTask {
   readonly createdAt: number;
 }
 
-/** 触发回调（ServiceContainer 接入 agent 执行；返回 Promise 允许异步处理） */
 export type CronFireHandler = (task: CronTask) => Promise<void> | void;
 
-/**
- * 定时任务服务（模块单例）
- */
+/** 定时任务调度器：job 随启停同步 DB 行（nextFireAt 供 UI 展示倒计时） */
 export class CronService {
-  /** taskId → croner 调度实例（运行中任务） */
   private jobs = new Map<string, Cron>();
 
-  /**
-   * 创建定时任务（表达式非法抛错）
-   *
-   * @returns 任务 id
-   */
   create(sessionId: string, expression: string, description: string): string {
     const id = randomUUID();
-    // 2026-09-08 修复（首次触发丢失）：此前 createJob(id, expression, false) 直接
-    // 启动，而 DB insert 在其后——若触发点落在两者之间，fire() 读不到任务行会
-    // early-return，首次触发被静默吞掉。现在先以 paused 创建（校验表达式 +
-    // 取得 nextRun），insert 成功后再 resume 启动。
     const job = this.createJob(id, expression, true);
     const db = getDb();
     const now = Date.now();
@@ -79,22 +44,15 @@ export class CronService {
         })
         .run();
     } catch (err: unknown) {
-      // 回滚调度实例：insert 失败不留幽灵 job（否则 delete 对无 DB 行
-      // early-return，运行中实例永远无法清除，周期空转）
       this.stopJob(id);
       throw err;
     }
-    // DB 行就位后启动调度
     job.resume();
     logger.info({ id, expression, nextFireAt }, '定时任务已创建');
     return id;
   }
 
-  /**
-   * 删除定时任务（幂等）：停止调度实例 + 删除记录
-   */
   delete(taskId: string): boolean {
-    // 先停调度实例再查 DB：即使 DB 行缺失（历史幽灵 job）也能清除运行中实例
     this.stopJob(taskId);
     const db = getDb();
     const existing = db.select().from(cronTasks).where(eq(cronTasks.id, taskId)).get();
@@ -105,9 +63,6 @@ export class CronService {
     return true;
   }
 
-  /**
-   * 列出定时任务（创建时间倒序 + id 兜底确定性）
-   */
   list(): CronTask[] {
     const db = getDb();
     return db
@@ -118,9 +73,6 @@ export class CronService {
       .sort((a, b) => b.createdAt - a.createdAt || b.id.localeCompare(a.id));
   }
 
-  /**
-   * 启用/停用任务（同步调度实例 pause/resume）
-   */
   setEnabled(taskId: string, enabled: boolean): boolean {
     const db = getDb();
     const existing = db.select().from(cronTasks).where(eq(cronTasks.id, taskId)).get();
@@ -129,7 +81,6 @@ export class CronService {
     }
     const job = this.jobs.get(taskId);
     if (enabled) {
-      // 恢复/新建调度实例：重新计算下次触发
       const active = job ?? this.createJob(taskId, existing.expression, true);
       active.resume();
       const nextFireAt = active.nextRun()?.getTime() ?? null;
@@ -141,9 +92,6 @@ export class CronService {
     return true;
   }
 
-  /**
-   * 订阅触发事件（fire 回调；多个订阅者均触发）
-   */
   onFire(handler: CronFireHandler): () => void {
     this.fireHandlers.push(handler);
     return () => {
@@ -151,10 +99,6 @@ export class CronService {
     };
   }
 
-  /**
-   * 启动调度（应用启动时调用）：从 sqlite 恢复全部启用任务
-   * （幂等：已恢复过则直接返回）
-   */
   start(): void {
     if (this.started) {
       return;
@@ -169,7 +113,6 @@ export class CronService {
         this.createJob(row.id, row.expression, true);
         restored += 1;
       } catch (err: unknown) {
-        // 表达式异常（历史脏数据）：停用任务，防反复失败
         logger.error({ error: err, taskId: row.id }, '定时任务恢复失败，已停用');
         db.update(cronTasks).set({ enabled: 0 }).where(eq(cronTasks.id, row.id)).run();
       }
@@ -177,9 +120,6 @@ export class CronService {
     logger.info({ restored }, '定时任务调度已启动（croner 恢复）');
   }
 
-  /**
-   * 停止调度（应用退出；幂等）：停止全部调度实例
-   */
   stop(): void {
     for (const [taskId, job] of this.jobs) {
       try {
@@ -192,22 +132,14 @@ export class CronService {
     this.started = false;
   }
 
-  // ── 内部 ──────────────────────────────────────────────
-
   private started = false;
   private fireHandlers: CronFireHandler[] = [];
 
-  /**
-   * 创建 croner 调度实例并注册到 jobs（表达式非法抛错）
-   */
   private createJob(taskId: string, expression: string, initialPaused: boolean): Cron {
     const job = new Cron(
       expression,
       {
-        paused: initialPaused, // 本地时区（与 sqlite next_fire_at 语义一致）
-        // 2026-09-08 可靠性修复：此前未设 protect——上一次 fire 的 handler 还在跑
-        // 时下一次触发会重叠（同一会话并发回合）。protect 让 croner 跳过
-        // 上一次尚未结束的触发。
+        paused: initialPaused,
         protect: true,
       },
       (self) => {
@@ -218,16 +150,12 @@ export class CronService {
     return job;
   }
 
-  /**
-   * 停止并移除调度实例（幂等）
-   */
   private stopJob(taskId: string): void {
     const job = this.jobs.get(taskId);
     if (job !== undefined) {
       try {
         job.stop();
       } catch (error: unknown) {
-        // 2026-09-08：此前空 catch 吞掉异常，stop 失败无任何痕迹
         logger.warn(
           { taskId, error: error instanceof Error ? error.message : String(error) },
           '定时任务停止失败（忽略，继续移除引用）',
@@ -237,9 +165,6 @@ export class CronService {
     }
   }
 
-  /**
-   * 触发：更新 next_fire_at → 通知订阅回调（回调异常不影响调度）
-   */
   private async fire(taskId: string, expression: string, job: Cron): Promise<void> {
     const db = getDb();
     const row = db.select().from(cronTasks).where(eq(cronTasks.id, taskId)).get();
@@ -260,7 +185,6 @@ export class CronService {
   }
 }
 
-/** 行 → 领域类型 */
 function rowToTask(row: CronTaskRow): CronTask {
   return {
     id: row.id,
@@ -273,5 +197,4 @@ function rowToTask(row: CronTaskRow): CronTask {
   };
 }
 
-/** 模块级单例（ServiceContainer 与工具共用） */
 export const cronService = new CronService();

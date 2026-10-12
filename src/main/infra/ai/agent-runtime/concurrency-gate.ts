@@ -1,91 +1,66 @@
-// src/main/infra/ai/agent-runtime/concurrency-gate.ts
-// 回合级并发公平调度：多会话共享执行槽位（FIFO 先来先得）
-// ──────────────────────────────────────────────────────────────
-// 背景：多会话可同时发起 Agent 回合，无并发上限时会同时打满供应商 API
-// （免费层极易触发 429）。本门提供全局槽位，超过上限的回合进入 FIFO 队列
-// 等待——先到先得即"平均分配"（不会出现某会话被持续饿死），队列内 abort
-// 立即让位。（历史背景：原 ChatService / AgentService 两路共用；ChatService
-// 已并入 agent-service 回合链路删除，现所有回合同走这一门。）
-//
-// 生产接线：
-// - 唯一生产实例在 ServiceContainer（readonly 字段，非 accessor），槽位数取
-//   DEFAULT_MAX_CONCURRENT_TURNS；agent-service 构造注入，可选——未注入时
-//   跳过并发门（保持原并发行为，测试兼容）
-// - 排队 TTL 全局统一（DEFAULT_ACQUIRE_TIMEOUT_MS），acquire 不暴露按回合配置
-//
-// 设计：
-// - 纯函数 + 零依赖（不依赖 logger / config / telemetry，便于单测）
-// - acquire 返回幂等释放函数（重复调用无害），调用方 finally 释放
-// - signal 贯穿：排队期间 abort → 移除队列并抛 AbortError（与回合
-//   中断同语义，走上层统一错误分类）
-// ──────────────────────────────────────────────────────────────
+// concurrency-gate.ts：模型请求并发门——per-provider 分桶（每桶独立 cap/冷却/FIFO 队列），
+// 桶内接 ConcurrencyController（AIMD）。acquire 按 providerKey 选桶，退避 sleep 期间不持票。
+// 定时器（冷却唤醒/acquire 超时）在本文件——controller 保持纯状态机。
+import { ConcurrencyController } from './concurrency-controller';
 
-/** 队列条目 */
 interface GateEntry {
   readonly sessionId: string;
   readonly resolve: (release: () => void) => void;
   readonly reject: (error: unknown) => void;
-  /** abort 监听（出队时移除，防泄漏） */
   readonly onAbort: () => void;
-  /** 中断信号（出队时移除监听用） */
   readonly signal: AbortSignal | undefined;
-  /** 出队清理（清除排队超时定时器，2026-09-08 加） */
   readonly onDequeued: () => void;
 }
 
-/**
- * 默认最大同时执行回合数
- *
- * 桌面单用户场景：4 个并发回合足以覆盖多会话同时操作，
- * 同时避免免费层 API 被打满触发 429。真源在 ServiceContainer
- * （构造 createConcurrencyGate 时传入本常量）。
- */
-export const DEFAULT_MAX_CONCURRENT_TURNS = 4;
+/** 每桶并发上限默认值：4（LLM 网关并发约束 + 内存考量；容器初始化传此常量） */
+export const DEFAULT_MAX_CONCURRENT_PER_PROVIDER = 4;
 
-/**
- * 并发槽位门接口
- */
+/** 限流冷却默认上限：429 Retry-After 超过此值按此封顶（防几小时的指示挂死桶内所有请求） */
+export const MAX_COOLDOWN_MS = 5 * 60 * 1000;
+
+/** 并发门接口：acquire 返回 release 函数（用完必须释放）；coolDown 喂入限流冷却。
+ * providerKey（providerKind）是配额键——同一 provider 的所有请求共享一个桶。 */
 export interface ConcurrencyGate {
-  /**
-   * 获取一个执行槽位；无空位时 FIFO 排队等待。
-   *
-   * @param sessionId 请求方会话 id（日志/统计用）
-   * @param signal 中断信号（排队期间 abort → 抛 AbortError 并让位）
-   * @returns 释放函数（必须调用；幂等）
-   */
-  acquire(sessionId: string, signal?: AbortSignal): Promise<() => void>;
-  /** 当前运行/排队统计（日志与测试断言用） */
-  getStats(): { readonly running: number; readonly queued: number };
+  acquire(providerKey: string, sessionId: string, signal?: AbortSignal): Promise<() => void>;
+  /** 限流冷却：仅作用于该 provider 的桶；多次调用取最晚值；超 MAX_COOLDOWN_MS 封顶 */
+  coolDown(providerKey: string, durationMs: number): void;
+  /** 无准入对的限流学习信号：side query 观测到 429 时评价该 provider 桶的 cap
+   * （乘性减 + epoch 递增 + 冷却），不动在飞计数（无 acquire/release 配对） */
+  reportUnpairedThrottle(providerKey: string, cooldownMs: number): void;
+  /** 该 provider 桶是否处于冷却期（诊断/测试用） */
+  isCoolingDown(providerKey: string): boolean;
+  /** 等待该 provider 冷却结束（不占闸位；side query 经 modelGate 调用）。
+   * signal 中止时抛 GateAbortError——回合在 queued 态等冷却时用户中止应立即收场，
+   * 而非挂满冷却窗（此前不接 signal，最长挂 MAX_COOLDOWN_MS=5 分钟） */
+  waitCooldown(providerKey: string, signal?: AbortSignal): Promise<void>;
+  /** 回合级学习信号上报：该 provider 桶上一次 acquire 的尝试结果喂回 AIMD
+   * （rate_limited → throttled 评价 cap；其余失败 → failed 仅刷新活跃时间戳；
+   * 成功 → succeeded 计 streak）。纯学习不回减计数——闸位回减由 release 统一收口 */
+  reportAttemptOutcome(
+    providerKey: string,
+    outcome:
+      | { readonly kind: 'succeeded' }
+      | { readonly kind: 'throttled'; readonly cooldownMs?: number }
+      | { readonly kind: 'failed' },
+  ): void;
+  /** 该 provider 桶的控制器快照（观测/测试用；桶未创建返回 undefined） */
+  bucketSnapshot(providerKey: string): ReturnType<ConcurrencyController['snapshot']> | undefined;
+  getStats(): { running: number; queued: number };
 }
 
-/** 排队期间被 abort 的错误（与回合中断同语义，上层按 AbortError 分类） */
+/** 排队被中止时抛的错误（与 AbortError 同形，上游统一按中止处理） */
 export function createGateAbortError(): Error {
   return new DOMException('Concurrency gate aborted', 'AbortError');
 }
 
-/**
- * 默认排队获取超时（毫秒）
- *
- * 2026-09-08 加固：此前排队无 TTL——若某个运行中回合异常挂起且永不 release，
- * 后续回合会永久 pending（用户看到「一直在排队」且无任何反馈）。
- * 超时后拒绝并让出队列位置，上层按 AbortError 语义处理（回合失败可重试）。
- */
+// 排队等待上限 10 分钟：防队列堆积死等（上游 bug 不释放槽位时排队者也能脱身）
 export const DEFAULT_ACQUIRE_TIMEOUT_MS = 10 * 60 * 1000;
 
-/**
- * 入队等待槽位（模块级，从 createConcurrencyGate 提取以保持其函数体精简）
- *
- * 含 abort 竞态修复（2026-09-08）：注册监听后复查 signal.aborted——
- * 首次检查与注册之间存在窗口，若 signal 在窗口内 abort，监听器不会再触发，
- * 条目会滞留队列直到被 dequeue 后照常放行（中断语义被违反）。
- *
- * 含排队超时（2026-09-08）：超时后出队并拒绝，避免槽位泄漏导致永久等待。
- *
- * @param queue FIFO 队列（调用方持有）
- * @param sessionId 会话标识
- * @param signal 中断信号（可选）
- * @param timeoutMs 排队超时（毫秒）
- */
+interface GateBucket {
+  readonly controller: ConcurrencyController;
+  readonly queue: GateEntry[];
+}
+
 function enqueueGateEntry(
   queue: GateEntry[],
   sessionId: string,
@@ -93,7 +68,6 @@ function enqueueGateEntry(
   timeoutMs: number,
 ): Promise<() => void> {
   return new Promise<() => void>((resolve, reject) => {
-    /** 出队并拒绝（abort / 超时共用；幂等） */
     const rejectAndDequeue = (error: Error): void => {
       const index = queue.indexOf(entry);
       if (index >= 0) {
@@ -120,10 +94,8 @@ function enqueueGateEntry(
       );
     }, timeoutMs);
     timeoutTimer.unref?.();
-    // 排队期间 abort：移除队列并拒绝（让位给后续会话）
     signal?.addEventListener('abort', entry.onAbort, { once: true });
     queue.push(entry);
-    // 注册后复查：命中则立即出队拒绝
     if (signal?.aborted === true) {
       entry.onAbort();
     }
@@ -131,67 +103,160 @@ function enqueueGateEntry(
 }
 
 /**
- * 创建并发槽位门
+ * 创建分桶并发门。
  *
- * @param maxConcurrent 最大同时执行回合数（必须为正整数）
- * @returns ConcurrencyGate 实例
- *
- * @example
- * ```ts
- * const gate = createConcurrencyGate(4);
- * const release = await gate.acquire(sessionId, controller.signal);
- * try {
- *   await runTurn();
- * } finally {
- *   release();
- * }
- * ```
+ * 每桶：ConcurrencyController（AIMD 状态机，cap/冷却/epoch）+ FIFO 队列。
+ * 冷却期即使有空槽也不放行（provider 看到的在飞数必须真正下降）；
+ * 有等待者时不走快路径（公平性：防请求密集的调用方越过队列）。
+ * 桶惰性创建（用到哪个 provider 建哪个）。
  */
-export function createConcurrencyGate(maxConcurrent: number): ConcurrencyGate {
-  if (!Number.isInteger(maxConcurrent) || maxConcurrent <= 0) {
-    throw new Error(`createConcurrencyGate: maxConcurrent 必须为正整数（收到 ${maxConcurrent}）`);
+export function createConcurrencyGate(maxConcurrentPerProvider: number): ConcurrencyGate {
+  if (!Number.isInteger(maxConcurrentPerProvider) || maxConcurrentPerProvider <= 0) {
+    throw new Error(
+      `createConcurrencyGate: maxConcurrentPerProvider 必须为正整数（收到 ${maxConcurrentPerProvider}）`,
+    );
   }
 
-  let running = 0;
-  // FIFO 等待队列（先入先出 = 公平调度，无饥饿）
-  const queue: GateEntry[] = [];
+  const buckets = new Map<string, GateBucket>();
 
-  /** 出队下一个等待者（有空位时循环放行） */
-  const dequeueNext = (): void => {
-    while (running < maxConcurrent && queue.length > 0) {
-      const entry = queue.shift() as GateEntry;
+  const getBucket = (providerKey: string): GateBucket => {
+    let bucket = buckets.get(providerKey);
+    if (bucket === undefined) {
+      bucket = {
+        controller: new ConcurrencyController(maxConcurrentPerProvider),
+        queue: [],
+      };
+      buckets.set(providerKey, bucket);
+    }
+    return bucket;
+  };
+
+  const dequeueNext = (bucket: GateBucket, providerKey: string): void => {
+    const now = Date.now();
+    while (
+      bucket.queue.length > 0 &&
+      !bucket.controller.isCoolingDown(now) &&
+      bucket.controller.canAdmit(now)
+    ) {
+      const entry = bucket.queue.shift() as GateEntry;
       entry.signal?.removeEventListener('abort', entry.onAbort);
       entry.onDequeued();
-      running += 1;
-      entry.resolve(createRelease());
+      bucket.controller.admitted(now);
+      entry.resolve(createRelease(bucket, providerKey));
     }
   };
 
-  /** 生成独立释放函数（幂等：重复调用无害） */
-  const createRelease = (): (() => void) => {
+  const armCooldownWake = (bucket: GateBucket, providerKey: string): void => {
+    const waitMs = bucket.controller.cooldownRemainingMs(Date.now());
+    if (waitMs <= 0) {
+      return;
+    }
+    setTimeout(() => {
+      dequeueNext(bucket, providerKey);
+    }, waitMs).unref?.();
+  };
+
+  const createRelease = (bucket: GateBucket, providerKey: string): (() => void) => {
     let released = false;
     return () => {
       if (released) return;
       released = true;
-      running -= 1;
-      dequeueNext();
+      // 计数闭环在 gate 层：acquire → admitted / release → forceRelease（唯一回减口）。
+      // 终态上报（succeeded/throttled/failed）是纯学习信号不回减——若与此处双回减，
+      // inFlight 系统性低估会让 canAdmit 过度放行，实际并发静默超过 cap
+      bucket.controller.forceRelease();
+      dequeueNext(bucket, providerKey);
     };
   };
 
   return {
-    acquire(sessionId, signal) {
-      // 已中断：直接失败（不排队）
+    acquire(providerKey, sessionId, signal) {
       if (signal?.aborted === true) {
         return Promise.reject(createGateAbortError());
       }
-      // 有空位：立即放行
-      if (running < maxConcurrent) {
-        running += 1;
-        return Promise.resolve(createRelease());
+      const bucket = getBucket(providerKey);
+      const now = Date.now();
+      // 有等待者时不走快路径（公平性）；冷却期即使有空槽也不放行
+      if (
+        bucket.queue.length === 0 &&
+        !bucket.controller.isCoolingDown(now) &&
+        bucket.controller.canAdmit(now)
+      ) {
+        bucket.controller.admitted(now);
+        return Promise.resolve(createRelease(bucket, providerKey));
       }
-      // 排队等待（FIFO；带获取超时）
-      return enqueueGateEntry(queue, sessionId, signal, DEFAULT_ACQUIRE_TIMEOUT_MS);
+      return enqueueGateEntry(bucket.queue, sessionId, signal, DEFAULT_ACQUIRE_TIMEOUT_MS);
     },
-    getStats: () => ({ running, queued: queue.length }),
+    coolDown(providerKey, durationMs) {
+      if (!Number.isFinite(durationMs) || durationMs <= 0) {
+        return;
+      }
+      const bucket = getBucket(providerKey);
+      // MAX_COOLDOWN_MS 封顶在闸做（controller 不知道闸的常量边界）
+      const capped = Math.min(durationMs, MAX_COOLDOWN_MS);
+      bucket.controller.throttleCooldown(Date.now(), capped);
+      armCooldownWake(bucket, providerKey);
+    },
+    reportUnpairedThrottle(providerKey, cooldownMs) {
+      const bucket = getBucket(providerKey);
+      const capped = Math.min(Math.max(cooldownMs, 0), MAX_COOLDOWN_MS);
+      bucket.controller.throttledWithoutAdmission(Date.now(), { cooldownMs: capped });
+      armCooldownWake(bucket, providerKey);
+    },
+    isCoolingDown(providerKey) {
+      return buckets.get(providerKey)?.controller.isCoolingDown(Date.now()) === true;
+    },
+    async waitCooldown(providerKey, signal) {
+      const bucket = buckets.get(providerKey);
+      while (bucket !== undefined) {
+        if (signal?.aborted === true) {
+          throw createGateAbortError();
+        }
+        const waitMs = bucket.controller.cooldownRemainingMs(Date.now());
+        if (waitMs <= 0) {
+          return;
+        }
+        await new Promise<void>((resolve, reject) => {
+          const onAbort = (): void => {
+            clearTimeout(timer);
+            signal?.removeEventListener('abort', onAbort);
+            reject(createGateAbortError());
+          };
+          const timer = setTimeout(() => {
+            signal?.removeEventListener('abort', onAbort);
+            resolve();
+          }, waitMs);
+          signal?.addEventListener('abort', onAbort, { once: true });
+        });
+      }
+    },
+    reportAttemptOutcome(providerKey, outcome) {
+      const bucket = buckets.get(providerKey);
+      if (bucket === undefined) {
+        return;
+      }
+      const now = Date.now();
+      if (outcome.kind === 'succeeded') {
+        bucket.controller.succeeded(now);
+      } else if (outcome.kind === 'throttled') {
+        bucket.controller.throttled(now, {
+          ...(outcome.cooldownMs !== undefined ? { cooldownMs: outcome.cooldownMs } : {}),
+        });
+      } else {
+        bucket.controller.failed(now);
+      }
+    },
+    bucketSnapshot(providerKey) {
+      return buckets.get(providerKey)?.controller.snapshot();
+    },
+    getStats() {
+      let running = 0;
+      let queued = 0;
+      for (const bucket of buckets.values()) {
+        running += bucket.controller.snapshot().inFlight;
+        queued += bucket.queue.length;
+      }
+      return { running, queued };
+    },
   };
 }

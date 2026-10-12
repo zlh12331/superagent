@@ -1,21 +1,3 @@
-// src/renderer/stores/transient/pending-message-store.ts
-// 欢迎页首条消息暂存（L2 客户端共享状态层 - transient）
-// ──────────────────────────────────────────────────────────────
-// 职责：home.tsx 创建会话成功后暂存首条消息，ChatPanel 挂载后 consume 一次并自动发送。
-//
-// 为什么不用 sessionStorage（此前实现）：
-// - 手写字段名 + JSON 编解码 + 时间戳字符串化，契约散落在写入/读取两端，无类型约束
-// - 读取端要自己负责 removeItem，异常路径（解析失败/挂载前取消）易残留坏数据
-// - Electron 的 sessionStorage 本就不跨应用重启持久化，用「浏览器存储」换来的只是
-//   一层隐式耦合；跨重启行为（重启后不自动发送）在内存 store 下完全一致
-//
-// 为什么不塞进 welcome-store：
-// - 创建会话同一路由跳转内会调用 exitWelcomeMode()，welcome store 的预设目录会被清空，
-//   消息若挂在同一 state 上会被连带清掉（生命周期不同，必须分离）
-//
-// 不持久化：进程退出即散（跨重启不自动发送是既定行为）。
-// ──────────────────────────────────────────────────────────────
-
 import { create } from 'zustand';
 
 import { type PendingMessageRecord, resolvePendingMessage } from '@/lib/pending-message';

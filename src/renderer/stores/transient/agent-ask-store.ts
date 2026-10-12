@@ -1,17 +1,3 @@
-// src/renderer/stores/transient/agent-ask-store.ts
-// Agent 交互式提问状态（L2 transient：ask_user_question 工具 → 提问对话框）
-// ──────────────────────────────────────────────────────────────
-// 主进程 agent:event:ask 推送 → 本 store 入队 → AskDialog 渲染队头
-// 用户回答 → window.api.agent.respondAsk 回传 → 出队
-// 主进程决议（agent:event:ask:resolved）→ 超时/中断路径出队（配对闭合）
-// ──────────────────────────────────────────────────────────────
-//
-// 队列语义（2026-10-08 队列化）：一轮模型回复可含多个 ask 工具调用（AI SDK
-// 并行执行），故 store 持有 pending 列表而非单值——此前单值会被后到的提问
-// 覆盖，先到的那个永远看不到（且主进程侧已对称修复为 pendingAskIds 列表）。
-// AskDialog 为全屏模态，一次呈现**队头**（FIFO 先问先答）；队头出队后下一条
-// 自动上浮——超时的队头由主进程决议事件放行，不会阻塞队列。
-
 import type { AgentQuestion } from '@code-agent/shared/renderer';
 import { create } from 'zustand';
 
@@ -63,7 +49,6 @@ export const useAgentAskStore = create<AgentAskState>((set, get) => ({
       set({ asks: [] });
       return;
     }
-    // 会话清理：仅移除该会话的条目（其余会话的提问不受影响）
     const remaining = get().asks.filter((a) => a.sessionId !== sessionId);
     if (remaining.length !== get().asks.length) {
       set({ asks: remaining });

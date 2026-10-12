@@ -1,14 +1,3 @@
-// src/renderer/hooks/use-file-tree-ops.test.tsx
-// 文件树编辑操作 hook 单测（正向 / 边界 / 异常）
-// ──────────────────────────────────────────────────────────────
-// 此前仅 joinPath 有属性测试，createFile / createDir 的
-// 「IPC 参数契约 + pendingDirs 生命周期 + 成功/失败分支 + 错误提示」零覆盖。
-//
-// 重点守护两处易回归行为：
-// 1. pending 标记挂在**父目录**（挂新条目路径则永远命中不到已渲染行——状态无法抵达 UI）
-// 2. 失败时既不复位内联新建态（用户可改名字重试）也不吞错误（有 toast 提示）
-// ──────────────────────────────────────────────────────────────
-
 import { renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -72,7 +61,6 @@ describe('useFileTreeOps', () => {
 
       const pending = result.current.createFile(PARENT, 'new.ts');
 
-      // 在途：父目录挂 pending（而非新条目路径——新条目此刻不在 entries 中）
       expect(useFileTreeStore.getState().pendingDirs.has(PARENT)).toBe(true);
 
       resolveCreate({ data: { path: `${PARENT}/new.ts` } });
@@ -106,7 +94,6 @@ describe('useFileTreeOps', () => {
 
       expect(ok).toBe(false);
       expect(mockToastError).toHaveBeenCalled();
-      // 失败也不残留 pending（否则父目录行永久降透明度）
       expect(useFileTreeStore.getState().pendingDirs.has(PARENT)).toBe(false);
     });
 

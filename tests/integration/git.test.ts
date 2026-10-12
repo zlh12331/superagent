@@ -1,14 +1,3 @@
-// tests/integration/git.test.ts
-// Git 域集成测试（batch 4/9 · 核心链路）
-// ──────────────────────────────────────────────────────────────
-// 链路：IPC handler（真实）→ GitService（真实）→ SimpleGit（真实 git 命令）→ 临时仓库
-// 替身：无（git 命令为真实外部工具；临时仓库为 IO 边界）
-//
-// 维度覆盖：接口契约 / 时序编排（add→commit 顺序）/ 状态一致性（git 状态往返）/
-//           错误传播（assertGitRepo / push ok=false）
-// 场景：持久化往返（commit 后 status 干净）/ 并发（并行 status）/ 外部依赖故障（push 无 remote）
-// ──────────────────────────────────────────────────────────────
-
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -91,20 +80,16 @@ describe('git 域集成链路（batch 4）', () => {
       const handlers = createGitHandlers({ gitService: getGitService() });
       writeFileSync(join(dir, 'a.txt'), 'v1', 'utf-8');
 
-      // 未跟踪状态
       const dirty = await handlers.status({ path: dir });
       expect(dirty.clean).toBe(false);
 
-      // add 后 staged
       const addRes = await handlers.add({ path: dir });
       expect(addRes.stagedCount).toBe(1);
 
-      // commit 返回 SHA
       const commitRes = await handlers.commit({ path: dir, message: 'feat: init' });
       expect(commitRes.filesChanged).toBe(1);
       expect(commitRes.sha).toMatch(/^[0-9a-f]{7,40}$/);
 
-      // 持久化往返：commit 后干净
       const clean = await handlers.status({ path: dir });
       expect(clean.clean).toBe(true);
     });
@@ -160,7 +145,6 @@ describe('git 域集成链路（batch 4）', () => {
           setUpstream: true,
         });
         expect(pushRes.ok).toBe(true);
-        // 真实验证：bare 仓库收到提交（pushedCount 解析受 simple-git stdout 格式影响）
         const bareLog = execFileSync('git', ['log', '-1', '--format=%H'], {
           cwd: bare,
           encoding: 'utf-8',
@@ -175,7 +159,6 @@ describe('git 域集成链路（batch 4）', () => {
     await withGitRepo(async (dir) => {
       const handlers = createGitHandlers({ gitService: getGitService() });
       const status = await handlers.status({ path: dir });
-      // 无 commit 的仓库：clean 且无分支提交（porcelain -b 输出不同）
       expect(status.files).toEqual([]);
       expect(status.branch).toBeDefined();
     });
@@ -207,7 +190,6 @@ describe('git 域集成链路（batch 4）', () => {
     await withGitRepo(async (dir) => {
       const handlers = createGitHandlers({ gitService: getGitService() });
       const commitRes = await handlers.commit({ path: dir, message: 'nothing' });
-      // simple-git 对 nothing to commit 返回空结果（非异常——生产语义）
       expect(commitRes.sha).toBe('');
     });
   });

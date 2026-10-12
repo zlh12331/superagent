@@ -1,27 +1,23 @@
-// src/main/infra/ai/agent-runtime/create-stream.test.ts
-// 请求级重试链路单测：传输层失败重试 / HTTP 类交 SDK / 首包超时 / 首 part 接续
-//
-// 测试手法：ReadableStream 的 pull 回调内按需失败/发 part（fake UiStreamable，
-// 无 mock 模块——重试时序与错误分类走真实 llm-client/retry 实现）。
-
 import { ErrorCode } from '@code-agent/shared/main';
 import { APICallError, RetryError } from 'ai';
 import { describe, expect, it } from 'vitest';
 import { createStreamWithRetry, type MessageStreamSource } from './create-stream';
 
-/** fake UiStreamable：可配置首读失败次数与失败错误 */
 function createFakeStream(options: {
   firstReadFailures?: number;
   parts?: unknown[];
   error?: Error;
-  /** 首包永不到达（触发读流空闲超时） */
   neverEmit?: boolean;
 }): { streamable: MessageStreamSource; createdCount: () => number } {
   let created = 0;
   let failures = options.firstReadFailures ?? 0;
   const parts = options.parts ?? [{ type: 'text-delta', text: 'hello' }];
-  // 默认 TypeError：isRetryableError 对 TypeError 返回 true（可重试语义）
-  const failError = options.error ?? new TypeError('network failure');
+  // 模拟 undici 真实形态：TypeError('fetch failed') + cause 带网络错误码（isRetryableError 只认这个形态）
+  const failError =
+    options.error ??
+    new TypeError('fetch failed', {
+      cause: Object.assign(new Error('connect ECONNRESET'), { code: 'ECONNRESET' }),
+    });
   const streamable: MessageStreamSource = {
     toUIMessageStream() {
       created += 1;
@@ -29,7 +25,6 @@ function createFakeStream(options: {
       return new ReadableStream<unknown>({
         pull(controller) {
           if (options.neverEmit === true) {
-            // 悬挂：不产出也不结束，等读侧空闲超时
             return;
           }
           if (failures > 0) {
@@ -51,12 +46,6 @@ function createFakeStream(options: {
 }
 
 describe('createStreamWithRetry', () => {
-  // ⚠️ 走重试链的用例必须显式放宽超时：重试退避是真实等待（llm-client/retry.ts
-  // 的 initialDelayMs 默认 1500ms，指数递增），本用例两次失败 ≈ 4.5s，贴着
-  // vitest 默认的 5000ms 上限（实测 4521ms，余量仅 10%）。在共享 runner 上
-  // 必现偶发超时（2026-09-21 六平台 CI 首跑：windows-latest 与 windows-11-arm
-  // 各挂一处——同批次的 ubuntu/macOS 通过，属负载差异而非平台缺陷）。
-  // 不从产品侧注入"测试用短延迟"：那会让测试不再覆盖真实的退避时序。
   it('首读失败自动重试，成功后返回首 part 与 reader', async () => {
     const { streamable, createdCount } = createFakeStream({ firstReadFailures: 2 });
     const created = await createStreamWithRetry({
@@ -64,10 +53,9 @@ describe('createStreamWithRetry', () => {
       controller: new AbortController(),
       maxAttempts: 3,
     });
-    expect(createdCount()).toBe(3); // 失败 2 次 + 成功 1 次
+    expect(createdCount()).toBe(3);
     expect(created.firstPart.done).toBe(false);
     expect((created.firstPart.value as { type: string }).type).toBe('text-delta');
-    // 接续读取：reader 已预读首 part，后续读到流结束
     const next = await created.reader.read();
     expect(next.done).toBe(true);
   }, 15_000);
@@ -80,11 +68,10 @@ describe('createStreamWithRetry', () => {
         controller: new AbortController(),
         maxAttempts: 2,
       }),
-    ).rejects.toThrow('network failure');
+    ).rejects.toThrow('fetch failed');
   }, 15_000);
 
   it('HTTP 类错误不在本层重试（model call 级重试真源是 SDK）', async () => {
-    // 带 retry-after 的 429：SDK 已按该头定时长重试，本层再重试会放大请求数
     const rateLimited = new APICallError({
       message: 'Rate limit exceeded',
       url: 'https://api.example.com/v1/chat/completions',
@@ -159,4 +146,117 @@ describe('createStreamWithRetry', () => {
     });
     expect(created.result).toBe(streamable);
   });
+});
+
+describe('createStreamWithRetry（重试边界：prelude 缓冲）', () => {
+  /** 双尝试流：第一次尝试给定 parts 后断流，第二次尝试给完整 parts */
+  function createTwoAttemptStream(
+    firstParts: unknown[],
+    secondParts: unknown[],
+  ): MessageStreamSource {
+    let attempt = 0;
+    return {
+      toUIMessageStream() {
+        attempt += 1;
+        let idx = 0;
+        const parts = attempt === 1 ? firstParts : secondParts;
+        return new ReadableStream<unknown>({
+          pull(controller) {
+            if (attempt === 1 && idx >= firstParts.length) {
+              controller.error(
+                new TypeError('fetch failed', {
+                  cause: Object.assign(new Error('connect ECONNRESET'), { code: 'ECONNRESET' }),
+                }),
+              );
+              return;
+            }
+            if (idx < parts.length) {
+              controller.enqueue(parts[idx]);
+              idx += 1;
+              return;
+            }
+            controller.close();
+          },
+        });
+      },
+    };
+  }
+
+  function collectTypes(reader: ReadableStreamDefaultReader<unknown>): Promise<string[]> {
+    const seq: string[] = [];
+    return (async () => {
+      for (;;) {
+        const next = await reader.read();
+        if (next.done) break;
+        const part = next.value as { type: string; delta?: string };
+        seq.push(part.type);
+        if (part.delta !== undefined) {
+          seq.push(part.delta);
+        }
+      }
+      return seq;
+    })();
+  }
+
+  it('前奏后断流：无感重建流，前奏跨尝试保留并按原序交付', async () => {
+    const streamable = createTwoAttemptStream(
+      [{ type: 'start' }, { type: 'tool-input-start', id: 't1' }],
+      [{ type: 'start' }, { type: 'text-start', id: 'c1' }, { type: 'text-delta', delta: 'hello' }],
+    );
+    const created = await createStreamWithRetry({
+      create: () => streamable,
+      controller: new AbortController(),
+      maxAttempts: 3,
+    });
+
+    expect(created.attemptsToBoundary).toBe(2);
+    // firstPart = 回注流首格 = 第一次尝试的 start（跨尝试保留，原序）
+    expect((created.firstPart.value as { type: string }).type).toBe('start');
+    // firstPart 已消费首格（start）；collectTypes 从回注流第二格起收
+    const seq = await collectTypes(created.reader);
+    expect(seq).toEqual(['tool-input-start', 'start', 'text-start', 'text-delta', 'hello']);
+  }, 15_000);
+
+  it('空 delta 是前奏：缓冲不触发边界', async () => {
+    const { streamable } = createFakeStream({
+      parts: [
+        { type: 'start' },
+        { type: 'text-delta', delta: '' },
+        { type: 'text-delta', delta: 'real' },
+      ],
+    });
+    const created = await createStreamWithRetry({
+      create: () => streamable,
+      controller: new AbortController(),
+    });
+    expect((created.firstPart.value as { type: string }).type).toBe('start');
+    expect(created.preludeBufferedCount).toBe(2);
+    const second = await created.reader.read();
+    expect((second.value as { type: string }).type).toBe('text-delta');
+  }, 15_000);
+
+  it('tool-call 直接是边界（不缓冲），回注流按序透传', async () => {
+    const { streamable } = createFakeStream({
+      parts: [{ type: 'start' }, { type: 'tool-call', toolCallId: 't1', toolName: 'read' }],
+    });
+    const created = await createStreamWithRetry({
+      create: () => streamable,
+      controller: new AbortController(),
+    });
+    expect(created.preludeBufferedCount).toBe(1);
+    // firstPart 已消费首格（start）；回注流第二格起收边界及其后
+    const seq = await collectTypes(created.reader);
+    expect(seq).toEqual(['tool-call']);
+  }, 15_000);
+
+  it('无前奏：原始 reader 直通，零额外包装', async () => {
+    const { streamable } = createFakeStream({});
+    const created = await createStreamWithRetry({
+      create: () => streamable,
+      controller: new AbortController(),
+    });
+    expect(created.preludeBufferedCount).toBe(0);
+    expect(created.attemptsToBoundary).toBe(1);
+    expect((created.firstPart.value as { type: string }).type).toBe('text-delta');
+  }, 15_000);
 });

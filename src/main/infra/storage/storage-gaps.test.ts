@@ -1,11 +1,3 @@
-// src/main/infra/storage/storage-gaps.test.ts
-// storage 域 9 缺口补全：whitelist-pref 全路径（首次补测）、db 迁移/轮转/完整性分支
-//
-// 测试要点：
-// 1. readWhitelistSync：有效条目通过 / 非法条目过滤 / 非数组 / 文件缺失 / JSON 损坏
-// 2. writeWhitelist：整表覆写 + 日志
-// 3. db：getDb 未初始化抛错 / closeDb 幂等 / 旧库 ALTER 迁移 + duplicate 跳过 / 备份轮转
-
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -27,7 +19,6 @@ const mocks = vi.hoisted(() => {
 vi.mock('electron', () => ({
   app: {
     getPath: mocks.mockGetPath,
-    // initDb 的 resolveMigrationsDir 需要：dev 环境指向项目根 drizzle/
     getAppPath: () => process.cwd(),
     isPackaged: false,
   },
@@ -122,7 +113,6 @@ describe('storage 域批次9 缺口补全', () => {
       expect(db).toBeDefined();
       await closeDb();
       expect(() => getDb()).toThrow('数据库未初始化');
-      // 幂等：二次调用不抛
       await expect(closeDb()).resolves.toBeUndefined();
     });
 
@@ -146,7 +136,6 @@ describe('storage 域批次9 缺口补全', () => {
         close(): void;
       };
       const check = new Database(dbPath);
-      // 全部 11 张表 + drizzle journal 表
       const tables = check
         .prepare("SELECT name FROM sqlite_master WHERE type='table'")
         .all()
@@ -167,7 +156,6 @@ describe('storage 域批次9 缺口补全', () => {
           '__drizzle_migrations',
         ]),
       );
-      // 约束生效：非法 role 插入被 CHECK 拒绝
       expect(() =>
         check
           .prepare(
@@ -177,14 +165,12 @@ describe('storage 域批次9 缺口补全', () => {
       ).toThrow(/CHECK/);
       check.close();
 
-      // 重复 initDb（resetDb 后模拟重启）：journal 已记录，迁移不再执行，幂等不抛
       await closeDb();
       resetDb();
       expect(() => initDb()).not.toThrow();
     });
 
     it('备份轮转：保留最近 3 份，删除过期备份', async () => {
-      // 预置 5 个备份文件（initDb 的异步备份会追加 1 份）
       const backupDir = join(tempDir, 'backups');
       mkdirSync(backupDir, { recursive: true });
       for (let i = 1; i <= 5; i += 1) {
@@ -192,12 +178,10 @@ describe('storage 域批次9 缺口补全', () => {
       }
 
       initDb();
-      // 等待异步热备份 + 轮转完成
       await new Promise((resolve) => setTimeout(resolve, 500));
 
       const { readdirSync } = require('node:fs') as typeof import('node:fs');
       const remaining = readdirSync(backupDir).filter((n) => n.endsWith('.db'));
-      // 初始 5 份 + 本次备份 1 份 = 6 份，轮转保留 3 份
       expect(remaining.length).toBe(3);
       expect(mocks.mockLogger.info).toHaveBeenCalledWith(
         expect.objectContaining({ stale: expect.any(String) }),
@@ -206,7 +190,6 @@ describe('storage 域批次9 缺口补全', () => {
     });
 
     it('备份失败（backups 路径被文件占用）：记录错误不阻断启动', async () => {
-      // 把 backups 位置占为文件 → mkdirSync 抛 → backupDatabase catch
       writeFileSync(join(tempDir, 'backups'), 'not a dir', 'utf8');
 
       const db = initDb();

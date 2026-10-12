@@ -1,28 +1,5 @@
-// src/main/infra/ai/prompt/prompt-service.ts
-// PromptService：System Prompt 模板的数据库 CRUD + 默认 prompt 初始化 + 动态上下文注入
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - initialize()：创建 prompts 表 + 插入默认 Code Agent prompt（幂等）
-// - getPrompt(id)：从数据库读取 prompt 模板
-// - resolvePrompt(id, workingDir)：读取模板 + 注入动态上下文 → 返回完整 system prompt
-// - listPrompts() / updatePrompt(id, content)：预留设置界面接入点
-//
-// 消费方与调用链：
-// - initialize：index.ts 在 AgentService 初始化之前调用（resolvePrompt 时
-//   数据库已有默认 prompt）
-// - resolvePrompt：agent.handler 记忆召回链预解析（P2-32）→ agent-service
-//   resolveSystemPrompt 复用（同回合免二次解析；PromptService 内部已回退
-//   硬编码默认值，失败容忍）
-// - listPrompts / updatePrompt：当前生产零调用（无 prompt 域 IPC，仅单测），
-//   预留设置界面接入
-//
-// 设计原则：
-// - 数据库存储：用户选择的方案，支持运行时编辑
-// - 默认 prompt 注入：initialize 时插入 DEFAULT_CODE_AGENT_PROMPT
-// - 动态上下文注入：每次 resolvePrompt 都重新收集环境信息
-// - 失败容忍：数据库读取失败时回退到默认 prompt（硬编码在 default-prompt.ts）
-// ──────────────────────────────────────────────────────────────
-
+// prompt-service.ts：系统提示词服务——prompts 表（首启播种默认提示词）+ 动态上下文注入
+// resolvePrompt 单一出口：DB 命中或内置默认；git 摘要按需注入（容器装配时传 provider）
 import { eq } from 'drizzle-orm';
 import { logger } from '../../../utils/logger';
 import { getDb } from '../../storage/db';
@@ -30,90 +7,33 @@ import { type PromptRow, prompts } from '../../storage/schema';
 import { DEFAULT_CODE_AGENT_PROMPT } from './default-prompt';
 import { type GitSummaryProvider, injectDynamicContext } from './dynamic-context';
 
-/**
- * 默认 Code Agent prompt 的固定 ID
- *
- * 数据库主键，initialize 时用此 ID 插入。
- * 用户编辑后此 ID 的 content 会更新，但 ID 不变。
- */
 export const DEFAULT_CODE_AGENT_PROMPT_ID = 'code-agent';
 
-/**
- * PromptService 接口
- *
- * 解耦 AgentService / ServiceContainer 对具体类的依赖：
- * - 单元测试：注入 mock 实现，不依赖真实 SQLite
- * - 实现替换：setPromptService 注入另一实现
- *
- * 与 IAgentService / IMCPService 的接口设计模式一致。
- */
+/** 提示词服务契约（AgentService 与记忆召回共用） */
 export interface IPromptService {
-  /** 初始化默认 prompt（幂等，重复调用安全） */
   initialize(): void;
-  /**
-   * 解析 prompt：读取模板 + 注入动态上下文
-   *
-   * @param id prompt ID（默认 'code-agent'）
-   * @param workingDir 工作目录（用于收集 git/AGENTS.md 等动态上下文）
-   * @returns 解析后的 prompt（含动态上下文）
-   */
   resolvePrompt(id: string | undefined, workingDir: string): Promise<ResolvedPrompt>;
 }
 
-/**
- * PromptService 依赖选项
- */
 export interface PromptServiceOptions {
-  /**
-   * Git 状态查询函数（可选）
-   *
-   * 注入而非直接依赖 GitService：
-   * - 解耦对 ServiceContainer 的依赖
-   * - 便于测试 mock
-   *
-   * 不传则 prompt 中 git 状态显示"未知"。
-   */
   readonly gitSummaryProvider?: GitSummaryProvider;
 }
 
-/**
- * Prompt 解析结果
- */
+/** 解析结果：content + 来源（database=用户自定义 / default-fallback=内置兜底） */
 export interface ResolvedPrompt {
-  /** 完整的 system prompt（已注入动态上下文） */
   readonly content: string;
-  /** prompt 来源（'database' / 'default-fallback'） */
   readonly source: 'database' | 'default-fallback';
 }
 
-/**
- * PromptService：管理 System Prompt 的数据库存储与动态上下文注入
- *
- * 生命周期：
- * - initialize()：应用启动时调用（AgentService 初始化前），幂等建表 + 插入默认 prompt
- * - resolvePrompt()：每次 agent:run 时调用，读取模板 + 注入上下文
- * - getPrompt() / listPrompts() / updatePrompt()：预留设置界面（当前生产
- *   零调用，仅单测覆盖）
- *
- * 生产实例由 ServiceContainer lazy accessor 持有（getPromptService 创建，
- * 闭包装配 gitSummaryProviderFrom(gitService.status)；setPromptService 供替换）。
- */
+/** 提示词服务：initialize 播种默认行（onConflictDoNothing 幂等），失败下次调用重试 */
 export class PromptService implements IPromptService {
-  /** 标记 initialize 是否已执行（避免重复插入） */
   private initialized = false;
-  /** Git 状态查询函数（可选，未注入时为 undefined） */
   private readonly gitSummaryProvider: GitSummaryProvider | undefined;
 
   constructor(options: PromptServiceOptions = {}) {
     this.gitSummaryProvider = options.gitSummaryProvider;
   }
 
-  /**
-   * 初始化：插入默认 prompt（幂等）
-   *
-   * 在 initDb 之后调用一次。如果 prompts 表已有默认 prompt 则跳过。
-   * 用户编辑过的 prompt 不会被覆盖（用 INSERT OR IGNORE）。
-   */
   initialize(): void {
     if (this.initialized) {
       return;
@@ -123,8 +43,6 @@ export class PromptService implements IPromptService {
       const db = getDb();
       const now = Date.now();
 
-      // INSERT OR IGNORE：已存在则跳过（幂等）
-      // 不用 INSERT OR REPLACE：避免覆盖用户编辑过的内容
       db.insert(prompts)
         .values({
           id: DEFAULT_CODE_AGENT_PROMPT_ID,
@@ -142,22 +60,10 @@ export class PromptService implements IPromptService {
       this.initialized = true;
       logger.info({}, 'PromptService 初始化完成');
     } catch (error) {
-      // L6 修复：失败时不设 initialized=true，允许下次调用 initialize 重试
-      // - 原实现：catch 块末尾设 initialized=true，导致 DB 临时不可用（如文件锁）
-      //   后下次 initialize 直接 return，永远走 fallback，无法自愈
-      // - 修复后：保持 initialized=false，下次调用会重新尝试插入
-      // - 不影响运行时：resolvePrompt 已内置 fallback 到 DEFAULT_CODE_AGENT_PROMPT
-      //   数据库读取失败时仍能正常工作
       logger.error({ error }, 'PromptService 初始化失败，下次调用将重试');
     }
   }
 
-  /**
-   * 读取 prompt 模板（不含动态上下文）
-   *
-   * @param id prompt ID（如 'code-agent'）
-   * @returns prompt 行；不存在返回 null
-   */
   getPrompt(id: string): PromptRow | null {
     try {
       const db = getDb();
@@ -169,11 +75,6 @@ export class PromptService implements IPromptService {
     }
   }
 
-  /**
-   * 列出所有 prompt
-   *
-   * 预留设置界面接入点（当前生产零调用，仅单测）。
-   */
   listPrompts(): PromptRow[] {
     try {
       const db = getDb();
@@ -184,15 +85,6 @@ export class PromptService implements IPromptService {
     }
   }
 
-  /**
-   * 更新 prompt 内容
-   *
-   * 预留设置界面接入点（当前生产零调用，仅单测）。
-   *
-   * @param id prompt ID
-   * @param content 新的 prompt 内容
-   * @returns 是否成功（无该行返回 false）
-   */
   updatePrompt(id: string, content: string): boolean {
     try {
       const db = getDb();
@@ -208,26 +100,10 @@ export class PromptService implements IPromptService {
     }
   }
 
-  /**
-   * 解析 prompt：读取模板 + 注入动态上下文
-   *
-   * 生产调用链（agent:run）：
-   * 1. agent.handler 记忆召回链先调用（预解析，P2-32）
-   * 2. agent-service resolveSystemPrompt 复用该结果（同回合免二次解析）
-   * 步骤：
-   * 1. 从数据库读取指定 ID 的 prompt 模板
-   * 2. 如果数据库读取失败，回退到硬编码默认值
-   * 3. 调用 injectDynamicContext 注入环境信息 + Git 状态 + AGENTS.md
-   *
-   * @param id prompt ID（默认 'code-agent'）
-   * @param workingDir 工作目录（用于收集动态上下文）
-   * @returns 解析后的 prompt（含动态上下文）
-   */
   async resolvePrompt(
     id: string = DEFAULT_CODE_AGENT_PROMPT_ID,
     workingDir: string,
   ): Promise<ResolvedPrompt> {
-    // 1. 从数据库读取模板
     const row = this.getPrompt(id);
     let template: string;
     let source: 'database' | 'default-fallback';
@@ -236,13 +112,11 @@ export class PromptService implements IPromptService {
       template = row.content;
       source = 'database';
     } else {
-      // 数据库读取失败，回退到硬编码默认值
       logger.warn({ promptId: id }, '数据库中未找到 prompt，回退到硬编码默认值');
       template = DEFAULT_CODE_AGENT_PROMPT;
       source = 'default-fallback';
     }
 
-    // 2. 注入动态上下文
     const content = await injectDynamicContext(template, {
       workingDir,
       ...(this.gitSummaryProvider !== undefined

@@ -1,21 +1,8 @@
 // scripts/lib/animations.ts
-// 动画引用完整性（纯函数）：断言 animation 引用的名字都有 @keyframes 定义
-// ──────────────────────────────────────────────────────────────
-// 背景（2026-09 修复）：实测发现 3 处动画引用**没有对应 @keyframes**，浏览器
-// 静默丢弃该声明（元素退化为无动画）：
-//   - browser-pane.tsx 的 animate-[br-loading-bar_…]（定义随 prototype-v2.html
-//     被删，类名在其后才引入）
-//   - styles/ 各域 css 的 .palette-overlay / .palette 的 animation: fadein / modalin
-// 与 check:css-vars 的 var(--x) 未定义是同类「引用不存在的东西」缺陷，用同一
-// 思路做静态兜底：check:comments 通过、lint 通过、测试通过，都不覆盖它——
-// 测试只断言「元素存在/有该类名」，类名再错也不失败。
-//
-// 只检查两类**会指向自定义 keyframes** 的引用：
-//   1. CSS 的 animation / animation-name 简写里的名字
-//   2. TSX 的 Tailwind 任意值 animate-[name_…]
-// 不检查 animate-spin / animate-in 等具名类：它们来自 Tailwind 内置与
-// tw-animate-css 插件，本仓 keyframes 表里本就没有定义。
-// ──────────────────────────────────────────────────────────────
+// 动画引用完整性（纯函数）：断言 animation 引用的名字都有 @keyframes 定义。
+// 背景（2026-09 修复）：实测 3 处动画引用无对应 keyframes，浏览器静默丢弃声明
+// （元素退化为无动画）——与 check:css-vars 的 var(--x) 未定义同类「引用不存在
+// 的东西」，lint/测试都不覆盖，静态兜底
 
 /** 单条动画引用 */
 export interface AnimationRef {
@@ -80,7 +67,6 @@ function collapseParenGroups(value: string): string {
   for (const ch of value) {
     if (ch === '(') {
       depth += 1;
-      // 丢弃函数名（var / cubic-bezier / steps …）：它属于括号组的一部分
       if (depth === 1) out = out.replace(/[^\s]*$/, '');
       continue;
     }
@@ -98,9 +84,7 @@ function collapseParenGroups(value: string): string {
 function isNonNameToken(token: string): boolean {
   if (token.length === 0) return true;
   if (token === FN_PLACEHOLDER) return true;
-  // 时间值：2s / 300ms / 0.15s（也容忍纯数字）
   if (/^\d+(\.\d+)?(ms|s)?$/.test(token)) return true;
-  // 未闭合的括号残留（畸形值兜底）
   if (token.includes('(') || token.includes(')')) return true;
   return ANIMATION_KEYWORDS.has(token);
 }
@@ -172,7 +156,6 @@ export function extractCssAnimationRefsWithLines(css: string): { name: string; l
     line = line.replace(/\/\*[\s\S]*?\*\//g, '');
     const openIdx = line.indexOf('/*');
     if (openIdx !== -1) {
-      // 行内未闭合的块注释起点：截掉注释段并进入注释态
       line = line.slice(0, openIdx);
       inBlockComment = true;
     }

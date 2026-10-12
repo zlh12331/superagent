@@ -1,26 +1,10 @@
-// src/main/infra/autostart/autostart.test.ts
-// 开机自启模块单测：三平台读写分支 / 写后回读 / 静默启动判定
-// ──────────────────────────────────────────────────────────────
-// 这些用例锚定的是三处真机缺陷（2026-09-20 复核报告）：
-// - Windows 读取必须用 executableWillLaunchAtLogin 且路径带引号（否则 UI 恒显关闭
-//   且无法关闭自启）；断言读请求的参数形状即回归锚
-// - 写后必须回读真实状态（此前 handler 回显入参 ⇒ Linux 空实现/macOS 待审批都被
-//   显示为"成功"）
-// - Linux 自行实现 XDG autostart（Electron 的实现是空函数）
-// - --hidden / wasOpenedAtLogin 的静默启动判定
-// ──────────────────────────────────────────────────────────────
-
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-// 模块顶层 import electron（createAutostartDeps 用）；用例全部注入 fake deps，
-// 这里 mock 仅避免测试进程触碰真实 Electron API
 vi.mock('electron', () => ({ app: {} }));
 
-// logger mock：本模块新增的自启日志若走真实实现会写文件（虽已重定向到临时目录，
-// 但测试不应依赖日志副作用，也让输出保持干净）
 vi.mock('../../utils/logger', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
@@ -44,7 +28,6 @@ import {
 
 const EXEC_PATH = 'E:\\apps\\Code Agent Desktop\\Code Agent Desktop.exe';
 
-/** 记录调用并可编程返回的 fake 适配器 */
 function createFakeAdapter(raw?: {
   executableWillLaunchAtLogin?: boolean;
   openAtLogin?: boolean;
@@ -163,7 +146,6 @@ describe('autostart', () => {
         path: EXEC_PATH,
         args: [AUTOSTART_HIDDEN_ARG],
       });
-      // 回读（而非回显入参）
       expect(getCalls.length).toBeGreaterThan(0);
       expect(state.openAtLogin).toBe(true);
     });
@@ -312,7 +294,6 @@ describe('autostart', () => {
     it('读取进程级真实值（platform / execPath 非空，homeDir 非空）', () => {
       const deps = createAutostartDeps();
       expect(deps.platform).toBe(process.platform);
-      // execPath 经 resolveAutostartExecPath：非 linux 或无 APPIMAGE 时即 process.execPath
       if (process.platform === 'linux' && process.env['APPIMAGE'] !== undefined) {
         expect(deps.execPath).toBe(process.env['APPIMAGE']);
       } else {
@@ -321,8 +302,6 @@ describe('autostart', () => {
       expect(deps.homeDir.length).toBeGreaterThan(0);
     });
   });
-
-  // ── 2026-09-21 修复项（docs/design/30-residency-fix-spec.md §4.4/§4.5）──
 
   describe('resolveAutostartExecPath（AppImage 用 $APPIMAGE，修 P1-1）', () => {
     it('linux + 有 APPIMAGE → 用 APPIMAGE（execPath 是临时挂载点，每次启动都变）', () => {
@@ -477,7 +456,6 @@ describe('autostart', () => {
       try {
         const { adapter, getCalls } = createFakeAdapter();
         expect(resolveStartHidden(adapter)).toBe(true);
-        // 非 darwin 宿主不查 wasOpenedAtLogin
         if (process.platform !== 'darwin') {
           expect(getCalls).toHaveLength(0);
         }

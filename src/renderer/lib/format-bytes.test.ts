@@ -1,5 +1,3 @@
-// src/renderer/lib/format-bytes.test.ts
-// 字节 / 时长格式化单测（纯函数：边界值 / 进位 / 缺省占位）
 import { describe, expect, it } from 'vitest';
 
 import { formatBytes, formatClock, formatRemainingClock } from './format-bytes';

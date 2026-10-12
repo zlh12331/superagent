@@ -1,8 +1,3 @@
-// src/renderer/components/settings/sections/approval-mode-section.test.tsx
-// ApprovalModeSection 单测：审批模式单选 / 白名单增删 / 工具权限分组
-// 数据源：window.api.whitelist.* / tool.list / settings.getApprovalMode（全部 stub）
-// i18n 已加载 zh-CN，用中文文案断言。业务交互保持真实实现。
-
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -10,7 +5,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ApprovalModeSection } from './approval-mode-section';
 
-// 删除确认收敛至命令式 confirm() store：测试默认确认通过
 vi.mock('@/stores/transient/confirm-dialog-store', () => ({
   confirm: vi.fn().mockResolvedValue(true),
 }));
@@ -55,8 +49,6 @@ describe('ApprovalModeSection', () => {
         ],
       },
     });
-    // setup.ts 的 window.api 是宽松 MockApi；但 TS 会按 IpcApi 推断对象字面量，
-    // 用 as unknown as 收敛（mock 返回体与真实 IpcResponse 结构对不上，属常态）
     window.api = {
       settings: {
         getApprovalMode: mocks.getApprovalMode,
@@ -101,7 +93,6 @@ describe('ApprovalModeSection', () => {
       data: { entries: [{ toolName: 'run_command', pattern: 'ls *' }] },
     } as never);
     renderSection();
-    // run_command 同时出现在白名单条目与工具分组 → 用 findAllByText 断言存在
     const matches = await screen.findAllByText(/run_command/);
     expect(matches.length).toBeGreaterThan(0);
     const removeBtn = screen.getByLabelText('移除');
@@ -120,7 +111,6 @@ describe('ApprovalModeSection', () => {
 
   it('工具权限分组：auto 与 ask 各渲染工具名', async () => {
     renderSection();
-    // 工具名同时出现在白名单输入（default 'run_command'）与分组 → 用 findAllByText
     const autoHits = await screen.findAllByText(/run_command/);
     const askHits = await screen.findAllByText(/edit_file/);
     expect(autoHits.length).toBeGreaterThan(0);

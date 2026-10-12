@@ -1,6 +1,3 @@
-// src/renderer/lib/terminal-actions.test.ts
-// Terminal IPC bridge: create/kill/input/resize/subscribe + no-bridge degradation
-
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ipcErr, ipcOk } from './ipc-factories';

@@ -17,33 +17,36 @@
 
 | 域 | 数量 | Channels |
 |---|---|---|
-| audio | 3 | `audio:start`, `audio:append`, `audio:stop` |
-| app | 4 | `app:getStatus`, `app:getInfo`, `app:openExternal`, `app:openDataDir` |
-| chat | 5 (3 推送) | `chat:send`, `chat:stop`, `chat:stream:part`, `chat:stream:end`, `chat:stream:error` |
-| agent | 12 (8 推送) | `agent:run`, `agent:ask:respond`, `agent:stop`, `agent:approval:response`, `agent:event:ask`, `agent:stream:part`, `agent:stream:end`, `agent:stream:error`, `agent:tool:call`, `agent:tool:result`, `agent:approval:request`, `agent:turn:event` |
-| session | 12 | `session:list`, `session:get`, `session:delete`, `session:rename`, `session:pin`, `session:create`, `session:listRecentDirs`, `session:exportAll`, `session:getUsageSummary`, `session:getTurns`, `session:getRecentTurns`, `session:getTurnMessages` |
+| app | 10 (2 推送) | `app:getStatus`, `app:getInfo`, `app:openExternal`, `app:openDataDir`, `app:exportDiagnostics`, `app:getLoginItemSettings`, `app:setLoginItemSettings`, `app:quit`, `app:event:deepLink`, `app:event:loginItemChanged` |
+| window | 1 | `window:applyZoom` |
+| backup | 3 | `backup:list`, `backup:create`, `backup:restore` |
+| agent | 14 (10 推送) | `agent:run`, `agent:event:ask`, `agent:event:ask:resolved`, `agent:ask:respond`, `agent:stop`, `agent:approval:response`, `agent:stream:part`, `agent:stream:start`, `agent:stream:end`, `agent:stream:error`, `agent:tool:call`, `agent:tool:result`, `agent:approval:request`, `agent:approval:resolved` |
+| session | 15 | `session:list`, `session:get`, `session:delete`, `session:clearAll`, `session:rename`, `session:pin`, `session:create`, `session:listRecentDirs`, `session:exportAll`, `session:import`, `session:getUsageSummary`, `session:getTurns`, `session:getRecentTurns`, `session:getTurnMessages`, `session:compact` |
 | file | 10 (1 推送) | `file:read`, `file:write`, `file:list`, `file:watch:start`, `file:watch:stop`, `file:watch:event`, `file:create`, `file:createDir`, `file:delete`, `file:rename` |
 | search | 2 | `search:grep`, `search:glob` |
+| browser | 9 (2 推送) | `browser:navigate`, `browser:back`, `browser:forward`, `browser:reload`, `browser:setViewport`, `browser:configure`, `browser:getState`, `browser:event:state`, `browser:event:loadFailed` |
 | terminal | 7 (3 推送) | `terminal:create`, `terminal:input`, `terminal:resize`, `terminal:kill`, `terminal:event:created`, `terminal:event:output`, `terminal:event:exit` |
 | git | 5 | `git:status`, `git:diff`, `git:add`, `git:commit`, `git:push` |
-| codebase | 6 | `codebase:query`, `codebase:explore`, `codebase:node`, `codebase:callers`, `codebase:callees`, `codebase:impact` |
 | tool | 1 | `tool:list` |
-| settings | 10 | `settings:getApiKey`, `settings:setApiKey`, `settings:deleteApiKey`, `settings:getTelemetryLevel`, `settings:setTelemetryLevel`, `settings:getApprovalMode`, `settings:setApprovalMode`, `settings:addRuntimeModel`, `settings:removeRuntimeModel`, `settings:listRuntimeModels` |
+| settings | 17 (1 推送) | `settings:getAll`, `settings:set`, `settings:getApiKey`, `settings:setApiKey`, `settings:deleteApiKey`, `settings:getTelemetryLevel`, `settings:setTelemetryLevel`, `settings:getApprovalMode`, `settings:setApprovalMode`, `settings:addRuntimeModel`, `settings:removeRuntimeModel`, `settings:listRuntimeModels`, `settings:updateRuntimeModel`, `settings:export`, `settings:import`, `settings:resetAll`, `settings:event:changed` |
+| proxy | 1 | `proxy:test` |
 | system | 1 | `system:getStatus` |
-| models | 1 | `models:list` |
-| memory | 2 | `memory:list`, `memory:clear` |
+| models | 3 | `models:list`, `models:listBuiltin`, `models:test` |
+| memory | 4 | `memory:list`, `memory:clear`, `memory:clearAll`, `memory:status` |
 | task | 1 | `task:list` |
 | skill | 4 | `skill:list`, `skill:learn`, `skill:listLearned`, `skill:removeLearned` |
 | whitelist | 3 | `whitelist:list`, `whitelist:add`, `whitelist:remove` |
 | goal | 3 | `goal:create`, `goal:list`, `goal:clear` |
 | im | 3 | `im:list`, `im:start`, `im:stop` |
+| remote | 4 | `remote:getStatus`, `remote:start`, `remote:stop`, `remote:setBindScope` |
 | logs | 1 | `logs:read` |
 | devtools | 1 | `devtools:open` |
 | dialog | 2 | `dialog:pickDirectory`, `dialog:pickFiles` |
 | mcp | 3 | `mcp:list`, `mcp:start`, `mcp:stop` |
-| update | 3 (1 推送) | `update:check`, `update:install`, `update:event:status` |
+| invalidation | 1 (1 推送) | `invalidation:event:domains` |
+| update | 7 (1 推送) | `update:check`, `update:install`, `update:cancel`, `update:getStatus`, `update:getCacheInfo`, `update:clearCache`, `update:event:status` |
 
-合计 25 个域 / 105 个 channel（89 invoke + 16 push）。
+合计 28 个域 / 136 个 channel（115 invoke + 21 push）。
 
 ## 2. Preload API 形状（window.api）
 
@@ -52,37 +55,42 @@
 
 通过 `contextBridge.exposeInMainWorld('api', api)` 暴露，形状由 `IPC_META` 元数据表驱动，类型系统保证与定义表同步。
 
-### 2.1 16 个域方法
+### 2.1 28 个域方法
 
 | 域 | invoke 方法 | subscribe 方法 |
 |---|---|---|
-| audio | `start`, `append`, `stop` | — |
-| app | `getStatus`, `getInfo`, `openExternal`, `openDataDir` | — |
-| chat | `send`, `stop` | `subscribePart`, `subscribeEnd`, `subscribeError` |
-| agent | `run`, `askRespond`, `stop`, `approvalResponse` | `subscribeStreamPart`, `subscribeStreamEnd`, `subscribeStreamError`, `subscribeToolCall`, `subscribeToolResult`, `subscribeApprovalRequest`, `subscribeTurnEvent`, `subscribeAskEvent` |
-| session | `list`, `get`, `delete`, `rename`, `pin`, `create`, `listRecentDirs`, `exportAll`, `getUsageSummary`, `getTurns`, `getRecentTurns`, `getTurnMessages` | — |
+| app | `getStatus`, `getInfo`, `openExternal`, `openDataDir`, `exportDiagnostics`, `getLoginItemSettings`, `setLoginItemSettings`, `quit` | `subscribeDeepLink`, `subscribeLoginItemChanged` |
+| window | `applyZoom` | — |
+| backup | `list`, `create`, `restore` | — |
+| agent | `run`, `respondAsk`, `stop`, `approvalResponse` | `subscribeAsk`, `subscribeAskResolved`, `subscribeStreamPart`, `subscribeStreamStart`, `subscribeStreamEnd`, `subscribeStreamError`, `subscribeToolCall`, `subscribeToolResult`, `subscribeApprovalRequest`, `subscribeApprovalResolved` |
+| session | `list`, `get`, `delete`, `clearAll`, `rename`, `pin`, `create`, `listRecentDirs`, `exportAll`, `importAll`, `getUsageSummary`, `getTurns`, `getRecentTurns`, `getTurnMessages`, `compact` | — |
 | file | `read`, `write`, `list`, `watchStart`, `watchStop`, `create`, `createDir`, `delete`, `rename` | `subscribeWatchEvent` |
 | search | `grep`, `glob` | — |
+| browser | `navigate`, `back`, `forward`, `reload`, `setViewport`, `configure`, `getState` | `subscribeState`, `subscribeLoadFailed` |
 | terminal | `create`, `input`, `resize`, `kill` | `subscribeCreatedEvent`, `subscribeOutputEvent`, `subscribeExitEvent` |
 | git | `status`, `diff`, `add`, `commit`, `push` | — |
-| codebase | `query`, `explore`, `node`, `callers`, `callees`, `impact` | — |
 | tool | `list` | — |
-| settings | `getApiKey`, `setApiKey`, `deleteApiKey`, `getTelemetryLevel`, `setTelemetryLevel`, `getApprovalMode`, `setApprovalMode`, `addRuntimeModel`, `removeRuntimeModel`, `listRuntimeModels` | — |
+| settings | `getAll`, `set`, `getApiKey`, `setApiKey`, `deleteApiKey`, `getTelemetryLevel`, `setTelemetryLevel`, `getApprovalMode`, `setApprovalMode`, `addRuntimeModel`, `removeRuntimeModel`, `listRuntimeModels`, `updateRuntimeModel`, `exportSettings`, `importSettings`, `resetAll` | `subscribeChanged` |
+| proxy | `test` | — |
 | system | `getStatus` | — |
-| models | `list` | — |
-| memory | `list`, `clear` | — |
+| models | `list`, `listBuiltin`, `test` | — |
+| memory | `list`, `clear`, `clearAll`, `status` | — |
 | task | `list` | — |
 | skill | `list`, `learn`, `listLearned`, `removeLearned` | — |
 | whitelist | `list`, `add`, `remove` | — |
 | goal | `create`, `list`, `clear` | — |
 | im | `list`, `start`, `stop` | — |
+| remote | `getStatus`, `start`, `stop`, `setBindScope` | — |
 | logs | `read` | — |
 | devtools | `open` | — |
 | dialog | `pickDirectory`, `pickFiles` | — |
 | mcp | `list`, `start`, `stop` | — |
-| update | `check`, `install` | `subscribeStatus` |
+| invalidation | — | `subscribeDomains` |
+| update | `check`, `install`, `cancel`, `getStatus`, `getCacheInfo`, `clearCache` | `subscribeStatus` |
 
 > 2026-08-11 同步：域表由 16 域/74 channel 更新为 25 域/105 channel（新增 audio/models/memory/task/skill/whitelist/goal/im/mcp + agent:ask/agent:event:ask/session:pin/session:getTurnMessages/settings 审批模式/dialog:pickFiles 等新方法），与 packages/shared/src/ipc/meta.ts 一致。
+>
+> 2026-10-12 同步：域表由 25 域/105 channel 更新为 **28 域/136 channel（115 invoke + 21 push）**——移除已无 IPC 面的 audio/chat/codebase，新增 window/backup/browser/proxy/remote/invalidation 六域，agent/session/settings/models/memory/update 等域方法扩充（含 #122 模型路由接线与 settings:resetAll 等），两表按 packages/shared/src/ipc/meta.ts 全量重生成。
 
 ### 2.2 invoke vs subscribe 形状差异
 

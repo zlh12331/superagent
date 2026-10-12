@@ -1,11 +1,3 @@
-// src/renderer/i18n/i18n-gaps.test.ts
-// i18n 域批次8 缺口补全：initI18n 幂等 / 语言切换 / useErrorMessage 兜底链
-//
-// 测试要点：
-// 1. initI18n 幂等 + 资源可用（chat.inputLabel 可查）
-// 2. getCurrentLanguage / changeLanguage 切换
-// 3. useErrorMessage：i18n key 命中 / 未注册 code 回退原文 / ERROR_META 兜底语义
-
 import { ErrorCode } from '@code-agent/shared/renderer';
 import { renderHook } from '@testing-library/react';
 import i18next from 'i18next';
@@ -22,7 +14,6 @@ import { useErrorMessage } from './use-translation';
 
 describe('i18n 批次8 缺口补全', () => {
   afterEach(async () => {
-    // 恢复默认语言，避免污染其他测试
     await i18next.changeLanguage('zh-CN');
   });
 
@@ -73,7 +64,6 @@ describe('i18n 批次8 缺口补全', () => {
   it('useErrorMessage：中文文案与 ERROR_META 语义一致（双源一致验证）', () => {
     const { result } = renderHook(() => useErrorMessage());
     const message = result.current.getErrorMessage(ErrorCode.INVALID_INPUT);
-    // 若 i18n 缺失则回退 ERROR_META，两种路径都不应返回 key
     expect(message).not.toBe(`errors.${ErrorCode.INVALID_INPUT}`);
   });
 });

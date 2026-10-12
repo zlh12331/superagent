@@ -1,14 +1,3 @@
-// src/renderer/components/settings/sections/browser-section.tsx
-// 浏览器 pane（右面板「浏览器」tab 的进程外预览设置）
-// ──────────────────────────────────────────────────────────────
-// 三项配置写穿透 SQLite app_settings 的 browser 分组（settings-store）：
-// - defaultDevicePreset / defaultZoom：pane 挂载初值（工具栏内临时改动不写回）
-// - strictSandbox：安全策略，切换即经 browser:configure 通知主进程
-//   重建 WebContentsView（禁用预览页 JS），服务侧值一致时幂等 no-op
-// 预设/缩放文案复用 panel.browserDevice* 既有键，避免同一概念两套译名；
-// 档位数据取自 lib/browser/presets（与预览工具栏同一真源，此前两处各存一份）。
-// ──────────────────────────────────────────────────────────────
-
 import { Globe } from 'lucide-react';
 import type { ReactElement } from 'react';
 import { toast } from 'sonner';
@@ -54,9 +43,6 @@ export function BrowserSection(): ReactElement {
   /** 严格模式切换：写穿透设置 + 通知主进程重建预览视图（即时生效） */
   const handleStrictChange = (checked: boolean): void => {
     updateBrowser({ strictSandbox: checked });
-    // 主进程应用失败：设置已先写入 SQLite（settings-store 写穿透），二者分叉。
-    // 不静默（此前 `.catch(() => {})` 完全吞掉），提示用户该开关可能未即时生效。
-    // 无桥时 configureBrowser 返回 false（已发起=false），不进入 catch
     void configureBrowser({ strictSandbox: checked }).catch(() => {
       toast.error(t('settings.browser.strictApplyFailed'));
     });
@@ -80,7 +66,6 @@ export function BrowserSection(): ReactElement {
           value={browser.defaultDevicePreset}
           onChange={handlePresetChange}
           options={DEVICE_PRESETS.map((preset) => {
-            // 局部常量再传给 t：check-i18n 的间接引用识别只覆盖 t(标识符) 形态
             const labelKey = PRESET_LABEL_KEYS[preset];
             return { value: preset, label: t(labelKey) };
           })}

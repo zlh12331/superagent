@@ -1,19 +1,3 @@
-// src/renderer/components/layout/DevPanel.tsx
-// 右面板（会话上下文面板）· 对齐原型 .chat-right-panel
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 右侧竖条面板：会话详情 / 文件变更 / 文件 / 终端 / 开发者
-// - 会话详情（info）：会话目标 + 计划待办 + 会话元信息（对齐原型 crpPaneInfo）
-// - 文件变更（diff）：本轮 edit_file/write_file 调用记录（对齐原型 crpPaneDiff）
-// - 文件（files）：最近修改文件，点击打开 FileViewerDialog（对齐原型 crpPaneFiles）
-// - 终端（terminal）：TerminalPanel（保留原能力）
-// - 开发者（dev）：Git / 日志 / 指标 / 检查器（调试工具收纳，不占主位）
-//
-// 设计：
-// - 默认展开撑满右面板（折叠由 AppShell rightPanelCollapsed 控制）
-// - 内部保留折叠态：折叠为标题栏横条（可再收起内容）
-// ──────────────────────────────────────────────────────────────
-
 import {
   Activity,
   FileCode2,
@@ -46,7 +30,6 @@ import { cn } from '@/lib/utils';
 import { useUiStore } from '@/stores/transient/ui-store';
 import { DiffPane, InfoPane } from './right-panel-panes';
 
-// 懒加载（对齐参考项目：xterm ~200KB vendor chunk 仅在切到终端 tab 时加载，避免拖慢首屏）
 const TerminalPanel = lazy(() =>
   import('@/components/terminal/TerminalPanel').then((m) => ({ default: m.TerminalPanel })),
 );
@@ -179,19 +162,13 @@ const DEV_SUBTABS: ReadonlyArray<{
  * 组件级记忆化交给 React Compiler（props 未变时跳过重渲染，覆盖原 memo() 目标）。
  */
 export function DevPanel({ sessionId, gitRepoPath, className }: DevPanelProps): ReactElement {
-  // 本地化文案
   const { t } = useTranslation();
-  // 当前激活 Tab（默认会话详情，对齐原型首位；集中到 ui-store——命令面板「打开终端」等入口可跨组件切换）
   const activeTab = useUiStore((state) => state.devPanelTab);
   const setActiveTab = useUiStore((state) => state.setDevPanelTab);
-  // 开发者子视图（默认 git，对齐原 GitPanel 入口）
   const [devSubTab, setDevSubTab] = useState<DevSubTab>('git');
 
-  // 动态 tab 集合：默认任务摘要（info）常驻；其余通过"+"按钮按需加入（用户需求）
   const [openTabs, setOpenTabs] = useState<PanelTab[]>(['info']);
-  // tab 行横向滚动容器：tab 多时横向滚动而非挤压文字（此前均分导致标签被压到 0 宽，实测 bug）
   const tabListRef = useRef<HTMLDivElement | null>(null);
-  // 新增视图后滚动到末尾（关闭视图不触发，保留用户当前视区）
   const prevTabCountRef = useRef(openTabs.length);
   useEffect(() => {
     const el = tabListRef.current;
@@ -207,7 +184,6 @@ export function DevPanel({ sessionId, gitRepoPath, className }: DevPanelProps): 
       setActiveTab(remaining[0] ?? 'info');
     }
   };
-  // 外部切换（命令面板"打开终端"等）时自动加入未打开的视图
   useEffect(() => {
     setOpenTabs((prev) => (prev.includes(activeTab) ? prev : [...prev, activeTab]));
   }, [activeTab]);
@@ -220,13 +196,9 @@ export function DevPanel({ sessionId, gitRepoPath, className }: DevPanelProps): 
   const paneCls = (visible: boolean): string =>
     cn('h-full', !visible && 'hidden', visible && 'animate-in fade-in-0 duration-150');
 
-  // 右面板背景透明，透出 .chat-right-panel 的镜像渐变（与左栏对称）
   return (
     <div className={cn('flex flex-col bg-transparent', className)}>
-      {/* 标题栏：Tab 切换（右面板折叠由全局机制管理：断点/AppShell 按钮，此处不重复放置）
-          背景透明 + h-30px：与状态条同高对齐（用户要求：两者 30px，消除交界不齐） */}
       <div className="border-border flex h-[30px] items-center gap-2 border-b px-2 py-1">
-        {/* Tab 切换 */}
         <Tabs
           value={activeTab}
           onValueChange={(value) => {
@@ -234,7 +206,6 @@ export function DevPanel({ sessionId, gitRepoPath, className }: DevPanelProps): 
           }}
           className="min-w-0 flex-1"
         >
-          {/* tab 行可横向滚动：标签保持自然宽度不被挤压（对齐 TerminalTabs 滚动模式） */}
           <TabsList
             ref={tabListRef}
             className="bg-transparent h-5 min-w-0 w-full justify-start overflow-x-auto overflow-y-hidden p-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
@@ -248,8 +219,6 @@ export function DevPanel({ sessionId, gitRepoPath, className }: DevPanelProps): 
                     value={tab}
                     className="h-5 flex-none gap-1 px-1.5 py-0 text-2xs"
                     onKeyDown={(e) => {
-                      // 键盘关闭路径（与 TerminalTabs 的 Delete/Backspace 约定对齐）：
-                      // 任务摘要常驻不可关，其余视图可键盘删除
                       if ((e.key === 'Delete' || e.key === 'Backspace') && tab !== 'info') {
                         e.preventDefault();
                         closeTab(tab);
@@ -265,10 +234,6 @@ export function DevPanel({ sessionId, gitRepoPath, className }: DevPanelProps): 
                       size="icon"
                       className="text-muted-foreground hover:bg-muted hover:text-foreground shrink-0 p-0.5"
                       title={t('panel.closeView')}
-                      // 「可关闭标签」模式（VS Code/Chrome 同款）：关闭钮对无障碍树
-                      // 隐藏（鼠标专用修饰），键盘等价路径 = 聚焦标签后 Delete/
-                      // Backspace（本组件 TabsTrigger onKeyDown 实现）——避免
-                      // tablist 混入非 tab 子元素的 aria-required-children 违规
                       aria-hidden="true"
                       tabIndex={-1}
                       data-panel-close-view="true"
@@ -285,7 +250,6 @@ export function DevPanel({ sessionId, gitRepoPath, className }: DevPanelProps): 
             })}
           </TabsList>
         </Tabs>
-        {/* 添加视图按钮（用户需求：默认任务摘要 + 添加按钮，按需加入其他视图） */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
@@ -315,8 +279,6 @@ export function DevPanel({ sessionId, gitRepoPath, className }: DevPanelProps): 
         </DropdownMenu>
       </div>
 
-      {/* 内容区（面板折叠由全局机制管理，此处始终展开）
-          按 openTabs 条件渲染（未添加的视图不挂载；已添加的用 hidden 切换避免状态丢失） */}
       <div className="min-h-0 flex-1">
         {openTabs.includes('info') && (
           <div className={paneCls(activeTab === 'info')}>
@@ -370,7 +332,6 @@ export function DevPanel({ sessionId, gitRepoPath, className }: DevPanelProps): 
         {openTabs.includes('dev') && (
           <div className={paneCls(activeTab === 'dev')}>
             <div className="flex h-full flex-col">
-              {/* 开发者子视图切换（调试工具收纳）——segmented 形态，纳入 ui-consistency 豁免 */}
               <div className="border-border bg-muted/20 flex items-center gap-0.5 border-b px-1.5 py-0.5">
                 {DEV_SUBTABS.map((sub) => (
                   <DevSubTabButton
@@ -387,14 +348,12 @@ export function DevPanel({ sessionId, gitRepoPath, className }: DevPanelProps): 
                   <GitPanel path={gitRepoPath} className="h-full" />
                 </div>
                 <div className={paneCls(devSubTab === 'logs')}>
-                  {/* enabled 跟随可见性（对齐参考项目：面板不可见时不查询） */}
                   <LogsPanel
                     enabled={activeTab === 'dev' && devSubTab === 'logs'}
                     className="h-full"
                   />
                 </div>
                 <div className={paneCls(devSubTab === 'metrics')}>
-                  {/* enabled 跟随可见性（对齐参考项目：面板不可见时不轮询） */}
                   <MetricsPanel
                     enabled={activeTab === 'dev' && devSubTab === 'metrics'}
                     className="h-full"

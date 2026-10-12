@@ -1,5 +1,3 @@
-// src/renderer/lib/invalidation/invalidation.test.ts
-// 失效域纯函数层单测：域映射（与 QUERY_KEY_ROOTS 对齐）/ 前缀失效 / 回合结束覆盖登记
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { IM_CHANNELS_QUERY_KEY, QUERY_KEY_ROOTS } from '@/lib/query/keys';
@@ -35,8 +33,6 @@ describe('domainToQueryKey（域映射）', () => {
   });
 
   it("'im' 域不在 QUERY_KEY_ROOTS 内，仍按 key 首段命中 IM_CHANNELS_QUERY_KEY", () => {
-    // keys.ts:18-19 既定设计：im 域无专用 hook、key 未纳入前缀根表；
-    // 映射是纯 split 不查表，故 'im' 天然命中 ['im', 'channels']（keys.ts:68）
     expect(QUERY_KEY_ROOTS).not.toHaveProperty('im');
     expect(IM_CHANNELS_QUERY_KEY[0]).toBe('im');
     expect(domainToQueryKey('im')).toEqual(['im']);
@@ -110,7 +106,6 @@ describe('回合结束覆盖登记（use-agent-bridge 回落判定）', () => {
     for (let i = 0; i < 130; i++) {
       noteInvalidationEvent(turnEndDomains(`s${i}`), `s${i}`);
     }
-    // 最旧的 s0/s1 被逐出，最新登记仍有效
     expect(isTurnEndCovered('s0')).toBe(false);
     expect(isTurnEndCovered('s1')).toBe(false);
     expect(isTurnEndCovered('s129')).toBe(true);

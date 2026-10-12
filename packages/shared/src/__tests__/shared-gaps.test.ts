@@ -1,12 +1,5 @@
-// packages/shared/src/__tests__/shared-gaps.test.ts
-// shared 层契约补测：运行时产物正确性 + 单一真源一致性 + 核心 schema 拦截能力
-//
-// 测试要点：
-// 1. request/event 元数据构造器
-// 2. deriveChannels 通道派生（camelCase/多段 channel/空表）
-// 3. IPC_DEFINITIONS ↔ IPC_META 双向一致性（无孤儿/无缺失/kind 不漂移）
-// 4. 核心 schema parse 抽查（file read/write、session list）：正向 + 非法拦截
-
+// shared-gaps.test.ts：shared 层契约补测——meta 构造器/deriveChannels 派生规则/meta ↔ definitions 单一真源一致性/核心 schema 拦截
+// 边界：只抽查代表性条目（构造器、通道派生、核心 schema），不做全量域与全量 schema 覆盖
 import { describe, expect, it } from 'vitest';
 import { IPC_DEFINITIONS } from '../ipc/definitions';
 import { deriveChannels } from '../ipc/derive';
@@ -45,12 +38,12 @@ describe('shared 层契约补测', () => {
     });
 
     it('definitions 真源派生：与 meta 派生通道集一致（无孤儿 channel）', () => {
-      // definitions 含 schema 的完整真源，channel 必须与 meta 完全同步（无新增/无遗漏）
-      // 注意：不能依赖 IPC_CHANNELS 自比（其自身就是 deriveChannels(IPC_META) 的同源产物）
+      // definitions 是 meta 的超集（补入 schema/类型标记）；两表派生通道集必须完全一致，单边新增/漏删都会红
+      // 不能改与 IPC_CHANNELS 对比：它是 deriveChannels(IPC_META) 的同源产物，自比恒真
       const fromDefs = deriveChannels(IPC_DEFINITIONS);
       const fromMeta = deriveChannels(IPC_META);
       expect(fromDefs).toEqual(fromMeta);
-      // key 与 value 一一对应（toConstantKey 冲突会静默覆盖，防止 channel 丢失）
+      // 长度相等即无撞名：toConstantKey 撞名走 result[key] 静默覆盖，会丢通道且不报错
       expect(Object.keys(fromMeta)).toHaveLength(Object.values(fromMeta).length);
     });
   });
@@ -59,13 +52,13 @@ describe('shared 层契约补测', () => {
     it('双向覆盖：meta 与 definitions 的 domain/method 完全对齐（无孤儿/无缺失）', () => {
       const defs = IPC_DEFINITIONS as unknown as Record<string, Record<string, { kind?: string }>>;
       const meta = IPC_META as unknown as Record<string, Record<string, { kind?: string }>>;
-      // meta ⊆ definitions：meta 条目在 definitions 必须存在（防手写孤儿）
+      // meta ⊆ definitions：meta 有的条目 definitions 必须也有（防单边新增的孤儿）
       for (const [domain, methods] of Object.entries(meta)) {
         for (const method of Object.keys(methods)) {
           expect(defs[domain]?.[method]).toBeDefined();
         }
       }
-      // definitions ⊆ meta：definitions 条目在 meta 必须存在（防新增遗漏）
+      // definitions ⊆ meta：反向亦然（防 definitions 加了方法却漏登记 meta）
       for (const [domain, methods] of Object.entries(defs)) {
         for (const method of Object.keys(methods)) {
           expect(meta[domain]?.[method]).toBeDefined();

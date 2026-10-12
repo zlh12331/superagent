@@ -1,13 +1,3 @@
-// src/renderer/components/$1/CommandPalette.search.test.tsx
-// CommandPalette 深覆盖：命令执行 / 模糊搜索 / 文件与会话派生 / 开关交互
-// ──────────────────────────────────────────────
-// 覆盖动机：原冒烟测试仅覆盖操作组渲染与主题三态标题（组件行覆盖 58%）——
-// 命令 action 副作用（导航/主题切换/面板折叠/文件打开/会话切换）、
-// fuse.js 模糊搜索、文件派生（相对路径 + 50 条上限）、会话派生（20 条上限）、
-// 遮罩点击与 Esc 关闭均无回归锚。
-// 隔离面：仅 mock window.api（会话列表 IPC）；store / cmdk / fuse 全真实。
-// ──────────────────────────────────────────────
-
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
@@ -70,7 +60,6 @@ describe('CommandPalette 命令执行', () => {
     useFileTreeStore.setState({ rootPath: null, entries: new Map() });
     useActiveSessionStore.setState({ activeSessionId: null });
     useWelcomeStore.setState({ isWelcomeMode: false });
-    // 会话列表 IPC（默认空）
     const w = window as unknown as { api: { session?: unknown } };
     w.api.session = {
       list: vi.fn(async () => ({ data: { sessions: [], total: 0 } })),
@@ -184,10 +173,8 @@ describe('CommandPalette 数据派生', () => {
         ],
       ]),
     });
-    // 点击文件命令 → 调 openFile（异步走 IPC 读文件，此处只断言命令已触发，不断言异步完成态）
     const openFileSpy = vi.spyOn(useFileViewerStore.getState(), 'openFile');
     renderPalette();
-    // 相对路径展示（去掉 rootPath 前缀）
     expect(screen.getByText('a.ts')).toBeDefined();
     clickCommand('a.ts');
     expect(openFileSpy).toHaveBeenCalledWith('/proj/a.ts');

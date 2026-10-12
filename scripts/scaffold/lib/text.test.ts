@@ -1,4 +1,6 @@
 // scripts/scaffold/lib/text.test.ts
+// 文本插入工具单测：锚点插入/块内追加/字典序插入的行为与错锚点报错
+
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -118,7 +120,6 @@ export { resolveWithinWorkspace } from './path-guard';
 export { createReadFileTool } from './read-file.tool';
 `;
 
-  // 提取 from 路径（含扩展名场景，如 './my-tool.tool'）
   const FromPathRe = /from '(\.\/[a-z0-9.-]+)'/;
   const pathKey = (line: string): string => line.match(FromPathRe)?.[1] ?? line;
 
@@ -130,7 +131,6 @@ export { createReadFileTool } from './read-file.tool';
       pathKey,
     );
     expect(result).not.toBeNull();
-    // 上一行断言已保证非 null；此处的 ?? '' 仅为满足类型收窄（若为 null 断言会先失败）
     const out = result ?? '';
     const myIndex = out.indexOf('createMyToolTool');
     const guardIndex = out.indexOf('resolveWithinWorkspace');

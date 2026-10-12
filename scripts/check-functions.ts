@@ -1,42 +1,8 @@
-// scripts/check-functions.ts
-// 函数门禁（工程化强制）：形参数 ≤4（自研正则度量）+ 函数体 ≤200 行（Biome 度量），棘轮只允许收紧
-// ──────────────────────────────────────────────────────────────
-// 2026-09-15 体长度量迁移（用户拍板）：函数体行数改由 Biome 内置规则
-// noExcessiveLinesPerFunction（v2.0.0 起，lint/complexity 组）度量，自研正则
-// 花括号扫描（function-metrics.ts 的 measureBodyLines 族）退役。理由与
-// check:complexity 同款：度量语义必须权威且唯一，与其维护第二套解析器并承担
-// 漂移风险，不如复用 Biome（先例：认知复杂度自研两版皆败，迁移后问题消失）。
-// 自研版头注释登记的全部「已知边界」（对象字面量返回类型 / 多层嵌套形参括号 /
-// 嵌套模板串的漏报）随迁移消失。
-//
-// 口径变化（重要——基线已按新口径重算，跨口径比较行数无意义）：
-// - 旧（自研正则）：净行（排除注释与空行），嵌套函数体计入外层
-// - 新（Biome）：独占行数（嵌套函数体单独计量，不计入外层）+ 含注释行 +
-//   skipBlankLines（跳过空行）。同函数实测普遍低于旧口径
-//   （createMockApi 488→380、ChatInput 303→207），阈值 200 不变
-// - 测试文件（.test.* / __tests__/）不计——与旧 collectSourceFiles 及
-//   check-complexity 的扫描口径一致（测试的长 setup 不是重构信号）
-//
-// params 仍用自研正则（Biome 无形参个数规则）：解构按 1 计，见 function-metrics.ts。
-//
-// 数据通路（与 check-complexity 同款）：package.json 以管道串联——
-// `biome lint --only=... --reporter=json src | tsx scripts/check-functions.ts`；
-// 脚本从标准输入读 JSON，避免 child_process（安全扫描拦截 + shell 重定向不可移植）。
-// 阈值自校验：诊断消息含上游实际生效阈值，与 limits.json functionSize.body 比对，
-// 不一致即失败——防止 Biome 升级改默认值或有人本地改配置而门禁静默失真。
-//
-// 基线口径（按文件，与 check-complexity 同款折中——Biome 诊断不含函数名，行号 key
-// 会随上方增删漂移）：
-//   body 维度   count = 该文件超阈值函数数；max = 该文件最高行数
-//   params 维度 params = 该文件最高形参数（正则可定位函数，但统一文件级 key 降复杂度）
-//
-// 提示档（51–200 仅提示）随迁移移除：其「值得被看见」职责已由 check:complexity
-// 接管——它对全部函数计量控制流复杂度，不再依赖行数做代理。
-//
-// 运行：pnpm check:functions
-//       pnpm check:functions --update-baseline   # 重构后收紧基线
-// ──────────────────────────────────────────────────────────────
-
+// check-functions.ts：函数门禁——形参 ≤4（自研正则）+ 函数体 ≤200 行（Biome 度量），棘轮只允许收紧。
+// 数据通路与 check-complexity 同款：package.json 以管道把 Biome 的 JSON 诊断喂进标准输入
+// （`biome lint --only=… --reporter=json src | tsx scripts/check-functions.ts`），脚本不自起
+// child_process——既避开安全扫描对子进程的拦截，也避开 shell 重定向的跨平台不可移植。
+// 边界：本脚本只判定与报告，不代偿重构；阈值与分档真源在 scripts/limits.json，本文件只读取。
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { collectSourceFiles, toPosixRelative } from './lib/file-metrics';
@@ -187,7 +153,6 @@ function toParamsMetrics(): {
 }
 
 function loadBaseline(): Record<string, Metrics> {
-  // 文件缺失 → 空基线（首次 --update-baseline 得以创建；普通运行把所有超限报成 new）
   if (!existsSync(BASELINE_PATH)) return {};
   return parseBaseline(readFileSync(BASELINE_PATH, 'utf8'), METRICS);
 }
@@ -210,7 +175,6 @@ function buildTierBands(counts: Record<BodyTier, number>): Array<{ label: string
 function main(): number {
   const diagnostics = readBiomeJson();
 
-  // 阈值自校验：诊断消息里的上游阈值必须与 limits.json 真源一致
   const actual = thresholdOf(diagnostics.find((d) => d.category === RULE)?.message);
   if (actual !== null && actual !== BODY_LIMIT) {
     console.error(
@@ -219,7 +183,6 @@ function main(): number {
     return 1;
   }
 
-  // body（Biome）+ params（正则）两维度合并为按文件的棘轮实测集
   const current = toBodyMetrics(diagnostics);
   const { map: paramsMap, details: paramDetails } = toParamsMetrics();
   for (const [file, m] of paramsMap) {
@@ -240,8 +203,6 @@ function main(): number {
   }
 
   const problems = evaluateRatchet(current, baseline, METRICS);
-  // 分档按「每个函数」的实测值计数（不是每文件 max——同文件多个超限函数各占一档）；
-  // 测试文件不计（与 toBodyMetrics / 旧 collectSourceFiles 口径一致）
   const bodyValues = diagnostics
     .filter((d) => d.category === RULE)
     .map((d) => ({
@@ -256,13 +217,11 @@ function main(): number {
         !d.file.includes('__tests__/'),
     );
 
-  // 体长分档统计（按函数诊断值；2026-09-08 引入：让重构优先级可见）
   const tiers = countTiers(
     bodyValues.map((d) => d.value),
     BODY_LIMIT,
     BODY_TIERS,
   );
-  // >heavy 档必须登记理由（登记表 scripts/function-size-exempt.json）
   const exempt = loadExempt();
   const overEntries = [...current.entries()]
     .filter(([, m]) => tierOf(m['max'] ?? 0, BODY_LIMIT, BODY_TIERS) === 'over')
@@ -288,7 +247,6 @@ function main(): number {
         `（Biome noExcessiveLinesPerFunction：独占行数 + 含注释 + 跳过空行；测试文件不计）`,
     );
     for (const line of tierLines) console.log(line);
-    // 「距规范目标的差距」：避免棘轮把「暂时容忍」静默变成「永久合法」
     const worst = [...current.entries()].sort((a, b) => (b[1]['max'] ?? 0) - (a[1]['max'] ?? 0))[0];
     if (worst !== undefined && (worst[1]['max'] ?? 0) > BODY_LIMIT) {
       console.log(

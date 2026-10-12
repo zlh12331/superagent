@@ -1,13 +1,8 @@
 // scripts/lib/devtools-residue.ts
-// devtools 产物残留扫描核（纯函数层，供 check-devtools.ts CLI 调用）
-// ──────────────────────────────────────────────────────────────
-// 判据与 src/renderer/providers/query-devtools.tsx 头注释记录的权威门禁同源：
-// 「包名串 react-query-devtools」与「组件名 ReactQueryDevtools」两个标记串
-// 任一出现即残留（子串匹配，与门禁命令 rg 的默认语义一致）。
-// 范围刻意不含 electron-devtools-installer——它是主进程 dev 工具（window.ts
-// 静态导入），不属于本门禁。
-// 红绿夹具见 devtools-residue.test.ts。
-// ──────────────────────────────────────────────────────────────
+// devtools 产物残留扫描核（纯函数层，供 check-devtools.ts 调用）。判据与
+// query-devtools.tsx 头注释的权威门禁同源：两个标记串任一出现即残留（子串匹配，
+// 与门禁 rg 默认语义一致）；范围刻意不含 electron-devtools-installer——那是主进程
+// dev 工具（window.ts 静态导入），不属本门禁。红绿夹具见 devtools-residue.test.ts
 
 /** 包名标记串（模块被打回产物图时必经 import 描述符 / sourcesContent 出现） */
 const PACKAGE_MARKER = 'react-query-devtools';

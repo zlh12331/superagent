@@ -1,6 +1,6 @@
-// packages/shared/src/__tests__/mcp-schema.test.ts
-// MCP schema 单测：transport 三态条件校验 / 向后兼容（无 transport 字段 = stdio）
-// / stdio args 执行跳板 deny-list（P0：bash -c / node -e / cmd /c 之类任意代码执行）
+// packages/shared/src/__tests__/mcp-schema.test.ts：McpServerConfigSchema 契约测试——transport 三态条件校验、
+// 缺 transport 字段按 stdio 的向后兼容、stdio args 的 exec trampoline deny-list（P0：bash -c / node -e 这类代码入口）。
+// 边界：主进程侧同源校验 validateMcpServerConfig 不在本文件覆盖（见 src/main/infra/ai/mcp/mcp-service.test.ts）。
 
 import { describe, expect, it } from 'vitest';
 import { detectMcpExecTrampoline, McpServerConfigSchema } from '../schemas/mcp';
@@ -15,6 +15,7 @@ describe('McpServerConfigSchema', () => {
       });
       expect(result.success).toBe(true);
       if (result.success) {
+        // 缺省必须保持"未设置"而非回填 'stdio'：缺省兜底由下游 resolveMcpTransport 负责
         expect(result.data.transport).toBeUndefined();
         expect(result.data.command).toBe('npx');
       }
@@ -54,7 +55,7 @@ describe('McpServerConfigSchema', () => {
           // biome-ignore lint/style/useNamingConvention: HTTP 标准头名
           Authorization: 'Bearer token-1',
         },
-        command: '',
+        command: '', // 远程传输显式留空：command 非空校验只在 stdio 分支生效
       });
       expect(result.success).toBe(true);
       if (result.success) {
@@ -95,7 +96,7 @@ describe('McpServerConfigSchema', () => {
 });
 
 describe('McpServerConfigSchema · exec trampoline deny-list（P0 args 内容策略）', () => {
-  /** 断言配置被拒且给出 trampoline 原因 */
+  /** 断言配置被拒、且拒绝原因确为 trampoline——只看 success=false 会被 name/command 等无关校验分支的失败掩盖（假绿） */
   function expectTrampoline(config: Record<string, unknown>): void {
     const result = McpServerConfigSchema.safeParse(config);
     expect(result.success).toBe(false);
@@ -105,6 +106,7 @@ describe('McpServerConfigSchema · exec trampoline deny-list（P0 args 内容策
   }
 
   it('bash -c "curl … | sh"：command 合法但 args 是代码串 → 拒绝', () => {
+    // command 字符集校验只保证裸可执行文件名（bash 本身合法），args 无字符集约束 ⇒ 非法入口只能在此拦
     expectTrampoline({
       name: 'evil',
       command: 'bash',
@@ -129,7 +131,7 @@ describe('McpServerConfigSchema · exec trampoline deny-list（P0 args 内容策
     for (const config of [
       { name: 'h1', command: 'node', args: ['build/index.js'] },
       { name: 'h2', command: 'python', args: ['server.py'] },
-      { name: 'h3', command: 'python', args: ['-m', 'mcp_server_demo'] },
+      { name: 'h3', command: 'python', args: ['-m', 'mcp_server_demo'] }, // -m 是模块入口，不在代码开关集合内
       { name: 'h4', command: 'npx', args: ['-y', '@modelcontextprotocol/server-filesystem'] },
     ]) {
       expect(McpServerConfigSchema.safeParse(config).success).toBe(true);
@@ -137,10 +139,12 @@ describe('McpServerConfigSchema · exec trampoline deny-list（P0 args 内容策
   });
 
   it('非解释器命令带 -c 不误伤（curl -c cookies.txt）', () => {
+    // 判据是"解释器 + 开关"的组合——命令不在解释器集合内即直接放行（-c 对 curl 是写 cookie 罐）
     expect(detectMcpExecTrampoline('curl', ['-c', 'cookies.txt'])).toBeNull();
   });
 
   it('detectMcpExecTrampoline：大小写与 .exe 后缀归一化', () => {
+    // 归一化缺失等于 deny-list 可被 'CMD.EXE' / 'Bash' 绕过（Windows 配置最常见的写法）
     expect(detectMcpExecTrampoline('CMD.EXE', ['/K', 'dir'])).toContain('cmd');
     expect(detectMcpExecTrampoline('Bash', ['-C', 'x'])).toContain('bash');
   });

@@ -1,13 +1,3 @@
-// src/renderer/components/settings/sections/terminal-section.test.tsx
-// TerminalSection 测试：断言 store 实质状态（36 号 B：选项表随平台 + 写穿透）
-// ──────────────────────────────────────────────────────────────
-// jsdom navigator.platform 为空串 → 归一 linux 分支（auto/bash/zsh/fish）。
-// 覆盖：
-// - shell 选项随平台档位表渲染（linux 分支）且当前值命中
-// - fontSize 档位 = TERMINAL_FONT_SIZES
-// - 切换 shell / 字号 → updateTerminal 部分合并 + 以 terminal 键写穿透
-// ──────────────────────────────────────────────────────────────
-
 import { TERMINAL_FONT_SIZES } from '@code-agent/shared/renderer';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -32,14 +22,10 @@ describe('TerminalSection', () => {
   it('shell 选项随平台档位表渲染（jsdom = linux 分支）且当前值命中', () => {
     render(<TerminalSection />);
 
-    // SegControl 迁 ToggleGroup：item 是 radio 语义（激活态 data-state=on）
-    // jsdom 下 navigator.platform 为空 → linux 选项表
     for (const label of ['Auto', 'Bash', 'Zsh', 'Fish']) {
       expect(screen.getByRole('radio', { name: label })).toBeDefined();
     }
-    // windows 独有档位不可见
     expect(screen.queryByRole('radio', { name: 'WSL' })).toBeNull();
-    // 当前值 auto 高亮
     expect(screen.getByRole('radio', { name: 'Auto' }).getAttribute('data-state')).toBe('on');
   });
 

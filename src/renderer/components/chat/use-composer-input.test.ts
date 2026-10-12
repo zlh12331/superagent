@@ -1,6 +1,3 @@
-// use-composer-input.test.ts
-// composer 输入状态 hook 单测：受控/非受控双模 / 草稿恢复与保存 / 会话切换 /
-// 注入值（受控跳过）/ 附件去重与移除 / clear
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -49,7 +46,6 @@ describe('useComposerInput', () => {
     });
     expect(onValueChange).toHaveBeenCalledWith('x');
     expect(result.current.value).toBe('abc');
-    // 外部值变化 → 跟随
     rerenderWith({ ...NONE, controlledValue: 'abcd' });
     expect(result.current.value).toBe('abcd');
   });
@@ -86,7 +82,6 @@ describe('useComposerInput', () => {
     const { result, rerenderWith } = mountInput({ ...NONE, chatId: 's1', injectedValue: '/goal ' });
     expect(result.current.value).toBe('/goal ');
     rerenderWith({ ...NONE, chatId: 's1' });
-    // undefined 注入不触发清空（守卫：injectedValue === undefined 直接返回）
     expect(result.current.value).toBe('/goal ');
   });
 
@@ -105,7 +100,6 @@ describe('useComposerInput', () => {
     act(() => {
       result.current.pickAttachments(['/proj/a.txt', '/proj/c.txt']);
     });
-    // a.txt 去重，仅追加 c.txt
     expect(result.current.attachments.map((a) => a.name)).toEqual(['a.txt', 'b.txt', 'c.txt']);
     act(() => {
       result.current.removeAttachment('/proj/b.txt');

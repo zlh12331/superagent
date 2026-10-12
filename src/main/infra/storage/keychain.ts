@@ -1,17 +1,5 @@
-// src/main/infra/storage/keychain.ts
-// 敏感数据加密存储（API Key 等）
-// 设计文档 §1.2 决策 5：API Key 存钥匙串
-//
-// 使用 Electron 内置 safeStorage API（替代 keytar）：
-// - 基于 OS 加密（Windows DPAPI / macOS Keychain / Linux libsecret）
-// - 不需要 native rebuild，符合 Electron 官方安全建议
-// - 加密后的数据存储到 keychain.dat 文件（JSON 格式）
-//
-// 设计文档 §2.2 列出 keytar ^7，但 safeStorage 更优：
-// 1. 内置于 Electron，无需额外依赖
-// 2. 不需要 native rebuild（keytar 需要）
-// 3. 跨平台一致 API
-
+// keychain.ts：API Key 等敏感凭据存储——safeStorage（DPAPI/Keychain/libsecret）加密后落
+// keychain.dat JSON（值为字节数组）；损坏按条目抢救 + .corrupt 留档，绝不静默清空
 import { execFileSync } from 'node:child_process';
 import { chmodSync, promises as fs } from 'node:fs';
 import { join } from 'node:path';
@@ -20,42 +8,18 @@ import { safeStorage } from 'electron';
 import { logger } from '../../utils/logger';
 import { getKeychainPath } from './app-data';
 
-/**
- * 互斥锁（用于保护 keychain 文件的并发读写）
- *
- * 场景：多个 IPC 请求同时调用 setSecret 时，若没有锁保护，
- * readStore() 可能读取到旧数据，writeStore() 会覆盖其他请求的写入，
- * 导致数据丢失。
- *
- * 实现：用 Promise 链式调用实现简单的互斥锁，
- * 每个操作必须等待前一个操作完成才能执行。
- *
- * P1 修复：旧实现只在链上登记槽位后**同步返回 release**，调用方从未等待
- * 前一个持有者——链形同虚设，并发 setSecret 的「读-改-写」互相覆盖（丢更新）。
- * 现在返回 `Promise<release>`，必须 `await` 才算真正进入临界区。
- */
+// 全局写锁串行化 read-modify-write（readStore 与 writeStore 之间不能被并发插入，否则丢更新）
 let lock: Promise<void> = Promise.resolve();
 
-/** 加密不可用告警是否已发出（每进程仅一次，避免每次读密钥都刷日志） */
 let warnedEncryptionUnavailable = false;
 
-/**
- * 系统加密（safeStorage）是否可用
- *
- * 供 IPC 响应透出（settings:getApiKey 的 keychainAvailable）：false 时所有
- * getSecret 返回 null——「密钥不可读」与「未配置」在调用方视角必须可区分。
- */
+/** safeStorage 是否可用（Linux 无 libsecret 时为 false，届时密钥全部不可读） */
 export function isEncryptionAvailable(): boolean {
   return safeStorage.isEncryptionAvailable();
 }
 
-/**
- * 获取互斥锁（等待前一个持有者释放）
- *
- * @returns resolve 后即为「已持锁」，resolve 值为释放锁的函数
- */
+// 简易互斥队列：新请求排在既有锁链尾部，返回的 release 释放自己的槽位
 function acquireLock(): Promise<() => void> {
-  // 登记必须同步完成（保证 FIFO），只有「等待」是异步的
   const waiting = lock;
   let release: () => void = () => {};
   const slot = new Promise<void>((resolve) => {
@@ -65,21 +29,9 @@ function acquireLock(): Promise<() => void> {
   return waiting.then(() => release);
 }
 
-/**
- * Keychain 存储结构
- *
- * key: secret 名称（如 'deepseek-api-key'）
- * value: 加密后的 Buffer 转换为 number[]（JSON 可序列化）
- */
 type KeychainStore = Record<string, number[]>;
 
-/**
- * 文件损坏处置结果（供上层向用户显式告警，而非静默返回空）
- *
- * - corrupted：本次读取遇到无法整体解析的 keychain.dat
- * - recoverable：至少一条条目经解密校验后已回写恢复
- * - salvaged / lost： salvage 存活条目数 / 无法恢复条目数
- */
+/** 最近一次完整性事件（损坏抢救结果；渲染层可展示「抢救 N 条 / 丢失 M 条」） */
 export interface KeychainIntegrity {
   readonly corrupted: boolean;
   readonly recoverable: boolean;
@@ -87,15 +39,13 @@ export interface KeychainIntegrity {
   readonly lost: number;
 }
 
-/** 最近一次损坏处置报告（未发生损坏为 null；设置页可据此提示用户重新录入密钥） */
 let lastIntegrity: KeychainIntegrity | null = null;
 
-/** 读取最近一次 keychain 完整性报告（无损坏历史时 null） */
+/** 查询最近一次完整性事件（null = 从未损坏） */
 export function getKeychainIntegrity(): KeychainIntegrity | null {
   return lastIntegrity;
 }
 
-/** 值是否为「加密字节数组」形状（number[] 且元素在 0..255） */
 function isEncryptedArray(value: unknown): value is number[] {
   return (
     Array.isArray(value) &&
@@ -103,7 +53,6 @@ function isEncryptedArray(value: unknown): value is number[] {
   );
 }
 
-/** 整体结构校验：仅接受 key → 字节数组 的平对象（其余按损坏处理） */
 function isKeychainStore(value: unknown): value is KeychainStore {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     return false;
@@ -111,15 +60,10 @@ function isKeychainStore(value: unknown): value is KeychainStore {
   return Object.values(value).every(isEncryptedArray);
 }
 
-/** 条目片段正则：`"key": [ 1,2,3 ]`——截断写入时仍能逐条捞出完整配对（忽略未闭合尾巴） */
 const ENTRY_FRAGMENT_PATTERN = /"((?:[^"\\]|\\.)+)"\s*:\s*(\[[^\][]*\])/g;
 
-/**
- * 逐条抢救损坏文件（P1 修复：此前整文件判损坏即弃，全部 API Key 静默消失）
- *
- * 只保留「能解析出字节数组」且「safeStorage 能解开」的条目——解不开的
- * （跨系统用户 / DPAPI 主密钥轮换）留也只会反复报错，计入 lost。
- */
+// 结构级抢救：整体 JSON 解析失败后按「"键": [字节数组]」碎片正则逐条提取，
+// 能解密通过的收编——文件部分损坏时尽量少丢密钥
 function salvageEntries(raw: string): { store: KeychainStore; candidates: number } {
   const store: KeychainStore = {};
   let candidates = 0;
@@ -136,24 +80,12 @@ function salvageEntries(raw: string): { store: KeychainStore; candidates: number
       }
       safeStorage.decryptString(Buffer.from(parsed));
       store[JSON.parse(`"${rawKey}"`) as string] = parsed;
-    } catch {
-      // 单条不可解析/不可解密：跳过（计入 lost），不阻断其余条目
-    }
+    } catch {}
   }
   return { store, candidates };
 }
 
-/**
- * 读取 keychain 文件（损坏时逐条抢救并回写健康子集）
- *
- * 文件不存在时返回空对象（首次使用，不算损坏）。
- */
-/**
- * 读取失败时抛错（2026-09-08 修复数据丢失，从 readStore 提取）
- *
- * 此前静默返回空对象，后续 set 会基于空对象读-改-写，把原有密钥全部覆盖为
- * 空。现在抛错阻止写入，用户看到明确失败而非密钥被静默清空。
- */
+// 读取失败绝不降级为空库继续——后续写会把既有密钥整体覆盖掉，宁可炸掉本次操作
 function throwKeychainReadError(error: unknown, filePath: string): never {
   const message = error instanceof Error ? error.message : String(error);
   logger.error(
@@ -172,7 +104,6 @@ async function readStore(): Promise<KeychainStore> {
   try {
     content = await fs.readFile(filePath, 'utf8');
   } catch (error: unknown) {
-    // ENOENT = 首次使用（合法空态）
     if (error instanceof Error && error.message.includes('ENOENT')) {
       return {};
     }
@@ -186,7 +117,6 @@ async function readStore(): Promise<KeychainStore> {
     }
     throw new Error('keychain.dat 结构不符合契约');
   } catch {
-    // 结构损坏（半截写入 / 手工改坏）：先逐条抢救，再隔离原件，最后回写健康子集
     const { store: salvaged, candidates } = salvageEntries(content);
     const report: KeychainIntegrity = {
       corrupted: true,
@@ -201,9 +131,7 @@ async function readStore(): Promise<KeychainStore> {
     );
     try {
       await fs.rename(filePath, `${filePath}.corrupt`);
-    } catch {
-      // 重命名失败（权限等）不阻断：仍继续回写健康子集
-    }
+    } catch {}
     if (report.recoverable) {
       await writeStore(salvaged);
     }
@@ -211,16 +139,7 @@ async function readStore(): Promise<KeychainStore> {
   }
 }
 
-/**
- * 写入 keychain 文件（原子写）
- *
- * 安全修复：keychain.dat 含加密的 API Key，限制为仅属主可读写（0o600）。
- * - writeFile mode 仅对新建文件生效，后续覆盖写入需显式 chmod 兜底
- *
- * 原子性（2026-09-06 审计修复）：先写同目录 `.tmp` → fsync → rename 覆盖。
- * 此前直接覆盖主文件，写入过程中断电/强杀会留下半截 JSON——读侧虽有逐条
- * salvage 抢救，但正在写入的那条 Key 会丢，且抢救结果依赖正则对截断内容的容忍度。
- */
+// 写入三防：0600 创建 + fsync 落盘 + tmp/rename 原子替换；失败清 tmp 不留半截文件
 async function writeStore(store: KeychainStore): Promise<void> {
   const filePath = getKeychainPath();
   const content = JSON.stringify(store, null, 2);
@@ -229,29 +148,19 @@ async function writeStore(store: KeychainStore): Promise<void> {
     const handle = await fs.open(tmpPath, 'w', 0o600);
     try {
       await handle.writeFile(content, 'utf8');
-      // fsync：确保内容真正落盘后再 rename（rename 本身是原子的）
       await handle.sync();
     } finally {
       await handle.close();
     }
     await fs.rename(tmpPath, filePath);
   } catch (error) {
-    // 失败清理临时文件，避免残留（读路径只认 keychain.dat，不受影响）
     await fs.rm(tmpPath, { force: true }).catch(() => undefined);
     throw error;
   }
   restrictKeychainPermissions(filePath);
 }
 
-/**
- * 解析当前进程的 Windows 账户名（icacls 可识别的 DOMAIN\user 形态）
- *
- * 不能用 `process.env.USERNAME`：沙箱 / 服务 / 提权上下文中该变量可能是
- * `SYSTEM` 等与进程真实令牌不一致的值。若据此执行
- * `icacls /inheritance:r /grant:r SYSTEM:F`，会剥掉继承 ACL 只留给 SYSTEM，
- * 真实用户立刻 EPERM（读/写/删 keychain.dat 全部失败，等于锁死密钥库）。
- * `whoami` 读的是进程令牌，才是 icacls 该授权的主体。
- */
+// whoami 解析当前账户供 icacls 授权（失败返回空串——ACL 收紧跳过而非炸掉写入）
 function resolveWindowsAccount(): string {
   const systemRoot = process.env['SystemRoot'];
   const whoamiExe =
@@ -263,19 +172,13 @@ function resolveWindowsAccount(): string {
   }
 }
 
-/**
- * 收紧 keychain.dat 权限（POSIX chmod 0600 / Windows icacls 仅当前用户）
- *
- * DPAPI/Keychain 加密是主防线，文件权限是纵深防御——失败仅告警不阻断。
- * Windows 侧解析不到账户时**保持继承 ACL**（宁可少一层收紧，不可锁死属主）。
- */
+// 文件 ACL 收紧：unix 0600；win32 用 icacls 断继承 + 仅授予当前用户（DPAPI 才是主防线，
+// ACL 是纵深防御；失败只告警不阻塞）
 function restrictKeychainPermissions(filePath: string): void {
   if (process.platform !== 'win32') {
     try {
       chmodSync(filePath, 0o600);
-    } catch {
-      // 权限设置失败不阻断写入（只读文件系统等场景）
-    }
+    } catch {}
     return;
   }
   const user = resolveWindowsAccount();
@@ -284,7 +187,6 @@ function restrictKeychainPermissions(filePath: string): void {
     return;
   }
   try {
-    // 解析系统绝对路径（不依赖 PATH）：%SystemRoot%\System32\icacls.exe
     const icaclsExe =
       process.env['SystemRoot'] !== undefined
         ? join(process.env['SystemRoot'], 'System32', 'icacls.exe')
@@ -297,17 +199,9 @@ function restrictKeychainPermissions(filePath: string): void {
   }
 }
 
-// 2026-09-28：以 restrictFileAccessWin32 之名导出——sessions.db / -wal / -shm /
-// 备份（db.ts restrictFilePermissions 的 win32 分支）与 keychain.dat 共用同一套
-// ACL 收紧机制，此前 db 侧 Windows 完全跳过、纵深标准低于密钥文件（深读发现）
 export { restrictKeychainPermissions as restrictFileAccessWin32 };
 
-/**
- * 存储加密的敏感数据
- *
- * @param key secret 名称（如 'deepseek-api-key'）
- * @param value 原始值（会被加密后存储）
- */
+/** 写入密钥（加密不可用直接抛——明文落盘不可接受） */
 export async function setSecret(key: string, value: string): Promise<void> {
   if (!safeStorage.isEncryptionAvailable()) {
     throw new Error('safeStorage 加密不可用，无法存储敏感数据');
@@ -325,17 +219,10 @@ export async function setSecret(key: string, value: string): Promise<void> {
 }
 
 /**
- * 读取并解密敏感数据
- *
- * @param key secret 名称
- * @returns 原始值，不存在时返回 null
+ * 读取密钥；加密不可用时返回 null 并只告警一次（不炸调用方——上游按「未配置 Key」处理）
  */
 export async function getSecret(key: string): Promise<string | null> {
   if (!safeStorage.isEncryptionAvailable()) {
-    // fail-silent 收口（2026-09-28 深读发现）：此前静默返 null——Linux 无 keyring
-    // 等场景下已保存的 Key 读出为「未配置」，用户视角密钥凭空消失且无任何线索。
-    // 现每进程告警一次（随诊断包导出）；仍返回 null 保持可用性——读抛错会卡死
-    // 设置页，而 set 侧的抛错语义不变（写入失败必须让用户知道）
     if (!warnedEncryptionUnavailable) {
       warnedEncryptionUnavailable = true;
       logger.warn(
@@ -346,8 +233,6 @@ export async function getSecret(key: string): Promise<string | null> {
     return null;
   }
 
-  // P1 修复：读路径同样持锁——此前 get 无锁，可与 set/delete 的「读-改-写」
-  // 以及损坏文件的 rename 交错，读到随即被隔离的孤儿快照（甚至丢条目）
   const release = await acquireLock();
   try {
     const store = await readStore();
@@ -363,14 +248,7 @@ export async function getSecret(key: string): Promise<string | null> {
   }
 }
 
-/**
- * 删除指定 secret
- *
- * @param key secret 名称
- */
 export async function deleteSecret(key: string): Promise<void> {
-  // P1 修复：delete 是读改写，必须与 setSecret 同锁——否则运行时模型删除密钥
-  // 与设置页保存密钥并发时，delete 的旧读会覆盖 set 刚写入的 key（丢更新）
   const release = await acquireLock();
   try {
     const store = await readStore();
@@ -383,13 +261,7 @@ export async function deleteSecret(key: string): Promise<void> {
   }
 }
 
-/**
- * 列出所有已存储的 secret 名称
- *
- * @returns secret key 数组
- */
 export async function listSecrets(): Promise<string[]> {
-  // 读路径持锁：readStore 可能触发损坏抢救（rename + 回写），不能与 set/delete 交错
   const release = await acquireLock();
   try {
     const store = await readStore();

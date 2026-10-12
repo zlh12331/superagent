@@ -1,4 +1,3 @@
-/* ── 应用骨架：顶栏 + 弹性主体（grid 两行） ── */
 .app {
   display: grid;
   grid-template-rows: var(--topbar-h) 1fr;
@@ -7,12 +6,7 @@
   min-width: 0;
 }
 
-/* ── 主体容器：水平 grid（sidebar | resizer | main | resizer | right-panel） ──
-   对齐原型 .view-chat，合并了原型的 .body + .view-chat 两层
-   宽度令牌 --sidebar-w / --right-panel-w 在 :root 上为 clamp 默认值，
-   拖拽时由 use-resizable-panels 直接 setProperty 覆盖为 px */
 .view-chat {
-  /* 背景锚定到主区色：resizer 列（透明）不露 body 氛围层，交界处与两侧完全一致 */
   background: var(--background);
   display: grid;
   grid-template-columns:
@@ -26,11 +20,8 @@
   overflow: hidden;
 }
 
-/* ── 侧边栏基础样式（须在折叠态规则之前，避免特异性降序告警） ── */
 .sidebar {
-  /* 侧边栏纯底色（移除左右镜像渐变） */
   background: var(--sidebar);
-  /* 像素实测：1px transparent border 会在交界处产生亮色突变带——彻底移除 */
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -39,7 +30,6 @@
   grid-column: 1;
 }
 
-/* resizer 列定位（放在折叠态规则之前，避免特异性降序告警） */
 .resizer-left {
   grid-column: 2;
 }
@@ -48,7 +38,6 @@
   grid-column: 4;
 }
 
-/* 侧栏折叠态：第一列塌缩为 0 */
 .view-chat.sb-collapsed {
   grid-template-columns:
     0
@@ -63,7 +52,6 @@
   display: none;
 }
 
-/* 右面板折叠态：第五列塌缩为 0 */
 .view-chat.crp-collapsed {
   grid-template-columns:
     var(--sidebar-w)
@@ -77,7 +65,6 @@
   display: none;
 }
 
-/* 双折叠态（侧栏 + 右面板同时折叠） */
 .view-chat.sb-collapsed.crp-collapsed {
   grid-template-columns:
     0
@@ -87,7 +74,6 @@
     0;
 }
 
-/* ── 顶栏：干净中性表面（TraeWork quiet by default）── */
 .topbar {
   display: flex;
   align-items: center;
@@ -96,19 +82,14 @@
   background: var(--bg-elev);
   border-bottom: 1px solid var(--border);
   position: relative;
-  /* frameless 窗口（titleBarStyle: hidden）：顶栏即窗口标题栏
-     右侧预留 Win11 overlay 窗口控件占位（最小化/最大化/关闭约 140px） */
   padding-right: 158px;
   height: var(--topbar-h, 52px);
 }
 
-/* 通用 frameless 拖拽区（Topbar / 设置抽屉头部窗口控件预留区复用） */
 .app-region-drag {
   -webkit-app-region: drag;
 }
 
-/* frameless 拖拽区：顶栏背景整体可拖（含 padding 预留区），
-   交互元素（按钮/品牌）no-drag——drag 必须挂在容器上 */
 .topbar {
   -webkit-app-region: drag;
 }
@@ -117,9 +98,6 @@
   -webkit-app-region: no-drag;
 }
 
-/* TraeWork：移除底部发光刻度线（quiet by default — 纯 border 分割） */
-
-/* ── 品牌标识：纯色品牌方块（TraeWork — brand color is scarce）── */
 .brand {
   display: flex;
   align-items: center;
@@ -128,8 +106,6 @@
   letter-spacing: 0.01em;
 }
 
-/* 品牌标识：形态由 components/common/BrandMark.tsx 的 SVG 提供（顶栏/欢迎页共用），
-   此处仅保留顶栏尺寸约束与不收缩 */
 .brand-mark {
   width: 22px;
   height: 22px;
@@ -166,9 +142,7 @@
 .topbar-spacer {
   flex: 1;
 }
-/* TraeWork：移除品牌呼吸脉冲动画（无发光装饰） */
 
-/* ── 顶栏图标按钮（对齐原型 .icon-btn） ── */
 .icon-btn {
   display: inline-flex;
   align-items: center;
@@ -186,38 +160,25 @@
 }
 
 .icon-btn:hover {
-  /* hover 反馈校准：低强度底色 + 前景提亮（实心品牌紫与 quiet 基调自相矛盾，
-     实底留给主操作按钮） */
   background: color-mix(in srgb, var(--accent) 10%, transparent);
   color: var(--accent-text);
 }
 
-/* ── 主内容区背景：TraeWork 安静表面（无装饰光晕）
-   原 Aurora 三层 radial 光晕已移除 */
 .thread-bg {
   min-width: 0;
   min-height: 0;
-  /* grid 列锚定（对齐原型 L1215 .thread { grid-column: 3 }）：
-     双折叠态下 sidebar/resizer display:none 不占轨道，
-     auto 放置会把 main 放进第 1 列（0px）→ 主区崩溃 */
   grid-column: 3;
   background: var(--background);
 }
 
-/* ── 会话顶部状态条：等宽字体遥测带 ── */
 .thread-status-bar {
   display: flex;
   align-items: center;
   gap: 14px;
-  /* 高度与右面板 tab 栏对齐（用户要求：两者 30px，消除交界不齐） */
   height: 30px;
   padding: 0 24px;
   border-bottom: 1px solid var(--border);
-  /* 不透明背景：与 resizer 透明热区（--background）完全同色，消除两侧 6px 间隔感
-     （玻璃渐变/透明均会暴露 thread-bg 氛围层色差，用户标注） */
   background: var(--background);
-  /* z-index 1：让状态条盖住绝对定位的同级内容（原根因 paper-texture::before
-     光晕层已在 quiet 迁移中删除，此处保留为防御性层叠，档位见 --z-base） */
   position: relative;
   z-index: var(--z-base);
   font-family: var(--font-mono);
@@ -227,7 +188,6 @@
   overflow: hidden;
 }
 
-/* ── 侧边栏子元素（基础样式见上方 .sidebar） ── */
 .sidebar-head {
   padding: 12px;
   border-bottom: 1px solid var(--sidebar-border);
@@ -295,7 +255,6 @@
   align-items: center;
   justify-content: center;
   gap: 4px;
-  /* 激活态底条（sidebar-tab-active-bar）定位基准：单 tab 常驻激活，滑动动画实际不触发 */
   position: relative;
 }
 
@@ -314,7 +273,6 @@
   font-family: var(--font-mono);
   font-size: var(--font-size-2xs);
   color: var(--muted-foreground);
-  /* 数量徽章（对齐参考项目 SidebarTabButton：圆角背景 + 等宽数字） */
   background: var(--bg);
   border-radius: var(--radius);
   padding: 1px 5px;
@@ -323,7 +281,6 @@
 
 .sidebar-tab.active .count {
   color: var(--sidebar-foreground);
-  /* 徽章背景恒为 --bg（对齐参考项目 SidebarTabButton：bg-[var(--bg)]，仅文字色随激活变化） */
   background: var(--bg);
 }
 
@@ -335,7 +292,6 @@
   min-width: 0;
 }
 
-/* 新建会话按钮 · TraeWork C3 实心 primary（禁双 accent 渐变/发光） */
 .new-thread-btn {
   width: 100%;
   display: flex;
@@ -363,7 +319,6 @@
   background: color-mix(in srgb, var(--primary) 85%, black);
 }
 
-/* 会话分组标签（最近会话 / 归档） */
 .thread-group-label {
   font-size: var(--font-size-2xs);
   text-transform: uppercase;
@@ -376,23 +331,18 @@
   justify-content: space-between;
 }
 
-/* 文件夹标签 */
-/* 单元格：flex 同行布局——folder-label（折叠+图标+名称）与 fl-add-btn（+号）水平排列，
-   默认 block 会让两个按钮垂直堆叠（+号落到名称下一行，2026-09-04 修复） */
 .folder-label-cell {
   display: flex;
   align-items: center;
 }
 
 .folder-label {
-  /* button 默认样式重置（元素从 div 改为 button 以满足 a11y 语义化要求） */
   background: none;
   border: none;
   flex: 1;
   min-width: 0;
   text-align: left;
   font: inherit;
-  /* 布局 */
   display: flex;
   align-items: center;
   gap: 5px;
@@ -426,9 +376,6 @@
   font-size: var(--font-size-xs);
 }
 
-/* fl-add-btn 是 .folder-label-cell 内与 .folder-label 平级的兄弟按钮
-   （由原内嵌 span 移出为平级 button）——基础样式必须挂在 cell 作用域，
-   后代选择器 .folder-label .fl-add-btn 永不匹配（曾致按钮 hover 显现失效） */
 .folder-label-cell .fl-add-btn {
   background: transparent;
   border: none;
@@ -450,7 +397,6 @@
   background: var(--sidebar-accent);
 }
 
-/* 会话条目 — 衬线标题 + 等宽元信息 */
 .thread-item {
   display: flex;
   align-items: flex-start;
@@ -467,8 +413,6 @@
 }
 
 .thread-item.active {
-  /* 激活态与 hover 拉开一档：hover 用 sidebar-accent（灰阶 L2），激活换品牌淡底
-     （与列表选中统一配方一致——此前两者同灰底，激活只剩细条+圆点两个弱信号） */
   background: var(--accent-soft);
 }
 
@@ -546,9 +490,6 @@
   opacity: 1;
 }
 
-/* 内联重命名时收起操作按钮：输入框获得整行宽度
-   （.hidden 工具类会被本文件 .ti-actions display:flex 覆盖——同特异性后者胜，
-   故用更高特异性显式声明） */
 .thread-item .ti-actions.hidden {
   display: none;
 }
@@ -566,7 +507,6 @@
   width: 28px;
   height: 28px;
   border-radius: calc(var(--radius) - 1px);
-  /* 平色（原 135deg 渐变两端在双主题下同为 --bg-elev-2，渲染即平色） */
   background: var(--sidebar-accent);
   display: flex;
   align-items: center;
@@ -574,7 +514,6 @@
   font-family: var(--font-mono);
   font-size: var(--font-size-xs);
   font-weight: 600;
-  /* --accent-text：基色 --accent 作暗色首字母文字仅 3.84，文本层 6.29 */
   color: var(--accent-text);
   border: 1px solid var(--border);
   flex-shrink: 0;
@@ -583,7 +522,6 @@
 .sidebar-foot .user-info {
   flex: 1;
   min-width: 0;
-  /* 名称与邮箱纵向堆叠（默认 inline 会粘连成一行） */
   display: flex;
   flex-direction: column;
   gap: 1px;
@@ -603,13 +541,8 @@
   white-space: nowrap;
 }
 
-/* ── 拖拽分隔线 ── */
 .resizer {
-  /* h-full 必须显式：Tailwind preflight 给 hr 默认 height 0.67px，
-     align-self: stretch 无法覆盖显式高度 → 命中区塌陷不可拖（同抽屉调宽条坑） */
   height: 100%;
-  /* 热区 = 元素 6px（用户要求：好拖）；grid 列宽已为 0（--resizer-w: 0px，用户要求：
-     无视觉间隔），元素溢出覆盖相邻列边缘承担热区；视觉线由 ::after 1px 居中承担，默认透明 */
   width: 6px;
   cursor: col-resize;
   display: flex;
@@ -621,11 +554,8 @@
   background: transparent;
   transition: background var(--duration-fast) ease;
   position: relative;
-  /* 溢出覆盖 main/面板边缘后仍可命中（默认透明不影响视觉） */
   z-index: var(--z-raised);
   margin: 0;
-  /* 关键：preflight 给 hr 设了 border-top-width: 1px + color inherit（亮色）——
-     6px 溢出条顶部有 1px 亮白横线，正是用户多轮反馈的"状态条与侧边栏间隔"竖缝；显式归零 */
   border-width: 0;
 }
 
@@ -642,13 +572,11 @@
   width: 1px;
   height: 100%;
   max-height: 100%;
-  /* 用户要求：默认不可见（侧边栏与对话区无缝衔接）；hover/拖拽时显示 accent 提示线 */
   background: transparent;
   transition: background var(--duration-fast) ease;
   border-radius: calc(var(--radius) - 7px);
 }
 
-/* hover/拖拽仅变色 + 光晕提示可拖拽，宽度保持 1px（用户要求：分隔线恒 1px） */
 .resizer:hover::after,
 .resizer.dragging::after {
   background: var(--accent);
@@ -659,9 +587,7 @@ body.resizing {
   user-select: none;
 }
 
-/* ── 右面板 ── */
 .chat-right-panel {
-  /* 右面板纯底色（与左栏一致，移除镜像渐变） */
   background: var(--sidebar);
   display: flex;
   flex-direction: column;

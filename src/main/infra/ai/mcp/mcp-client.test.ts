@@ -1,20 +1,3 @@
-// src/main/infra/ai/mcp/mcp-client.test.ts
-// mcp-client 单测：单个 MCP server 客户端封装
-//
-// 测试要点：
-// 1. connect：启动成功 → 缓存工具列表
-// 2. connect：启动失败 → 抛 AppError(INTERNAL_ERROR)
-// 3. connect：已连接时幂等（不重复启动）
-// 4. listTools：未连接时抛 INTERNAL_ERROR
-// 5. callTool：转发调用并返回标准化结果
-// 6. callTool：未连接时抛 INTERNAL_ERROR
-// 7. callTool：转发失败抛 TOOL_EXECUTION_FAILED
-// 8. close：幂等（已关闭时直接返回）
-//
-// 接线背景：生产创建方唯一 = mcp-service.startServer；本文件 mock MCP SDK
-// 的 Client 与 StdioClientTransport（基础设施 mock，协议行为走断言），
-// 批次 12 节覆盖条件展开/stderr 转写/兜底分支等缺口。
-
 import { AppError, ErrorCode } from '@code-agent/shared/main';
 import type { WebContents } from 'electron';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -23,13 +6,11 @@ import type { ToolContext } from '../tools/tool';
 import { MCPClient } from './mcp-client';
 import type { McpServerConfig } from './mcp-types';
 
-// Mock WebContents：测试不依赖事件推送，仅满足 ToolContext 类型契约
 const mockWebContents = {
   send: vi.fn(),
   isDestroyed: vi.fn(() => false),
 } as unknown as WebContents;
 
-// vi.mock 必须在顶层
 const mocks = vi.hoisted(() => {
   const mockClient = {
     connect: vi.fn(),
@@ -51,7 +32,6 @@ const mocks = vi.hoisted(() => {
   return { mockClient, mockTransport, mockLogger };
 });
 
-// Mock @modelcontextprotocol/sdk 的 Client 与 StdioClientTransport
 vi.mock('@modelcontextprotocol/sdk/client/index.js', () => ({
   // biome-ignore lint/style/useNamingConvention: 必须匹配 SDK 导出的类名
   // biome-ignore lint/complexity/useArrowFunction: 必须用普通函数以支持 new 调用
@@ -68,7 +48,6 @@ vi.mock('@modelcontextprotocol/sdk/client/stdio.js', () => ({
   }),
 }));
 
-// Mock logger
 vi.mock('../../../utils/logger', () => ({
   logger: mocks.mockLogger,
 }));
@@ -102,7 +81,6 @@ describe('mcp-client', () => {
     vi.clearAllMocks();
     client = new MCPClient(baseConfig);
 
-    // 默认 mock 行为
     mocks.mockClient.connect.mockResolvedValue(undefined);
     mocks.mockClient.getServerVersion.mockReturnValue({
       name: 'filesystem-mcp',
@@ -136,7 +114,7 @@ describe('mcp-client', () => {
 
     it('已连接时幂等（不重复启动）', async () => {
       await client.connect();
-      await client.connect(); // 第二次直接返回
+      await client.connect();
       expect(mocks.mockClient.connect).toHaveBeenCalledOnce();
     });
 
@@ -152,7 +130,6 @@ describe('mcp-client', () => {
     it('启动失败后调用 close 不抛错（资源清理）', async () => {
       mocks.mockClient.connect.mockRejectedValue(new Error('fail'));
       await expect(client.connect()).rejects.toThrow();
-      // close 幂等
       await expect(client.close()).resolves.toBeUndefined();
     });
   });
@@ -197,7 +174,6 @@ describe('mcp-client', () => {
       const ctx = makeCtx();
       const result = await client.callTool('read_file', { path: '/tmp/x' }, ctx);
 
-      // callTool 签名：(params, resultSchema?, options?) — M1 后透传 signal
       expect(mocks.mockClient.callTool).toHaveBeenCalledWith(
         { name: 'read_file', arguments: { path: '/tmp/x' } },
         undefined,
@@ -278,11 +254,9 @@ describe('mcp-client', () => {
         abortSignal: controller.signal,
         webContents: mockWebContents,
       };
-      // 模拟 SDK 在 abort 时抛 AbortError
       const abortErr = new Error('aborted');
       abortErr.name = 'AbortError';
       mocks.mockClient.callTool.mockRejectedValue(abortErr);
-      // 在 await 期间触发 abort
       setTimeout(() => controller.abort(), 0);
 
       await expect(client.callTool('read_file', {}, ctx)).rejects.toMatchObject({
@@ -297,8 +271,6 @@ describe('mcp-client', () => {
       await client.close();
       expect(mocks.mockClient.close).toHaveBeenCalledOnce();
       expect(mocks.mockTransport.close).toHaveBeenCalledOnce();
-      // L7 修复：client.close 必须在 transport.close 之前调用
-      // toHaveBeenCalledOnce 已确保调用至少一次；未调用时 ?? 0 让比较失败（测试本就该红）
       const clientCloseOrder = mocks.mockClient.close.mock.invocationCallOrder[0] ?? 0;
       const transportCloseOrder = mocks.mockTransport.close.mock.invocationCallOrder[0] ?? 0;
       expect(clientCloseOrder).toBeLessThan(transportCloseOrder);
@@ -326,7 +298,6 @@ describe('mcp-client', () => {
       await client.connect();
       mocks.mockClient.close.mockRejectedValue(new Error('protocol close fail'));
       await expect(client.close()).resolves.toBeUndefined();
-      // 即便 client.close 失败，仍尝试 transport.close（kill 子进程）
       expect(mocks.mockTransport.close).toHaveBeenCalledOnce();
     });
   });

@@ -1,5 +1,3 @@
-// src/renderer/components/terminal/TerminalTabs.test.tsx
-// TerminalTabs 交互测试：tab 渲染/激活高亮/点击选择/键盘导航（方向键/Home/End）/关闭
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { TerminalMeta } from '@/stores/transient/terminal-store';
@@ -67,9 +65,6 @@ describe('TerminalTabs', () => {
     expect(onSelect).not.toHaveBeenCalled();
   });
 
-  // ── 方向键导航（2026-09 审计补：a11y spec 明确要求 tablist 支持方向键，
-  //    此前仅有 roving tabIndex 而无 Arrow 处理，键盘用户无法在 tab 间移动） ──
-
   it('ArrowRight：切换到下一个 tab', () => {
     const onSelect = vi.fn();
     render(
@@ -114,8 +109,6 @@ describe('TerminalTabs', () => {
     first.focus();
     fireEvent.keyDown(first, { key: 'ArrowRight' });
 
-    // 焦点须移到 t2 对应节点：否则焦点留在 tabIndex=-1 的旧节点，
-    // 下次按 Tab 会直接跳过整个 tablist（键盘导航失效）
     expect(document.activeElement?.getAttribute('data-terminal-tab')).toBe('t2');
   });
 });

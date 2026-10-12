@@ -1,22 +1,10 @@
 // scripts/check-secrets-git.ts
-// 密钥扫描闸（只扫已提交内容，模式 gitleaks git）
-// ──────────────────────────────────────────────────────────────
-// 扫描范围：默认 `<远端主分支>..HEAD`，即「本次相对远端 main 多出来的提交」。
-// 这个范围正好对应「即将推送 / 即将并入 main 的东西」，且实测约 1.4 秒。
-//
-// 为什么用 `gitleaks git` 而不是 `gitleaks dir .`（2026-09-22 实测）：
-//   `dir .` 扫文件系统，会连同 .pnpm-store / .electron-user-data / .env 等
-//   非版本库内容一起扫（实测 3.21 GB / 191 秒 / 451 条噪音命中）；
-//   `git` 只扫已提交内容（实测 26 MB：全历史 1 分 41 秒、区间 1.4 秒）。
-//   两者规则集相同（同读 .gitleaks.toml），差异只在范围。
-//
-// 基线缺失时（全新克隆、从未 fetch）回退全历史扫描——慢但不会漏，属 fail-closed。
-//
-// ⚠️ 配置侧前提：.gitleaks.toml 必须有 `[extend] useDefault = true`。
-//    缺它则 gitleaks 用该文件**替代**内置规则集，而文件里只有 [allowlist]、
-//    没有 [[rules]] ⇒ 有效规则数为 0 ⇒ 恒报 no leaks found（2026-09-22 前
-//    长期如此，三道 gitleaks 闸全部空转）。
-// ──────────────────────────────────────────────────────────────
+// 密钥扫描闸（gitleaks git 模式）：默认扫 origin/main..HEAD——正好是「即将推送/
+// 并入 main 的内容」，实测 ~1.4s。不用 `gitleaks dir .`：那会连 .pnpm-store/
+// .electron-user-data 等非版本库内容一起扫（实测 3.21GB/191s/451 条噪音）
+// 基线缺失（全新克隆）回退全历史——慢但不漏，fail-closed
+// ⚠️ 配置前提：.gitleaks.toml 必须有 [extend] useDefault = true，否则内置规则集
+// 被替代、有效规则数为 0、恒报 no leaks found（2026-09-22 前三道闸全空转）
 
 import { spawnSync } from 'node:child_process';
 

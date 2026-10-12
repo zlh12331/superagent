@@ -1,6 +1,3 @@
-// src/renderer/hooks/use-working-dir.test.tsx
-// 会话工作目录 hook 行为测试：索引派生 + knownDir 优先 + 激活会话解析
-
 import { renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 

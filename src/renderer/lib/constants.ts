@@ -1,14 +1,3 @@
-// src/renderer/lib/constants.ts
-// 渲染层 UI 常量
-// 集中管理路由路径、响应式断点与 UI 时序常量，避免散落在各组件硬编码
-//
-// 设计：
-// - 路由常量 ROUTES 提供 path 模板 + 工厂函数，避免字符串拼接 typo
-// - 断点与时序常量供 AppShell / Sidebar / 搜索高亮等共用，便于统一调整
-// - 布局尺寸（顶栏高 / 分隔线宽等）不在本文件：已收敛到 CSS 令牌
-//   （src/renderer/styles/tokens.css 的 --topbar-h / --resizer-w），
-//   避免 TS 常量与 CSS 变量两处真源
-
 /**
  * 草稿会话 id
  *

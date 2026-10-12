@@ -1,9 +1,3 @@
-// src/main/infra/storage/settings-pref.test.ts
-// settings-pref 单测：app_settings 表读写（真实 SQLite 临时库，无业务 mock）
-// ──────────────────────────────────────────────────────────────
-// S1：渲染层 settings 下沉 SQLite——验证读写往返/upsert/删除/非法 key 防御。
-// 与 storage-gaps.test.ts 同一套「真实 better-sqlite3 临时目录」基建模式。
-
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -18,7 +12,6 @@ const mocks = vi.hoisted(() => ({
 vi.mock('electron', () => ({
   app: {
     getPath: mocks.mockGetPath,
-    // initDb 的 resolveMigrationsDir 需要：dev 环境指向项目根 drizzle/
     getAppPath: () => process.cwd(),
     isPackaged: false,
   },
@@ -67,7 +60,6 @@ describe('settings-pref（app_settings 表，SQLite 单一真源）', () => {
     writeSetting('theme', 'dark');
     deleteSetting('theme');
     expect(readAllSettings()).toEqual({});
-    // 幂等：再删不抛
     expect(() => deleteSetting('theme')).not.toThrow();
   });
 
@@ -76,9 +68,7 @@ describe('settings-pref（app_settings 表，SQLite 单一真源）', () => {
     writeSetting('ai', { temperature: 1 });
     writeSetting('internal.trusted', { x: 1 });
     deleteSettings(['theme', 'ai', 'nonexistent']);
-    // 白名单外键（主进程内部配置组语义）不受批量删除影响
     expect(readAllSettings()).toEqual({ 'internal.trusted': { x: 1 } });
-    // 幂等：重复删除不抛
     expect(() => deleteSettings(['theme', 'ai', 'nonexistent'])).not.toThrow();
   });
 

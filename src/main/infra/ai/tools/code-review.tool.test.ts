@@ -1,6 +1,3 @@
-// src/main/infra/ai/tools/code-review.tool.test.ts
-// code_review 工具单测：路径解析 + 行统计 + 输出格式（mock IFileService）
-
 import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import type { IFileService } from '../../file/file-service';

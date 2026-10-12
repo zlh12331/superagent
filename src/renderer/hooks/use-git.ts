@@ -1,24 +1,3 @@
-// src/renderer/hooks/use-git.ts
-// Git 数据查询 hook（L3 服务端请求状态层）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 通过 TanStack Query 调用 git:status / git:diff IPC
-// - 自动处理缓存失效 + 竞态 + 重试（QueryClient 默认配置）
-// - 仅封装只读操作（Git 域设计上不提供 commit/push 等写操作）
-//
-// 设计依据（项目规范）：
-// - "Server state from IPC `invoke` (request-response) must use TanStack Query
-//    for caching, invalidation, and race condition handling"
-// - git:status / git:diff 为 IPC invoke（请求-响应），使用 TanStack Query 缓存
-// - 不缓存 diff（因 diff 可能针对不同 ref/staged/filePath 组合，缓存键复杂且
-//   重复查询频率低，且 diff 文本可能较大，避免占用缓存空间）
-//
-// 缓存策略：
-// - queryKey: ['git', 'status', path] - 工作区状态（按仓库路径缓存）
-// - staleTime: 10s（Git 状态变化较快，避免长时间展示过期数据）
-// - 不缓存 diff：每次调用都重新请求
-// ──────────────────────────────────────────────────────────────
-
 import type { GitDiffRes, GitStatusRes } from '@code-agent/shared/renderer';
 import { useQuery } from '@tanstack/react-query';
 
@@ -111,14 +90,11 @@ export function useGitDiffQuery(
     readonly path: string;
     readonly ref?: string;
     readonly staged?: boolean;
-    // exactOptionalPropertyTypes：可选属性不允许显式 undefined，此处允许
-    // 因 GitPanel 会传入 selectedFilePath ?? undefined
     readonly filePath: string | undefined;
   },
   enabled = true,
 ) {
   return useQuery({
-    // diff 不缓存：每次都重新请求，queryKey 仅用于 TanStack 内部状态管理
     queryKey: GIT_DIFF_QUERY_KEY(params),
     queryFn: async (): Promise<GitDiffRes> => {
       const response = await window.api.git.diff({
@@ -130,7 +106,6 @@ export function useGitDiffQuery(
       return unwrap(response);
     },
     enabled,
-    // 不缓存 diff：staleTime=0 让 Query 每次都重新请求
     staleTime: 0,
   });
 }

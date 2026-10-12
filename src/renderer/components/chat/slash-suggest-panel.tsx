@@ -1,10 +1,3 @@
-// src/renderer/components/chat/slash-suggest-panel.tsx
-// 斜杠/提及建议面板（自 ChatInput 拆出：/ 命令 + @ 文件 建议下拉）
-// ──────────────────────────────────────────────
-// 只负责渲染建议下拉（listbox 语义 + 键盘高亮索引）；触发状态与选中回调
-// 由 ChatInput 持有。纯展示组件，可在测试中独立 mock。
-// ──────────────────────────────────────────────
-
 import { FileText, Slash } from 'lucide-react';
 import type { ReactElement } from 'react';
 
@@ -52,12 +45,7 @@ export function SlashSuggestPanel({
       id="chat-input-suggest"
       role="listbox"
       aria-label={t('chat.slashCommand')}
-      // combobox 模式：焦点始终留在输入框，当前项由输入框的 aria-activedescendant
-      // 指向（此前把 activedescendant 挂在本容器上——本容器 tabIndex=-1 且永不受焦，
-      // 屏幕阅读器不会播报当前选项）
       tabIndex={-1}
-      // 左对齐 + 紧凑上限：此前 left-0 right-0 w-full 拉伸到输入舱全宽（实测 728px），
-      // 短命令行的 7 行建议面板过宽失衡；长路径（@ 提及）由 truncate + title 处理
       className="bg-popover text-popover-foreground absolute bottom-full left-0 z-surface mb-2 w-full max-w-sm overflow-hidden rounded-md border shadow-md"
     >
       {slashOpen &&
@@ -69,8 +57,6 @@ export function SlashSuggestPanel({
             size="sm"
             role="option"
             aria-selected={i === activeIndex}
-            // combobox 模式：选项不参与 Tab 序列（键盘导航由输入框的 ArrowUp/Down 驱动），
-            // 否则 Tab 会进入每个选项形成第二条键盘路径
             tabIndex={-1}
             onClick={() => onSelectCommand(s.command)}
             className={cn(

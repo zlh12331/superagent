@@ -1,10 +1,3 @@
-// src/main/infra/storage/remote-pref.test.ts
-// remote-pref 单测：绑定范围读写（真实 SQLite 临时库，无业务 mock）
-// ──────────────────────────────────────────────────────────────
-// 与 settings-pref.test.ts 同一套「真实 better-sqlite3 临时目录」基建模式。
-// 覆盖：默认回退（未设置/损坏/非法值）→ 读写往返 → listen 地址映射。
-// ──────────────────────────────────────────────────────────────
-
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -20,7 +13,6 @@ const mocks = vi.hoisted(() => ({
 vi.mock('electron', () => ({
   app: {
     getPath: mocks.mockGetPath,
-    // initDb 的 resolveMigrationsDir 需要：dev 环境指向项目根 drizzle/
     getAppPath: () => process.cwd(),
     isPackaged: false,
   },
@@ -52,7 +44,6 @@ describe('remote-pref（remote.bindScope，app_settings 表）', () => {
   it('写入 + 读取往返（lan / loopback 两态）', () => {
     writeRemoteBindScope('loopback');
     expect(readRemoteBindScope()).toBe('loopback');
-    // 落库形态：app_settings 表中为 JSON 字符串（与 settings 域同构）
     expect(readSetting('remote.bindScope')).toBe('loopback');
     writeRemoteBindScope('lan');
     expect(readRemoteBindScope()).toBe('lan');

@@ -1,16 +1,3 @@
-// src/renderer/lib/shortcut-conflicts.ts
-// 快捷键冲突检测纯函数（36 号 C：录键冲突 + 固定键抢占）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 归一化快捷键串用于比较（Meta ≡ Ctrl 跨平台等价、修饰符排序、主键小写）
-// - 录入值与「其他自定义键 + 固定键」判定冲突，供 shortcuts-section 拒绝写入
-//
-// 设计：
-// - 只用于比较，不回写存储格式（存储仍为 "Meta+P" 原始形态）
-// - 固定键清单在 use-keyboard-shortcuts.ts 导出（与 useHotkeys 绑定同源维护）
-// - 空串（解绑）/ 纯修饰键 → 无冲突（normalize 返回 null）
-// ──────────────────────────────────────────────────────────────
-
 import { FIXED_SHORTCUT_CONFLICTS } from '@/hooks/use-keyboard-shortcuts';
 import type { KeyboardShortcuts } from '@/stores/persistent/settings-store';
 

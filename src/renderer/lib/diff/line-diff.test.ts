@@ -1,15 +1,3 @@
-// src/renderer/lib/diff/line-diff.test.ts
-// 行级 diff 纯函数测试（dmp 行编码 + 规模守卫）
-// ──────────────────────────────────────────────────────────────
-// 测试要点：
-// 1. 基本 LCS 语义（context/add/del 排列）
-// 2. 空文本边界（新建全 add / 删除全 del）
-// 3. 规模守卫：超上限退化为整块替换（不串码、不丢行）
-// 4. 统计（countDiffLines）
-// 历史：2026-09-24 合并 __tests__/line-diff.test.ts（countDiffLines 用例并回，
-// 双文件并存是当年 colocation 迁移的未收尾残留）
-// ──────────────────────────────────────────────────────────────
-
 import { describe, expect, it } from 'vitest';
 
 import { computeLineDiff, countDiffLines } from './line-diff';
@@ -65,7 +53,6 @@ describe('computeLineDiff', () => {
   it('规模守卫：任一侧超 5000 行 → 整块替换（全 del + 全 add，行文本不丢）', () => {
     const big = lines(5001);
     const result = computeLineDiff(big, 'only-one-line');
-    // 退化路径：old 全 del 在前，new 全 add 在后，无 context
     expect(result).toHaveLength(5001 + 1);
     expect(result.every((line) => line.type === 'del' || line.type === 'add')).toBe(true);
     expect(result[0]).toEqual({ type: 'del', text: 'L0' });

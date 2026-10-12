@@ -1,34 +1,21 @@
-// src/main/infra/ai/tools/run-team.tool.ts
-// run_team 工具：模型并行委派多个子代理并汇总（对齐 qwen Team 工具语义）
-// ──────────────────────────────────────────────────────────────
-// 设计：
-// - permission='ask' / category='exec'：成员回合可能产生副作用，保守审批
-// - 团队执行 = 并行委派（SubagentManager 按 sessionId 过滤保证并发隔离）
-// ──────────────────────────────────────────────────────────────
-
+// run-team.tool.ts：run_team 工具——多成员并行（team-service 承载）
 import { z } from 'zod';
 import { t } from '../../i18n';
 import { teamService } from '../agent/team-service';
 import type { Tool, ToolContext, ToolResult } from './tool';
 
-/** run_team 入参 */
 const RunTeamInputSchema = z.object({
-  /** 团队成员委派列表（2-4 名，任务可并行） */
   members: z
     .array(
       z.object({
-        /** 子代理名（general / code_review / plan 等） */
         agent: z.string().min(1).max(100),
-        /** 委派任务 */
         task: z.string().min(1).max(1000),
       }),
     )
     .min(1)
     .max(4),
-  /** 领导汇总配置（可选：成员完成后由领导子代理聚合结论） */
   leader: z
     .object({
-      /** 领导子代理名（默认 general） */
       agent: z
         .string()
         .min(1)
@@ -42,9 +29,6 @@ const RunTeamInputSchema = z.object({
 
 type RunTeamInput = z.infer<typeof RunTeamInputSchema>;
 
-/**
- * 创建 run_team 工具（依赖模块级 TeamService 单例）
- */
 export function createRunTeamTool(): Tool<RunTeamInput> {
   return {
     name: 'run_team',
@@ -55,7 +39,6 @@ export function createRunTeamTool(): Tool<RunTeamInput> {
     category: 'exec',
     execute: async (input: RunTeamInput, ctx: ToolContext): Promise<ToolResult> => {
       try {
-        // exactOptionalPropertyTypes：leader.agent 可能为 undefined，条件展开
         const result = await teamService.runTeam(
           input.members,
           ctx.workingDir,

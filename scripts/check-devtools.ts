@@ -1,24 +1,12 @@
 // scripts/check-devtools.ts
-// devtools 产物零残留门禁：断言 out/ 无 react-query devtools 任何痕迹
-// ──────────────────────────────────────────────────────────────
-// 背景：dev 调试面板（@tanstack/react-query-devtools）按设计只允许存在于
-// dev 构建链——QueryProvider 以 `DEV && MODE!=='web' && !VITEST` 门 +
-// 动态 import 挂载，生产构建应整体 DCE 出产物图。2026-09-27 查询层改造时
-// 做过一次性 rg 零命中实证，但判据未固化（外部审计点名）：回归（dev 门改
-// 运行时条件 / 动态 import 变静态 / 字面串落进常驻模块）不会挡在任何闸上。
-// 本脚本把该判据变成机器闸。
-//
-// 判据：`react-query-devtools|ReactQueryDevtools` 在 out/ 全部产物文件零命中
-// （与 query-devtools.tsx 头注释记录的权威命令同源；模块一旦回到产物图，
-// 包名串经 sourcemap sourcesContent 必然出现，哪怕只在死分支/注释里）。
-// 范围刻意不含 electron-devtools-installer——主进程 dev 工具（静态导入），
-// 不属于本门禁。
-//
-// 产物不存在时仅提示（本地未构建场景不卡关）；CI 中 build 后与 check:compiler
-// 同位运行（ci.yml e2e-electron job + verify:local:full 产物层）。
-//
+// devtools 产物零残留门禁：断言 out/ 全部产物无 react-query devtools 痕迹。
+// dev 调试面板按设计只存在于 dev 构建链（QueryProvider 的 dev 门 + 动态 import），生产构建应整体
+// DCE 出产物图；三条回归路径（dev 门改运行时条件 / 动态 import 变静态 / 字面串落进常驻模块）不挡在
+// 任何其它闸上，故需本机器闸。判据 = `react-query-devtools|ReactQueryDevtools` 零命中——模块一旦
+// 回到产物图，包名串经 sourcemap sourcesContent 必然出现，哪怕只在死分支/注释里；范围刻意不含
+// electron-devtools-installer（主进程 dev 工具，静态导入），不属本门禁。
+// 产物不存在（本地未构建）时仅提示跳过、不卡关；CI 中 build 后与 check:compiler 同位运行。
 // 运行：pnpm build && pnpm check:devtools
-// ──────────────────────────────────────────────────────────────
 
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';

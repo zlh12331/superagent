@@ -1,11 +1,3 @@
-// src/renderer/components/common/ModelSelector.test.tsx
-// ModelSelector 组件逻辑回归（清单渲染 / 选择回调 / 受控开关 / 键盘导航）
-// ──────────────────────────────────────────────
-// 覆盖动机：组件行覆盖 34%/分支 23%——去硬编码模型选择器（models:list 单一真源）
-// 的分组渲染、未知模型回退、受控/非受控双模式、roving focus 键盘导航均无单测。
-// useModelsQuery 以 vi.mock 注入固定清单，避免依赖 TanStack Query 异步时序。
-// ──────────────────────────────────────────────
-
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -78,7 +70,6 @@ describe('ModelSelector', () => {
 
     const menu = screen.getByRole('menu');
     expect(menu).toBeInTheDocument();
-    // 分组头：kind 原文 + 首字母大写图标
     expect(menu.textContent).toContain('deepseek');
     expect(menu.textContent).toContain('openai');
     expect(screen.getAllByRole('menuitem')).toHaveLength(2);
@@ -128,16 +119,15 @@ describe('ModelSelector', () => {
     fireEvent.click(openButton());
     const items = screen.getAllByRole('menuitem');
 
-    // 打开时 effect 聚焦选中项（deepseek-chat active）
     expect(document.activeElement).toBe(items[0]);
 
     const menu = screen.getByRole('menu');
     fireEvent.keyDown(menu, { key: 'ArrowDown' });
     expect(document.activeElement).toBe(items[1]);
     fireEvent.keyDown(menu, { key: 'ArrowDown' });
-    expect(document.activeElement).toBe(items[0]); // 循环回首
+    expect(document.activeElement).toBe(items[0]);
     fireEvent.keyDown(menu, { key: 'ArrowUp' });
-    expect(document.activeElement).toBe(items[1]); // 循环到尾
+    expect(document.activeElement).toBe(items[1]);
     fireEvent.keyDown(menu, { key: 'Home' });
     expect(document.activeElement).toBe(items[0]);
     fireEvent.keyDown(menu, { key: 'End' });
@@ -165,7 +155,6 @@ describe('ModelSelector', () => {
     expect(onProviderChange).toHaveBeenCalledWith('openai');
     expect(onModelChange).toHaveBeenCalledWith('gpt-4o');
 
-    // 受控 open 仍为 true → 菜单保持打开（父组件决定何时关闭）
     rerender(
       <ModelSelector
         provider="deepseek"

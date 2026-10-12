@@ -1,15 +1,7 @@
-// src/main/infra/ai/tools/command-classifier.test.ts
-// 命令分类器单测：safe/dangerous/unknown（fail-closed）/ 缓存
-//
-// 接线背景：生产装配方 = service-container（注入 PermissionService，
-// auto 模式 exec 命令分层决策消费）；本文件用 fake LlmClient 注入（无 mock），
-// fail-closed 语义（任何失败 → unknown 必拦）是安全关键回归锚。
-
 import { describe, expect, it, vi } from 'vitest';
 import type { LlmClient } from '../llm-client';
 import { CommandClassifier } from './command-classifier';
 
-/** fake LlmClient（手写最小实现，符合无 mock 原则的 fake 注入） */
 function createFakeLlm(output: unknown, throwError = false): LlmClient {
   return {
     generateJson: vi.fn(async () => {
@@ -46,7 +38,6 @@ describe('CommandClassifier', () => {
     const classifier = new CommandClassifier(fake);
     await classifier.classify('git status');
     await classifier.classify('git status');
-    // 第二次命中缓存：LLM 只调用一次
     const generateJson = fake.generateJson as ReturnType<typeof vi.fn>;
     expect(generateJson).toHaveBeenCalledTimes(1);
   });
@@ -64,19 +55,16 @@ describe('CommandClassifier', () => {
   it('缓存达限：淘汰最旧而非整体清空', async () => {
     const fake = createFakeLlm({ safe: true, reason: '安全' });
     const classifier = new CommandClassifier(fake);
-    // 填满缓存（CACHE_LIMIT=200，与实现私有常量对齐）
     for (let i = 0; i < 200; i += 1) {
       await classifier.classify(`cmd-${i}`);
     }
     const generateJson = fake.generateJson as ReturnType<typeof vi.fn>;
     generateJson.mockClear();
-    // 达限后再写入：最旧条目（cmd-0）被逐出，较新条目仍保留
     await classifier.classify('cmd-new');
-    generateJson.mockClear(); // cmd-new 自身的判定不计入后续断言
+    generateJson.mockClear();
     await classifier.classify('cmd-0');
-    expect(generateJson).toHaveBeenCalledTimes(1); // cmd-0 已被逐出 → 重新判定
+    expect(generateJson).toHaveBeenCalledTimes(1);
     await classifier.classify('cmd-2');
-    expect(generateJson).toHaveBeenCalledTimes(1); // cmd-2 仍命中缓存 → 未整体清空
-    // （重新判定 cmd-0 时逐出的是当时的次旧 cmd-1，故探针取 cmd-2）
+    expect(generateJson).toHaveBeenCalledTimes(1);
   });
 });

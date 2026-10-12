@@ -1,7 +1,5 @@
-// packages/shared/src/__tests__/terminal-schema.test.ts
-// terminal schema 单测：P0 env 注入面——系统关键环境变量禁止由渲染层覆盖
-// （PATH/PATHEXT 决定命令解析、LD_PRELOAD/NODE_OPTIONS 决定启动即加载哪里的代码）
-
+// terminal-schema.test.ts：terminal IPC 入参契约单测——env 关键变量覆盖与自定义启动命令两条 P0 拒绝路径
+// （PATH/PATHEXT 决定命令解析、LD_PRELOAD/NODE_OPTIONS 决定启动即加载哪段代码；command 则是任意进程原语收口）
 import { describe, expect, it } from 'vitest';
 import { isTerminalEnvDenied, TerminalCreateReqSchema } from '../schemas/terminal';
 
@@ -41,6 +39,7 @@ describe('TerminalCreateReqSchema · env 关键变量拒绝（P0）', () => {
     expect(result.success).toBe(false);
     if (!result.success) {
       const issues = result.error.issues.filter((issue) => issue.path.join('.') === 'env');
+      // schema 侧把全部被拒键聚合成一条 issue，故断言恰好 1 条而非「至少 1 条」
       expect(issues).toHaveLength(1);
       for (const key of keys) {
         expect(issues[0]?.message).toContain(key);

@@ -1,10 +1,6 @@
-// src/main/infra/im/adapters/feishu-stream.test.ts
-// 飞书事件解析单测：im.message.receive_v1 → 入站消息（纯函数）
-
 import { describe, expect, it } from 'vitest';
 import { type FeishuMessageEventV1, parseFeishuEvent } from './feishu-stream';
 
-/** 构造飞书文本消息事件 */
 function textEvent(
   content: string,
   overrides?: Partial<FeishuMessageEventV1['message']>,

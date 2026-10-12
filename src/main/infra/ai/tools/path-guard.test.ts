@@ -1,21 +1,3 @@
-// src/main/infra/ai/tools/path-guard.test.ts
-// path-guard 单测：路径越权防护（安全关键模块）
-//
-// 测试要点：
-// 1. 相对路径基于 workingDir 解析
-// 2. 绝对路径直接使用（仍通过边界检查）
-// 3. 路径遍历（../）越界 → UNAUTHORIZED
-// 4. 空路径 → INVALID_INPUT
-// 5. Windows 盘符跨盘越界 → UNAUTHORIZED
-// 6. 工作区内部路径（含子目录回溯后仍在区内）→ 通过
-// 7. 符号链接（P1 安全修复）：工作区内 symlink 指向外部 → UNAUTHORIZED；
-//    指向工作区内 → 通过；新建文件经 symlink 祖先 → UNAUTHORIZED
-// 8. TOCTOU（debt.md#d1）：双形态返回——resolved 保持输入形态（展示零漂移），
-//    realTarget 为真实落点（文件 IO 必用）；symlink 场景两者指向不同链路
-//
-// 注：realpath 校验需要真实文件系统（2026-08 安全修复引入），
-// 测试使用真实临时目录（与 file-service 测试同一模式）。
-
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, sep } from 'node:path';
@@ -24,9 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { resolveWithinWorkspace } from './path-guard';
 
-// Windows 用 junction（目录链接，无需管理员权限）；其他平台用目录 symlink
 const SYMLINK_TYPE = process.platform === 'win32' ? 'junction' : 'dir';
-/** 跨平台用例用平台分隔符 `sep` 构造路径；Windows 专属语义用例按平台门控 */
 const IS_WIN = process.platform === 'win32';
 
 describe('resolveWithinWorkspace', () => {
@@ -113,16 +93,12 @@ describe('resolveWithinWorkspace', () => {
     mkdirSync(join(workspace, 'src'));
     writeFileSync(join(workspace, 'src', 'main.ts'), 'x');
     const result = resolveWithinWorkspace('src/main.ts', workspace);
-    // macOS tmpdir 本身可能是链接（/var → /private/var），用 realpath 基准对比而非字符串
     expect(result.realTarget).toBe(realpathSync(join(workspace, 'src', 'main.ts')));
   });
-
-  // ── 符号链接（P1 安全修复，2026-08 安全审计） ──────────────
 
   it('symlink 指向工作区外：读取外部文件 → UNAUTHORIZED', () => {
     const outside = mkdtempSync(join(tmpdir(), 'path-guard-outside-'));
     try {
-      // 工作区内建 external 链接 → 外部目录
       symlinkSync(outside, join(workspace, 'external'), SYMLINK_TYPE);
       expect(() => resolveWithinWorkspace('external/secret.txt', workspace)).toThrowError(
         expect.objectContaining({ code: ErrorCode.UNAUTHORIZED }),
@@ -144,9 +120,7 @@ describe('resolveWithinWorkspace', () => {
     writeFileSync(join(workspace, 'src', 'main.ts'), 'x');
     symlinkSync(join(workspace, 'src'), join(workspace, 'alias'), SYMLINK_TYPE);
     const result = resolveWithinWorkspace('alias/main.ts', workspace);
-    // resolved：输入形态（alias 链路），LLM/UI 展示零漂移
     expect(result.resolved).toBe(join(workspace, 'alias', 'main.ts'));
-    // realTarget：真实落点（src 链路），文件 IO 必用——经链接读取不会拿别名路径
     expect(result.realTarget).toBe(realpathSync(join(workspace, 'src', 'main.ts')));
   });
 
@@ -154,7 +128,6 @@ describe('resolveWithinWorkspace', () => {
     const outside = mkdtempSync(join(tmpdir(), 'path-guard-outside2-'));
     try {
       symlinkSync(outside, join(workspace, 'evil'), SYMLINK_TYPE);
-      // evil/new.txt 不存在（新建场景）——祖先 evil 是 symlink 指向外部 → 拦截
       expect(() => resolveWithinWorkspace('evil/new.txt', workspace)).toThrowError(
         expect.objectContaining({ code: ErrorCode.UNAUTHORIZED }),
       );

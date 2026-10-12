@@ -1,7 +1,3 @@
-// src/renderer/lib/error-actions.test.ts
-// error-actions 单测：错误码解析与恢复动作注册表
-// 无业务 mock：直接构造 Error 驱动。
-
 import { describe, expect, it } from 'vitest';
 
 import { parseErrorCode, resolveErrorAction } from './error-actions';

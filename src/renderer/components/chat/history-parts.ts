@@ -1,16 +1,3 @@
-// src/renderer/components/chat/history-parts.ts
-// 持久化历史 → UIMessage 的忠实重建（纯函数，可单测）
-// ──────────────────────────────────────────────────────────────
-// 背景缺陷：重开会话时历史被压成「单条 text part」，工具调用 / 工具结果 / 推理 /
-// 附件全部静默丢失，回显与直播时看到的对话不是同一个东西。
-// ──────────────────────────────────────────────────────────────
-// 契约（读取侧只依赖存储里真实存在的东西）：
-// - messages.content = 单条 ModelMessage 的 JSON（`{ role, content }`），
-//   content 可能是 string（纯文本）或 part 数组（text / reasoning / file / tool-call /
-//   tool-result / tool-error）
-// - 工具结果落在 assistant 消息内，也可能落在独立 role:'tool' 消息里
-//   → 两遍扫描：先全局收集 toolCallId 的结果，再重建并把结果合并进对应工具卡
-// - 存储里没有的 part 类型不可凭空补：如实登记进 droppedPartTypes，由 UI 显式告知
 import type { ChatMessage } from '@code-agent/shared/renderer';
 import type { UIMessage } from 'ai';
 
@@ -63,7 +50,6 @@ function normalizeMessage(raw: unknown): { readonly role: string; readonly parts
   if (Array.isArray(content)) {
     return { role, parts: content.filter(isRecord) };
   }
-  // 旧数据兜底：content 直接是单个 part 对象
   if (isRecord(content) && typeof content['type'] === 'string') {
     return { role, parts: [content] };
   }
@@ -124,8 +110,6 @@ function toFilePart(part: StoredPart): UiPart {
   let url = rawUrl;
   if (url.length === 0) {
     if (typeof data === 'string') {
-      // 白名单仅认真 URL scheme：裸 base64 可能以 "/" 开头（JPEG 恒为
-      // "/9j/..."），早前把 "./|/" 当路径前缀会让整图被当根相对路径裂掉
       url = /^(?:data:|https?:|file:|blob:)/.test(data) ? data : `data:${mediaType};base64,${data}`;
     } else if (data instanceof Uint8Array) {
       let binary = '';
@@ -265,7 +249,6 @@ function partToUi(part: StoredPart, ctx: PartContext): { part: UiPart | null; ri
     }
     case 'tool-result':
     case 'tool-error': {
-      // 有对应 tool-call 的结果已合并进上面的卡；孤儿结果单独呈现
       const callId = asString(part['toolCallId']);
       if (isMergedOutcome(callId, ctx.callIds)) {
         return { part: null, rich: false };

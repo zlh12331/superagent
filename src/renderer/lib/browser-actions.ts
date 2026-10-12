@@ -1,12 +1,3 @@
-// src/renderer/lib/browser-actions.ts
-// 浏览器预览 IPC 桥（导航 / 状态订阅 / 严格沙箱配置）
-// ──────────────────────────────────────────────────────────────
-// 职责（direct-ipc 清迁，2026-09-26）：
-// - browser-pane.tsx 此前直连 window.api.browser.*，收敛到本文件
-// - use-browser-viewport.ts（.ts 桥接层）可继续直连，也可逐步改用本模块
-// - 无桥时导航返回 false，订阅返回 no-op，不抛 TypeError
-// ──────────────────────────────────────────────────────────────
-
 import type {
   BrowserLoadFailedPayload,
   BrowserState,

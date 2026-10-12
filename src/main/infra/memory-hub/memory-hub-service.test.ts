@@ -1,10 +1,3 @@
-// src/main/infra/memory-hub/memory-hub-service.test.ts
-// MemoryHubService 单测：配置判定 / 未配置降级 / 生命周期幂等
-// ──────────────────────────────────────────────────────────────
-// 说明：真实 sidecar 拉起（spawn + /health）由 memory-hub.contract.test.ts 覆盖
-// （需 MEMORY_HUB_ROOT，CI 自动跳过）。本文件覆盖无需子进程的纯逻辑与降级语义。
-// ──────────────────────────────────────────────────────────────
-
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -15,7 +8,6 @@ import { broadcastInvalidation } from '../invalidation/invalidation';
 import { createDeferredMemoryPort, MemoryHubService } from './memory-hub-service';
 import type { MemoryPort } from './types';
 
-// 失效域广播替身（基础设施边界，规范允许 vi.mock；S8 断言用，见文件尾 describe）
 vi.mock('../invalidation/invalidation', () => ({ broadcastInvalidation: vi.fn() }));
 
 describe('MemoryHubService 配置判定', () => {
@@ -68,7 +60,6 @@ describe('MemoryHubService 未配置降级（空实现）', () => {
 });
 
 describe('MemoryHubService 无引擎产物降级（hubRoot 存在但入口缺失）', () => {
-  /** 模拟打包期未捆绑记忆引擎：hubRoot 目录存在，但里面没有上游入口 */
   function createHubless(): MemoryHubService {
     const dir = mkdtempSync(join(tmpdir(), 'memory-hub-hubless-'));
     mkdirSync(join(dir, 'node_modules'), { recursive: true });
@@ -106,7 +97,6 @@ describe('MemoryHubService 生命周期', () => {
 });
 
 describe('MemoryHubService.listL0BySession', () => {
-  /** 构造含 conversations JSONL 的临时数据目录 */
   function createDataDir(linesByFile: Record<string, string>): string {
     const root = mkdtempSync(join(tmpdir(), 'memory-hub-l0-'));
     const convDir = join(root, 'data', 'conversations');
@@ -213,7 +203,6 @@ describe('MemoryHubService.removeL0JsonlBySession', () => {
     const removed = await service.removeL0JsonlBySession('sess-1');
     expect(removed).toBe(1);
 
-    // 其余数据完好（其他会话 + 损坏行不误伤）
     const remaining = readFileSync(`${dir}/data/conversations/2026-08-24.jsonl`, 'utf8')
       .split(/\r?\n/)
       .filter((l) => l.trim().length > 0);
@@ -251,7 +240,6 @@ describe('MemoryHubService.removeL0JsonlBySession', () => {
       ].join('\n'),
     });
     const service = createService(dir);
-    // 逐 key 两次调用 = 两次全扫；批量一次完成且移除行数相同
     const batchRemoved = await service.removeL0JsonlBySessions(['sess-1', 'sess-2']);
     expect(batchRemoved).toBe(2);
     const remaining = readFileSync(`${dir}/data/conversations/2026-08-24.jsonl`, 'utf8')
@@ -304,15 +292,12 @@ describe('createDeferredMemoryPort', () => {
   });
 });
 
-// ── 失效域声明（31 号 spec S8：memory 运行态变化） ──────────────────
-
 describe('MemoryHubService 失效域声明（S8）', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.mocked(broadcastInvalidation).mockClear();
   });
 
-  /** EngineProcessHandle 的 fake 形状（kill 触发 exit 监听，模拟真实进程） */
   interface FakeHandle {
     pid: number | undefined;
     hasExited: () => boolean;
@@ -321,7 +306,6 @@ describe('MemoryHubService 失效域声明（S8）', () => {
     kill: () => void;
   }
 
-  /** fake launcher：可编程的 EngineProcessHandle */
   function createLaunchFake(): { launcher: () => FakeHandle; crash: (code?: number) => void } {
     const exitListeners: Array<(code: number) => void> = [];
     let exited = false;
@@ -350,7 +334,6 @@ describe('MemoryHubService 失效域声明（S8）', () => {
     };
   }
 
-  /** 造一个「有上游入口」的 hubRoot（fake launcher + stub fetch，不真拉子进程） */
   function createStartedService(launcher: () => FakeHandle): MemoryHubService {
     const dir = mkdtempSync(join(tmpdir(), 'memory-hub-invalidation-'));
     mkdirSync(join(dir, 'src', 'gateway'), { recursive: true });
@@ -365,7 +348,6 @@ describe('MemoryHubService 失效域声明（S8）', () => {
 
   it('sidecar 就绪 → 广播 memory（懒启动运行态缺口锚）', async () => {
     const fake = createLaunchFake();
-    // /health 探测替身：立即就绪（真实 fetch 由 contract test 覆盖）
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => ({ ok: true, json: async () => ({ status: 'ok' }) })),
@@ -406,7 +388,6 @@ describe('MemoryHubService 失效域声明（S8）', () => {
 
     await service.stop();
 
-    // exit 回调广播 + stop 尾部广播（真实进程语义下两处都发生）
     expect(broadcastInvalidation).toHaveBeenCalledWith(['memory']);
   });
 

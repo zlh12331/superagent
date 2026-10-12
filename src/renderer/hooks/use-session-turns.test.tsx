@@ -1,6 +1,3 @@
-// src/renderer/hooks/use-session-turns.test.tsx
-// use-session-turns 单元测试：回合列表 / 回合消息分页 / 页序平铺 / 身份游标不变性
-
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
@@ -88,17 +85,14 @@ describe('use-session-turns hooks', () => {
       wrapper: createWrapper(),
     });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    // 首页 = 最近 10 个回合（t3..t12）
     expect(result.current.data?.pages[0]?.turnCount).toBe(TURNS_PER_PAGE);
     expect(result.current.data?.pages[0]?.turns[0]?.turnId).toBe('t3');
     expect(result.current.data?.pages[0]?.turns[0]?.messages[0]?.content).toBe('u3');
-    // 首页消息 = 10 回合 × 2 条
     const total = (result.current.data?.pages[0]?.turns ?? []).reduce(
       (sum, g) => sum + g.messages.length,
       0,
     );
     expect(total).toBe(TURNS_PER_PAGE * 2);
-    // 仍有更早回合
     expect(result.current.hasNextPage).toBe(true);
   });
 
@@ -123,7 +117,6 @@ describe('use-session-turns hooks', () => {
     const { result } = renderHook(
       () => {
         const query = useTurnPagesInfinite('s1', turns);
-        // v5 tracked-props：渲染期读取属性才会在其变更时通知（对齐 ChatPage 真实消费）
         void query.data;
         void query.hasNextPage;
         void query.isSuccess;
@@ -134,7 +127,6 @@ describe('use-session-turns hooks', () => {
       },
     );
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    // 第一次翻页：锚点 = 首页首回合 t3 → 窗口 [0, 3)
     await act(async () => {
       await result.current.fetchNextPage();
     });
@@ -143,9 +135,7 @@ describe('use-session-turns hooks', () => {
     expect(result.current.hasNextPage).toBe(false);
 
     const flat = flattenTurnPages(result.current.data?.pages);
-    // 13 回合 × 2 条，无重复
     expect(flat).toHaveLength(13 * 2);
-    // 最早回合（t0）在最前，最后回合（t12）在最后
     expect(flat[0]?.content).toBe('u0');
     expect(flat.at(-1)?.content).toBe('a12');
   });
@@ -156,25 +146,21 @@ describe('use-session-turns hooks', () => {
     const { result } = renderHook(
       () => {
         const query = useTurnMessagesInfinite('s1', turns);
-        // v5 tracked-props：渲染期读取属性才会在其变更时通知（对齐 ChatPage 真实消费）
         void query.data;
         return query;
       },
       { wrapper: createWrapper() },
     );
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    // 首页（最近 10 回合）平铺：20 条，最早在前（t3 的 u3 开头，t12 的 a12 结尾）
     expect(result.current.data).toHaveLength(TURNS_PER_PAGE * 2);
     expect(result.current.data?.[0]?.content).toBe('u3');
     expect(result.current.data?.at(-1)?.content).toBe('a12');
-    // 翻页后 data 增长为全部 13 回合 × 2 条，仍时间正序（页序反转在 select 内完成）
     await act(async () => {
       await result.current.fetchNextPage();
     });
     await waitFor(() => expect(result.current.data).toHaveLength(13 * 2));
     expect(result.current.data?.[0]?.content).toBe('u0');
     expect(result.current.data?.at(-1)?.content).toBe('a12');
-    // 分页控制不受 select 影响
     expect(result.current.hasNextPage).toBe(false);
   });
 
@@ -193,7 +179,6 @@ describe('use-session-turns hooks', () => {
   it('身份游标不变性：回合列表增长后同锚点窗口不变（append-only 索引稳定）', async () => {
     stubTurnMessages(window.api.session.getTurnMessages as ReturnType<typeof vi.fn>);
     const before = await fetchTurnMessagesPage(makeTurns(13), 't3');
-    // 模拟新回合落库：列表尾部追加 3 个回合（回合一经产生不消失）
     const grown = [
       ...makeTurns(13),
       ...makeTurns(3).map((t, i) => ({ ...t, turnId: `n${i}`, seq: 13 + i })),
@@ -204,8 +189,6 @@ describe('use-session-turns hooks', () => {
 
   it('flattenTurnPages：页间回合重叠时按身份去重（保序首现）', () => {
     const msg = (content: string) => ({ role: 'user' as const, content });
-    // 重叠回合（t2）在两页中内容一致——回合消息一经产生不可变，
-    // 重叠只来自交错窗口内的布局混合，去重取首现即可
     const pages = [
       {
         turnCount: 2,
@@ -223,15 +206,10 @@ describe('use-session-turns hooks', () => {
       },
     ];
     const flat = flattenTurnPages(pages);
-    // 最早页在前：t1、t2、t3 各出现一次
     expect(flat.map((m) => m.content)).toEqual(['u1', 'u2', 'u3']);
   });
 
   it('prefetchTurnPages：按 infinite 形状写入缓存（消费方读 .pages 不崩）', async () => {
-    // 回归锚（2026-09-28）：路由 loader 此前用 ensureQueryData 写裸页对象
-    // （{ turnCount, turns }），而消费方是 useInfiniteQuery ⇒ 观察者读 .pages
-    // 得 undefined，渲染期 TypeError 直接掀翻整页（浏览器 E2E 旅程批量失败）。
-    // 断言预取写出的缓存确实带 pages/pageParams（形状与消费端一致）。
     stubTurnMessages(window.api.session.getTurnMessages as ReturnType<typeof vi.fn>);
     const turns = makeTurns(3);
     const prefetched = await prefetchTurnPages('prefetch-shape', turns);

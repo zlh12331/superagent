@@ -1,11 +1,8 @@
-// message-actions.test.tsx
-// 消息操作按钮组单测：复制回调 / 重新生成透传 / disabled 拦截
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { MsgActions } from './message-actions';
 
-// useCopy mock：copied 状态由用例经 mockReturnValue 控制
 const copySpy = vi.fn();
 vi.mock('@/hooks/use-copy', () => ({
   useCopy: vi.fn(() => ({ copied: false, copy: copySpy })),

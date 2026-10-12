@@ -1,46 +1,5 @@
-// src/main/ipc/file.handler.ts
-// 文件域 IPC handler（FileService 暴露给渲染层的入口，定义表驱动）
-//
-// 实现 9 个请求-响应方法：
-// - read        读取文件内容（支持 offset/limit 分批）
-// - write       写入文件（覆盖或追加，可选自动创建父目录）
-// - list        递归列出目录内容（深度可控）
-// - watchStart  开始监听文件变更，返回 watcherId
-// - watchStop   停止指定 watcherId 的监听
-// - create      创建新文件（空文件，若已存在则报错）
-// - createDir   创建新目录（递归创建父目录）
-// - delete      删除文件或目录（目录递归删除）
-// - rename      重命名/移动文件或目录
-//
-// 流式事件由 FileService 主动推送（不在此 handler 返回）：
-// - file:watch:event  文件变更事件（携带 watcherId 关联）
-//
-// 设计要点：
-// - DI 模式：通过 ServiceContainer 注入 IFileService 实例
-// - watchStart 需要使用 ctx.sender（WebContents）传给 FileService.watch()，
-//   后续文件变更事件会通过该 webContents.send 推送回渲染层
-// - handler 内不直接调用 webContents.send，所有事件推送由 FileService 内部处理
-//   （保持 handler 简单 + 关注点分离）
-//
-// ── P0 安全：渲染层文件 API 工作区收口 ──────────────────────────
-// FileService 本身只校验「绝对路径」（assertAbsolutePath），不校验边界：
-// agent 工具路径由 path-guard 在工具层收口，而渲染层直接调用 file:* 时
-// 此前可以读写/删除任意磁盘路径（含 C:\Users\<u>\.ssh\*）。
-// 现在所有带 path 的入参在 handler 层统一经过 resolveWithinWorkspace 收口：
-// - 边界集合 = 会话绑定过的 workingDir 并集（session:listRecentDirs 同源）
-// - 复用 path-guard 同一份解析逻辑（相对路径、../ 遍历、realpath 二次校验），
-//   避免两套边界实现漂移
-// - 越界抛 AppError(UNAUTHORIZED)，由 wrap 转成标准 IPC 错误
-// - 拿不到任何根目录时 fail closed（拒绝一切访问），而不是放开
-// 已知边界代价（诚实记录，非沙箱）：
-// 1. 收口粒度是「历史打开过的项目集合」，不是「当前窗口正在使用的项目」——
-//    IpcHandlerContext 只有 traceId + sender，主进程无法得知渲染层当前会话，
-//    要收窄到单会话需改 wrap.ts/定义表由渲染层显式携带 sessionId（跨 owner 协作项）
-// 2. 通过 dialog:pickFiles 选中的工作区外文件（聊天附件）走「用户手势授权」通道：
-//    原生对话框返回的路径登记进 infra/file/user-grants，仅 file:read 查询该表，
-//    命中判定是 realpath 后的精确路径相等（不放开子树）；写/删/改名一律不看此表。
-// ──────────────────────────────────────────────────────────────
-
+// file.handler.ts：file 域 IPC——读写/列举/监听/建删改名，全部方法过工作区路径守卫后才进 fileService
+// 边界：守卫逻辑（confineToWorkspace）也导出给 IPC 之外的调用方（如集成层）复用
 import type { InferHandlers, IPC_DEFINITIONS } from '@code-agent/shared/main';
 import { AppError, ErrorCode } from '@code-agent/shared/main';
 
@@ -51,37 +10,17 @@ import { matchUserGrantedReadPath } from '../infra/file/user-grants';
 import { readSetting } from '../infra/storage/settings-pref';
 import type { IpcHandlerContext } from '../utils/wrap';
 
-/**
- * 文件域 handler 依赖
- *
- * 通过依赖注入解耦 handler 与具体 FileService 实现：
- * - 生产环境：ServiceContainer 注入默认 FileService 实例
- * - 测试环境：可注入 mock 实现，不依赖真实文件系统
- */
 export interface FileHandlerDeps {
-  /** FileService 实例（由 ServiceContainer 注入） */
   readonly fileService: IFileService;
-  /**
-   * 可选：工作区根集合提供者（边界来源）
-   *
-   * 缺省实现读取会话 workingDir 集合（见 defaultWorkspaceRoots）；
-   * 测试或多根工作区可注入自定义实现。返回绝对路径数组。
-   */
   readonly workspaceRoots?: () => Promise<readonly string[]>;
 }
 
-/** 工作区根集合缓存 TTL：文件树展开会在毫秒级多次调用 list，避免每次查库 */
+// 工作区根列表短 TTL 缓存：listRecentDirs 是 DB 查询，而 guard 在每个文件操作前都要跑
 const ROOTS_TTL_MS = 2000;
 
-/** 会话 workingDir 集合缓存（模块级：所有 handler 实例共享同一份边界） */
 let rootsCache: { readonly at: number; readonly roots: readonly string[] } | null = null;
 
-/**
- * 默认边界来源：会话表中出现过的 workingDir（最近 50 个）
- *
- * - 动态 import session-service：避免单测 / 非 Electron 环境把 electron + DB 拉进模块图
- * - 任何异常（DB 未初始化等）→ 空集合，由 confineToWorkspace fail closed
- */
+/** 默认工作区根 = 最近 50 个会话的工作目录（动态导入防启动期循环依赖） */
 export async function defaultWorkspaceRoots(): Promise<readonly string[]> {
   const now = Date.now();
   if (rootsCache !== null && now - rootsCache.at < ROOTS_TTL_MS) {
@@ -93,40 +32,26 @@ export async function defaultWorkspaceRoots(): Promise<readonly string[]> {
     const res = await getSessionService().listRecentDirs({ limit: 50 });
     roots = res.dirs.map((dir) => dir.workingDir).filter((dir) => dir.length > 0);
   } catch {
-    // 查询失败 ≠ 「无边界」：返回空集，调用侧一律拒绝
     roots = [];
   }
   rootsCache = { at: now, roots };
   return roots;
 }
 
-/** confineToWorkspace 可选行为 */
+/** 读路径 confinement 选项：allowUserGrant = 用户经对话框选过的路径直接放行 */
 export interface ConfineOptions {
-  /**
-   * 是否查询「用户手势授权」表（仅 file:read 置 true）
-   *
-   * true 时：路径若为用户用原生对话框亲手选中并登记过的精确文件，直接放行——
-   * 这是工作区外文件（聊天附件）的唯一合法读取通道，授权来源在主进程，渲染层无法伪造。
-   */
   readonly allowUserGrant?: boolean;
 }
 
 /**
- * 将渲染层传入的路径收口到工作区内
- *
- * @param inputPath 渲染层路径（相对或绝对）
- * @param rootsProvider 边界来源
- * @param opts 可选行为（allowUserGrant：登记过的用户选中路径放行）
- * @returns 通过校验的绝对路径（交给 FileService 的即此值）
- * @throws AppError(UNAUTHORIZED) 越界 / 无任何工作区根（fail closed）
- * @throws AppError(INVALID_INPUT) 空路径（由 resolveWithinWorkspace 抛出）
+ * 把路径约束到工作区：依次尝试每个会话工作目录，全部越界才拒绝；
+ * allowUserGrant 时先查用户手动授权清单（对话框选择），命中即放行（不再要求在工作区内）
  */
 export async function confineToWorkspace(
   inputPath: string,
   rootsProvider: () => Promise<readonly string[]>,
   opts?: ConfineOptions,
 ): Promise<string> {
-  // 用户手势授权优先于工作区边界：命中即返回 canonical 路径（不放开子树）
   if (opts?.allowUserGrant === true) {
     const granted = matchUserGrantedReadPath(inputPath);
     if (granted !== null) return granted;
@@ -141,16 +66,12 @@ export async function confineToWorkspace(
   let lastDenied: AppError | null = null;
   for (const root of roots) {
     try {
-      // 多根语义：任一根内即为合法（相对路径按「第一个命中的根」解析）。
-      // 取 .resolved：渲染层用户手势路径（用户在对话框选中文件）非 LLM 生成，
-      // 无 symlink 换链威胁面，保持 resolved 形态即 FileService 入参（debt.md#d1 取舍）
       return resolveWithinWorkspace(inputPath, root).resolved;
     } catch (error: unknown) {
       if (error instanceof AppError && error.code === ErrorCode.UNAUTHORIZED) {
         lastDenied = error;
         continue;
       }
-      // 非越界错误（如空路径 INVALID_INPUT）直接透出，不被多根循环吞掉
       throw error;
     }
   }
@@ -159,14 +80,7 @@ export async function confineToWorkspace(
   );
 }
 
-/**
- * 构建路径收口函数对
- *
- * - guard：写/列/删/改名一律严格，只看工作区边界
- * - guardRead：读取专用，额外允许命中「用户手势授权」表。只有 read 走这条通道——
- *   用户原生对话框选中的工作区外附件才读得到；写/删/改名不查该表，
- *   避免授权面从「读一个文件」扩成「改一个文件」。
- */
+// 双守卫：guard = 严格工作区内（写/删/改名）；guardRead = 额外认用户授权路径（只读放行）
 function makePathGuards(rootsProvider: () => Promise<readonly string[]>) {
   const guard = (path: string): Promise<string> => confineToWorkspace(path, rootsProvider);
   const guardRead = (path: string): Promise<string> =>
@@ -174,11 +88,7 @@ function makePathGuards(rootsProvider: () => Promise<readonly string[]>) {
   return { guard, guardRead };
 }
 
-/**
- * 创建文件域 handler 实现
- *
- * @param deps 依赖项：包含 IFileService 实例与可选工作区根提供者
- */
+/** 依赖注入工厂：workspaceRoots 可注入（测试），缺省用最近会话目录 */
 export function createFileHandlers(
   deps: FileHandlerDeps,
 ): InferHandlers<typeof IPC_DEFINITIONS, IpcHandlerContext>['file'] {
@@ -186,9 +96,6 @@ export function createFileHandlers(
   const { guard, guardRead } = makePathGuards(deps.workspaceRoots ?? defaultWorkspaceRoots);
 
   return {
-    // 读取文件：支持大文件分批读取（offset/limit）
-    // 入参由 FileReadReqSchema 校验（path 非空、offset/limit 为非负整数）
-    // 返回文件内容（UTF-8 解码）+ 总行数（渲染层据此判断是否分批）
     read: async (input) => {
       return fileService.read({
         path: await guardRead(input.path),
@@ -197,9 +104,6 @@ export function createFileHandlers(
       });
     },
 
-    // 写入文件：覆盖或追加
-    // append=true 时使用 O_APPEND 模式追加，避免覆盖已有内容
-    // createDirs=true 时自动创建父目录（避免 ENOENT）
     write: async (input) => {
       return fileService.write({
         path: await guard(input.path),
@@ -209,18 +113,12 @@ export function createFileHandlers(
       });
     },
 
-    // 列出目录内容：递归深度可控（默认 1 层，最大 10 层）
-    // includeHidden=false 时跳过 .git / .vscode 等隐藏文件/目录
     list: async (input) => {
-      // 忽略模式：现读用户设置（workspace.treeIgnorePatterns）——改后下一次 list 即生效。
-      // 读取失败（DB 异常等）降级为无用户模式，不阻断文件树；内置 node_modules 基线由 service 合并
       let userPatterns: string[] = [];
       try {
         const workspace = readSetting('workspace') as { treeIgnorePatterns?: unknown } | undefined;
         userPatterns = normalizeTreeIgnorePatterns(workspace?.treeIgnorePatterns);
-      } catch {
-        // 降级路径
-      }
+      } catch {}
       return fileService.list({
         path: await guard(input.path),
         depth: input.depth,
@@ -229,10 +127,6 @@ export function createFileHandlers(
       });
     },
 
-    // 开始文件监听：基于 chokidar v5 监听指定目录
-    // 关键：传入 ctx.sender（WebContents）作为事件推送目标，
-    // 后续文件变更会通过 file:watch:event 事件推送到该 webContents
-    // 返回 watcherId，渲染层用此 id 关联后续事件并在停止时传给 watchStop
     watchStart: async (input, ctx) => {
       const handle = await fileService.watch({
         path: await guard(input.path),
@@ -241,15 +135,11 @@ export function createFileHandlers(
       return { watcherId: handle.watcherId };
     },
 
-    // 停止指定 watcher：通过 watcherId 定位并关闭对应的 chokidar watcher
-    // 返回 stopped=true 表示成功停止，stopped=false 表示 watcherId 不存在（可能已自动停止）
     watchStop: async (input) => {
       const stopped = fileService.unwatch(input.watcherId);
       return { stopped };
     },
 
-    // 创建新文件：空文件，已存在时抛 ALREADY_EXISTS
-    // createDirs=true 时自动创建父目录
     create: async (input) => {
       return fileService.createFile({
         path: await guard(input.path),
@@ -257,15 +147,12 @@ export function createFileHandlers(
       });
     },
 
-    // 创建新目录：递归创建父目录（mkdir -p 语义）
     createDir: async (input) => {
       return fileService.createDir({
         path: await guard(input.path),
       });
     },
 
-    // 删除文件或目录：recursive 必填（P0 契约，schema 已收紧）——
-    // true 递归删除目录；false 仅空目录/文件（非空抛 ENOTEMPTY）
     delete: async (input) => {
       return fileService.delete({
         path: await guard(input.path),
@@ -273,9 +160,6 @@ export function createFileHandlers(
       });
     },
 
-    // 重命名/移动：overwrite=false（默认）时目标已存在则报错
-    // P0：源与目标都必须在工作区内——只校验一侧等于允许
-    // 「把工作区外文件移进来」或「把工作区文件搬到工作区外」
     rename: async (input) => {
       return fileService.rename({
         oldPath: await guard(input.oldPath),

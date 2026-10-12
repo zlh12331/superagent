@@ -1,6 +1,3 @@
-// src/main/infra/ai/tools/task-tools.test.ts
-// 任务工具单测：task_create / task_update / task_list 真实执行（内存 DB）
-
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createTaskCreateTool } from '../../src/main/infra/ai/tools/task-create.tool';
 import { createTaskListTool } from '../../src/main/infra/ai/tools/task-list.tool';
@@ -9,7 +6,6 @@ import type { ToolContext } from '../../src/main/infra/ai/tools/tool';
 import { SessionService } from '../../src/main/infra/storage/session-service';
 import { createTestDb } from '../../src/main/infra/storage/test-utils';
 
-// mock getDb：内存数据库（drizzle 迁移，schema.ts 单一真源）
 function createInMemoryDb() {
   return createTestDb();
 }
@@ -86,7 +82,6 @@ describe('任务工具', () => {
     );
     expect(done.title).toContain('completed');
 
-    // 终端状态锁定：再更新失败
     const locked = await updateTool.execute(
       { taskId: taskId as string, status: 'cancelled' },
       makeCtx(sid),

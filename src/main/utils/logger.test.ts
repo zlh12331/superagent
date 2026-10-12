@@ -1,11 +1,5 @@
-// src/main/utils/logger.test.ts
-// logger 单元测试
-// 注意：electron-log 在测试环境 mock 为内存缓冲，验证日志格式与级别
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-// Vitest 4 的 vi.mock 会被 hoist 到文件顶部，工厂函数内不能直接引用外部 const 变量
-// 必须用 vi.hoisted 导出 mock 对象，工厂函数才能引用
-// 参考 https://vitest.dev/guide/mocking.html#hoisting
 const { mockLog } = vi.hoisted(() => {
   const mockLog = {
     level: 'info',
@@ -22,10 +16,8 @@ const { mockLog } = vi.hoisted(() => {
   return { mockLog };
 });
 
-// mock electron-log，避免文件写入
 vi.mock('electron-log', () => ({ default: mockLog }));
 
-// mock electron app（用于 isPackaged 判断 + getPath）
 vi.mock('electron', () => ({
   app: { isPackaged: false, getPath: vi.fn(() => '/tmp/test-userdata') },
 }));
@@ -71,8 +63,6 @@ describe('logger', () => {
   });
 
   it('测试环境重定向日志路径（回归锚：曾把测试夹具写进真实用户日志目录）', () => {
-    // 修复前：electron-log 默认路径解析在纯 Node 下回退到
-    // %APPDATA%/<appName>/logs，即真实用户日志目录（实测污染 143 行）
     initLogger();
     const fileTransport = mockLog.transports.file as unknown as {
       resolvePathFn?: () => string;
@@ -80,7 +70,6 @@ describe('logger', () => {
     expect(typeof fileTransport.resolvePathFn).toBe('function');
     const resolved = fileTransport.resolvePathFn?.() ?? '';
     expect(resolved).toContain('code-agent-test-logs');
-    // 且不再写入真实用户日志目录
     expect(resolved).not.toContain('code-agent-desktop');
   });
 
@@ -89,7 +78,6 @@ describe('logger', () => {
   });
 
   it('flushPendingLogs：轮询等待队列清空后返回', async () => {
-    // 模拟在途异步写：首次探测队列非空，下次探测已清空 → 循环退出
     const fileState = { asyncWriteQueue: ['log line'], hasActiveAsyncWriting: true };
     const fileTransport = mockLog.transports.file as { getFile?: () => unknown };
     fileTransport.getFile = () => {

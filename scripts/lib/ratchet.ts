@@ -1,19 +1,9 @@
 // scripts/lib/ratchet.ts
-// 棘轮基线（ratchet baseline）公共工具：让「存量违规」可审计且只能收紧
-// ──────────────────────────────────────────────────────────────
-// 背景：静态门禁若直接卡死阈值，会把存量违规误报为新问题；若改用豁免清单
-// （Set<string>），清单会与代码漂移——记录的行数过期、文件重构后清单条目
-// 仍留在原地（check-file-size 曾出现此症状）。
-//
-// 本模块把「存量违规」外置为 JSON 基线文件，并强制单向收紧：
-//   1. 基线外的新违规      → 失败（不允许悄悄加豁免）
-//   2. 基线内指标变大      → 失败（棘轮：只能更小）
-//   3. 基线内条目已不再违规 → 失败（陈旧豁免必须清理，跑 --update-baseline 收紧）
-//   4. --update-baseline   → 只在 --force 时允许写高数值
-//
-// 约定：基线 key 为文件相对路径（体积类）或 `路径#符号名`（函数类），
-// 值为「指标名 → 实测值」映射；指标名由调用方声明（metrics）。
-// ──────────────────────────────────────────────────────────────
+// 棘轮基线公共工具：让「存量违规」可审计且只能收紧。不用豁免清单（Set<string>）——
+// 清单会与代码漂移（行数过期、重构后条目滞留，check-file-size 曾出现此症状）
+// 四条强制：基线外新违规失败（不许悄悄加豁免）/ 基线内指标变大失败（只能更小）/
+// 基线条目已消解失败（陈旧豁免必须 --update-baseline 清理）/ 写高数值需 --force
+// 约定：key = 文件相对路径（体积类）或 `路径#符号名`（函数类），值 = 指标名→实测值
 
 /** 单条基线/实测记录：指标名 → 数值（行数、体积 KiB 等） */
 export type Metrics = Record<string, number>;
@@ -79,8 +69,6 @@ export function serializeBaseline(baseline: Baseline): string {
     const ordered: Metrics = {};
     for (const m of Object.keys(entry).sort()) {
       const value = entry[m];
-      // 索引签名 + noUncheckedIndexedAccess ⇒ 取值为 number | undefined。
-      // 跳过 undefined 与原先写入 undefined 后再被 JSON.stringify 丢弃等价。
       if (value !== undefined) ordered[m] = value;
     }
     sorted[key] = ordered;
@@ -119,7 +107,6 @@ export function evaluateRatchet(
       });
       continue;
     }
-    // 只比对基线记录的指标（= 上次超限的维度）
     const tracked = Object.keys(base);
     const grown = tracked.filter((m) => (cur[m] ?? 0) > (base[m] ?? 0));
     if (grown.length > 0) {

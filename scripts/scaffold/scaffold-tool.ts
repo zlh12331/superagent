@@ -1,20 +1,7 @@
 // scripts/scaffold/scaffold-tool.ts
-// Tool 脚手架：从工具名生成 AI 工具代码骨架并接入注册表
-// ──────────────────────────────────────────────────────────────
-// 用法：
-//   pnpm scaffold:tool --name <snake_case> [--permission auto|ask] [--desc <描述>]
-//
-// 示例：
-//   pnpm scaffold:tool --name fetch_url --permission ask --desc "抓取网页正文"
-//
-// 自动完成：
-//   1. src/main/infra/ai/tools/{kebab}.tool.ts 生成工具骨架（工厂函数 + zod schema）
-//   2. src/main/infra/ai/tools/index.ts 三处接入（import / export / registerBuiltinTools）
-//
-// 手动完成（打印指引）：
-//   - 实现 execute 逻辑与入参 schema；需要服务依赖时改为工厂注入
-//   - 补测试（参考 read-file.tool.test.ts / run-command.tool.test.ts）
-// ──────────────────────────────────────────────────────────────
+// Tool 脚手架：生成 AI 工具骨架（工厂函数 + zod schema）并接入注册表三处
+// （import / export / registerBuiltinTools）
+// 用法：pnpm scaffold:tool --name <snake_case> [--permission auto|ask] [--desc <描述>]
 
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
@@ -132,7 +119,6 @@ function updateToolIndex(spec: ToolSpec): string | null {
   }
   const source = readFileSync(abs, 'utf8');
 
-  // 幂等：工厂名已存在则拒绝
   const factoryName = `create${Pascal}Tool`;
   if (source.includes(factoryName)) {
     throw new Error(`工具已存在（${relative}）：${factoryName}，请勿重复脚手架`);
@@ -150,7 +136,6 @@ function updateToolIndex(spec: ToolSpec): string | null {
     throw new Error(`${relative} 插入失败：未找到 export 行`);
   }
 
-  // 注册行追加到 registerBuiltinTools 末尾（无依赖默认，需要注入服务时手动改）
   const registerLine = `  registry.register(${factoryName}());`;
   const withRegister = insertAfterLastLine(
     withExport,

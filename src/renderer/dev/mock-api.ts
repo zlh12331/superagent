@@ -1,19 +1,3 @@
-// src/renderer/dev/mock-api.ts
-// 前端独立开发模式：完整 window.api mock 层
-// ──────────────────────────────────────────────────────────────
-// 用途：pnpm dev:web（浏览器模式）下无 Electron preload 时注入本 mock，
-//       让前端开发者不依赖主进程即可开发/调试全部界面与交互。
-// 原则：
-// - 仅当 import.meta.env.MODE === 'web' 时由 main.tsx 动态导入注入，
-//   生产构建与 electron-vite dev（E2E 模式）绝不加载本文件。
-// - 数据全部为内存假数据（标注 MOCK），重启即失。
-// - 覆盖核心交互：会话 CRUD、聊天流式输出（按 AI SDK v7 UIMessageChunk
-//   格式模拟推送）、模型清单、文件树、Git 状态、用量统计、终端回显等；
-//   其余域返回空数据兜底。
-// - 参数类型一律从 IpcApi 推导（Parameters<IpcApi['域']['方法']>[0]），
-//   保证与 shared 契约同步。
-// ──────────────────────────────────────────────────────────────
-
 import {
   type AgentApprovalRequestPayload,
   type AgentStreamEndPayload,
@@ -46,11 +30,8 @@ type MockRuntimeModel = Extract<
     : never
   : never;
 
-// ── 内存假数据库 ──────────────────────────────────────────────
-
 const now = Date.now();
 
-// 运行时模型（可变状态：list/update/remove 联动，Web 预览下开关/删除实时生效）
 let mockRuntimeModels: MockRuntimeModel[] = [
   {
     modelId: 'my-coder',
@@ -109,7 +90,6 @@ const mockSessions: SessionMeta[] = [
 interface MockMessage {
   id: string;
   role: 'user' | 'assistant';
-  // ModelMessage 形状（与主进程 SQLite 存储一致）：content 为字符串
   content: string;
 }
 
@@ -126,7 +106,6 @@ const messagesBySession: Record<string, MockMessage[]> = {
       content:
         '已完成拆分：`meta.ts` 保留纯字符串通道元数据（preload 沙箱安全），`definitions.ts` 合并 zod schema。新增 IPC 方法只需改两行 + handler 一个方法，其余全自动。',
     },
-    // 连续 assistant 消息（验证 isContinuation：第二条隐藏头像与角色标签，对齐参考项目）
     {
       id: 'm1-3',
       role: 'assistant',
@@ -134,7 +113,6 @@ const messagesBySession: Record<string, MockMessage[]> = {
         '补充：`derive.ts` 负责类型推导（IpcApi / RequestMap / EventMap / InferHandlers），`register.ts` 统一注册 handler——定义表驱动全链路自动生成是核心资产。',
     },
   ],
-  // mock-2 预置消息（多会话切换 E2E 用：切换后聊天区显示本会话历史，不串 mock-1）
   'mock-2': [
     {
       id: 'm2-1',
@@ -221,15 +199,12 @@ function mockRemoteStatus(): RemoteStatusRes {
 
 /** 模拟助手回答：按 AI SDK v7 UIMessageChunk 格式（带 id）分片推送 → end（含 usage） */
 function simulateAgentStream(sessionId: string, userText: string): void {
-  // 限流模拟（前端开发专用）：发送 "/limit" 触发 AI_RATE_LIMITED 错误流
-  // → use-agent-bridge 触发 rate-limit-store → 顶部限流横幅（pill 形态）显示
   if (userText.trim() === '/limit') {
     for (const cb of errorCallbacks) {
       cb({ sessionId, code: 'AI_RATE_LIMITED', message: '请求过于频繁，请稍后重试' });
     }
     return;
   }
-  // 全类型演示（前端开发专用）：发送 "/demo" 推送 step-start/reasoning/text/通用工具/edit_file/dynamic-tool/file 全部 part
   if (userText.trim() === '/demo') {
     simulateAllPartsDemo(sessionId);
     return;
@@ -260,7 +235,6 @@ function simulateAgentStream(sessionId: string, userText: string): void {
   ];
   const total = answer.join('\n');
   const messageId = `mock-msg-${Date.now()}`;
-  // 模拟审批请求（对齐真实链路：命令工具执行前推送 approval:request，验证内联审批卡）
   const approvalId = `mock-approval-${Date.now()}`;
   for (const cb of approvalCallbacks) {
     cb({
@@ -272,8 +246,6 @@ function simulateAgentStream(sessionId: string, userText: string): void {
       description: '执行命令: npm install axios',
     });
   }
-  // 模拟工具调用（AI SDK v7 协议：tool-input-start → input-available → output-available，
-  // 先于文本推送，验证工具卡渲染；start 与 available 间隔 400ms 保留 running 态时间窗）
   const toolCallId = `mock-tool-${Date.now()}`;
   for (const cb of streamCallbacks) {
     cb({
@@ -309,7 +281,6 @@ function simulateAgentStream(sessionId: string, userText: string): void {
       });
     }
   }, 400);
-  // AI SDK v7：UIMessageChunk 每个 chunk 必须带 id（text-start 先行）
   for (const cb of streamCallbacks) {
     cb({ sessionId, part: { type: 'text-start', id: messageId } });
   }
@@ -318,8 +289,6 @@ function simulateAgentStream(sessionId: string, userText: string): void {
     if (index >= total.length) {
       clearInterval(interval);
       streamIntervals.delete(sessionId);
-      // 助手回复落库（对齐主进程行为：真实环境流式推送过程中持久化消息；
-      // 不落库则切走再切回会话时助手回复消失）
       messagesBySession[sessionId]?.push({
         id: messageId,
         role: 'assistant',
@@ -360,8 +329,6 @@ function simulateAllPartsDemo(sessionId: string): void {
       }
     }, delay);
   };
-  // 1. reasoning：折叠式推理块（流式协议：reasoning-start → delta → end；
-  //    start-step 已按用户要求移除（不再演示步骤分隔线））
   push({ type: 'reasoning-start', id: demoMessageId }, 150);
   push(
     {
@@ -372,7 +339,6 @@ function simulateAllPartsDemo(sessionId: string): void {
     250,
   );
   push({ type: 'reasoning-end', id: demoMessageId }, 350);
-  // 3. text：Markdown（标题/列表/行内代码/代码块）
   const demoText =
     '### 全类型演示\n\n' +
     '这是一条包含**全部 part 类型**的模拟回复：\n\n' +
@@ -386,7 +352,6 @@ function simulateAllPartsDemo(sessionId: string): void {
   push({ type: 'text-delta', id: demoMessageId, delta: demoText.slice(0, 60) }, 500);
   push({ type: 'text-delta', id: demoMessageId, delta: demoText.slice(60, 140) }, 700);
   push({ type: 'text-delta', id: demoMessageId, delta: demoText.slice(140) }, 900);
-  // 4. 通用工具：exec_command（input-start → input-available → output-available）
   const toolId = `demo-tool-${Date.now()}`;
   push(
     {
@@ -414,7 +379,6 @@ function simulateAllPartsDemo(sessionId: string): void {
     },
     1300,
   );
-  // 5. edit_file：FileChangeCard（diff 卡片）
   const editId = `demo-edit-${Date.now()}`;
   push(
     { type: 'tool-input-start', toolCallId: editId, toolName: 'edit_file', title: 'edit_file' },
@@ -441,7 +405,6 @@ function simulateAllPartsDemo(sessionId: string): void {
     },
     1900,
   );
-  // 6. dynamic-tool：动态工具（dynamic-tool-input-start → input-available → output-available）
   const dynId = `demo-dyn-${Date.now()}`;
   push({ type: 'dynamic-tool-input-start', toolCallId: dynId, toolName: 'search_snippets' }, 2100);
   push(
@@ -461,7 +424,6 @@ function simulateAllPartsDemo(sessionId: string): void {
     },
     2500,
   );
-  // 7. 工具错误态：tool-output-error（红色错误卡）
   const errId = `demo-err-${Date.now()}`;
   push(
     { type: 'tool-input-start', toolCallId: errId, toolName: 'read_file', title: 'read_file' },
@@ -480,7 +442,6 @@ function simulateAllPartsDemo(sessionId: string): void {
     { type: 'tool-output-error', toolCallId: errId, errorText: '文件不存在: src/nonexistent.ts' },
     3300,
   );
-  // 8. file：附件卡片
   push(
     {
       type: 'file',
@@ -493,7 +454,6 @@ function simulateAllPartsDemo(sessionId: string): void {
     },
     3500,
   );
-  // 9. 结束：end（含 usage）
   setTimeout(() => {
     messagesBySession[sessionId]?.push({
       id: demoMessageId,
@@ -506,8 +466,6 @@ function simulateAllPartsDemo(sessionId: string): void {
     }
   }, 3900);
 }
-
-// ── 各域 mock 实现（参数类型从 IpcApi 推导）──────────────────
 
 /**
  * app 域 mock（浏览器模式假实现）
@@ -530,17 +488,12 @@ function createAppDomainMock(): IpcApi['app'] {
       }),
     openExternal: async () => ipcOk({ ok: true }),
     openDataDir: async () => ipcOk({ ok: true }),
-    // 开机自启（浏览器模式假实现：仅回显，不写 OS 登录项；supported=false 与真实
-    // dev 环境一致——未打包不注册，界面据 supported 显示禁用态并说明）
     getLoginItemSettings: async () =>
       ipcOk({ openAtLogin: false, supported: false, requiresApproval: false }),
     setLoginItemSettings: async () =>
       ipcOk({ openAtLogin: false, supported: false, requiresApproval: false }),
-    // 诊断包导出：浏览器模式无真实打包，模拟用户取消（saved=false）
     exportDiagnostics: async () => ipcOk({ saved: false }),
-    // 退出应用（走完整善后链，浏览器模式 no-op 语义一致）
     quit: async () => ipcOk({ ok: true }),
-    // 深度链接与登录项变更：浏览器模式无协议注册/无 OS 登录项 ⇒ 订阅即 no-op
     subscribeDeepLink: () => () => {},
     subscribeLoginItemChanged: () => () => {},
   };
@@ -554,7 +507,6 @@ function createMockApi(): IpcApi {
 
     session: {
       list: async ({ limit }: Req<IpcApi['session']['list']>) => {
-        // 对齐主进程排序：置顶优先，同置顶内 updatedAt 倒序
         const sorted = [...mockSessions].sort((a, b) => {
           if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
           return b.updatedAt - a.updatedAt;
@@ -562,11 +514,9 @@ function createMockApi(): IpcApi {
         return ipcOk({ sessions: sorted.slice(0, limit), total: sorted.length });
       },
       get: async ({ id, includeMessages }: Req<IpcApi['session']['get']>) => {
-        // includeMessages=true 才返回消息（对齐主进程 session:get 契约默认按需加载，P2-28）
         const messages = includeMessages === true ? (messagesBySession[id] ?? []) : [];
         const session = mockSessions.find((s) => s.id === id);
         if (session === undefined) {
-          // 宽松兜底：任意 id 返回默认会话（dev mock——首页 DRAFT 场景需 workingDir 供 agent 发送）
           return ipcOk({
             session: {
               id,
@@ -606,7 +556,6 @@ function createMockApi(): IpcApi {
         }
         return ipcOk({ ok: true });
       },
-      // 清空全部会话（36-D）：连同 mock 消息历史一并清（对齐主进程级联语义）
       clearAll: async () => {
         const deleted = mockSessions.length;
         mockSessions.length = 0;
@@ -626,7 +575,6 @@ function createMockApi(): IpcApi {
         const s = mockSessions.find((x) => x.id === id);
         if (s !== undefined) {
           s.pinned = pinned;
-          // 对齐主进程：pin 操作刷新 updatedAt（置顶排序依据）
           s.updatedAt = Date.now();
         }
         return ipcOk({ ok: true });
@@ -749,12 +697,9 @@ function createMockApi(): IpcApi {
             cb({ terminalId, data: `MOCK PTY：cwd=${cwd}\r\nPS> ` });
           }
         }, 100);
-        // pid 用固定正数（契约要求 positive int，0 会被 TerminalCreateResSchema 拒绝）；
-        // title 与真实主进程语义一致：默认 shell 名（此处模拟 PowerShell 提示符）
         return ipcOk({ terminalId, pid: 1, title: 'powershell.exe' });
       },
       input: async ({ terminalId, data }: Req<IpcApi['terminal']['input']>) => {
-        // 回显输入（模拟 shell）
         for (const cb of terminalOutputCallbacks) {
           cb({ terminalId, data: `\r\n${data}\r\nPS> ` });
         }
@@ -772,13 +717,9 @@ function createMockApi(): IpcApi {
 
     agent: {
       run: async ({ sessionId, messages }: Req<IpcApi['agent']['run']>) => {
-        // ChatMessageSchema 是 z.custom<ModelMessage>（宽松校验），z.input 为 unknown——
-        // mock 层显式收窄回 ModelMessage（真实运行链路经主进程校验后即为此类型）
         const msgs = messages as ModelMessage[];
-        // convertToModelMessages 后 content 可能是字符串或数组（多 part），兼容两种
         const lastUserText = [...msgs].reverse().find((m) => m.role === 'user');
         const rawContent = lastUserText?.content;
-        // TS7 对复杂三目+闭包捕获的收窄不稳定：显式标注 text 类型
         const text: string =
           typeof rawContent === 'string'
             ? rawContent
@@ -796,9 +737,7 @@ function createMockApi(): IpcApi {
                   })
                   .join('')
               : '（模拟消息）';
-        // AgentRunReq.sessionId 为可选类型，运行期 transport 总是传入（chatId）
         setTimeout(() => simulateAgentStream(sessionId ?? 'mock-1', text), 300);
-        // 模拟 Agent 提问（AskDialog E2E 用）：输入以 /ask 开头时，流式期间推送一条提问事件
         if (text.startsWith('/ask')) {
           setTimeout(() => {
             const askPayload = {
@@ -819,14 +758,9 @@ function createMockApi(): IpcApi {
             }
           }, 600);
         }
-        // P0 修复：与真实 IPC 信封一致返回 { data: { sessionId } }。
-        // 此前返回裸 { sessionId } 与 IpcResponse 契约相悖（真实链路经 wrap 包装为 { data }），
-        // transport 按 response.data.sessionId 解包，裸对象导致 currentSessionId 恒为 undefined、
-        // 流式事件按 sessionId 过滤后全部丢失（浏览器模式 agent 流式即坏）
         return ipcOk({ sessionId: sessionId ?? 'mock-1' });
       },
       stop: async ({ sessionId }: Req<IpcApi['agent']['stop']>) => {
-        // 真正中断模拟流（对齐主进程行为：清除定时器 + 推送 interrupted end）
         const interval = streamIntervals.get(sessionId);
         if (interval !== undefined) {
           clearInterval(interval);
@@ -848,7 +782,6 @@ function createMockApi(): IpcApi {
         endCallbacks.add(cb);
         return () => endCallbacks.delete(cb);
       },
-      // D4A：回合开始事件（mock 模拟流无独立 start 推送，仅订阅桩保 API 形状完整）
       subscribeStreamStart: () => () => {},
       subscribeStreamError: (cb: Parameters<IpcApi['agent']['subscribeStreamError']>[0]) => {
         errorCallbacks.add(cb);
@@ -862,20 +795,15 @@ function createMockApi(): IpcApi {
         approvalCallbacks.add(cb);
         return () => approvalCallbacks.delete(cb);
       },
-      // 审批决议事件（真实链路：主进程超时/中断/用户决策后回推；mock 无审批流，
-      // 订阅桩只保 API 形状完整）
       subscribeApprovalResolved: () => () => {},
       subscribeAsk: (cb: Parameters<IpcApi['agent']['subscribeAsk']>[0]) => {
         askCallbacks.add(cb);
         return () => askCallbacks.delete(cb);
       },
-      // 提问决议事件（真实链路：主进程超时/作答后回推；mock 无提问流，
-      // 订阅桩只保 API 形状完整）
       subscribeAskResolved: () => () => {},
     },
 
     proxy: {
-      // 34 号：浏览器模式无真实网络栈，测试连接恒返回不可测（UI 可用，行为无感）
       test: async () =>
         ipcOk({
           ok: false,
@@ -885,19 +813,16 @@ function createMockApi(): IpcApi {
     },
 
     window: {
-      // 35 号：浏览器模式无 webContents，applyZoom 本地确认成功（行为无感）
       applyZoom: async () => ipcOk({ ok: true }),
     },
 
     settings: {
-      // S1：settings 下沉 SQLite 的 mock 实现（浏览器模式持久化到 localStorage）
       getAll: async () => {
         const raw = localStorage.getItem('mock-settings');
         return ipcOk({
           settings: raw === null ? {} : (JSON.parse(raw) as Record<string, unknown>),
         });
       },
-      // 恢复默认：清空 mock-settings（与真实语义一致——缺失即默认）
       resetAll: async () => {
         localStorage.removeItem('mock-settings');
         return ipcOk({ settings: {} });
@@ -910,15 +835,11 @@ function createMockApi(): IpcApi {
         localStorage.setItem('mock-settings', JSON.stringify(cur));
         return ipcOk({ ok: true });
       },
-      // 浏览器 mock 无 safeStorage：keychainAvailable=false（对齐真实降级语义）
       getApiKey: async () =>
         ipcOk({
           configured: localStorage.getItem('mock-key-flag') === '1',
           keychainAvailable: false,
         }),
-      // 只落「已配置」标志、不落明文：真实 handler 的明文加密后仅主进程内消费，渲染层
-      // 拿不到也不需要；浏览器 mock 无加密存储，落明文等于把 Key 平文留在本地。
-      // 省略入参不违背 IpcApi 契约（TS 允许少参函数赋给多参签名）
       setApiKey: async () => {
         localStorage.setItem('mock-key-flag', '1');
         return ipcOk({ ok: true });
@@ -941,12 +862,9 @@ function createMockApi(): IpcApi {
         mockRuntimeModels = mockRuntimeModels.filter((m) => m.modelId !== input.modelId);
         return ipcOk({ ok: true });
       },
-      // 运行时模型：返回模块级可变状态（开关/删除在 Web 预览实时生效）
       listRuntimeModels: async () => ipcOk({ models: mockRuntimeModels }),
-      // 设置导出/导入：浏览器模式无主进程 dialog/文件系统 ⇒ 返回取消 / 零操作
       exportSettings: async () => ipcOk({ saved: false }),
       importSettings: async () => ipcOk({ imported: 0, skipped: 0 }),
-      // 设置变更推送：浏览器模式下设置只由本页写入（无托盘等主进程入口）⇒ 订阅即 no-op
       subscribeChanged: () => () => {},
     },
 
@@ -997,7 +915,6 @@ function createMockApi(): IpcApi {
         return ipcOk({ goals });
       },
       create: async ({ sessionId, condition }: Req<IpcApi['goal']['create']>) => {
-        // 对齐主进程语义：新建覆盖旧目标
         const idx = mockGoals.findIndex((g) => g.sessionId === sessionId);
         if (idx >= 0) {
           mockGoals.splice(idx, 1);
@@ -1069,7 +986,6 @@ function createMockApi(): IpcApi {
       start: async () => ipcOk({ ok: true }),
       stop: async () => ipcOk({ ok: true }),
     },
-    // 失效域事件：浏览器模式无主进程写路径 ⇒ 订阅即 no-op（31 号设计文档 §2.1）
     invalidation: {
       subscribeDomains: () => () => {},
     },
@@ -1094,7 +1010,6 @@ function createMockApi(): IpcApi {
     search: {
       grep: async () => ipcOk({ matches: [], truncated: false }),
       glob: async ({ pattern }: Req<IpcApi['search']['glob']>) => {
-        // 模拟文件匹配（模糊搜索用）：解析 `**/*[aA]pp*` → 'app'（字符类取首字符）
         const query = pattern
           .replace(/^\*\*\/\*/, '')
           .replace(/\*$/, '')

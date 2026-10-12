@@ -1,20 +1,5 @@
-// src/main/diagnostics.ts
-// 诊断包导出：日志 + 配置 + 版本信息 → 用户选定路径的 zip
-// ──────────────────────────────────────────────────────────────
-// 背景（对齐 VS Code 等开发者工具的一键排障闭环）：
-// - 用户反馈问题时，日志/配置/版本信息散落多处，逐文件拷贝门槛高
-// - 本模块一键打包：主进程日志（含轮转 old 文件）+ 用户设置（脱敏）+ 版本清单
-//
-// 安全设计：
-// - 设置脱敏：apiKey/token/secret/password 等敏感键逐层递归替换为 [REDACTED]
-// - 仅收集日志文件（*.log），不打包会话 DB / keychain / 备份（体积与隐私双赢）
-// - 写盘路径由用户经保存对话框显式选定，主进程不主动落盘
-//
-// 体积控制：
-// - 单个日志 > 8MB 只取尾部 8MB（聚焦"最近发生了什么"，避免打包臃肿）
-// - zip 默认 DEFLATE 压缩
-// ──────────────────────────────────────────────────────────────
-
+// diagnostics.ts：诊断包导出——manifest + 脱敏后设置 + 脱敏日志 + 运行时状态打 zip，
+// 供 GitHub Issue 报障附件（本地优先，不上传任何服务）
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import AdmZip from 'adm-zip';
@@ -23,26 +8,14 @@ import { app } from 'electron';
 import { readAllSettings } from './infra/storage/settings-pref';
 import { logger } from './utils/logger';
 
-/** 单个日志文件纳入诊断包的最大体积（超出取尾部） */
+// 单个日志文件超过 8MB 只保留尾部——近期上下文在尾部，同时防诊断包爆炸
 const MAX_LOG_BYTES = 8 * 1024 * 1024;
 
-/** 脱敏键匹配：命中即整值替换（明文泄露面收敛到键名本身） */
+// 键名形态兜底：设置键命中即整体 [REDACTED]（不看值）
 const SENSITIVE_KEY_PATTERN =
   /(api[_-]?key|token|secret|password|passwd|credential|private[_-]?key|access[_-]?key)/i;
 
-/**
- * 值级脱敏模式（2026-09-08 修复：此前只按键名脱敏）
- *
- * 键名匹配覆盖不到「键名无害但值含密钥」的场景（日志行、URL query、
- * Authorization 头文本等）。这里对字符串值再做一次模式替换：
- * - `sk-` / `sk_` 前缀的 OpenAI 系密钥
- * - `Bearer <token>` 形式的授权头
- * - PEM 私钥块起始行
- * - 常见长随机串（32+ 位十六进制，多为 token/密钥）
- *
- * 有意不覆盖 base64：日志里长 base64 与图片/二进制片段无法区分，
- * 误伤会把诊断包正文打成不可读的 [REDACTED] 海洋——宁缺勿滥。
- */
+// 值形态兜底：键名不含敏感词但值本身是密钥形态（日志正文里的 key 串、Bearer 头、PEM 头、32+ 位 hex）
 const VALUE_PATTERNS: readonly { readonly pattern: RegExp; readonly replacement: string }[] = [
   { pattern: /\bsk-[A-Za-z0-9_-]{8,}/g, replacement: 'sk-[REDACTED]' },
   { pattern: /(Bearer\s+)[A-Za-z0-9._~+/-]{8,}=*/gi, replacement: '$1[REDACTED]' },
@@ -53,7 +26,7 @@ const VALUE_PATTERNS: readonly { readonly pattern: RegExp; readonly replacement:
   },
 ];
 
-/** 对字符串做值级脱敏（键名脱敏的补充；纯函数，导出供测试） */
+/** 对任意文本跑值形态脱敏（日志正文用——日志行没有键名上下文，只能按形态匹配） */
 export function redactText(text: string): string {
   let out = text;
   for (const { pattern, replacement } of VALUE_PATTERNS) {
@@ -62,30 +35,18 @@ export function redactText(text: string): string {
   return out;
 }
 
-/** 诊断包导出入参（handler 组装，测试可注入临时目录） */
+/** 导出选项：zip 落盘路径 + userData 根（取日志/窗口状态）+ 自启状态快照（由调用方装配传入） */
 export interface ExportDiagnosticsOptions {
-  /** 目标 zip 路径（用户经保存对话框选定） */
   readonly filePath: string;
-  /** 用户数据目录（日志位于其下 logs/） */
   readonly userDataPath: string;
-  /**
-   * 开机自启状态（由调用方读好传入）
-   *
-   * 为什么由调用方传入而非本模块自行读取：autostart 依赖 Electron `app` 与平台环境，
-   * 在诊断模块内直接调会引入对 `app` 桩的额外耦合（本模块的测试用极简 app mock）。
-   * 这两项是「开机自启/静默启动」类报障的关键判据（见 30-spec §3 P2-2）。
-   */
   readonly autostart?: unknown;
 }
 
 /**
- * 递归脱敏：键命中敏感模式时，标量叶子替换为 [REDACTED]；
- * 对象/数组结构节点始终递归（保留 baseUrl/model 等诊断信息，只抹秘密叶子）。
- *
- * 纯函数（导出供单元测试验证脱敏边界）。
+ * 递归脱敏任意结构：对象/数组深入遍历，键名命中即整值 [REDACTED]，
+ * 字符串叶子再过一遍值形态（双层：键名层 + 值形态层）
  */
 export function redactSensitive(value: unknown, key = ''): unknown {
-  // 结构节点：不论键是否敏感都下沉递归（数组项沿用父键判定叶子）
   if (value !== null && typeof value === 'object') {
     if (Array.isArray(value)) {
       return value.map((item) => redactSensitive(item, key));
@@ -96,14 +57,12 @@ export function redactSensitive(value: unknown, key = ''): unknown {
     }
     return result;
   }
-  // 标量叶子：键命中敏感模式 → 替换；否则做值级脱敏（2026-09-08）
   if (SENSITIVE_KEY_PATTERN.test(key)) {
     return '[REDACTED]';
   }
   return typeof value === 'string' ? redactText(value) : value;
 }
 
-/** 版本与环境清单（对齐 app:getInfo 字段，补充导出时间戳） */
 function buildManifest(userDataPath: string): Record<string, unknown> {
   return {
     app: app.getName(),
@@ -120,11 +79,6 @@ function buildManifest(userDataPath: string): Record<string, unknown> {
   };
 }
 
-/**
- * 收集日志目录下全部 *.log 文件
- *
- * 超限（8MB）取尾部片段；单文件读取失败跳过不阻断（日志丢失可容忍）。
- */
 async function collectLogFiles(logsDir: string): Promise<Array<{ name: string; content: Buffer }>> {
   const entries = await readdir(logsDir, { withFileTypes: true }).catch((error) => {
     logger.warn({ error: String(error), logsDir }, '诊断导出：日志目录读取失败（跳过日志）');
@@ -138,14 +92,12 @@ async function collectLogFiles(logsDir: string): Promise<Array<{ name: string; c
     const filePath = join(logsDir, entry.name);
     try {
       let content = await readFile(filePath);
-      // 只保留"最近"日志：超限截尾，避免单日志拖垮诊断包体积
       if (content.byteLength > MAX_LOG_BYTES) {
         content = content.subarray(content.byteLength - MAX_LOG_BYTES);
         logger.info({ file: entry.name }, '诊断导出：日志超限，仅打包尾部 8MB');
       }
       collected.push({ name: entry.name, content });
     } catch (error) {
-      // 日志文件被占用/被删属于可容忍失败，跳过继续
       logger.warn({ error: String(error), file: entry.name }, '诊断导出：日志读取失败（跳过）');
     }
   }
@@ -153,24 +105,21 @@ async function collectLogFiles(logsDir: string): Promise<Array<{ name: string; c
 }
 
 /**
- * 组装并写入诊断包 zip
+ * 导出诊断包 zip：manifest.json → settings.json（脱敏）→ logs/*.log（脱敏，单文件超限取尾部）→
+ * runtime.json（自启 + 窗口状态）
  *
- * @param options filePath / userDataPath
- * @throws 读取或写盘失败时抛出（由 IPC wrap 统一错误分类 + 本地日志）
+ * 各环节失败都降级跳过（warn 后继续），保证包总是能产出
  */
 export async function exportDiagnosticsPackage(options: ExportDiagnosticsOptions): Promise<void> {
   const { filePath, userDataPath, autostart } = options;
   const zip = new AdmZip();
 
-  // 1. 版本与环境清单（manifest.json）
   zip.addFile('manifest.json', Buffer.from(JSON.stringify(buildManifest(userDataPath), null, 2)));
 
-  // 2. 用户设置（脱敏后落盘，防御误导出的密钥泄露）
   let settings: Record<string, unknown> = {};
   try {
     settings = readAllSettings();
   } catch (error) {
-    // DB 不可用（未初始化/损坏自愈中）：设置段置空，不阻断诊断包
     logger.warn({ error: String(error) }, '诊断导出：设置读取失败（跳过配置段）');
   }
   zip.addFile(
@@ -178,18 +127,11 @@ export async function exportDiagnosticsPackage(options: ExportDiagnosticsOptions
     Buffer.from(JSON.stringify(redactSensitive(settings) as Record<string, unknown>, null, 2)),
   );
 
-  // 3. 主进程日志（含轮转 old 文件）
-  // 2026-09-08 修复：日志内容此前原样入包（只按键名脱敏覆盖不到日志行），
-  // 现对文本做值级脱敏后再打包。
   const logs = await collectLogFiles(join(userDataPath, 'logs'));
   for (const log of logs) {
     zip.addFile(`logs/${log.name}`, Buffer.from(redactText(log.content.toString('utf8'))));
   }
 
-  // 4. 运行时状态（开机自启 + 窗口状态）
-  // 这两项是「开机自启不生效 / 开机弹窗」类报障的直接判据：自启注册态决定该不该静默启动，
-  // window-state.isMaximized 决定静默启动是否会被最大化恢复击穿（30-spec §3 P0-1）。
-  // 读不到（文件不存在/损坏）记 null 而非省略键——"读不到"本身也是诊断信息。
   zip.addFile(
     'runtime.json',
     Buffer.from(
@@ -201,11 +143,9 @@ export async function exportDiagnosticsPackage(options: ExportDiagnosticsOptions
     ),
   );
 
-  // 5. 写盘（用户选定路径；writeZipPromise 异步压缩，避免阻塞主进程）
   await zip.writeZipPromise(filePath);
 }
 
-/** 读取窗口状态文件（诊断用；不存在/损坏返回 null，不阻断导出） */
 async function readWindowState(userDataPath: string): Promise<unknown> {
   try {
     return JSON.parse(await readFile(join(userDataPath, 'window-state.json'), 'utf8'));

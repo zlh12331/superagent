@@ -1,26 +1,3 @@
-// src/renderer/router.tsx
-// React Router 8 Data Mode 路由配置
-// 设计文档 §3 路由结构 + §5.3 React Router 8 Data Mode（非 Framework Mode）
-//
-// 职责：
-// - 使用 createHashRouter（Data Mode）声明全应用路由（hash 而非 history 的原因见下方路由配置注释）
-// - 根布局 root.tsx 挂载 AppShell（Topbar + Sidebar + 内容区）
-// - index 路由渲染 HomePage（欢迎页：品牌区 + 输入框 + 快捷动作 + 项目选择）
-// - /chat/:sessionId 路由渲染 ChatPage（历史会话续传，内部渲染 ChatPanel）
-// - 提供 RootErrorBoundary 作为顶层错误边界
-//
-// 路由树：
-//   /                            → RootLayout (AppShell)
-//     index                      → HomePage（欢迎页 / 新会话创建入口）
-//     /chat/:sessionId           → ChatPage（历史会话，chatId=sessionId）
-//
-// 说明：
-// - HomePage 创建会话后跳转 /chat/:id，ChatPanel 仅在聊天路由渲染
-// - useChat 通过 chatId 隔离消息状态，切换时自动重置
-// - AppShell 中已集成 AskDialog，所有路由下都能接收 Agent 提问
-// - /chat/:id 路由 loader 预取会话详情（与 lazy 并行），消除
-//   「lazy 下载 → 挂载 → 才发 IPC」的串行等待（debt.md#d5）
-
 import { createHashRouter } from 'react-router';
 import {
   fetchSessionTurns,
@@ -52,7 +29,6 @@ export const router = createHashRouter([
     // biome-ignore lint/style/useNamingConvention: React Router 8 路由 API 要求 PascalCase 属性名
     HydrateFallback: RootHydrateFallback,
     children: [
-      // 首页：欢迎页（品牌区 + composer + 快捷动作）
       {
         index: true,
         lazy: async () => {
@@ -61,21 +37,13 @@ export const router = createHashRouter([
           return { Component: HomePage };
         },
       },
-      // 聊天页：历史会话续传（chatId=URL 参数 sessionId）
       {
         path: ROUTES.chat,
         loader: ({ params }) => {
           const sessionId = params['sessionId'];
           if (sessionId !== undefined) {
-            // match 即预取（与 route.lazy 并行），缓存 key 与页面查询一致：
-            // 元数据 → 回合列表 → 最近一页消息链式预取，消除
-            // 「lazy 下载 → 挂载 → 才发 IPC」的串行等待。fire-and-forget：
-            // 失败不阻断导航——被删会话等错误仍由 ChatPage 的 isError 守卫
-            // 优雅重定向首页，而非落入全页错误边界。
             void queryClient
               .ensureQueryData({
-                // 数据 key 与 useSessionDetail 一致（meta 形状）；失效/清理
-                // 走 SESSION_DETAIL_QUERY_KEY 前缀，与此数据 key 解耦
                 queryKey: SESSION_DETAIL_DATA_KEY(sessionId, false),
                 queryFn: () => fetchSessionDetail(sessionId, false),
               })

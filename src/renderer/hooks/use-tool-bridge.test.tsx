@@ -1,6 +1,3 @@
-// src/renderer/hooks/use-tool-bridge.test.tsx
-// use-tool-bridge 单元测试：订阅工具调用事件（挂载注册 / 卸载清理）
-
 import { renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 

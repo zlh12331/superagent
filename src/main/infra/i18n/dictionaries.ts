@@ -1,17 +1,5 @@
-// src/main/infra/i18n/dictionaries.ts
-// 主进程语言词典（工具 title 等 main 侧用户可见文案）
-// ──────────────────────────────────────────────────────────────
-// 与渲染层语言包（src/renderer/i18n/locales/）相互独立：
-// - 渲染层走 i18next + JSON 语言包（有 check-i18n 双语一致性门禁）
-// - 主进程为轻量 key-value（零依赖），key 齐全性由 index.test.ts 守护
-//   （zh/en key 集合必须一致，缺一即测试失败）
-// zh-CN 值与迁移前的硬编码字符串逐字一致（默认语言下行为零变化）。
-// ──────────────────────────────────────────────────────────────
-
-/** 主进程支持的语言（与渲染层 AppLanguage 对齐） */
 export type MainLanguage = 'zh-CN' | 'en';
 
-/** 中文词典（默认语言；值 = 迁移前工具文件内的原始文案） */
 export const ZH_CN: Readonly<Record<string, string>> = {
   'tools.askUser.failed': '提问失败',
   'tools.askUser.noResponse': '用户未响应',
@@ -90,7 +78,6 @@ export const ZH_CN: Readonly<Record<string, string>> = {
   'tools.planMode.exited': '已退出计划模式',
 };
 
-/** 英文词典 */
 export const EN: Readonly<Record<string, string>> = {
   'tools.askUser.failed': 'Ask failed',
   'tools.askUser.noResponse': 'No user response',
@@ -169,7 +156,6 @@ export const EN: Readonly<Record<string, string>> = {
   'tools.planMode.exited': 'Exited plan mode',
 };
 
-/** 全部词典（语言 → key → 文案） */
 export const MAIN_DICTIONARIES: Readonly<Record<MainLanguage, Readonly<Record<string, string>>>> = {
   'zh-CN': ZH_CN,
   en: EN,

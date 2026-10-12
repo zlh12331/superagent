@@ -1,10 +1,6 @@
-// src/main/infra/invalidation/invalidation.test.ts
-// 失效域广播单测：逐窗发送 / 销毁守卫 / 空窗降级 / payload 形状
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-// electron 替身：BrowserWindow 由用例注入窗口清单
 const mocks = vi.hoisted(() => ({
-  /** 当前 getAllWindows 返回的窗口清单（用例改写） */
   windows: [] as Array<{
     isDestroyed: () => boolean;
     webContents: { isDestroyed: () => boolean; send: (channel: string, payload: unknown) => void };
@@ -12,17 +8,14 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('electron', () => ({
-  // 方括号键：规避 useNamingConvention 对 electron API 名（PascalCase）的误报（既有先例 preview-service.test.ts）
   ['BrowserWindow']: {
     getAllWindows: vi.fn(() => mocks.windows),
   },
-  // emitEvent 读取 app.isPackaged：false 走 dev 契约校验（顺带覆盖 payload schema）
   app: { isPackaged: false },
 }));
 
 import { broadcastInvalidation } from './invalidation';
 
-/** 造一个窗口（各自独立 send spy，便于逐窗断言） */
 function makeWindow(overrides?: { destroyed?: boolean; webContentsDestroyed?: boolean }): {
   isDestroyed: () => boolean;
   webContents: { isDestroyed: () => boolean; send: (channel: string, payload: unknown) => void };

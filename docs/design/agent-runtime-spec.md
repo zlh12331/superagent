@@ -1,6 +1,7 @@
-# 04 · AI 智能体层
+# Agent 运行时规范（编排 / 回合机器 / LLM 客户端 / Provider / Prompt / 知识）
 
 > 覆盖：`src/main/infra/ai/` 下的 Agent 编排、Agent-Runtime 回合机器、LLM 客户端、模型/Provider 路由、Prompt、知识（goal/memory/session-title/learn-skill）。
+> 自 code-wiki 04 合并升格为主题命名规范（2026-10-12，编号规范 01~24 已固化）。
 
 ## 1. 架构总览
 
@@ -10,21 +11,21 @@ ai/
  ├─ agent-runtime/  回合执行原语：TurnMachine（xstate）、TurnRunner、create-stream、stream-reader、并发闸、活跃会话、循环检测、text-delta 批处理、回合转录
  ├─ llm-client/     LlmClient 封装 + ai-provider + retry
  ├─ models/         模型注册表、运行时模型存储、generation-options、token-limits、reasoning-effort
- ├─ providers/      供应商工厂与内置定义（10 家，见 §4.3）
+ ├─ providers/      供应商工厂与内置定义（11 家，见 §4.3）
  ├─ prompt/         PromptService + dynamic-context + agents-md + default-prompt
  ├─ skills/         技能注册表（skill-registry，learned + builtin）
  ├─ middleware/     模型观测中间件（wrapLanguageModel，OTel 接线）
- ├─ mcp/            MCP 客户端与服务（见 05）
- ├─ tools/          工具系统（见 05）
+ ├─ mcp/            MCP 客户端与服务（见 22 号）
+ ├─ tools/          工具系统（见 22 号）
  ├─ cron-service    定时任务调度服务（cron_tasks 表 + croner）
- └─ knowledge/      goal-judge/goal-service、session-title、learn-skill-agent（记忆已迁至 memory-hub，见 07）
+ └─ knowledge/      goal-judge/goal-service、session-title、learn-skill-agent（记忆已迁至 memory-hub，见 05 号附录）
 ```
 
 > **历史**：早期版本的纯对话链路（`chat:stream` + 后端 ChatService）已随 AI SDK v7 迁移删除。现在全应用只有 agent 一个对话域：渲染层经 AI SDK `useChat` + `ipc-agent-transport.ts` 直接驱动 `agent:run`，无独立后端聊天服务。
 
 ## 2. AgentService（Code Agent 主入口）
 
-文件：`agent/agent-service.ts`
+文件：`src/main/infra/ai/agent/agent-service.ts`
 
 ### 2.1 对外方法
 
@@ -46,7 +47,7 @@ ai/
 
 | 文件 | 职责 |
 |---|---|
-| `create-stream.ts` | 请求级流创建 + **重试**：创建 `streamText`、拿到 `toUIMessageStream()` reader；只重试"创建 + 首 part"，首 part 成功后不重试（防重复工具副作用） |
+| `create-stream.ts` | 请求级流创建 + **重试**：创建 `streamText`、拿到 `toUIMessageStream()` reader；重试边界 = 首个真实内容事件（非空 delta / tool-call 等）——边界前的结构事件缓冲为 prelude，重试时原序回注（无感重试窗口）；边界后断流由 `agent/turn-assembly.ts` 从对话锚点续写恢复 |
 | `turn-runner.ts` | 回合执行器：复用上层 reader，循环读取流并翻译为 `TurnEvent`；含 tool-call 循环检测、abort 归类、错误传播、finally 清理 |
 | `agent-turn-machine.ts` | 回合状态机（**xstate v5 实现**：idle / running / waitingApproval / ended 等），驱动审批等待 |
 | `turn-translator.ts` | 把 AI SDK 流 part 翻译为内部 `TurnEvent` |
@@ -55,7 +56,7 @@ ai/
 | `text-delta-batcher.ts` | 文本增量批处理（高频 delta 合并降低事件量） |
 | `stream-reader.ts` | 读取/消费 `UIMessageStream` 的封装 |
 | `active-session-registry.ts` | 活跃 stream 注册表（共享 CAS 删除，防旧 stream 覆盖新 controller） |
-| `concurrency-gate.ts` | 并发公平调度门（默认槽位 `DEFAULT_MAX_CONCURRENT_TURNS`，FIFO，防供应商 429） |
+| `concurrency-gate.ts` | per-provider 分桶并发门（每桶基线 `DEFAULT_MAX_CONCURRENT_PER_PROVIDER`=4，桶内 FIFO + AIMD 自适应 cap + 独立冷却，防供应商 429） |
 | `loop-detector.ts` | 工具调用循环检测 |
 | `abort-utils.ts` | abort 信号工具 |
 
@@ -67,7 +68,7 @@ ai/
 
 - `LlmClient`：统一封装 `model(...)` / `streamText(...)` / 结构化输出等，供 agent 主流程与 side-query（标题、GoalJudge、CommandClassifier）共用。
 - `ai-provider.ts`：`llmClient` 单例 + `runtimeModelStore`（运行时自定义模型）+ `resetAIProvider()`。
-- `retry.ts`：重试层——定义可重试错误集合、解析 `Retry-After`、指数退避执行器；支持 abort 中断重试链。
+- `retry.ts`：重试层——定义可重试错误集合、解析 `Retry-After`（含采纳窗口与双头解析）、equal-jitter 指数退避执行器（参数经 `CODE_AGENT_MODEL_RETRY_*` 环境变量可调）；支持 abort 中断重试链。
 
 ### 4.2 models（`models/`）
 
@@ -80,12 +81,12 @@ ai/
 
 ### 4.3 providers（`providers/`）
 
-- `types.ts`：`PROVIDER_KINDS`（**10 家**：deepseek / openai / anthropic / ollama / moonshot / zhipu / qwen / doubao / siliconflow / openrouter）。
+- `types.ts`：`PROVIDER_KINDS`（**11 家**：deepseek / openai / anthropic / ollama / moonshot / zhipu / qwen / doubao / siliconflow / openrouter / mimo）。
 - `registry.ts`：`BUILTIN_DEFINITIONS` + `BUILTIN_FACTORIES`（同文件；新增供应商 = 注册一条定义 + 一个工厂）。
 - 路由：`getModel(kind, modelId)`（实现在 `llm-client/ai-provider.ts`，委托 llmClient）→ ProviderRegistry；deepseek/ollama 及其余兼容端走 `@ai-sdk/openai-compatible`，openai 走 `@ai-sdk/openai`，anthropic 走 `@ai-sdk/anthropic`。
 - API Key 按供应商存 keychain（safeStorage）；baseURL 可 `.env` 覆盖（`*_API_BASE`）。
 - **默认供应商/模型单一真源**：`packages/shared/src/constants/defaults.ts` 定义 `DEFAULT_PROVIDER`（deepseek）与 `DEFAULT_MODEL`（deepseek-v4-flash），作为「未指定模型」的最终兜底。
-- **模型选择路由（2026-10-08 接通）**：对话回合按「`agent:run` 契约的 modelId（渲染层模型选择器即时值）→ `app_settings.ai.defaultModel`（无头入口：IM/cron/远程/子代理）→ 默认供应商默认模型」三档解析（`agent-service.ts` 的 `resolveModel` dep；设置读取经 `infra/storage/ai-pref.ts`）。规则与边界成文见 [15 号 §七](file:///docs/design/15-model-management-spec.md)。
+- **模型选择路由（2026-10-08 接通）**：对话回合按「`agent:run` 契约的 modelId（渲染层模型选择器即时值）→ `app_settings.ai.defaultModel`（无头入口：IM/cron/远程/子代理）→ 默认供应商默认模型」三档解析（`agent-service.ts` 的 `resolveModel` dep；设置读取经 `infra/storage/ai-pref.ts`）。规则与边界成文见 [15 号 §七](15-model-management-spec.md)。
 
 ## 5. Prompt 层（`prompt/`）
 
@@ -104,7 +105,7 @@ ai/
 - `goal-service.ts` + `goal-judge.ts`：会话目标（Goals）——挂载回合监听，用 LLM 判断目标是否达成（GoalJudge），迭代执行。
 - `session-title.ts`：会话标题生成（llmClient side query）。
 - `learn-skill-agent.ts`：技能学习（把用户场景沉淀为可复用技能，写 `skills` 表，`skill-registry` 加载）。
-- **记忆已迁出本目录**：`save-memory.tool` / `recall-memory.tool` 经 `MemoryPort` 读写 **memory-hub sidecar**（TencentDB-Agent-Memory 引擎，见 07 记忆章节）；`agent.handler` 注入 `createMemoryCaptureWire`（`memory-hub/capture-wire.ts`）在回合结束后自动提取用户意图做记忆捕获（落 L0 JSONL + 引擎侧写入）。不再有自研 `memories` 表。
+- **记忆已迁出本目录**：`save-memory.tool` / `recall-memory.tool` 经 `MemoryPort` 读写 **memory-hub sidecar**（TencentDB-Agent-Memory 引擎，见 05 号功能设计附录·记忆引擎）；`agent.handler` 注入 `createMemoryCaptureWire`（`memory-hub/capture-wire.ts`）在回合结束后自动提取用户意图做记忆捕获（落 L0 JSONL + 引擎侧写入）。不再有自研 `memories` 表。
 
 ## 7. Hook 与工作流
 

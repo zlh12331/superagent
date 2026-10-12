@@ -1,12 +1,3 @@
-// src/renderer/dev/mock-turns.ts
-// dev mock 的回合派生（browser 模式 mock-api 用；debt.md#d2 回合分页配套）
-// ──────────────────────────────────────────────────────────────
-// 从 messagesBySession 的扁平消息按「每个用户消息开一个回合」派生回合列表与
-// 回合消息明细，turnId 形如 `${sessionId}-turn-${用户消息序号}`——与主进程
-// 不变量（所有持久化消息带 turnId、回合以用户消息开始）对齐。
-// 独立成文件的原因：mock-api.ts 有 file-size 棘轮基线（净行只减不增）。
-// ──────────────────────────────────────────────────────────────
-
 /** 回合派生输入的最小消息形状（结构兼容 mock-api 的 MockMessage） */
 export interface MockTurnSourceMessage {
   readonly role: 'user' | 'assistant';
@@ -15,7 +6,7 @@ export interface MockTurnSourceMessage {
 
 /** 回合 mock 的公共摘要字段（tokens/耗时/状态） */
 const MOCK_TURN_BASE = {
-  modelId: 'deepseek-v4-flash',
+  modelId: 'deepseek-flash',
   status: 'completed',
   inputTokens: 120,
   outputTokens: 320,

@@ -1,9 +1,6 @@
 // scripts/lib/animations.test.ts
-// 动画引用完整性（纯函数）单元测试
-// ──────────────────────────────────────────────────────────────
-// 这组测试守的是「引用不存在的 keyframes」这一类静默失效：
-// 浏览器会丢弃整条 animation 声明，而 lint/typecheck/组件测试全绿。
-// ──────────────────────────────────────────────────────────────
+// 动画引用完整性单测：守「引用不存在的 keyframes」类静默失效——浏览器丢弃整条
+// animation 声明，而 lint/typecheck/组件测试全绿
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -155,12 +152,6 @@ describe('findMissingAnimations', () => {
     expect(findMissingAnimations(refs, new Set(['blink']))).toEqual([]);
   });
 });
-
-// ──────────────────────────────────────────────────────────────
-// 仓库现状回归锚：本次修复前这里有 3 处失效引用（br-loading-bar /
-// fadein / modalin）。该断言把「仓库当前无失效动画引用」固化下来——
-// 无此锚点，将来再删 keyframes 而漏改引用不会被任何门禁拦住。
-// ──────────────────────────────────────────────────────────────
 
 describe('仓库现状（styles/* + renderer components）', () => {
   const Styles = [

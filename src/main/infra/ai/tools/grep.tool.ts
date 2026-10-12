@@ -1,7 +1,4 @@
-// src/main/infra/ai/tools/grep.tool.ts
-// grep 工具：封装 SearchService.grep，供 Code Agent 在文件内容中搜索匹配
-// ──────────────────────────────────────────────────────────────
-
+// grep.tool.ts：grep 工具——ripgrep 内容搜索（search-service 承载）
 import type { GrepRes } from '@code-agent/shared/main';
 import { z } from 'zod';
 import { t } from '../../i18n';
@@ -40,11 +37,6 @@ const GrepInputSchema = z.object({
 
 type GrepInput = z.infer<typeof GrepInputSchema>;
 
-/**
- * 创建 grep 工具（基于 ripgrep 的内容搜索：正则/字面量模式 + glob 过滤，返回行号与前后 2 行上下文）
- *
- * @param searchService 搜索服务（执行实际搜索）
- */
 export function createGrepTool(searchService: ISearchService): Tool<GrepInput> {
   return {
     name: 'grep',
@@ -54,7 +46,6 @@ export function createGrepTool(searchService: ISearchService): Tool<GrepInput> {
     permission: 'auto',
     category: 'read',
     execute: async (input: GrepInput, ctx: ToolContext): Promise<ToolResult> => {
-      // realTarget：IO 用真实落点（TOCTOU，debt.md#d1）；metadata 保持输入形态
       const resolvedPaths =
         input.paths.length > 0
           ? input.paths.map((p) => resolveWithinWorkspace(p, ctx.workingDir).realTarget)

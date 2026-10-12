@@ -1,11 +1,3 @@
-// src/renderer/components/browser/browser-device-bar.tsx
-// 浏览器预览设备工具栏（从 browser-pane 提取：预设/宽高/缩放控件）
-// ──────────────────────────────────────────────────────────────
-// 纯受控组件：全部状态与回调由 browser-pane 持有（工具栏内临时改动不写回
-// 设置，真源管理见 use-browser-viewport 与 settings-store）。
-// 预设/缩放档位取自 lib/browser/presets（与设置页同一真源）。
-// ──────────────────────────────────────────────────────────────
-
 import { X } from 'lucide-react';
 import type { ReactElement } from 'react';
 import { Button } from '@/components/ui/button';
@@ -80,7 +72,6 @@ export function DeviceBar(props: DeviceBarProps): ReactElement {
         className="border-border bg-background text-muted-foreground h-[22px] shrink-0 cursor-pointer rounded border px-1.5 text-xs focus:border-primary"
       >
         {DEVICE_PRESETS.map((preset) => {
-          // 局部常量再传给 t：check-i18n 的间接引用识别只覆盖 t(标识符) 形态
           const labelKey = PRESET_LABEL_KEYS[preset];
           return (
             <option key={preset} value={preset}>
@@ -103,8 +94,6 @@ export function DeviceBar(props: DeviceBarProps): ReactElement {
           aria-label={t('panel.browserDeviceWidth')}
           className="border-border bg-background text-muted-foreground h-[22px] w-[42px] rounded border text-center font-mono text-xs disabled:opacity-40"
         />
-        {/* 宽×高分隔符：纯视觉，aria-hidden 防止读屏念出「乘号」
-            （两侧输入框各有自己的 aria-label） */}
         <span className="text-muted-foreground px-0.5 font-mono text-xs" aria-hidden="true">
           ×
         </span>

@@ -1,6 +1,3 @@
-// src/renderer/lib/vim-mode.test.ts
-// vim 模式纯逻辑单测：移动 / 编辑 / 插入切换 / 命令缓冲
-
 import { describe, expect, it } from 'vitest';
 
 import { INITIAL_VIM_STATE, vimHandleKey } from './vim-mode';
@@ -23,18 +20,15 @@ describe('vim-mode 纯逻辑', () => {
   });
 
   it('j/k 上下行保持列偏移；首尾行钳制', () => {
-    // 'ab\ncde'：光标 a（列0）j → c；k → 回 a
     const j = vimHandleKey(INITIAL_VIM_STATE, 'j', 'ab\ncde', 0);
     expect(j.cursor).toBe(3);
     const k = vimHandleKey(INITIAL_VIM_STATE, 'k', 'ab\ncde', 4);
     expect(k.cursor).toBe(1);
-    // 最后一行 j 不动；第一行 k 不动
     expect(vimHandleKey(INITIAL_VIM_STATE, 'j', 'ab\ncde', 4).cursor).toBe(4);
     expect(vimHandleKey(INITIAL_VIM_STATE, 'k', 'ab\ncde', 0).cursor).toBe(0);
   });
 
   it('w/b 词首移动', () => {
-    // 'foo bar baz'：词首 f(0) b(4) b(8)
     expect(vimHandleKey(INITIAL_VIM_STATE, 'w', 'foo bar baz', 0).cursor).toBe(4);
     expect(vimHandleKey(INITIAL_VIM_STATE, 'w', 'foo bar baz', 4).cursor).toBe(8);
     expect(vimHandleKey(INITIAL_VIM_STATE, 'b', 'foo bar baz', 8).cursor).toBe(4);

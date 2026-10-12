@@ -1,6 +1,3 @@
-// src/renderer/lib/shortcut-conflicts.test.ts
-// 快捷键冲突检测纯函数测试（36 号 C：归一化 + 冲突矩阵 + 固定键清单锚定）
-
 import { describe, expect, it } from 'vitest';
 
 import { FIXED_SHORTCUT_CONFLICTS } from '@/hooks/use-keyboard-shortcuts';
@@ -88,7 +85,6 @@ describe('findShortcutConflict', () => {
   });
 
   it('无冲突 → null', () => {
-    // Ctrl+E 不与任何自定义键/固定键冲突
     expect(findShortcutConflict('Ctrl+E', 'newSession', shortcuts)).toBeNull();
   });
 });

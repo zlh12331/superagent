@@ -1,14 +1,9 @@
 // scripts/scaffold/lib/ipc-snippets.ts
-// IPC 脚手架的纯代码片段生成与源码插入（零 AST / 零依赖，可单测）
-// ──────────────────────────────────────────────
-// 为什么单独成模块：原 scaffold-ipc.ts 把「生成什么」和「写到哪」混在一起，
-// 于是 resSchema 漏发这类「会让应用启动即崩」的错误没有测试可拦。
-// register.ts 的启动断言要求每个 request 方法必须有 resSchema：
-//   if (def.resSchema === undefined) throw new Error('IPC 响应契约缺失 …——resSchema 必填')
-// 旧脚手架产出的是 3 参 withSchema(meta, null, {} as { ok: boolean })，
-// 即「脚手架跑完 → pnpm dev 直接崩」。本模块产出一律 4 参（第 4 参用
-// 内联 z.object({ ok: z.boolean() }) 占位，与 {} as { ok: boolean } 类型一致）。
-// ──────────────────────────────────────────────
+// IPC 脚手架的代码片段生成与源码插入（零 AST 零依赖，可单测）。单独成模块的原因：
+// 原 scaffold-ipc 混「生成什么」与「写到哪」，resSchema 漏发（应用启动即崩）无测试
+// 可拦——register.ts 启动断言每个 request 必须有 resSchema，旧脚手架曾产出 3 参
+// withSchema(meta, null, …)（跑完 pnpm dev 直接崩）；本模块一律 4 参（第 4 参内联
+// z.object({ ok: z.boolean() }) 占位）
 
 import { escapeRegExp, insertSortedLine } from './text';
 

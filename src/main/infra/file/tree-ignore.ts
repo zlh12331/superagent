@@ -1,29 +1,11 @@
-// src/main/infra/file/tree-ignore.ts
-// 文件树忽略规则：用户配置的名称模式过滤（file:list 每次调用现读设置，改后即生效）
-// ──────────────────────────────────────────────────────────────
-// 职责（纯函数，不依赖 DB——设置读取在 handler 层薄封装）：
-// - matchIgnorePattern：名称级匹配（精确 / * 通配任意非分隔符序列 / ? 单字符）
-// - normalizeTreeIgnorePatterns：用户配置归一化（trim / 去空 / 限长限量）
-//
-// 设计原则：
-// - 匹配作用于 basename（用户心智模型：node_modules / dist / *.log），不做路径 glob
-// - 内置基线 node_modules（与 watch ignored 对齐；此前 list 不过滤导致大目录卡顿）
-// - 零依赖自写通配转换（* → [^\\]*，? → 单字符；Windows/POSIX 分隔符均不跨）
-// ──────────────────────────────────────────────────────────────
-
-/** 内置忽略基线（始终生效，叠加在用户配置之上） */
+// tree-ignore.ts：文件树忽略模式——用户可配 glob（*/?）或字面名，超限防滥用
 export const DEFAULT_TREE_IGNORE_PATTERNS: readonly string[] = ['node_modules'];
 
-/** 用户模式上限（防御性） */
+// 用户可配模式的上限：32 条 × 64 字符——这是渲染给 glob→RegExp 的用户输入面，防灾难性回溯
 const MAX_PATTERNS = 32;
 const MAX_PATTERN_LENGTH = 64;
 
-/**
- * 名称是否命中忽略模式
- *
- * @param name 条目名（basename）
- * @param patterns 忽略模式列表（空 = 不忽略任何项）
- */
+/** 名称是否命中任一忽略模式（星号/问号通配或字面相等；分隔符统一按正反斜杠处理） */
 export function matchIgnorePattern(name: string, patterns: readonly string[]): boolean {
   for (const raw of patterns) {
     const pattern = raw.trim();
@@ -41,7 +23,7 @@ export function matchIgnorePattern(name: string, patterns: readonly string[]): b
   return false;
 }
 
-/** 通配模式 → 全名正则（* 匹配任意非分隔符序列，? 匹配单个字符） */
+// 手写 glob→RegExp：* 与 ? 不跨目录分隔符（与 .gitignore 直觉一致），其余字符全量转义
 function wildcardToRegExp(pattern: string): RegExp {
   let source = '';
   for (const char of pattern) {
@@ -50,18 +32,13 @@ function wildcardToRegExp(pattern: string): RegExp {
     } else if (char === '?') {
       source += '[^\\\\/]';
     } else {
-      // 其余字符按字面量转义
       source += char.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     }
   }
   return new RegExp(`^${source}$`);
 }
 
-/**
- * 归一化用户配置的忽略模式列表（trim / 去空 / 截断；非法输入降级为仅内置基线）
- *
- * @param raw 原始值（来自 app_settings 的 workspace.treeIgnorePatterns）
- */
+/** 用户配置清洗：非字符串/空白/超长剔除，条数截断（不可信输入面） */
 export function normalizeTreeIgnorePatterns(raw: unknown): string[] {
   if (!Array.isArray(raw)) {
     return [];

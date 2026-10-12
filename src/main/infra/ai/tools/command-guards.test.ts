@@ -1,6 +1,3 @@
-// src/main/infra/ai/tools/command-guards.test.ts
-// 权限决策确定性原语单测：白名单模式 / 前缀匹配 / 复合命令 / 路径越界 / 命令提取
-
 import { mkdtempSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -13,7 +10,6 @@ import {
   matchesWhitelistPattern,
 } from './command-guards';
 
-/** Windows 下 junction 无需管理员权限；POSIX 用 dir 链接 */
 const SYMLINK_TYPE = process.platform === 'win32' ? 'junction' : 'dir';
 
 describe('isUniversalWhitelistPattern（等同放行全部调用的模式：fail closed）', () => {
@@ -59,8 +55,6 @@ describe('isCompositeCommand（复合命令识别）', () => {
     expect(isCompositeCommand('git push -u origin main')).toBe(false);
   });
 
-  // 2026-09-08 安全修复：重定向此前不被视为复合命令，导致
-  // `npm test > ~/.ssh/authorized_keys` 命中白名单前缀后在边界外写文件
   it.each(['npm test > out.txt', 'npm test >> out.txt', 'cat < secret.txt'])(
     '重定向识别为复合：%s',
     (cmd) => {
@@ -91,9 +85,6 @@ describe('commandTargetsOutsideBoundary（路径越界识别）', () => {
     expect(commandTargetsOutsideBoundary('npm run test', boundary)).toBe(false);
   });
 
-  // 2026-09-08 安全修复：变量展开此前被 resolvePathToken 当普通相对段
-  // 拼到边界目录下，于是 `cat $HOME/.ssh/id_rsa` 被判为界内只读命令而免审批
-  // `%VAR%` 是 Windows cmd 语法，POSIX 分词下反斜杠形式不算路径 token，仅 win32 语义
   const isWin = process.platform === 'win32';
   it.each([
     'cat $HOME/.ssh/id_rsa',
@@ -113,13 +104,11 @@ describe('commandTargetsOutsideBoundary（路径越界识别）', () => {
     expect(commandTargetsOutsideBoundary('curl https://example.com/a/b', boundary)).toBe(false);
   });
 
-  // 2026-09-06 安全审计修复：symlink 逃逸（此前相对路径 token 不参与边界判定）
   it('工作区内 symlink 指向边界外（相对路径 token）→ 越界', () => {
     const outside = mkdtempSync(join(tmpdir(), 'cmd-guard-outside-'));
     const workspace = mkdtempSync(join(tmpdir(), 'cmd-guard-ws-'));
     try {
       symlinkSync(outside, join(workspace, 'link'), SYMLINK_TYPE);
-      // 字符串级 relative 判定为界内；realpath 后落点在界外
       expect(commandTargetsOutsideBoundary('cat link/secret.txt', workspace)).toBe(true);
     } finally {
       rmSync(outside, { recursive: true, force: true });

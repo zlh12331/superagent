@@ -1,17 +1,8 @@
 // scripts/lib/comments-rules.ts
-// 注释一致性规则核（纯函数层，供 check-comments.ts CLI 调用）
-// ──────────────────────────────────────────────────────────────
-// 从 check-comments.ts 抽出的原因：门禁判据此前内联零测试（外部审计点名）。
-// 本模块把四条规则做成可注入 ctx 的纯函数，反例 fixture 测试见
-// comments-rules.test.ts——每条 error 级规则都有「最小违规样本必须命中 +
-// 干净样本必须放过」的双向断言。
-//
-// 规则：
-//   A. JSDoc @param 与函数签名一致性（stale-param，error）
-//   B. file:/// 引用路径存在性 + #L 行号越界（stale-file-ref/stale-line-ref，error）
-//   C. TODO/FIXME 过期（todo-stale，error；无日期 todo-no-date，warning）
-//   D. pnpm 命令引用存在性（stale-command，error；只查代码语境）
-// ──────────────────────────────────────────────────────────────
+// 注释一致性规则核（纯函数层，供 check-comments.ts 调用；从 CLI 抽出以补测试——
+// 外部审计点名判据内联零测试）。四条规则：A @param 与签名一致（error）/
+// B file:/// 引用存在 + 行号越界 / C TODO 过期（带日期 >90 天 error，无日期 warning）/
+// D pnpm 命令存在性。反例 fixture 见 comments-rules.test.ts
 
 import { readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
@@ -106,7 +97,6 @@ function extractJsDocBlocks(content: string): Array<{ start: number; end: number
   for (const m of content.matchAll(re)) {
     const index = m.index;
     const captured = m[1];
-    // matchAll 必然提供 index 与捕获组；显式判 undefined 仅为满足类型收窄
     if (index === undefined || captured === undefined) continue;
     blocks.push({ start: index, end: index + m[0].length, text: captured });
   }
@@ -116,7 +106,6 @@ function extractJsDocBlocks(content: string): Array<{ start: number; end: number
 /** 从 JSDoc 块提取 @param 名集合（仅 {Type} name 或 name 形式，name 为第二捕获组） */
 function extractParamNames(jsdoc: string): Set<string> {
   const names = new Set<string>();
-  // {Type} name 或 name；name 之后才允许描述文字
   const re = /@param\s+(?:\{([^}]+)\}\s+)?([A-Za-z_$][\w$]*)/g;
   for (const m of jsdoc.matchAll(re)) {
     const name = m[2];
@@ -129,7 +118,6 @@ function extractParamNames(jsdoc: string): Set<string> {
 function extractSignatureParams(signature: string): Set<string> {
   const names = new Set<string>();
   const params = signature.slice(signature.indexOf('(') + 1, signature.lastIndexOf(')'));
-  // 解构对象参数 { a: T; b: T } → 属性名并入（JSDoc 常以 @param a 描述解构属性；TS 对象类型用 ; 分隔）
   const destructuredInner = params.match(/\{\s*([^}]+)\}/)?.[1];
   if (destructuredInner !== undefined) {
     for (const p of destructuredInner.split(/[;,]/)) {
@@ -145,7 +133,6 @@ function extractSignatureParams(signature: string): Set<string> {
   for (const p of params.split(',')) {
     const clean = p.trim().replace(/^\.\.\./, '');
     if (clean === '') continue;
-    // 去类型/默认值/可选标记：name?: Type = default → name
     const name = clean.split(':')[0]?.trim().replace(/\?$/, '').split('=')[0]?.trim();
     if (name && !name.includes(' ')) names.add(name);
   }
@@ -161,7 +148,6 @@ export function createCommentRules(ctx: CommentRulesCtx) {
     const blocks = extractJsDocBlocks(content);
     if (blocks.length === 0) return;
 
-    // 函数签名模式（跨行参数 + 返回类型，前瞻函数体 {）：JSDoc 块之后的函数声明/箭头函数
     const fnRe =
       /(?:export\s+)?(?:async\s+)?function\s+(\w+)\s*\(([\s\S]*?)\)\s*(?::[^{}]*)?(?=\s*\{)|(?:export\s+)?const\s+(\w+)\s*=\s*(?:async\s+)?(?:\(([\s\S]*?)\)|(\w+))\s*=>|(?:export\s+)?const\s+(\w+)\s*=\s*(?:async\s+)?function\s*\(([\s\S]*?)\)/g;
 
@@ -169,7 +155,6 @@ export function createCommentRules(ctx: CommentRulesCtx) {
       fnRe.lastIndex = block.end;
       const m = fnRe.exec(content);
       if (m === null) continue;
-      // JSDoc 与函数之间只允许空白/装饰符（间隔 ≤ 2 行且无非声明代码）
       const gap = content.slice(block.end, m.index);
       const gapLines = gap.split('\n').length - 1;
       if (gapLines > 2) continue;
@@ -200,14 +185,9 @@ export function createCommentRules(ctx: CommentRulesCtx) {
     const re = /file:\/\/\/([^)\s"`]+)/g;
     for (const m of content.matchAll(re)) {
       const raw = m[1];
-      // matchAll 必然提供捕获组；显式判 undefined 仅为满足类型收窄
       if (raw === undefined) continue;
-      // 模板字符串插值（如 `file:///${dir.replace(...)}` 构造运行时 URL）
-      // 无法静态验证路径存在性 → 跳过（避免把真实业务代码误报为过期引用）
       if (raw.includes('${')) continue;
-      // 默认值 '' 保证 pathPart 为 string（split 结果首元素必然存在）
       const [pathPart = '', linePart] = raw.split('#L');
-      // docs 内为绝对路径（f:/...），src 注释内为相对路径
       const abs = pathPart.includes(':') ? pathPart : join(ctx.root, pathPart.replace(/^\/+/, ''));
       const lineNo = content.slice(0, m.index).split('\n').length;
       if (!statSync(abs, { throwIfNoEntry: false })) {
@@ -269,15 +249,15 @@ export function createCommentRules(ctx: CommentRulesCtx) {
    * md 围栏代码块的行首命令）。裸文本不查：「pnpm workspace 配置」等描述性短语无法与
    * 命令引用区分，强行匹配只会持续误报（实测）。 */
   function checkCommandRefs(content: string, file: string, problems: CommentProblem[]): void {
-    const reInline = /`pnpm\s+([a-zA-Z@][\w@:./-]*)/g; // 行内代码：`pnpm <name>`
-    const reLine = /^pnpm\s+([a-zA-Z@][\w@:./-]*)/; // md 围栏代码块内：行首整行命令
+    const reInline = /`pnpm\s+([a-zA-Z@][\w@:./-]*)/g;
+    const reLine = /^pnpm\s+([a-zA-Z@][\w@:./-]*)/;
 
     const verify = (token: string | undefined, fileLine: number): void => {
       if (token === undefined) return;
-      if (token.startsWith('-')) return; // 旗标（-r / --filter / --frozen-lockfile…）
+      if (token.startsWith('-')) return;
       if (PNPM_BUILTIN.has(token)) return;
       if (ctx.rootScripts.has(token)) return;
-      if (ctx.binStems.has(token)) return; // pnpm 未知命令回退 node_modules/.bin
+      if (ctx.binStems.has(token)) return;
       problems.push({
         file,
         line: fileLine + 1,
@@ -291,13 +271,13 @@ export function createCommentRules(ctx: CommentRulesCtx) {
     let inFence = false;
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
-      if (line === undefined) continue; // noUncheckedIndexedAccess：索引访问需收窄
+      if (line === undefined) continue;
       if (inFence) {
         const m = reLine.exec(line);
         if (m !== null) verify(m[1], i);
       }
       if (/^\s*(```|~~~)/.test(line)) {
-        inFence = !inFence; // 围栏开/关（``` 或 ~~~）
+        inFence = !inFence;
         continue;
       }
       for (const m of line.matchAll(reInline)) verify(m[1], i);

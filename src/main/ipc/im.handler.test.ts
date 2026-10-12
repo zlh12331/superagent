@@ -1,6 +1,3 @@
-// src/main/ipc/im.handler.test.ts
-// im.handler 单测：渠道列表/启停（真实 ImService + fake 适配器 + electron 外壳）
-
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -14,10 +11,8 @@ import type {
 import { ImService } from '../infra/im/im-service';
 import { createImHandlers } from './im.handler';
 
-/** 临时 userData 目录（真实文件 IO，符合无 mock 测试原则） */
 const TEMP_DIR = mkdtempSync(join(tmpdir(), 'im-handler-test-'));
 
-// mock electron：safeStorage（keychain 依赖）+ app
 vi.mock('electron', () => ({
   safeStorage: {
     isEncryptionAvailable: vi.fn(() => true),
@@ -30,7 +25,6 @@ vi.mock('electron', () => ({
   },
 }));
 
-/** fake 渠道适配器（手写最小实现，无 mock 框架） */
 class FakeAdapter implements IChannelAdapter {
   readonly kind: ChannelKind;
   readonly displayName: string;
@@ -63,7 +57,6 @@ class FakeAdapter implements IChannelAdapter {
   }
 }
 
-/** 构造 handler（真实 ImService + fake 适配器） */
 function createHandlers(): ReturnType<typeof createImHandlers> {
   const service = new ImService([new FakeAdapter('telegram'), new FakeAdapter('wechat', false)]);
   return createImHandlers({ imService: service });
@@ -74,9 +67,7 @@ describe('im.handler', () => {
     vi.clearAllMocks();
   });
 
-  afterEach(async () => {
-    // 清理 keychain 残留（真实文件可能写入 tmp）
-  });
+  afterEach(async () => {});
 
   afterAll(() => {
     rmSync(TEMP_DIR, { recursive: true, force: true });
@@ -98,14 +89,12 @@ describe('im.handler', () => {
     const handlers = createHandlers();
     const result = await handlers.start({ kind: 'telegram', token: 'tok-1' }, {} as never);
     expect(result).toEqual({ ok: true });
-    // 启动后状态 running
     const channels = (await handlers.list(undefined, {} as never)).channels;
     expect(channels.find((c) => c.kind === 'telegram')?.running).toBe(true);
   });
 
   it('start：无 token 启动（读 keychain——未配置时抛错）', async () => {
     const handlers = createHandlers();
-    // 未配置 token：keychain 无值 → adapter.connect(undefined) → FakeAdapter 接受（真实骨架抛错）
     await expect(handlers.start({ kind: 'wechat', token: undefined }, {} as never)).rejects.toThrow(
       'NOT_IMPLEMENTED',
     );
@@ -116,7 +105,7 @@ describe('im.handler', () => {
     await handlers.start({ kind: 'telegram', token: 't' }, {} as never);
     const stopped = await handlers.stop({ kind: 'telegram' }, {} as never);
     expect(stopped).toEqual({ ok: true });
-    await handlers.stop({ kind: 'telegram' }, {} as never); // 幂等
+    await handlers.stop({ kind: 'telegram' }, {} as never);
     const channels = (await handlers.list(undefined, {} as never)).channels;
     expect(channels.find((c) => c.kind === 'telegram')?.running).toBe(false);
   });

@@ -1,21 +1,10 @@
 // scripts/check-coverage-floors.ts
-// 覆盖率门槛门禁：门槛必须有唯一真源、只升不降、且与实际强制值一致
-// ──────────────────────────────────────────────────────────────
-// 背景（2026-08-30 审计）：三张 vitest.config.ts 各自内联一套数字
-//   main 80/75/80/80、renderer 59/50/54/59、shared 80/30/39/80
-// 而对外口径统一自称「按规范值 80/75/80/80 卡关」，渲染层注释还曾声称
-// 实测 92.87（真实 64.06）。这类漂移靠人盯注释防不住。
-//
-// 本门禁把「门槛数字」收敛到 scripts/coverage-floors.json，并机械校验：
-//   A. 每层 config 必须从真源读 thresholds，config 里不得再出现门槛数字
-//   B. floor ≥ ratchet：已批准的门槛不得静默下调（降级必须显式改 ratchet）
-//   C. measured ≥ floor：记录的实测必须支撑记录的门槛，否则数字是编的
-//   D. measuredAt 未超过 maxStaleDays：实测必须定期重跑，禁止「一次测量吃三年」
-//   E. 逐层打印 floor 与 specTarget 的真实差距（不再用「以 CI 报告为准」糊过去）
-//
-// 运行：pnpm exec tsx scripts/check-coverage-floors.ts
-//       --tighten  按 §3.3 机制（min(规范目标, 实测−5)）只升不降回填 floor/ratchet
-// ──────────────────────────────────────────────────────────────
+// 覆盖率门槛门禁：门槛唯一真源 scripts/coverage-floors.json，机械校验四件事——
+//   A config 必须从真源读 thresholds（不得再内联数字）/ B floor ≥ ratchet（不得静默下调）/
+//   C measured ≥ floor（实测必须支撑门槛，防数字是编的）/ D measuredAt 未过期（禁一次测量吃三年）
+// 背景（2026-08-30 审计）：三张 vitest.config.ts 各自内联数字且对外口径与实际不符
+// （注释声称实测 92.87、真实 64.06），这类漂移靠人盯注释防不住
+// 运行：pnpm exec tsx scripts/check-coverage-floors.ts [--tighten]
 
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';

@@ -1,4 +1,6 @@
 // scripts/scaffold/lib/naming.test.ts
+// 命名校验与转换单测：四种命名约定的合法/非法形态与派生规则
+
 import { describe, expect, it } from 'vitest';
 
 import {

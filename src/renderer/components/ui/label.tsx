@@ -1,7 +1,3 @@
-// src/renderer/components/ui/label.tsx
-// 标签组件（shadcn/ui new-york 风格，基于 @radix-ui/react-label）
-// 设计文档 §2.3 shadcn/ui 组件库
-
 import * as LabelPrimitive from '@radix-ui/react-label';
 import type * as React from 'react';
 

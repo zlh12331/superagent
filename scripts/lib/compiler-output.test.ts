@@ -1,6 +1,5 @@
 // scripts/lib/compiler-output.test.ts
-// React Compiler 产物调用点统计核反例 fixture 测试：三态（真失效/假阳性/正常）
-// ──────────────────────────────────────────────────────────────
+// React Compiler 产物调用点统计核反例 fixture：三态（真失效/假阳性/正常）
 
 import { describe, expect, it } from 'vitest';
 
@@ -19,7 +18,6 @@ describe('countCompilerCallSites', () => {
   });
 
   it('假阳性剔除：vendor 定义形态不计入调用点', () => {
-    // 同一 chunk 同时含定义与 1 处调用 → 净调用 1（不是 2）
     const mixed = `${VENDOR_CHUNK} ${APP_CHUNK}`;
     const s = countCompilerCallSites([mixed]);
     expect(s.totalCalls).toBe(1);

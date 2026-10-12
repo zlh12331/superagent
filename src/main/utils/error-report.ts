@@ -1,37 +1,14 @@
-// src/main/utils/error-report.ts
-// 错误上报单一出口缝（2026-09-13 引入）
-// ──────────────────────────────────────────────────────────────
-// 背景：Sentry 移除（路线 4 本地优先，见 docs/design/23-otel-spec.md 调整记录）。
-// 此前 wrap / logger 崩溃路径 / 渲染崩溃自愈 / 内存与事件循环告警等
-// 6 处上报点直接调用 @sentry/electron——现全部收敛到本模块。
-//
-// 当前实现：结构化本地日志（electron-log 落盘，随诊断包导出）。
-// 将来接任何后端（Sentry / GlitchTip / OTel exception events）只改本文件，
-// 调用方不动——这是"可回插"的设计承诺。
-//
-// 为什么在 utils 层（而非 infra/telemetry）：本模块只依赖 logger，是"错误汇聚"
-// 这类通用设施；wrap（utils 层）需要调用它，而 depcruise 的 utils-pure 规则
-// 禁止 utils 依赖 infra。放此层可同时服务 utils 与 infra 的调用方。
-//
-// 注意：不再区分"上报失败静默降级"——本实现只写本地日志，不会抛错。
-// ──────────────────────────────────────────────────────────────
-
+// error-report.ts：错误上报单一出口——主进程一切异常经这里落本地日志（本地优先，无云端上报）
+// 将来接任何后端只改本文件；渲染层对应物在 src/renderer/lib/error-report.ts（经 electron-log 转发主进程）
 import { logger } from './logger';
 
-/** 错误上报上下文（结构化字段，随日志落盘） */
+/** 上报附加上下文：tags 进结构化字段；componentStack 供渲染层 React 组件栈（转发场景） */
 export interface ErrorReportContext {
-  /** 分组/来源标签（原 Sentry tags 语义） */
   readonly tags?: Readonly<Record<string, string>>;
-  /** React 组件栈（错误边界场景，帮助定位出错组件） */
   readonly componentStack?: string;
 }
 
-/**
- * 上报错误（原 Sentry.captureException 收敛点）
- *
- * @param error 任意错误（Error / string / unknown reason）
- * @param context 结构化上下文（tags / componentStack）
- */
+/** 上报异常（统一 message 前缀「错误上报」，便于日志检索聚合） */
 export function reportError(error: unknown, context?: ErrorReportContext): void {
   logger.error(
     {
@@ -43,14 +20,7 @@ export function reportError(error: unknown, context?: ErrorReportContext): void 
   );
 }
 
-/**
- * 上报消息级事件（原 Sentry.captureMessage 收敛点）
- *
- * 供非 Error 的系统事件使用：进程崩溃自愈 / 内存告警 / 事件循环阻塞等。
- *
- * @param message 消息文本
- * @param level 严重级别（warning → 日志 warn；error → 日志 error）
- */
+/** 上报一条消息（无异常对象时用；warning 级用于「疑似问题但不致命」场景，如内存增长） */
 export function reportMessage(message: string, level: 'error' | 'warning' = 'error'): void {
   if (level === 'warning') {
     logger.warn({ scope: 'error-report' }, message);

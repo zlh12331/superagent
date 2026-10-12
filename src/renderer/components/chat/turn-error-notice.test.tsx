@@ -1,5 +1,3 @@
-// turn-error-notice.test.tsx
-// 回合错误提示卡单测：具体错误渲染 / 关闭 / 重试 / 复制 / 未注册码回退 / 会话隔离
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -25,11 +23,8 @@ describe('TurnErrorNotice', () => {
     useTurnErrorStore.getState().set('s1', 'AI_API_KEY_INVALID', '无效的 API Key');
     render(<TurnErrorNotice sessionId="s1" />);
     expect(screen.getByRole('alert')).toBeDefined();
-    // 标题来自 errors.json 本地化（zh 默认），而非泛化文案
     expect(screen.getByText('API Key 无效')).toBeDefined();
-    // 详情为主进程消息原文逐字展示
     expect(screen.getByText('无效的 API Key')).toBeDefined();
-    // API Key 族给定向提示（本地网关案例）
     expect(screen.getByText(/本地网关模型需使用网关自身签发/)).toBeDefined();
   });
 

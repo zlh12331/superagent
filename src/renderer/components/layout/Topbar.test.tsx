@@ -1,13 +1,3 @@
-// src/renderer/components/$1/Topbar.test.tsx
-// Topbar 组件测试（顶栏按钮组渲染与回调）
-// ──────────────────────────────────────────────────────────────
-// 测试要点：
-// 1. 侧栏/右面板切换按钮渲染且回调触发
-// 2. 命令面板双入口（图标 + 文字）渲染
-// 3. 设置/主题按钮渲染
-// 4. 返回按钮按 showBack 条件渲染
-// ──────────────────────────────────────────────────────────────
-
 import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -47,7 +37,6 @@ describe('Topbar', () => {
   it('命令面板单一入口（文字胶囊）：点击触发 onOpenCommandPalette', async () => {
     const handlers = renderTopbar();
     const paletteButtons = screen.getAllByRole('button', { name: /命令面板/ });
-    // 单一入口：重复的图标按钮已删除（对齐原型 palette-entry-btn）
     expect(paletteButtons.length).toBe(1);
     const first = paletteButtons[0];
     if (first === undefined) {
@@ -63,7 +52,6 @@ describe('Topbar', () => {
   });
 });
 
-// ── 主题切换 / 面板隐藏 / 折叠态文案（原 layout-gaps.test 并入） ──
 describe('Topbar · 主题切换与折叠态', () => {
   beforeEach(() => {
     localStorage.clear();
@@ -93,7 +81,6 @@ describe('Topbar · 主题切换与折叠态', () => {
 
   it('主题切换按钮：dark 主题显示太阳图标（切换为亮色）', () => {
     renderTopbarThemed();
-    // dark → 显示 Sun（点击切到 light）
     expect(document.querySelector('.lucide-sun')).not.toBeNull();
   });
 

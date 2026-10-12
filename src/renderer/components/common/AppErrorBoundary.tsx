@@ -1,23 +1,3 @@
-// src/renderer/components/common/AppErrorBoundary.tsx
-// App 级错误边界（P1-4 分层错误边界第 1 层）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 包裹整个应用根（App.tsx 中包裹 AppProviders + RouterProvider）
-// - 捕获 Provider 初始化异常 / RouterProvider 异常 / 任意子树未捕获错误
-// - 提供"重新加载"按钮，触发整个应用根重新挂载
-//
-// 分层错误边界体系：
-//   1. AppErrorBoundary（本组件）   → App 级：全屏兜底
-//   2. RootErrorBoundary            → Route 级：捕获路由错误（react-router 已实现）
-//   3. SectionErrorBoundary         → Component 级：局部错误隔离
-//
-// 设计：
-// - 使用 react-error-boundary 6.x 的 ErrorBoundary 组件
-// - fallbackRender 提供错误对象 + resetErrorBoundary 回调
-// - onReset 调用 window.location.reload() 强制刷新页面
-// - 不依赖任何 Provider（避免边界本身被错误 Provider 拖垮）
-// ──────────────────────────────────────────────────────────────
-
 import { AlertTriangle, RefreshCw, Send } from 'lucide-react';
 import type { ErrorInfo, ReactElement } from 'react';
 import { ErrorBoundary } from 'react-error-boundary';
@@ -51,9 +31,7 @@ async function buildIssueUrl(message: string, error: unknown): Promise<string> {
       arch: info.arch,
       electron: info.electron,
     });
-  } catch {
-    // getInfo 失败不阻塞报障，仅缺版本行
-  }
+  } catch {}
   const body = [
     i18n.t('common.crashIssueHeading'),
     '',
@@ -88,14 +66,8 @@ function AppFallback({
   error: unknown;
   resetErrorBoundary: () => void;
 }): ReactElement {
-  // 文案经 i18next 全局单例 i18n.t() 取，**不用 useTranslation() hook**：
-  // 与 SectionFallback 同一约束（fallback 零 hook/context 依赖）——
-  // 错误边界 fallback 在 React 的错误恢复渲染路径中执行，此时 hooks 宿主不可靠
-  // （实测 react-i18next 的 useTranslation 在此路径抛 Invalid hook call）；
-  // i18n.t() 是纯数据访问，不依赖 hooks 宿主，且随当前语言切换。
   const message = error instanceof Error ? error.message : String(error);
 
-  // 报障：深链 GitHub 新建 issue（预填崩溃信息与版本环境；诊断包由用户手动附上）
   const handleSendReport = (): void => {
     void buildIssueUrl(message, error)
       .then(async (url) => {
@@ -113,12 +85,10 @@ function AppFallback({
   };
 
   return (
-    // data-testid 用于 E2E 测试与 CDP 动态分析检测 AppErrorBoundary 是否被触发
     <div
       data-testid="app-error-boundary"
       className="bg-background text-foreground flex h-screen w-screen flex-col items-center justify-center gap-4 p-8"
     >
-      {/* 朱砂红淡底圆形 + 警告图标 */}
       <div className="bg-error/10 text-error flex size-16 items-center justify-center rounded-full">
         <AlertTriangle className="size-8" strokeWidth={1.5} />
       </div>
@@ -174,8 +144,6 @@ export function AppErrorBoundary({ children }: AppErrorBoundaryProps): ReactElem
     <ErrorBoundary
       FallbackComponent={AppFallback}
       onError={(error: unknown, info: ErrorInfo) => {
-        // 统一错误出口：electron-log renderer → 主进程落盘（随诊断包导出）
-        // info.componentStack 帮助定位错误来源组件
         reportError(error, {
           tags: { boundary: 'AppErrorBoundary' },
           ...(info.componentStack !== null ? { componentStack: info.componentStack } : {}),

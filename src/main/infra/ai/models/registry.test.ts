@@ -1,18 +1,3 @@
-// src/main/infra/ai/models/registry.test.ts
-// ModelRegistry 单测：模型级解析 / 跨供应商查找 / 运行时快照
-//
-// 测试要点：
-// 1. resolve(undefined) → 默认供应商默认模型（deepseek-v4-flash）
-// 2. resolve(显式 id) → 跨供应商查找（gpt-4o → openai）
-// 3. resolve(未注册 id) → 默认供应商 + 原始 id 透传（防御性降级）
-// 4. 运行时快照：注册 / 覆盖内置 / 注销 / 显式 apiKey+baseUrl
-// 5. 停用身份：available=false（含默认模型停用的主链路拦截）
-// 6. listModels：内置 + 运行时快照
-//
-// 接线背景：生产中单例 modelRegistry 在 models/index.ts 装配，llm-client
-// getModel 与 runtime-model-store 消费；停用拦截经 resolve 的 available
-// 字段（isModelDisabled 方法无生产调用方）。本文件为纯领域层测试（无 mock）。
-
 import { beforeEach, describe, expect, it } from 'vitest';
 import { BUILTIN_MODELS, DEFAULT_MODEL_BY_KIND } from './builtin-models';
 import { ModelRegistry } from './registry';
@@ -34,28 +19,28 @@ describe('ModelRegistry', () => {
   });
 
   describe('resolve（模型级解析）', () => {
-    it('未传 modelId：解析为默认供应商默认模型（deepseek-v4-flash）', () => {
+    it('未传 modelId：解析为默认供应商默认模型（deepseek-flash）', () => {
       const resolved = registry.resolve(undefined);
 
-      expect(resolved.modelId).toBe('deepseek-v4-flash');
+      expect(resolved.modelId).toBe('deepseek-flash');
       expect(resolved.providerKind).toBe('deepseek');
       expect(resolved.isRuntime).toBe(false);
       expect(resolved.capabilities.reasoning).toBe(true);
     });
 
-    it('显式内置模型 id：跨供应商查找（gpt-4o → openai）', () => {
-      const resolved = registry.resolve('gpt-4o');
+    it('显式内置模型 id：同厂商跨模型查找（glm-5.3 → zhipu）', () => {
+      const resolved = registry.resolve('glm-5.3');
 
-      expect(resolved.modelId).toBe('gpt-4o');
-      expect(resolved.providerKind).toBe('openai');
-      expect(resolved.capabilities.vision).toBe(true);
+      expect(resolved.modelId).toBe('glm-5.3');
+      expect(resolved.providerKind).toBe('zhipu');
+      expect(resolved.capabilities.reasoning).toBe(true);
     });
 
-    it('显式快模型 id：携带 fastOnly 能力标记', () => {
-      const resolved = registry.resolve('gpt-4o-mini');
+    it('显式快模型 id：MiMo UltraSpeed（高速档）', () => {
+      const resolved = registry.resolve('mimo-v2.6-pro-ultraspeed');
 
-      expect(resolved.providerKind).toBe('openai');
-      expect(resolved.capabilities.fastOnly).toBe(true);
+      expect(resolved.providerKind).toBe('mimo');
+      expect(resolved.modelId).toBe('mimo-v2.6-pro-ultraspeed');
     });
 
     it('未注册模型 id：回退默认供应商 + 原始 id 透传（兼容测试连接）', () => {
@@ -66,11 +51,11 @@ describe('ModelRegistry', () => {
       expect(resolved.isRuntime).toBe(false);
     });
 
-    it('本地供应商模型（ollama）：无需 API Key', () => {
-      const resolved = registry.resolve('qwen2.5-coder:7b');
+    it('显式深度适配模型（mimo-v2.6-pro）：解析到注册厂商', () => {
+      const resolved = registry.resolve('mimo-v2.6-pro');
 
-      expect(resolved.providerKind).toBe('ollama');
-      expect(resolved.explicitApiKey).toBeUndefined();
+      expect(resolved.providerKind).toBe('mimo');
+      expect(resolved.capabilities.reasoning).toBe(true);
     });
 
     it('思考模型（deepseek-v4-pro）：标记 reasoning + 思考强度配置（max）', () => {
@@ -80,10 +65,10 @@ describe('ModelRegistry', () => {
       expect(resolved.generationConfig?.reasoningEffort).toBe('max');
     });
 
-    it('模型能力上限：DeepSeek v4 输出 384K（官方），GPT-4o 16K', () => {
-      expect(registry.resolve('deepseek-v4-flash').capabilities.maxOutputTokens).toBe(384_000);
+    it('模型能力上限：DeepSeek v4 输出 384K（官方），GLM-5.3 128K', () => {
+      expect(registry.resolve('deepseek-flash').capabilities.maxOutputTokens).toBe(384_000);
       expect(registry.resolve('deepseek-v4-pro').capabilities.maxOutputTokens).toBe(384_000);
-      expect(registry.resolve('gpt-4o').capabilities.maxOutputTokens).toBe(16_384);
+      expect(registry.resolve('glm-5.3').capabilities.maxOutputTokens).toBe(128_000);
     });
 
     it('旧版模型（deepseek-chat）：保留兼容条目，非思考模型', () => {
@@ -129,8 +114,6 @@ describe('ModelRegistry', () => {
     });
 
     it('快照 timeoutMs 与内置 generationConfig 合并（不整组覆盖）', () => {
-      // deepseek-v4-pro 内置 generationConfig = { reasoningEffort: 'max' }：
-      // 用户只调超时旋钮不应抹掉思考强度等默认值
       registry.registerRuntimeModel({
         id: buildRuntimeSnapshotId('deepseek', 'deepseek-v4-pro'),
         providerKind: 'deepseek',
@@ -157,9 +140,6 @@ describe('ModelRegistry', () => {
     });
 
     it('快照覆盖同名内置模型：继承能力元数据（contextWindowSize / reasoning）', () => {
-      // 服务商模式典型形态：modelId 即内置 id（deepseek-v4-pro），仅覆盖 apiKey/baseUrl。
-      // 能力是同一模型的固有属性，必须沿用——否则窗口回落 128K 保守值、reasoning 标记
-      // 丢失（后者会让 buildGenerationOptions 向思考模型注入采样参数，违背官方语义）
       registry.registerRuntimeModel({
         id: buildRuntimeSnapshotId('deepseek', 'deepseek-v4-pro'),
         providerKind: 'deepseek',
@@ -206,6 +186,51 @@ describe('ModelRegistry', () => {
       expect(resolved.isRuntime).toBe(true);
       expect(resolved.capabilities).toEqual({});
       expect(resolved.generationConfig).toBeUndefined();
+    });
+
+    it('快照带 capabilitiesOverride：覆盖字段逐项覆盖内置值，其余字段保留内置', () => {
+      registry.registerRuntimeModel({
+        id: buildRuntimeSnapshotId('deepseek', 'deepseek-v4-pro'),
+        providerKind: 'deepseek',
+        modelId: 'deepseek-v4-pro',
+        capabilitiesOverride: {
+          contextWindowSize: 512_000,
+          vision: false,
+        },
+        createdAt: 1_700_000_000_000,
+      });
+
+      const resolved = registry.resolve('deepseek-v4-pro');
+
+      expect(resolved.isRuntime).toBe(true);
+      expect(resolved.capabilities.contextWindowSize).toBe(512_000);
+      expect(resolved.capabilities.vision).toBe(false);
+      // 未覆盖字段保留内置清单值
+      expect(resolved.capabilities.maxOutputTokens).toBe(384_000);
+      expect(resolved.capabilities.reasoning).toBe(true);
+    });
+
+    it('自定义模型带 capabilitiesOverride：能力直接采用覆盖（无内置可回退）', () => {
+      registry.registerRuntimeModel({
+        id: buildRuntimeSnapshotId('openai', 'my-private-model'),
+        providerKind: 'openai',
+        modelId: 'my-private-model',
+        capabilitiesOverride: {
+          contextWindowSize: 128_000,
+          maxOutputTokens: 16_000,
+          vision: true,
+        },
+        createdAt: 1_700_000_000_000,
+      });
+
+      const resolved = registry.resolve('my-private-model');
+
+      expect(resolved.isRuntime).toBe(true);
+      expect(resolved.capabilities).toEqual({
+        contextWindowSize: 128_000,
+        maxOutputTokens: 16_000,
+        vision: true,
+      });
     });
 
     it('注销后解析回退内置条目', () => {
@@ -261,28 +286,34 @@ describe('ModelRegistry', () => {
     });
 
     it('默认模型被停用 → resolve(undefined) 返回 available=false（对话主链路拦截）', () => {
-      registry.registerDisabledModel('deepseek-v4-flash');
+      registry.registerDisabledModel('deepseek-flash');
       const resolved = registry.resolve(undefined);
       expect(resolved.available).toBe(false);
-      expect(resolved.modelId).toBe('deepseek-v4-flash');
+      expect(resolved.modelId).toBe('deepseek-flash');
     });
 
     it('默认模型未停用 → resolve(undefined) 正常可路由', () => {
       const resolved = registry.resolve(undefined);
       expect(resolved.available).toBe(true);
-      expect(resolved.modelId).toBe('deepseek-v4-flash');
+      expect(resolved.modelId).toBe('deepseek-flash');
     });
   });
 
   describe('listModels（设置 UI 下拉）', () => {
-    it('列出全部内置模型（10 个）', () => {
+    it('列出全部内置模型（收紧后 11 条：deepseek 4 / zhipu 5 / mimo 3）', () => {
       const models = registry.listModels();
 
       expect(models).toHaveLength(BUILTIN_MODELS.length);
-      expect(models.find((m) => m.id === 'deepseek-v4-flash')).toMatchObject({
-        label: 'DeepSeek V4 Flash',
+      expect(models.find((m) => m.id === 'deepseek-flash')).toMatchObject({
+        label: 'DeepSeek V4.1 Flash（多模态）',
         providerKind: 'deepseek',
         isRuntime: false,
+      });
+      expect(models.find((m) => m.id === 'glm-5.3')).toMatchObject({
+        providerKind: 'zhipu',
+      });
+      expect(models.find((m) => m.id === 'mimo-v2.6-pro')).toMatchObject({
+        providerKind: 'mimo',
       });
     });
 

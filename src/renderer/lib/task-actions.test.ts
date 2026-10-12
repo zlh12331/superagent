@@ -1,6 +1,3 @@
-// src/renderer/lib/task-actions.test.ts
-// Task list IPC bridge: empty on no-bridge / success / unwrap failure
-
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ipcErr, ipcOk } from './ipc-factories';

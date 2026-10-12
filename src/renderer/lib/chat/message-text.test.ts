@@ -1,5 +1,3 @@
-// src/renderer/lib/chat/message-text.test.ts
-// extractText 单测：文本拼接 / 非文本过滤 / 边界（空数组、全非文本、空文本 part）
 import type { UIMessage } from 'ai';
 import { describe, expect, it } from 'vitest';
 
@@ -38,7 +36,6 @@ describe('extractText', () => {
   });
 
   it('边界（现状行为）：空 text part 参与 join，产生空行分隔', () => {
-    // 记录既有语义：filter 只按类型过滤，不排除空串文本
     expect(extractText(parts({ type: 'text', text: '' }, { type: 'text', text: 'a' }))).toBe('\na');
   });
 });

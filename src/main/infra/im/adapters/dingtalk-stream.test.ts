@@ -1,10 +1,6 @@
-// src/main/infra/im/adapters/dingtalk-stream.test.ts
-// 钉钉 Stream 事件解析单测：事件帧 → 入站消息（纯函数，无网络）
-
 import { describe, expect, it } from 'vitest';
 import { type DingTalkEventFrame, parseDingTalkEvent } from './dingtalk-stream';
 
-/** 构造文本消息事件帧（钉钉 chatbot 形状） */
 function textFrame(overrides?: Partial<DingTalkEventFrame['body']>): DingTalkEventFrame {
   return {
     type: 'data',

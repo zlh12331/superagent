@@ -1,9 +1,3 @@
-// src/renderer/lib/settings-ops.test.ts
-// 设置域 IPC 桥行为测试：无桥降级语义 + 成功路径 + unwrap/业务失败路径
-// 分组对齐源码：whitelist/tool · mcp · memory · skill · im · settings · update/session/app · browser
-// 模式：每个 it 只覆盖一条路径（无桥/成功/失败分文件夹隔离），
-//      避免「无桥后同用例再注入 mock」把 window.api 置空后写属性。
-
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ipcErr, ipcOk } from './ipc-factories';
@@ -57,8 +51,6 @@ describe('settings-ops', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
   });
-
-  // ── whitelist / tool ─────────────────────────────────────
 
   describe('whitelist', () => {
     it('listWhitelistEntries 成功 → 返回条目', async () => {
@@ -118,8 +110,6 @@ describe('settings-ops', () => {
       await expect(listTools()).resolves.toEqual({ tools: [] });
     });
   });
-
-  // ── mcp ──────────────────────────────────────────────────
 
   describe('mcp', () => {
     it('listMcpServers 成功 → 返回服务器列表', async () => {
@@ -193,8 +183,6 @@ describe('settings-ops', () => {
     });
   });
 
-  // ── memory ───────────────────────────────────────────────
-
   describe('memory', () => {
     it('listSessionMemories 成功 → 返回记忆条目', async () => {
       const memories = [{ id: 'm1', text: 'hello' }];
@@ -258,8 +246,6 @@ describe('settings-ops', () => {
     });
   });
 
-  // ── skill ────────────────────────────────────────────────
-
   describe('skill', () => {
     it('listSkills 成功 → 返回技能列表', async () => {
       const skills = [{ name: 's1', description: 'd', prompt: 'p' }];
@@ -312,8 +298,6 @@ describe('settings-ops', () => {
       await expect(removeLearnedSkill('n')).resolves.toEqual({ removed: true });
     });
   });
-
-  // ── im ───────────────────────────────────────────────────
 
   describe('im', () => {
     it('listImChannels 成功 → 返回渠道列表', async () => {
@@ -369,8 +353,6 @@ describe('settings-ops', () => {
     });
   });
 
-  // ── settings（IM 群聊白名单） ─────────────────────────────
-
   describe('IM 群聊白名单', () => {
     it('fetchImAllowedGroups 数组 → 过滤非字符串', async () => {
       mockApiDomain('settings', {
@@ -417,8 +399,6 @@ describe('settings-ops', () => {
       await expect(saveImAllowedGroups(['qq:1'])).rejects.toThrow(/\[NO_BRIDGE\]/);
     });
   });
-
-  // ── update / session / app ───────────────────────────────
 
   describe('update / session / app', () => {
     it('getUpdateCacheInfo 成功 → 返回缓存信息', async () => {
@@ -558,8 +538,6 @@ describe('settings-ops', () => {
       await expect(resetAllSettings()).rejects.toThrow(/\[DB_ERROR\]/);
     });
   });
-
-  // ── browser ──────────────────────────────────────────────
 
   describe('configureBrowser', () => {
     it('有桥 → resolve true', async () => {

@@ -1,14 +1,3 @@
-// terminal-section.tsx（36 号 B 新增分区）
-// 设置 · 终端（默认 shell 选择 + 字号；对齐 editor/browser 分区形态）
-// ──────────────────────────────────────────────
-// 设计：
-// - shell 档位随平台收敛（shared terminalShellChoicesForPlatform 单一真源），
-//   auto = 平台默认；写入的是档位本身（跨平台写入合法，主进程读侧 fail-open 回落）
-// - fontSize 为档位制 SegControl（TERMINAL_FONT_SIZES），xterm 实例热更由
-//   TerminalView 消费（本组件只写 store）
-// - 数据源：settings-store.terminal（persistent），写穿透落 SQLite
-// ──────────────────────────────────────────────
-
 import {
   TERMINAL_FONT_SIZES,
   type TerminalPlatform,
@@ -58,8 +47,6 @@ export function TerminalSection(): ReactElement {
   const updateTerminal = useSettingsStore((s) => s.updateTerminal);
 
   const shellOptions = terminalShellChoicesForPlatform(TERMINAL_PLATFORM).map((choice) => {
-    // 先取 key 再 t()（间接引用）：check-i18n 以「key 形状字面量 + 间接 t()」
-    // 同文件判定引用，表达式实参会逃过扫描误报冗余
     const labelKey = shellLabelKey(choice);
     return { value: choice, label: t(labelKey) };
   });

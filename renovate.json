@@ -7,6 +7,7 @@
   "prConcurrentLimit": 3,
   "semanticCommits": "enabled",
   "minimumReleaseAge": "1 day",
+  "ignorePaths": ["packages/memory-engine/**", "third_party/**"],
   "packageRules": [
     {
       "description": "非 major 更新归一组，减少 PR 数量",

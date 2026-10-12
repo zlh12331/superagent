@@ -1,35 +1,6 @@
-// src/main/infra/ai/models/reasoning-effort.ts
-// 思考强度阶梯：统一档位 + 归一化 + 按模型能力钳制
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 定义五档思考强度（low/medium/high/xhigh/max），对齐 qwen-code 的
-//   reasoning-effort 阶梯（源自 openclaw thinking-level 模型）
-// - normalizeReasoningEffort：用户自由输入 → 规范档位
-// - clampReasoningEffort：请求档位 → 模型实际支持的档位（钳制）
-// - DeepSeek v4 官方映射表（api-docs.deepseek.com/zh-cn/guides/thinking_mode）：
-//   | 请求档位 | v4-flash 实际 | v4-pro 实际 |
-//   | low    | low          | high        |
-//   | high   | high         | high        |
-//   | xhigh  | high         | max         |
-//   | max    | max          | max         |
-//
-// 接线现状：
-// - clampDeepSeekReasoningEffort 已接线：generation-options 构造思考强度时
-//   对 DeepSeek 模型应用官方逐档映射
-// - normalizeReasoningEffort / clampReasoningEffort 当前无生产调用方
-//   （仅桶导出与单测，预留能力——用户自定义思考强度输入的归一化与
-//   通用钳制未接线；接入点应在设置域模型配置的输入侧）
-// ──────────────────────────────────────────────────────────────
-
-/**
- * 统一思考强度档位（弱 → 强）
- *
- * 供应商支持子集不同、线协议字段不同（reasoning_effort / output_config.effort 等），
- * 本层提供统一阶梯；供应商适配时用 clampReasoningEffort 钳制到模型支持的档位。
- */
+// reasoning-effort.ts：推理力度档位——五档枚举 + 档位秩（clamp/比较用）+ 别名归一
 export type ReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
-/** 有序阶梯（弱 → 强），驱动归一化与钳制 */
 export const REASONING_EFFORT_TIERS: readonly ReasoningEffort[] = [
   'low',
   'medium',
@@ -38,11 +9,7 @@ export const REASONING_EFFORT_TIERS: readonly ReasoningEffort[] = [
   'max',
 ] as const;
 
-/**
- * 档位数值强度（钳制比较用）
- *
- * 间隔刻意留白：未来中间档（如 minimal）可插入而不必重排。
- */
+// 档位秩：数值供 clamp 越界回退与跨档比较（间隔刻意不均匀——xhigh/max 是深思考专区）
 export const REASONING_EFFORT_RANKS: Record<ReasoningEffort, number> = {
   low: 20,
   medium: 30,
@@ -51,14 +18,6 @@ export const REASONING_EFFORT_RANKS: Record<ReasoningEffort, number> = {
   max: 70,
 };
 
-/**
- * 归一化用户自由输入为规范档位
- *
- * 接受常见别名（x-high / extra-high / maximum / med 等），
- * 无法识别的输入返回 undefined（调用方可提示错误）。
- *
- * 当前无生产调用方（预留能力，见文件头接线现状）。
- */
 export function normalizeReasoningEffort(raw?: string | null): ReasoningEffort | undefined {
   if (raw === undefined || raw === null || typeof raw !== 'string') {
     return undefined;
@@ -86,20 +45,6 @@ export function normalizeReasoningEffort(raw?: string | null): ReasoningEffort |
   }
 }
 
-/**
- * 把请求档位钳制到模型实际支持的档位
- *
- * 基于数值强度（对标 openclaw clampThinkingLevel）：
- * - 请求档位受支持 → 原样保留
- * - 否则优先取下一个更强的受支持档位；没有更强档位时取最强可用档
- *   （xhigh/max 被不支持时自然封顶到模型天花板，不抬高成本）
- *
- * @param requested 请求档位
- * @param supported 模型支持的档位（缺省 = 全阶梯，不钳制）
- *
- * 当前无生产调用方（预留能力，见文件头接线现状）；DeepSeek 模型的实际
- * 钳制走 clampDeepSeekReasoningEffort（官方逐档映射，非通用 clamp 语义）。
- */
 export function clampReasoningEffort(
   requested: ReasoningEffort,
   supported?: readonly ReasoningEffort[],
@@ -113,21 +58,13 @@ export function clampReasoningEffort(
   const ranked = [...supportedSet].sort(
     (a, b) => REASONING_EFFORT_RANKS[a] - REASONING_EFFORT_RANKS[b],
   );
-  // 取 ≥ 请求档位的最小支持档；没有则取最强可用档（封顶）
   const stronger = ranked.find((tier) => REASONING_EFFORT_RANKS[tier] >= requestedRank);
   if (stronger !== undefined) {
     return stronger;
   }
-  // noUncheckedIndexedAccess 防御：supportedSet 非空（length > 0 分支已保证）
   return ranked[ranked.length - 1] ?? requested;
 }
 
-/**
- * DeepSeek v4-flash 官方映射表（逐档映射，非通用 clamp 语义）
- *
- * 官方映射（thinking_mode 文档）：low→low / high→high / xhigh→high / max→max；
- * medium 官方未列出，按弱档处理（flash 最低档为 low）。
- */
 const DEEPSEEK_FLASH_EFFORT_MAP: Record<ReasoningEffort, ReasoningEffort> = {
   low: 'low',
   medium: 'low',
@@ -136,12 +73,6 @@ const DEEPSEEK_FLASH_EFFORT_MAP: Record<ReasoningEffort, ReasoningEffort> = {
   max: 'max',
 };
 
-/**
- * DeepSeek v4-pro 官方映射表（逐档映射，非通用 clamp 语义）
- *
- * 官方映射（thinking_mode 文档）：low→high / high→high / xhigh→max / max→max；
- * medium 官方未列出，按 pro 最低档处理（pro 最低映射档为 high）。
- */
 const DEEPSEEK_PRO_EFFORT_MAP: Record<ReasoningEffort, ReasoningEffort> = {
   low: 'high',
   medium: 'high',
@@ -150,13 +81,6 @@ const DEEPSEEK_PRO_EFFORT_MAP: Record<ReasoningEffort, ReasoningEffort> = {
   max: 'max',
 };
 
-/**
- * DeepSeek 模型思考强度映射（应用官方逐档映射表）
- *
- * @param modelId 模型 id（含 'flash' 视为 v4-flash，否则按 v4-pro 处理）
- * @param requested 请求档位
- * @returns 映射后的实际档位
- */
 export function clampDeepSeekReasoningEffort(
   modelId: string,
   requested: ReasoningEffort,

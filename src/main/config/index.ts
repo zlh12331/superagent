@@ -1,65 +1,32 @@
-// src/main/config/index.ts
-// 应用配置：从 process.env 读取，zod 校验，提供类型安全的单例
-// 设计文档 §2.6 监控与运维配置
-//
-// P2-8 环境分层：
-// - 显式 appEnv: 'development' | 'production' | 'test' 三态枚举
-// - 优先级：APP_ENV > NODE_ENV > app.isPackaged 推断
-// - test 环境由 Vitest 自动设置 NODE_ENV=test 触发
-// - isDev / isTest / isPackaged 三个布尔派生字段（向后兼容）
-//
-// 环境特定默认值：
-// - development：logLevel=debug、DeepSeek timeout=60s
-// - production：logLevel=info、DeepSeek timeout=60s
-// - test：logLevel=error（减少测试噪音）、DeepSeek timeout=5s（测试不应等 60s 超时）
-//
-// 敏感数据（API Key）不存此处，由 keychain.ts 管理。
-
+// config/index.ts：应用配置单一真源——环境判定（appEnv/isDev/isTest/isPackaged）、供应商根地址表、
+// 全局模型超时；zod 校验 + 惰性单例。边界：只解析 process.env，不负责加载 .env（main 入口在 whenReady 前完成）
 import { app } from 'electron';
 import { z } from 'zod';
 
-/**
- * 应用运行环境枚举
- *
- * - development：本地开发（electron-vite dev）
- * - production：打包发布（electron-builder 产物）
- * - test：自动化测试（Vitest 自动设置 NODE_ENV=test）
- */
+// ───── Schema 定义 ─────
+
 const AppEnvSchema = z.enum(['development', 'production', 'test']);
 
-/**
- * 模型供应商根地址配置（不含 /v1 后缀）
- *
- * ProviderRegistry（src/main/infra/ai/providers）从本配置读取各供应商 baseURL，
- * 由 registry 负责拼接协议路径（如 OpenAI Compatible 需要 /v1）。
- *
- * 与 .env 的关系：
- * - 环境变量（DEEPSEEK_API_BASE / OPENAI_API_BASE / ANTHROPIC_API_BASE / OLLAMA_API_BASE）
- *   优先于默认值，支持自托管网关 / 代理场景
- * - 新增供应商时同步扩展此处 + ProviderRegistry
- */
+// 各供应商根地址（ProviderRegistry 消费，协议路径由 registry 拼接）：OpenAI Compatible 系不含 /v1，
+// anthropic 例外直接使用根地址；同名 <PROVIDER>_API_BASE 环境变量优先于默认值（自托管网关/代理场景）。
+// 新增供应商：此处 + ProviderRegistry 同步扩展
 const ProviderBaseUrlSchema = z.object({
-  /** DeepSeek 根地址（registry 拼接 /v1；env DEEPSEEK_API_BASE 优先） */
   deepseek: z.preprocess(
     (v) => process.env['DEEPSEEK_API_BASE'] ?? v,
     z.string().url().default('https://api.deepseek.com'),
   ),
-  /** OpenAI 根地址（registry 拼接 /v1；env OPENAI_API_BASE 优先） */
   openai: z.preprocess(
     (v) => process.env['OPENAI_API_BASE'] ?? v,
     z.string().url().default('https://api.openai.com'),
   ),
-  /** Anthropic 根地址（registry 直接使用，无需 /v1；env ANTHROPIC_API_BASE 优先） */
   anthropic: z.preprocess(
     (v) => process.env['ANTHROPIC_API_BASE'] ?? v,
     z.string().url().default('https://api.anthropic.com'),
   ),
-  /** Ollama 本地服务根地址（registry 拼接 /v1；env OLLAMA_API_BASE 优先） */
   ollama: z.preprocess(
     (v) => process.env['OLLAMA_API_BASE'] ?? v,
     z.string().url().default('http://localhost:11434'),
   ),
-  /** Moonshot Kimi 根地址（registry 拼接协议路径；env MOONSHOT_API_BASE 优先） */
   moonshot: z.preprocess(
     (v) => process.env['MOONSHOT_API_BASE'] ?? v,
     z.string().url().default('https://api.moonshot.cn/v1'),
@@ -84,15 +51,14 @@ const ProviderBaseUrlSchema = z.object({
     (v) => process.env['OPENROUTER_API_BASE'] ?? v,
     z.string().url().default('https://openrouter.ai/api/v1'),
   ),
+  mimo: z.preprocess(
+    (v) => process.env['MIMO_API_BASE'] ?? v,
+    z.string().url().default('https://api.xiaomimimo.com/v1'),
+  ),
 });
 
-/**
- * 模型级总时长超时（毫秒）
- *
- * 消费链：llm-client.generateText → buildGenerationOptions(defaultTimeoutMs)
- * → generationConfig.timeoutMs → AbortSignal.timeout。
- * 模型自带 timeoutMs 优先，本值为全局兜底（env MODEL_TIMEOUT_MS 可覆盖）。
- */
+// 全局模型超时兜底（模型自带 timeoutMs 优先，消费方 llm-client → AbortSignal.timeout）。
+// MODEL_TIMEOUT_MS 须为有限正数才采纳，坏值静默回落默认 60s 而非 parse 报错
 const ModelTimeoutMsSchema = z.preprocess((v) => {
   const raw = process.env['MODEL_TIMEOUT_MS'];
   if (raw === undefined || raw === '') return v;
@@ -100,79 +66,47 @@ const ModelTimeoutMsSchema = z.preprocess((v) => {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : v;
 }, z.number().int().positive().default(60000));
 
-/**
- * 应用配置 Schema
- *
- * P2-8 改造：新增 appEnv 字段作为环境真源，isDev/isTest/isPackaged 为派生字段
- *
- * isDev 包含 development 和 test 两种环境：
- * - test 环境本质是开发环境的特化（缩短 timeout），
- *   但保留开发模式行为（devtools 可用、CSP 宽松等）
- * - 因此 isDev = (appEnv !== 'production')
- */
 const AppConfigSchema = z.object({
-  /** 运行环境（真源） */
-  appEnv: AppEnvSchema,
-  /** 是否为开发模式（appEnv !== 'production'，包含 development 和 test） */
-  isDev: z.boolean(),
-  /** 是否为测试环境（appEnv === 'test'） */
+  appEnv: AppEnvSchema, // 运行环境真源；isDev/isTest 是派生字段
+  isDev: z.boolean(), // appEnv !== 'production'：test 本质是开发环境特化（仅超时缩短），保留 devtools/CSP 宽松等开发行为，故并入 isDev
   isTest: z.boolean(),
-  /** 是否为打包后的生产环境（运行时事实，独立于 appEnv） */
-  isPackaged: z.boolean(),
-  /** 日志级别 */
+  isPackaged: z.boolean(), // 运行时事实，与 appEnv 正交——APP_ENV 可覆盖出 isPackaged=true + appEnv=development 组合
   logLevel: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
-  /** 模型供应商根地址（ProviderRegistry 消费） */
   providers: ProviderBaseUrlSchema,
-  /** 模型级总时长超时（毫秒；llm-client 兜底，test 环境 5s） */
   modelTimeoutMs: ModelTimeoutMsSchema,
 });
 
-/** 应用配置类型（从 schema 派生） */
+/** 应用配置类型（schema 派生） */
 export type AppConfig = z.infer<typeof AppConfigSchema>;
 
-/**
- * 推断运行环境
- *
- * 优先级：
- * 1. APP_ENV 显式覆盖（CI/E2E 强制 production 或 test）
- * 2. NODE_ENV=test（Vitest 自动设置，测试环境）
- * 3. app.isPackaged（运行时事实，true=production，false=development）
- *
- * @param isPackaged app.isPackaged 的值
- * @returns 推断出的运行环境
- */
+// ───── 环境判定与加载 ─────
+
+// 优先级：APP_ENV 显式覆盖（CI/E2E 强制场景）> NODE_ENV=test（Vitest 自动设）> app.isPackaged 运行时事实；
+// APP_ENV 非法值不报错，落到下一层推断
 function resolveAppEnv(isPackaged: boolean): 'development' | 'production' | 'test' {
-  // noPropertyAccessFromIndexSignature: process.env 必须用方括号访问
   const env = process.env;
-  // 1. APP_ENV 显式覆盖
   const explicit = env['APP_ENV'];
   if (explicit === 'development' || explicit === 'production' || explicit === 'test') {
     return explicit;
   }
-  // 2. NODE_ENV=test（Vitest 自动设置）
   if (env['NODE_ENV'] === 'test') {
     return 'test';
   }
-  // 3. 根据 isPackaged 推断
   return isPackaged ? 'production' : 'development';
 }
 
 /**
- * 从 process.env 加载并校验配置
+ * 从 process.env 解析并校验应用配置（每次调用重新解析，不缓存；常规取用走 getAppConfig）
  *
- * @returns 校验后的应用配置单例
+ * @returns 校验通过的应用配置
  */
 export function loadConfig(): AppConfig {
   const isPackaged = app.isPackaged;
   const appEnv = resolveAppEnv(isPackaged);
-  // isDev 包含 development 和 test（test 是开发环境的特化，保留开发模式行为）
   const isDev = appEnv !== 'production';
   const isTest = appEnv === 'test';
 
-  // 环境特定默认值
-  // - test：logLevel=error（减少测试噪音）
-  // - development：logLevel=debug（开发调试）
-  // - production：logLevel=info（默认）
+  // 默认级别按环境分级：test 安静（error）/开发 debug/生产 info
   const defaultLogLevel: 'debug' | 'info' | 'error' = isTest ? 'error' : isDev ? 'debug' : 'info';
 
   const env = process.env;
@@ -182,24 +116,20 @@ export function loadConfig(): AppConfig {
     isTest,
     isPackaged,
     logLevel: env['LOG_LEVEL'] ?? defaultLogLevel,
-    // providers 由 schema preprocess 读取 env（DEEPSEEK_API_BASE 等），此处不重复
     providers: {},
-    // test 环境缩短超时（5s），避免测试等待生产级 60s 超时
+    // test 缩到 5s 防测试真等 60s；undefined 交由 schema default 接管
     modelTimeoutMs: isTest ? 5000 : undefined,
   });
 }
 
-/**
- * 应用配置单例
- *
- * 注意：必须在 app.whenReady() 之后使用（依赖 app.isPackaged）
- */
+// ───── 单例 ─────
+
 let cachedConfig: AppConfig | null = null;
 
 /**
- * 获取应用配置单例
+ * 应用配置单例：首次调用解析并缓存
  *
- * 首次调用时加载并缓存，后续调用返回缓存
+ * 前置条件：app.whenReady() 之后调用（依赖 app.isPackaged）
  */
 export function getAppConfig(): AppConfig {
   if (cachedConfig === null) {
@@ -209,7 +139,7 @@ export function getAppConfig(): AppConfig {
 }
 
 /**
- * 重置配置缓存（仅测试用）
+ * 重置配置缓存。仅测试用——生产代码没有需要重新加载的路径
  */
 export function resetConfigCache(): void {
   cachedConfig = null;

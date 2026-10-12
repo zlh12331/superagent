@@ -1,35 +1,15 @@
-// src/main/infra/code-analysis/code-analyzer.ts
-// CodeAnalyzer：代码结构分析服务（web-tree-sitter）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - analyze：解析源文件语法树，提取顶层符号（function/class/interface/type/import/method）
-// - 能力基础：支撑代码智能（结构化理解、符号索引、Agent 代码定位）
-// - 参考 qwen-code shellAstParser 的懒加载模式：Parser 单例 + 语言 wasm 按需加载
-//
-// 设计：
-// - 懒加载：首次 analyze 才初始化 web-tree-sitter（WASM 加载约几十 ms）
-// - 语言映射：扩展名 → tree-sitter 语言 id（@cursorless/tree-sitter-wasms 提供的子集）
-// - 失败降级：WASM 缺失/解析异常 → 返回空符号 + parseFailed=true（不阻塞主流程）
-// - 单例模式：与 FileService / SearchService 一致
-//
-// 版本钉扎（2026-09-04 升级核实）：web-tree-sitter 0.27.x + @cursorless/tree-sitter-wasms
-// 0.10.x（语言 wasm 提供者，2026-08 更新，单包覆盖全所需语言）——新 dylink.0 ABI 与
-// 0.25+ 运行时匹配（实测 9/9 语言加载解析通过）。旧的 tree-sitter-wasms 0.1.13 仍用旧
-// dylink 格式，与 0.25+ 运行时 Language.load 不兼容（dylink 元数据错误），勿回退混用。
-// ──────────────────────────────────────────────────────────────
-
+// code-analyzer.ts：代码符号提取——web-tree-sitter 按语言解析出函数/类/接口等声明（含行号）
+// 用途：code-symbols 工具给 Agent 提供文件符号概览；解析失败降级为空结果不抛
 import { promises as fs } from 'node:fs';
 import { createRequire } from 'node:module';
 import { extname } from 'node:path';
-// web-tree-sitter 0.27：命名导出（Parser 运行时、Language 语言加载、Tree 语法树）；与
-// @cursorless/tree-sitter-wasms 0.10.x 的 wasm ABI 匹配
 import { Language, Parser, type Tree } from 'web-tree-sitter';
 
 import { logger } from '../../utils/logger';
 
 const require = createRequire(import.meta.url);
 
-/** 扩展名 → tree-sitter 语言 id（@cursorless/tree-sitter-wasms 支持子集） */
+// 扩展名 → tree-sitter 语言映射（未知扩展按 typescript 尝试——宽松兜底）
 const EXT_TO_LANG: Readonly<Record<string, string>> = {
   '.ts': 'typescript',
   '.tsx': 'tsx',
@@ -46,7 +26,6 @@ const EXT_TO_LANG: Readonly<Record<string, string>> = {
   '.java': 'java',
 };
 
-/** 语法树节点类型 → 符号类型 */
 const SYMBOL_KINDS: Readonly<Record<string, CodeSymbolKind>> = {
   function_declaration: 'function',
   class_declaration: 'class',
@@ -56,48 +35,34 @@ const SYMBOL_KINDS: Readonly<Record<string, CodeSymbolKind>> = {
   method_definition: 'method',
 };
 
-/** 符号类型 */
 export type CodeSymbolKind = 'function' | 'class' | 'interface' | 'type' | 'import' | 'method';
 
-/** 单个符号（名称 + 起始行，1-based） */
+/** 单个符号：类型 + 名字 + 起始行（1-based，直接对编辑器行号） */
 export interface CodeSymbol {
   readonly kind: CodeSymbolKind;
   readonly name: string;
   readonly line: number;
 }
 
-/** 分析结果 */
+/** 分析结果：parseFailed=true 表示 wasm/解析层失败（symbols 为空，调用方按降级处理） */
 export interface CodeAnalysis {
-  /** 实际使用的语言 id（如 'typescript'） */
   readonly language: string;
   readonly symbols: readonly CodeSymbol[];
-  /** true 表示解析失败（WASM 不可用/语法异常），symbols 为空 */
   readonly parseFailed: boolean;
 }
 
-/** CodeAnalyzer 接口 */
 export interface ICodeAnalyzer {
-  /**
-   * 分析源文件，提取符号列表
-   *
-   * @param options.path 文件路径（扩展名决定语言；路径不存在时需提供 content）
-   * @param options.content 源码内容（可选；省略时按 path 读取）
-   * @returns 分析结果；失败时 parseFailed=true 且 symbols 为空（不抛错）
-   */
   analyze(options: { readonly path: string; readonly content?: string }): Promise<CodeAnalysis>;
 }
 
-// ── 懒加载单例状态 ──────────────────────────────────────
-
+// tree-sitter 引擎与各语言 grammar 都是 .wasm：运行时从依赖包内 resolve 后以二进制喂给
+// Parser.init（不能走 URL 加载——打包产物内没有可 fetch 的 http 上下文）
 let parserClass: typeof Parser | null = null;
 let parserInstance: Parser | null = null;
 let initPromise: Promise<void> | null = null;
-/** 语言缓存：language id → Language（wasm 加载一次复用） */
 const languageCache = new Map<string, Language>();
-/** 初始化永久失败标记（避免反复重试挂起） */
 let initFailed = false;
 
-/** 解析 wasm 文件绝对路径（node_modules 内，返回 Buffer；缺失返回 null） */
 function resolveWasm(specifier: string): Buffer | null {
   try {
     const filePath = require.resolve(specifier);
@@ -107,7 +72,8 @@ function resolveWasm(specifier: string): Buffer | null {
   }
 }
 
-/** 初始化 Parser 单例（web-tree-sitter 运行时 wasm） */
+// 引擎初始化单飞（initPromise 复用并发调用）；失败后置 initFailed 永久短路——
+// wasm 环境坏了不会因反复重试拖慢每次调用
 async function ensureParser(): Promise<void> {
   if (parserInstance !== null) {
     return;
@@ -119,7 +85,6 @@ async function ensureParser(): Promise<void> {
     return initPromise;
   }
   initPromise = (async () => {
-    // web-tree-sitter 0.27：命名导出；wasmBinary 显式注入（asar 打包后文件定位不可靠）
     const runtimeWasm = resolveWasm('web-tree-sitter/web-tree-sitter.wasm');
     if (runtimeWasm === null) {
       throw new Error('web-tree-sitter 运行时 wasm 缺失');
@@ -136,7 +101,6 @@ async function ensureParser(): Promise<void> {
   return initPromise;
 }
 
-/** 按需加载语言 wasm（带缓存） */
 async function loadLanguage(lang: string): Promise<Language> {
   const cached = languageCache.get(lang);
   if (cached !== undefined) {
@@ -154,7 +118,8 @@ async function loadLanguage(lang: string): Promise<Language> {
   return language;
 }
 
-/** 遍历语法树提取符号（递归 walk） */
+// 符号提取用树游标手写先序遍历（tree.walk）：不用官方 Query API 是为了六种语言共用一份
+// node.type 判定，避免逐语言维护查询串
 function extractSymbols(tree: Tree): CodeSymbol[] {
   const symbols: CodeSymbol[] = [];
   const cursor = tree.walk();
@@ -163,7 +128,6 @@ function extractSymbols(tree: Tree): CodeSymbol[] {
     const node = cursor.currentNode;
     const kind = SYMBOL_KINDS[node.type];
     if (kind !== undefined) {
-      // 符号名称：import 特殊处理（path 字段在部分 wasm 变体缺失，回退 string 子节点去引号）
       let name = '';
       if (kind === 'import') {
         const pathNode = node.childForFieldName('path');
@@ -187,7 +151,6 @@ function extractSymbols(tree: Tree): CodeSymbol[] {
     if (cursor.gotoNextSibling()) {
       continue;
     }
-    // 回溯：无兄弟节点时上移直到找到下一个兄弟或结束
     let backtracking = true;
     while (backtracking && !done) {
       if (!cursor.gotoParent()) {
@@ -202,16 +165,13 @@ function extractSymbols(tree: Tree): CodeSymbol[] {
   return symbols;
 }
 
-/**
- * CodeAnalyzer 默认实现
- */
 class CodeAnalyzer implements ICodeAnalyzer {
+  /** 分析入口：content 可选注入（免重读文件）；任何异常降级为空符号 + parseFailed=true */
   async analyze(options: {
     readonly path: string;
     readonly content?: string;
   }): Promise<CodeAnalysis> {
     const { path, content } = options;
-    // 扩展名 → 语言；未知扩展名回退 typescript（避免不可用）
     const lang = EXT_TO_LANG[extname(path).toLowerCase()] ?? 'typescript';
 
     try {
@@ -224,24 +184,19 @@ class CodeAnalyzer implements ICodeAnalyzer {
       parserInstance.setLanguage(language);
       const tree = parserInstance.parse(source);
       if (tree === null) {
-        // 0.27 parse 返回 Tree | null：语言未设置/解析中止时为 null
         throw new Error('解析中止，未产出语法树');
       }
       return { language: lang, symbols: extractSymbols(tree), parseFailed: false };
     } catch (error) {
-      // 降级：返回空结果，不阻塞调用方（工具/搜索等上层自行处理）
       logger.warn({ path, lang, error }, '代码分析失败，降级为空结果');
       return { language: lang, symbols: [], parseFailed: true };
     }
   }
 }
 
-/** CodeAnalyzer 单例 */
 let codeAnalyzer: CodeAnalyzer | null = null;
 
-/**
- * 获取 CodeAnalyzer 单例
- */
+/** 惰性单例（服务容器经此取用） */
 export function getCodeAnalyzer(): ICodeAnalyzer {
   if (codeAnalyzer === null) {
     codeAnalyzer = new CodeAnalyzer();
@@ -249,9 +204,7 @@ export function getCodeAnalyzer(): ICodeAnalyzer {
   return codeAnalyzer;
 }
 
-/**
- * 重置 CodeAnalyzer（仅测试用）
- */
+/** 重置单例与全部 wasm/语言缓存（dispose 链与测试用） */
 export function resetCodeAnalyzer(): void {
   codeAnalyzer = null;
   parserClass = null;

@@ -1,35 +1,22 @@
-// src/main/ipc/proxy.handler.ts
-// Proxy 域 IPC handler（proxy:test 测试连接，34 号网络代理 §2.3）
-// ──────────────────────────────────────────────────────────────
-// D7（真·探测）：经 proxiedFetch 访问轻量端点，3s 超时；405 等非网络错误
-// 也算「通」（目标存在即可，不要求 2xx——generate_204 类端点未必处处可达）。
-// 归因（反例 6）：连代理失败 → proxy-unreachable；代理通但目标失败 →
-// target-unreachable。mode 非 fixed 时 not-applicable（无可测对象）。
-// ──────────────────────────────────────────────────────────────
-
+// proxy.handler.ts：proxy 域 IPC——代理连通性测试（设置面「测试连接」按钮）
 import type { InferHandlers, IPC_DEFINITIONS } from '@code-agent/shared/main';
 import { proxiedFetch, setProxyFetchConfig } from '../infra/network/proxied-fetch';
 import { parseProxyConfig } from '../infra/network/proxy-resolver';
 import { readSetting } from '../infra/storage/settings-pref';
 import type { IpcHandlerContext } from '../utils/wrap';
 
-/** 探测超时（毫秒，D7） */
+// 探针 3 秒超时：测试交互不等慢代理；目标默认 gstatic 204 探针（轻量、全球可达、无业务含义）
 const PROBE_TIMEOUT_MS = 3_000;
-/** 中立探测端点（CP2 #12：不锚定 AI 供应商域名；204 端点轻量无副作用） */
 const DEFAULT_PROBE_TARGET = 'https://www.gstatic.com/generate_204';
 
-/**
- * Proxy 域 handler 工厂
- *
- * 探测前把「DB 当前值」重新注入 proxiedFetch——handler 不依赖 applyProxyChange
- * 是否已在别处跑过（幂等，读库即真源）。
- */
+/** 依赖注入工厂（无外部依赖——直接读设置与全局 fetch 配置） */
 export function createProxyHandlers(): InferHandlers<
   typeof IPC_DEFINITIONS,
   IpcHandlerContext
 >['proxy'] {
   return {
     test: async (input) => {
+      // 先把待测配置装进全局 fetch（即测即用），非 fixed 模式（system/direct）无从测起
       const cfg = parseProxyConfig(readSetting('proxy'));
       setProxyFetchConfig(cfg);
       if (cfg.mode !== 'fixed' || cfg.url === undefined) {
@@ -43,7 +30,6 @@ export function createProxyHandlers(): InferHandlers<
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort('timeout'), PROBE_TIMEOUT_MS);
       try {
-        // 网络层可达即算通（任何 HTTP 状态都意味着代理与目标链路成立）
         await proxiedFetch(target, {
           signal: controller.signal,
         });

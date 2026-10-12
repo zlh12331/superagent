@@ -1,11 +1,3 @@
-// src/renderer/hooks/use-agent.test.tsx
-// 回归：useAgentWithIpc 必须把 id 透传给 useChat
-//
-// 根因链（journey-agent E2E 三例失败）：id 被解构掉未透传 → useChat 自生成随机
-// chatId → transport 以该随机串作为 IPC sessionId 发往主进程 → 主进程回流的审批
-// 载荷 sessionId 与 ChatPanel 的 chatId 永不相等 → InlineApprovalCard 不渲染、
-// 回合结束 clearBySession/invalidate 失配。
-
 import { renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useAgentWithIpc } from './use-agent';

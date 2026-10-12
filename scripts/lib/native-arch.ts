@@ -1,19 +1,9 @@
 // scripts/lib/native-arch.ts
-// 本机二进制格式与架构识别（ELF / PE / Mach-O）
-// ──────────────────────────────────────────────────────────────
-// 用途：打包产物的原生模块架构断言（scripts/check-native-arch.ts）。
-// 为什么需要：2026-09-20 实测发现「在 x64 机器上为 arm64 目标打包」时，
-// @electron/rebuild 会以 0.4s 的耗时"成功"完成（实际未产出 aarch64 二进制，
-// 静默复用了 host 架构）——产出的 arm64 安装包内是 x64 原生模块，用户装上会崩。
-// 该失败在构建日志里**没有任何错误**，只能靠读二进制头识别。
-//
-// 三类格式的识别依据（均为官方格式规范的最小必要字段）：
-// - ELF（Linux）：magic 7F 'E' 'L' 'F'；e_machine 位于偏移 18（uint16 LE）
-// - PE（Windows）：'MZ' 头；偏移 0x3C 为 PE 头偏移（uint32 LE），
-//   'PE\0\0' 后紧跟 Machine（uint16 LE）
-// - Mach-O（macOS）：magic 0xFEEDFACF（64 位）/ 0xFEEDFACE（32 位）；
-//   cputype 位于偏移 4（uint32 LE）；fat/universal 为 0xCAFEBABE
-// ──────────────────────────────────────────────────────────────
+// 本机二进制格式与架构识别（ELF / PE / Mach-O），供 check-native-arch.ts 用——
+// 2026-09-20 实测「x64 机器为 arm64 打包」时 @electron/rebuild 以 0.4s 假成功
+// （静默复用 host 架构、日志零报错），装上即崩；唯一可靠探针是读二进制头
+// 识别依据均为官方格式规范最小字段：ELF magic+e_machine@18 / PE MZ+PE 偏移@0x3C+
+// Machine / Mach-O magic FEEDFACF(64)+cputype@4（fat=CAFEBABE）
 
 /** 支持的架构标识（与 electron-builder 的 Arch 名称一致） */
 export type BinaryArch = 'x64' | 'arm64' | 'ia32' | 'armv7l' | 'universal';
@@ -46,13 +36,13 @@ function readU32le(buf: Buffer, offset: number): number | null {
 /** ELF e_machine → 架构 */
 function elfArch(machine: number): BinaryArch | null {
   switch (machine) {
-    case 0x3e: // EM_X86_64
+    case 0x3e:
       return 'x64';
-    case 0xb7: // EM_AARCH64
+    case 0xb7:
       return 'arm64';
-    case 0x03: // EM_386
+    case 0x03:
       return 'ia32';
-    case 0x28: // EM_ARM
+    case 0x28:
       return 'armv7l';
     default:
       return null;
@@ -62,13 +52,13 @@ function elfArch(machine: number): BinaryArch | null {
 /** PE Machine → 架构 */
 function peArch(machine: number): BinaryArch | null {
   switch (machine) {
-    case 0x8664: // IMAGE_FILE_MACHINE_AMD64
+    case 0x8664:
       return 'x64';
-    case 0xaa64: // IMAGE_FILE_MACHINE_ARM64
+    case 0xaa64:
       return 'arm64';
-    case 0x014c: // IMAGE_FILE_MACHINE_I386
+    case 0x014c:
       return 'ia32';
-    case 0x01c4: // IMAGE_FILE_MACHINE_ARMNT
+    case 0x01c4:
       return 'armv7l';
     default:
       return null;
@@ -78,13 +68,13 @@ function peArch(machine: number): BinaryArch | null {
 /** Mach-O cputype → 架构 */
 function machoArch(cpuType: number): BinaryArch | null {
   switch (cpuType) {
-    case 0x01000007: // CPU_TYPE_X86_64
+    case 0x01000007:
       return 'x64';
-    case 0x0100000c: // CPU_TYPE_ARM64
+    case 0x0100000c:
       return 'arm64';
-    case 0x00000007: // CPU_TYPE_X86
+    case 0x00000007:
       return 'ia32';
-    case 0x0000000c: // CPU_TYPE_ARM
+    case 0x0000000c:
       return 'armv7l';
     default:
       return null;
@@ -102,22 +92,20 @@ export function detectBinaryInfo(buf: Buffer): BinaryInfo | null {
     return null;
   }
 
-  // ELF
   if (buf[0] === 0x7f && buf[1] === 0x45 && buf[2] === 0x4c && buf[3] === 0x46) {
     const machine = readU16le(buf, 18);
     const arch = machine === null ? null : elfArch(machine);
     return arch === null ? null : { format: 'elf', arch };
   }
 
-  // PE（MZ + PE 头）
   if (buf[0] === 0x4d && buf[1] === 0x5a) {
     const peOffset = readU32le(buf, 0x3c);
     if (peOffset === null || peOffset + 6 > buf.length) {
       return null;
     }
     if (
-      buf[peOffset] !== 0x50 || // 'P'
-      buf[peOffset + 1] !== 0x45 || // 'E'
+      buf[peOffset] !== 0x50 ||
+      buf[peOffset + 1] !== 0x45 ||
       buf[peOffset + 2] !== 0x00 ||
       buf[peOffset + 3] !== 0x00
     ) {
@@ -128,14 +116,12 @@ export function detectBinaryInfo(buf: Buffer): BinaryInfo | null {
     return arch === null ? null : { format: 'pe', arch };
   }
 
-  // Mach-O（thin）
   const magic = readU32le(buf, 0);
   if (magic === 0xfeedfacf || magic === 0xfeedface) {
     const cpuType = readU32le(buf, 4);
     const arch = cpuType === null ? null : machoArch(cpuType);
     return arch === null ? null : { format: 'macho', arch };
   }
-  // Mach-O（fat / universal）：同时含多架构，按 universal 处理
   if (magic === 0xcafebabe || magic === 0xbebafeca) {
     return { format: 'macho', arch: 'universal' };
   }

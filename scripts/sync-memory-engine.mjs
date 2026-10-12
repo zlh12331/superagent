@@ -1,31 +1,9 @@
 // scripts/sync-memory-engine.mjs
-// 记忆引擎上游同步（vendored 源码刷新）
-// ──────────────────────────────────────────────────────────────
-// 用途：把 packages/memory-engine/MemoryCore 更新到上游指定版本。
-//
-// ⚠️ 网络说明：本脚本**不直接访问 GitHub**。上游源码归档由人工/CI 预先取得
-//   （本项目实测 codeload.github.com 在部分环境不可达），通过 --from 指定本地目录。
-//   这样同步流程离线可用、可复现，且与"构建不依赖网络"的设计一致。
-//
-// 用法：
-//   node scripts/sync-memory-engine.mjs --from <解压目录> --tag <tag> [--commit <sha>] [--archive <zip>] [--dry-run]
-//
-// 参数：
-//   --from    上游解压根目录（其下应有 MemoryCore/）
-//   --tag     目标版本 tag（写入 versions.json）
-//   --commit  目标 commit（可选；省略则保留现值并提示）
-//   --archive 上游归档 zip 路径（可选；提供时把文件名与 sha256 登记进 versions.json
-//             的 provenance——该字段是供应链溯源记录，漏登会让 provenance 与
-//             repoTag 脱节：本项目曾因此停留在 v2.0.1 登记而 tag 已到 v2.0.2-beta.1）
-//   --dry-run 只显示将要发生的变更，不落盘
-//
-// 流程：
-//   1. 校验来源目录含 MemoryCore/src/gateway/server.ts
-//   2. 计算新旧源码差异摘要（文件数 / 变更文件数）
-//   3. 检测本地是否有未登记的改动（integrity 校验）——有则拒绝同步并提示走 patches
-//   4. 替换 MemoryCore/ → 更新 versions.json → 重放 patches/
-//   5. 重新生成 integrity.lock.json
-// ──────────────────────────────────────────────────────────────
+// 记忆引擎上游同步（事务性替换 + 补丁重放 + 完整性重生成）
+// ⚠️ 本脚本不访问网络：上游归档由人工/CI 预先取得（codeload.github.com 在部分
+// 环境不可达），经 --from 指定本地目录——同步流程离线可用、可复现
+// 用法：node scripts/sync-memory-engine.mjs --from <解压目录> --tag <tag>
+//       [--commit <sha>] [--archive <zip>] [--dry-run]
 
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -86,7 +64,6 @@ if (!existsSync(join(sourceCore, 'src', 'gateway', 'server.ts'))) {
   fail(`来源目录不含 MemoryCore/src/gateway/server.ts：${sourceCore}`);
 }
 
-// 同步前校验：本地若已有未登记改动，先处理（否则会被本次覆盖而丢失）
 const integrityCheck = spawnSync(
   process.execPath,
   [join(ROOT, 'scripts', 'check-memory-engine-integrity.mjs')],
@@ -103,7 +80,6 @@ if (integrityCheck.status !== 0) {
 
 const currentVersions = JSON.parse(readFileSync(VERSIONS_PATH, 'utf8'));
 
-// 差异摘要
 const oldFiles = listFiles(CORE_TARGET);
 const newFiles = listFiles(sourceCore);
 const oldSet = new Set(oldFiles);
@@ -123,7 +99,6 @@ console.log(
   `  移除：${removed.length} 个${removed.length ? `（如 ${removed.slice(0, 5).join(', ')}）` : ''}`,
 );
 
-// 补丁预告
 const patches = existsSync(PATCH_DIR)
   ? readdirSync(PATCH_DIR)
       .filter((f) => f.endsWith('.patch'))
@@ -138,10 +113,6 @@ if (args.dryRun) {
   process.exit(0);
 }
 
-// 执行替换（事务性：先复制到临时目录，成功后再切换，避免失败留下空目录）
-// 注：Node 的 cpSync 在部分 Windows 环境复制大型源码树时会静默崩溃
-//   （实测：复制上游 src/adapters 时进程无异常退出，文件数为 0），
-//   因此改用平台原生复制工具（Windows robocopy / POSIX cp -R）。
 console.log('\n[memory-engine:sync] 替换 MemoryCore …');
 const staging = `${CORE_TARGET}.staging`;
 rmSync(staging, { recursive: true, force: true });
@@ -155,7 +126,6 @@ const copyRes =
       )
     : spawnSync('cp', ['-R', sourceCore, staging], { encoding: 'utf8' });
 
-// robocopy 退出码：0-7 为成功（1=有复制, 2=有额外项, 4=有不匹配…）；>=8 为失败
 const copyOk = process.platform === 'win32' ? (copyRes.status ?? 99) < 8 : copyRes.status === 0;
 if (!copyOk) {
   console.error(copyRes.stdout ?? '');
@@ -170,7 +140,6 @@ if (stagedCount === 0) {
 }
 console.log(`  暂存完成：${stagedCount} 个文件`);
 
-// 切换（同卷 rename 是原子操作：先移走原目录，再把暂存目录改名就位；失败可回滚）
 const backup = `${CORE_TARGET}.backup`;
 rmSync(backup, { recursive: true, force: true });
 const hadOriginal = existsSync(CORE_TARGET);
@@ -180,7 +149,6 @@ try {
   }
   renameSync(staging, CORE_TARGET);
 } catch (err) {
-  // 回滚：把原目录放回
   if (hadOriginal && existsSync(backup) && !existsSync(CORE_TARGET)) {
     renameSync(backup, CORE_TARGET);
   }
@@ -189,12 +157,8 @@ try {
 }
 rmSync(backup, { recursive: true, force: true });
 
-// 更新版本锚点（保留来源/许可等既有字段）
 const corePkg = JSON.parse(readFileSync(join(CORE_TARGET, 'package.json'), 'utf8'));
 
-// provenance 登记（供应链溯源）：--archive 提供时登记归档名 + sha256；未提供但已登记的
-// 归档名与本次 tag 不符时警告——防 provenance 与 repoTag 脱节（本项目曾因 sync 不更新
-// 该字段而停留在 v2.0.1 登记、tag 已到 v2.0.2-beta.1，溯源记录失效）
 function buildProvenance() {
   if (args.archive) {
     if (!existsSync(args.archive)) fail(`--archive 文件不存在：${args.archive}`);
@@ -234,7 +198,6 @@ console.log(
   `[memory-engine:sync] versions.json 已更新：${nextVersions.repoTag}（子包 ${nextVersions.corePackageVersion}）`,
 );
 
-// 重放补丁
 if (patches.length > 0) {
   console.log('[memory-engine:sync] 重放补丁 …');
   for (const p of patches) {
@@ -251,7 +214,6 @@ if (patches.length > 0) {
   }
 }
 
-// 重新生成完整性记录
 const upd = spawnSync(
   process.execPath,
   [join(ROOT, 'scripts', 'check-memory-engine-integrity.mjs'), '--update'],

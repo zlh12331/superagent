@@ -1,5 +1,3 @@
-// src/renderer/hooks/use-invalidation-bridge.test.tsx
-// use-invalidation-bridge 单测：订阅/退订 → 逐域前缀失效 + 覆盖登记
 import { QueryClientProvider } from '@tanstack/react-query';
 import { renderHook } from '@testing-library/react';
 import type { ReactNode } from 'react';
@@ -74,7 +72,6 @@ describe('use-invalidation-bridge', () => {
 
     domainsCallback?.({ domains: turnEndDomains('s1'), sessionId: 's1' });
 
-    // 登记生效（isTurnEndCovered 即 use-agent-bridge 引用的同一入口）
     expect(isTurnEndCovered('s1')).toBe(true);
     spy.mockRestore();
   });

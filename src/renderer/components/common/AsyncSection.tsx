@@ -1,23 +1,3 @@
-// src/renderer/components/common/AsyncSection.tsx
-// 设置分区/面板级数据四态包装器（loading / error / empty / ready）
-// ──────────────────────────────
-// 背景：铁律 6.2/6.7 要求含异步数据的组件具备 loading 与 error 态并有重试；
-// 此前除 AsyncBoundary（侧栏全量五态）外，settings 各 section 的 useQuery
-// 普遍缺失 error 分支 —— 请求失败被静默渲染成「空列表」，误导用户。
-//
-// 定位：轻量行内四态（区别于 AsyncBoundary 的骨架屏五态全量契约），
-// 适用于设置分区、右面板列表等小体量数据块。
-//
-// 用法：
-//   const q = useQuery(...);
-//   <AsyncSection isPending={q.isPending} isError={q.isError}
-//     onRetry={() => void q.refetch()} isEmpty={(q.data ?? []).length === 0}
-//     emptyText={t('xxx.empty')}>
-//     {(q.data ?? []).map(...)}
-//   </AsyncSection>
-// 可访问性：error 态 role="alert" 即时播报；pending 态 Spinner 自带 role="status"
-// ──────────────────────────────
-
 import type { ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
@@ -111,9 +91,6 @@ export function QueryPendingRow({ isPending }: { isPending: boolean }): React.Re
   if (!isPending) return null;
   return (
     <div className="text-muted-foreground mt-2 flex items-center gap-2 text-xs" role="status">
-      {/* Spinner 降级为装饰：外层已是 role="status"，且本行另有可见的加载文案
-          ——此前内层 Spinner 自带 role="status" + sr-only「加载中」，与外层嵌套
-          成两个 live region，同一状态被播报两次 */}
       <Spinner className="size-3.5" aria-hidden />
       {t('common.loading')}
     </div>

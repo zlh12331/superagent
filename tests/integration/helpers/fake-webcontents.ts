@@ -1,12 +1,6 @@
-// tests/integration/helpers/fake-webcontents.ts
-// 集成测试共享基建：fake WebContents（IPC 推送目标替身）
-// ──────────────────────────────────────────────────────────────
-// Electron SDK 边界替身：send 收集事件供断言；isDestroyed 恒定 false；
-// once 支持 'destroyed' 清理回调注册（FileService watcher / TerminalService PTY
-// 均在推送目标上注册 once('destroyed')——缺该方法会让集成链路在 create/watchStart
-// 处 TypeError，与真实 Electron API 不对齐）。
-// 对应用例：const { wc, sent } = createFakeWebContents();
-// ──────────────────────────────────────────────────────────────
+// fake-webcontents.ts：集成测试共享基建——fake WebContents（IPC 推送目标替身）。
+// 主进程 handler 经 ctx.sender.send 推流式事件，测试从 sent 数组断言事件序列与
+// payload；emitDestroyed 模拟窗口销毁（验证服务对 destroyed 的监听清理）。
 
 /** 收集的 IPC 事件 */
 export interface SentEvent {
@@ -32,14 +26,12 @@ export function createFakeWebContents(): {
       sent.push({ channel, payload });
     },
     isDestroyed: () => false,
-    // 与 Electron 签名对齐：返回 this 支持链式
     once: (channel: string, listener: (...args: unknown[]) => void) => {
       if (channel === 'destroyed') {
         destroyedListeners.add(listener);
       }
       return wc;
     },
-    // FileService.unwatch / TerminalService PTY 退出会移除 destroyed 监听
     removeListener: (channel: string, listener: (...args: unknown[]) => void) => {
       if (channel === 'destroyed') {
         destroyedListeners.delete(listener);

@@ -1,21 +1,3 @@
-// src/renderer/lib/invalidation/invalidation.ts
-// 失效域纯函数层：域 → queryKey 前缀映射 + 回合结束覆盖登记（31 号设计文档 §2.5）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - domainToQueryKey：把主进程声明的域（'sessions' / 'session:<id>'）拆成 TanStack
-//   Query 的前缀 key；前半段与 lib/query/keys.ts 的 QUERY_KEY_ROOTS 键一一对应
-// - applyDomainInvalidation：逐域前缀失效（queryClient.invalidateQueries）
-// - 回合结束覆盖登记：invalidation 事件已携带某会话的回合结束「全域」声明时登记，
-//   use-agent-bridge 的 streamEnd 处理据此跳过旧硬编码清单（渐进回落，见其注释）
-//
-// 覆盖判定必须「全域命中」才登记：单会话写路径的 ['sessions', 'session:<id>']
-// （session-service 各写操作）不得冒充回合结束聚合声明——否则 stream:end 跳过
-// 旧清单会丢 goal/task/usage/git/file/turns 的失效，恰是 31 号任务要修的五连。
-//
-// ⚠️ 本模块的覆盖登记 + use-agent-bridge 的旧清单是渐进兼容的过渡态（31 号
-// spec §2.5c）：待主进程声明在全路径（含 error 出口）稳定运行一个版本后一并删除。
-// ──────────────────────────────────────────────────────────────
-
 import { INVALIDATION_DOMAINS, TURN_END_GLOBAL_DOMAINS } from '@code-agent/shared/renderer';
 
 import { queryClient } from '@/lib/query/query-client';

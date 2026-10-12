@@ -1,19 +1,3 @@
-// src/renderer/components/loading-ui/terminal.tsx
-// Terminal 加载动画（copy-paste 自 @loading-ui/terminal，shadcn registry 组件）
-// ──────────────────────────────────────────────────────────────
-// 纯展示组件：终端提示符 + 闪烁块光标。无依赖、无 runtime 绑定，可直接嵌入
-// 任意 loading 状态（当前唯一调用点：TerminalPanel 创建会话时的加载态）。
-//
-// 与 ui/spinner 的分工（勿合并）：Spinner 是环形转圈，服务于通用加载；
-// 本组件是终端提示符样式，服务于「终端正在启动」这一具体语境。
-//
-// 动画与可访问性：
-// - 光标闪烁复用 styles/motion.css 的 blink 关键帧（见 .loading-ui-terminal-cursor），
-//   不再内联 <style>——关键帧统一在 styles/motion.css 维护
-// - role="status" + sr-only 本地化文案播报加载语义；提示符与光标对读屏器隐藏
-//   （与 ui/spinner 的可访问性模式一致）
-// ──────────────────────────────────────────────────────────────
-
 import type { ComponentProps } from 'react';
 import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';

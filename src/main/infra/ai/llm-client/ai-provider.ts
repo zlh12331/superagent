@@ -1,24 +1,5 @@
-// src/main/infra/ai/llm-client/ai-provider.ts
-// AI Provider 工厂（多供应商可插拔路由，Code Agent 模板核心）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// 1. 通过 ProviderRegistry 按 kind 路由到对应供应商（内置 10 家：
-//    deepseek/openai/anthropic/ollama/moonshot/zhipu/qwen/doubao/
-//    siliconflow/openrouter）
-// 2. apiKey 从 keychain 按 kind 独立读取（首次配置时由 settings service 写入）
-// 3. provider 实例按 kind 缓存，避免重复创建
-// 4. 提供 getModel(modelId) 工厂方法，返回 LanguageModel 实例供 streamText 使用
-//    - 无覆盖参数时走 LlmClient（模型级解析：模型 id → 供应商 → per-model 缓存）
-//    - 带 kind/apiKey 覆盖时走原 kind 级路由（当前生产零调用，仅单测）
-// 5. 支持 reset（settings:setApiKey 后下次调用重建实例）
-//
-// 设计（对标 qwen-code BaseLlmClient + 保持向后兼容）：
-// - 模型领域层（models/）：模型条目、ModelRegistry 解析、运行时快照
-// - LLM 客户端层（llm-client/）：LlmClient 统一出口（模型级路由 + 缓存 + 重试）
-// - 本文件是薄委托层：装配 LlmClient 单例，保持旧 API 签名不变
-//   （agent-service / service-container 零改动；原注释的 chat-service 已并入删除）
-// ──────────────────────────────────────────────────────────────
-
+// ai-provider.ts：AI 供应商装配口——llmClient 单例（依赖 modelRegistry/供应商工厂/模型超时）+
+// 供应商工厂缓存 + 运行时模型存储；settings 改 API Key 后 resetAIProvider 重建
 import { AppError, ErrorCode } from '@code-agent/shared/main';
 import type { LanguageModel } from 'ai';
 import { getAppConfig } from '../../../config';
@@ -30,70 +11,30 @@ import type { ProviderKind } from '../providers';
 import { providerRegistry, toKeychainKey } from '../providers';
 import { LlmClient } from './';
 
-/**
- * Provider 工厂配置
- */
 interface AiProviderFactoryOptions {
-  /**
-   * 显式传入的 API Key（覆盖 keychain 读取）
-   *
-   * 原注释的「settings:setApiKey 后立即测试连接」场景已随 models:test
-   * 改为裸 HTTP 探测而不再经本函数——覆盖路径当前生产零调用（仅单测）。
-   */
   readonly apiKey?: string;
-  /**
-   * 目标供应商（默认 registry 的 isDefault 供应商，当前为 deepseek）
-   */
   readonly kind?: ProviderKind;
 }
 
-/**
- * 缓存的 LanguageModel 工厂（按 kind 缓存）
- */
+// 工厂按 providerKind 缓存（同一供应商多个模型复用同一份客户端配置）
 const providerCache = new Map<string, (modelId: string) => LanguageModel>();
 
-/**
- * 获取指定供应商的 LanguageModel 工厂
- *
- * 首次调用会从 keychain 读取 API Key 并创建 provider；
- * 后续调用直接返回缓存实例。
- *
- * @param options 覆盖配置（apiKey 测试连接 / kind 切换供应商）
- * @returns (modelId) => LanguageModel 工厂
- * @throws AppError(ErrorCode.AI_API_KEY_MISSING) 需要 API Key 的供应商未配置
- *
- * 消费方：仅本文件内部（getModel 双轨覆盖路径 + llmClient 工厂装配），
- * 外部零调用——外部一律走 getModel / llmClient。
- *
- * @example
- * ```ts
- * // 默认供应商（deepseek）
- * const provider = await getAIProvider();
- * const model = provider('deepseek-chat');
- *
- * // 指定供应商（anthropic）
- * const anthropicProvider = await getAIProvider({ kind: 'anthropic' });
- * const claude = anthropicProvider('claude-sonnet-4-20250514');
- * ```
- */
+/** 取（或构建）供应商模型工厂；显式 apiKey 直建不缓存（测试/临时探测） */
 export async function getAIProvider(
   options?: AiProviderFactoryOptions,
 ): Promise<(modelId: string) => LanguageModel> {
   const kind = options?.kind ?? providerRegistry.getDefaultKind();
   const definition = providerRegistry.getDefinition(kind);
 
-  // 显式传入 apiKey 时直接创建临时实例（用于测试连接），不污染缓存
   if (options?.apiKey !== undefined) {
     return providerRegistry.createFactory(kind, { apiKey: options.apiKey });
   }
 
-  // 单例缓存：按 kind 缓存（keychain 中每个 kind 只有一把 key）
   const cached = providerCache.get(kind);
   if (cached !== undefined) {
     return cached;
   }
 
-  // 读取 API Key（本地供应商如 ollama 不需要）
   let apiKey: string | undefined;
   if (definition.requiresApiKey) {
     const stored = await getSecret(toKeychainKey(kind));
@@ -115,27 +56,42 @@ export async function getAIProvider(
   return factory;
 }
 
+/** 限流接缝窄接口：providerKey 定向的冷却两面（喂入 + 等待）+ 无准入对的限流学习信号——
+ * 结构化匹配分桶 ConcurrencyGate */
+export interface RateLimitGate {
+  coolDown(providerKey: string, durationMs: number): void;
+  /** 无准入对的 429 学习信号：评价 cap + 冷却（不动在飞计数） */
+  reportUnpairedThrottle(providerKey: string, cooldownMs: number): void;
+  waitCooldown(providerKey: string): Promise<void>;
+}
+
+/** 注入的限流闸（ServiceContainer 构造 gate 后调用；未注入时 429 观测不上报、冷却不等待） */
+let rateLimitGate: RateLimitGate | undefined;
+
 /**
- * LlmClient 单例（模型级路由统一出口）
+ * 注入限流闸（ServiceContainer 构造 gate 后调用）。
  *
- * 依赖装配：
- * - modelRegistry：内置模型注册表（模型 id → 供应商解析）
- * - createProviderFactory：委托 getAIProvider（keychain 读取 + kind 级缓存）
- * - modelGate：模型配置门禁——未配置任何启用模型时禁止一切 LLM 调用
- *   （2026-09-04：修复"前端未显示配置模型仍能对话"；配置记录用于设置页/选择器展示，
- *   也作为对话许可，杜绝默认模型直连绕过配置）
- *
- * 超时兜底：defaultTimeoutMs 取 config.modelTimeoutMs（test 环境 5s）；
- * 生产默认 undefined，落到 LlmClient 内部 60s 兜底（DEFAULT_MODEL_TIMEOUT_MS）。
+ * 接缝模式而非直接 import：ai-provider 是模块级单例，直接引容器会造出容器→单例→容器环。
  */
+export function setRateLimitBridge(gate: RateLimitGate): void {
+  rateLimitGate = gate;
+}
+
+async function ensureModelConfigured(): Promise<void> {
+  const records = await runtimeModelStore.list();
+  if (!records.some((r) => r.isEnabled)) {
+    throw new AppError(ErrorCode.AI_MODEL_NOT_CONFIGURED, '请先在设置中配置模型');
+  }
+  // 冷却等待放在配置检查之后：未配置模型的报错优先于排队等待（排队前先确认能打）。
+  // 冷却桶 = 默认 provider（side query 不显式指定模型时都落这里；指定的场景由 runSideQuery
+  // 在 getModel 前自行等待）
+  await rateLimitGate?.waitCooldown(providerRegistry.getDefaultKind());
+}
+
 export const llmClient = new LlmClient({
   modelRegistry,
-  // 全局模型超时兜底（config.modelTimeoutMs；test 环境 5s）
   defaultTimeoutMs: getAppConfig().modelTimeoutMs,
   createProviderFactory: async (kind, options) => {
-    // 运行时快照携带显式配置时创建临时实例（不污染 kind 级缓存）。
-    // apiFormat 同属「快照显式配置」（自定义模型的协议选择），必须一并判定——
-    // 否则「只选格式、未改 baseUrl/apiKey」的模型会落入 kind 级缓存路径，格式被忽略
     if (
       options?.apiKey !== undefined ||
       options?.baseUrl !== undefined ||
@@ -147,61 +103,22 @@ export const llmClient = new LlmClient({
         ...(options.apiFormat !== undefined ? { apiFormat: options.apiFormat } : {}),
       });
     }
-    // 常规路径：kind 级缓存 + keychain 读取
     return getAIProvider({ kind });
   },
   modelGate: ensureModelConfigured,
+  notifyRateLimited: (durationMs) => {
+    const providerKey = providerRegistry.getDefaultKind();
+    rateLimitGate?.coolDown(providerKey, durationMs);
+    rateLimitGate?.reportUnpairedThrottle(providerKey, durationMs);
+  },
 });
 
-/**
- * 模型配置门禁：至少存在一条启用的模型记录才允许 LLM 调用
- *
- * （2026-09-04 用户语义）服务商直连/自定义模式配置的模型都落 runtimeModelStore，
- * 前端"配置一个显示一个"；此处确保"前端不显示 = 后端不可用"——没有任何启用记录时
- * 抛 AI_MODEL_NOT_CONFIGURED，阻止默认模型直连绕过配置调 API。
- */
-async function ensureModelConfigured(): Promise<void> {
-  const records = await runtimeModelStore.list();
-  if (!records.some((r) => r.isEnabled)) {
-    throw new AppError(ErrorCode.AI_MODEL_NOT_CONFIGURED, '请先在设置中配置模型');
-  }
-}
-
-/**
- * 运行时模型存储单例（自定义模型持久化 + 注册）
- *
- * 启动时由 ServiceContainer 调用 loadAll() 加载已保存的模型。
- */
 export const runtimeModelStore = new RuntimeModelStore();
 
-/**
- * 获取指定 model id 的 LanguageModel 实例
- *
- * 便捷封装：先取 provider 工厂，再调工厂方法。
- * 供 streamText / generateText 直接使用。
- *
- * ⚠️ 双轨路由（向后兼容设计，语义不同）：
- * - 无覆盖参数（options.kind / apiKey 均为 undefined）：
- *   LlmClient 模型级解析（ModelRegistry）——显式 modelId 跨供应商查找，
- *   未传 modelId 时用默认供应商默认模型（DEFAULT_KIND / DEFAULT_MODEL_BY_KIND）
- * - 带 kind / apiKey 覆盖：旧 kind 级路由——modelId 直接透传给指定供应商工厂，
- *   不做跨供应商解析。当前生产零调用（唯一业务调用 = turn-assembly 的
- *   getModel(undefined) 常规路径；模型连通性测试走 models:test 裸 HTTP 探测，
- *   不经本函数），覆盖路径仅单测覆盖
- *
- * 调用方注意：业务代码请走无覆盖参数路径；kind/apiKey 覆盖路径
- * 不具备模型级解析/缓存/容错能力，请勿在业务逻辑中使用。
- * 覆盖路径也不经过观测中间件（LlmClient 常规链路专用，见
- * middleware/model-observability.ts 边界说明）。
- *
- * @param modelId 模型 id（省略时使用默认模型）
- * @param options kind 供应商 / apiKey 覆盖（当前生产零调用，仅单测）
- */
 export async function getModel(
   modelId?: string,
   options?: AiProviderFactoryOptions,
 ): Promise<LanguageModel> {
-  // 显式供应商 / API Key 覆盖：走原 kind 级路由（测试连接等临时场景）
   if (options?.kind !== undefined || options?.apiKey !== undefined) {
     const kind = options.kind ?? providerRegistry.getDefaultKind();
     const definition = providerRegistry.getDefinition(kind);
@@ -210,23 +127,14 @@ export async function getModel(
     return provider(resolvedModelId);
   }
 
-  // 常规路径：LlmClient 模型级解析 + per-model 缓存
   return llmClient.getModel(modelId);
 }
 
-/**
- * 重置 provider 缓存
- *
- * 用于 settings:setApiKey 后下次调用重新创建实例。
- * ServiceContainer.reset() 也会调用此函数。
- */
 export function resetAIProvider(): void {
   providerCache.clear();
-  // 同步清空 LlmClient per-model 缓存（模型实例持有旧 API Key）
   llmClient.reset();
 }
 
-/** 当前缓存的供应商数量（测试断言用） */
 export function getProviderCacheSize(): number {
   return providerCache.size;
 }

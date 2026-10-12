@@ -1,13 +1,3 @@
-// src/renderer/components/$1/error-boundary.integration.test.tsx
-// 错误边界分层体系集成测试：App 级 → Section 级嵌套降级行为
-// ──────────────────────────────────────────────
-// 覆盖动机：三层错误边界（App / Route / Section）的价值在**嵌套**时才体现——
-// Section 级捕获后 App 级不应被触发（局部降级不升级为全屏崩溃）。
-// 单测各自独立验证，但没有「嵌套隔离」这条集成契约的回归锚。
-// 同时验证与 AsyncBoundary 的协作：区块内查询失败 → 局部错误 UI，
-// 而非全屏兜底。
-// ──────────────────────────────────────────────
-
 import { render, screen } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -50,9 +40,7 @@ describe('错误边界分层集成', () => {
         </SectionErrorBoundary>
       </AppErrorBoundary>,
     );
-    // 局部降级：Section fallback 出现
     expect(screen.getByTestId('section-error-boundary')).toBeDefined();
-    // App 级未被触发：无全屏兜底，且健康区块仍在
     expect(screen.queryByTestId('app-error-boundary')).toBeNull();
     expect(screen.getByTestId('healthy')).toBeDefined();
   });
@@ -98,7 +86,6 @@ describe('错误边界分层集成', () => {
     );
     expect(screen.getByTestId('section-error-boundary')).toBeDefined();
     expect(screen.getByTestId('b-ok')).toBeDefined();
-    // 仅上报一次（A 区块的错误）
     expect(mockReportError).toHaveBeenCalledTimes(1);
   });
 
@@ -120,10 +107,8 @@ describe('错误边界分层集成', () => {
         </SectionErrorBoundary>
       </AppErrorBoundary>,
     );
-    // 查询失败是「预期内的数据态」，由 AsyncBoundary 的 role=alert 呈现
     expect(screen.getByRole('alert')).toBeDefined();
     expect(screen.getByRole('button', { name: t('common.retry') })).toBeDefined();
-    // 不应升级为错误边界（两者职责不同：数据态 vs 渲染异常）
     expect(screen.queryByTestId('app-error-boundary')).toBeNull();
     expect(screen.queryByTestId('section-error-boundary')).toBeNull();
     expect(mockReportError).not.toHaveBeenCalled();

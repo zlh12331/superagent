@@ -1,17 +1,10 @@
-// scripts/lib/file-metrics.ts
-// 文件体积度量纯函数：原始行数 + 净行数 + 扫描集收集（供 check-file-size / 门禁复用）
-// ──────────────────────────────────────────────────────────────
-// 为什么两种口径都要测（2026-08-30 审计结论）：
-// 只测净行会为「注释刷量」开门——service-container.ts 原始 1080 行被压到
-// 503 净行（注释密度 49%）而「通过 600 净行门槛」；净行同时奖励了
-// 「把该拆的文件写成注释文档」。原始行数是可文件化沟通的硬上限
-// （业界 eslint max-lines 默认口径即原始行），两者互补，缺一不可。
-// ──────────────────────────────────────────────────────────────
-
 import { type Dirent, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 
-/** 目录遍历时需要跳过的目录名（产物 / 依赖 / 生成物 / 参考代码） */
+/** 目录遍历时需要跳过的目录名（产物 / 依赖 / 生成物 / 参考代码 / 工作区工具缓存）
+ *  点开头目录一律跳过：.mimosa（扫描历史，实测 56 万文件）、.pnpm-store、.electron-user-data、
+ *  .tmp、.git 等体量大且不含受门禁管辖的源码；不带点的补 release / test-results /
+ *  playwright-report*（构建与测试产物，体量随时间增长，曾致 file-metrics.test 5s 超时） */
 export const SKIP_DIR_NAMES: ReadonlySet<string> = new Set([
   'node_modules',
   '__tests__',
@@ -20,9 +13,17 @@ export const SKIP_DIR_NAMES: ReadonlySet<string> = new Set([
   'build',
   'coverage',
   '.vite',
-  // 外部参考代码（未入仓，39,625 文件）——所有自研门禁必须排除
   '_template',
+  'release',
+  'test-results',
+  'playwright-report',
+  'playwright-report-electron',
 ]);
+
+/** 点开头目录一律跳过（工作区工具缓存 / 本机数据，非源码；见 SKIP_DIR_NAMES 注释） */
+export function isSkippedDirName(name: string): boolean {
+  return name.startsWith('.') || SKIP_DIR_NAMES.has(name);
+}
 
 /** 按目录名切分并去掉文件末尾的空行（等价 wc -l 口径） */
 export function splitLines(source: string): string[] {
@@ -81,7 +82,7 @@ export function collectSourceFiles(dir: string, acc: string[] = []): string[] {
     return acc;
   }
   for (const entry of entries) {
-    if (entry.isDirectory() && SKIP_DIR_NAMES.has(entry.name)) continue;
+    if (entry.isDirectory() && isSkippedDirName(entry.name)) continue;
     const full = join(dir, entry.name);
     if (entry.isDirectory()) collectSourceFiles(full, acc);
     else if (isSourceFile(entry.name)) acc.push(full);
@@ -103,7 +104,7 @@ export function discoverPackageSrcDirs(root: string): string[] {
     return [];
   }
   return entries
-    .filter((e) => e.isDirectory() && !SKIP_DIR_NAMES.has(e.name))
+    .filter((e) => e.isDirectory() && !isSkippedDirName(e.name))
     .map((e) => join(root, 'packages', e.name, 'src'))
     .filter((p) => statSync(p, { throwIfNoEntry: false })?.isDirectory() === true);
 }

@@ -1,14 +1,3 @@
-// src/main/infra/telemetry/otel.test.ts
-// otel 单测：初始化分支（OTLP/Console/失败容忍）、打包版端点门控、withSpan、shutdown
-//
-// 测试要点：
-// 1. initTelemetry：dev 无 endpoint → Console exporter；有 endpoint → OTLP exporter
-// 2. 打包版无 endpoint → 不注册（span 属性含路径/上下文，不落 stdout）
-// 3. serviceName：dev/prod 区分
-// 4. 幂等：重复调用跳过
-// 5. withSpan：未初始化直接执行 / 初始化后 span 生命周期 / 异常设置错误状态
-// 6. shutdownTelemetry：未初始化跳过 / 初始化后 flush + 重置
-
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => {
@@ -30,7 +19,6 @@ vi.mock('electron', () => ({
   app: mocks.mockApp,
 }));
 
-// 注意：otel 在 infra/telemetry/ 下，logger 相对路径为 '../../utils/logger'
 vi.mock('../../utils/logger', () => ({
   logger: mocks.mockLogger,
 }));
@@ -42,7 +30,6 @@ describe('otel 批次11 缺口补全', () => {
     vi.clearAllMocks();
     mocks.mockApp.isPackaged = false;
     delete process.env['OTEL_EXPORTER_OTLP_ENDPOINT'];
-    // 重置模块状态（shutdown 内部 forceFlush 在 SDK v2 测试环境可能抛，catch 兜底后状态仍重置）
     await shutdownTelemetry().catch(() => {});
   });
 
@@ -52,7 +39,6 @@ describe('otel 批次11 缺口补全', () => {
     let executed = false;
     const result = await withSpan('test.span', {}, async (span) => {
       executed = true;
-      // 未初始化分支：fn 收到 undefined span（业务代码必须容忍）
       expect(span).toBeUndefined();
       return 'ok';
     });
@@ -106,7 +92,6 @@ describe('otel 批次11 缺口补全', () => {
     const first = getTracer();
     initTelemetry();
     expect(getTracer()).toBe(first);
-    // 第二次初始化不再打日志
     const consoleLogs = mocks.mockLogger.info.mock.calls.filter((c) =>
       String(c[1]).includes('OpenTelemetry 初始化完成'),
     );

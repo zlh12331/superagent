@@ -1,7 +1,3 @@
-// src/renderer/hooks/use-api-key.test.tsx
-// use-api-key 单元测试：设置 API Key mutation
-// （useApiKeyQuery / useDeleteApiKey 无生产消费方，2026-08-27 审计后已随实现移除）
-
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';

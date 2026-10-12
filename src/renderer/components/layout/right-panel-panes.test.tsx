@@ -1,13 +1,3 @@
-// src/renderer/components/layout/right-panel-panes.test.tsx
-// 右面板 pane 测试（正向 / 边界 / 异常）：
-// - InfoPane：task 状态视觉 / 引用文件去重（tool-store read_file）
-// - DiffPane：变更过滤派生（仅 edit_file/write_file 且 success/error）/ 展开
-//   拉取 diff（useGitDiffQuery enabled）/ 打开文件 / 会话切换清空展开态
-// ──────────────────────────────────────────────────────────────
-// mock 边界：use-git（diff 数据边界，沿用 GitPanel.test 做法）+ window.api.task；
-// tool-store / file-viewer-store / UnifiedDiffView 走真实实现。
-// ──────────────────────────────────────────────────────────────
-
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactElement } from 'react';
@@ -30,7 +20,6 @@ const t = i18n.t.bind(i18n);
 
 function renderWithQuery(ui: ReactElement) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  // 展开的 diff 经 UnifiedDiffView 消费 useTheme → 需要 ThemeProvider
   return render(
     <QueryClientProvider client={client}>
       <ThemeProvider>{ui}</ThemeProvider>
@@ -97,7 +86,6 @@ describe('InfoPane', () => {
     } as never);
     renderWithQuery(<InfoPane sessionId="s1" />);
 
-    // 倒序后 a.ts（r3 最新）先于 b.ts，a.ts 去重只出现一次
     const files = screen.getAllByText(/\/proj\/[ab]\.ts/);
     expect(files).toHaveLength(2);
     expect(files[0]?.textContent).toContain('/proj/a.ts');
@@ -115,12 +103,10 @@ describe('InfoPane', () => {
     window.api = { task: { list } } as never;
     renderWithQuery(<InfoPane sessionId="s1" />);
 
-    // 错误行出现（retry: false 后 error 落定），空态文案被错误态取代
     expect(await screen.findByRole('alert')).toBeDefined();
     expect(screen.getByText(t('common.sectionLoadFailed'))).toBeDefined();
     expect(screen.queryByText(t('panel.noTasks'))).toBeNull();
 
-    // 重试按钮触发重新拉取
     fireEvent.click(screen.getByRole('button', { name: t('common.retry') }));
     await waitFor(() => expect(list).toHaveBeenCalledTimes(2));
   });
@@ -172,18 +158,15 @@ describe('DiffPane', () => {
     seedCalls();
     renderWithQuery(<DiffPane sessionId="s1" gitRepoPath="/proj" />);
 
-    // 倒序：最新在前；pending 的 d.ts 与 read_file 的 c.ts 不出现
     const rows = screen.getAllByText(/^[ab]\.ts$/);
     expect(rows).toHaveLength(2);
     expect(screen.queryByText('d.ts')).toBeNull();
     expect(screen.queryByText('c.ts')).toBeNull();
-    // 徽标语义：write_file → NEW，edit_file → EDIT
     expect(screen.getByText('EDIT')).toBeDefined();
     expect(screen.getByText('NEW')).toBeDefined();
   });
 
   it('正向：展开变更 → useGitDiffQuery 启用并渲染 diff 内容', async () => {
-    // 带 hunk 头的合法 unified diff（parseUnifiedDiff 需要 @@ 头才产出块）
     mockUseGitDiffQuery.mockReturnValue({
       data: { diff: '@@ -1,1 +1,2 @@\n line1\n+line2' },
       isLoading: false,
@@ -200,7 +183,6 @@ describe('DiffPane', () => {
         true,
       ),
     );
-    // diff 内容经 UnifiedDiffView（自研 DiffRowsTable）渲染为表格，断言表结构落地
     expect(document.querySelector('table')).not.toBeNull();
   });
 
@@ -251,7 +233,6 @@ describe('DiffPane', () => {
         <DiffPane sessionId="s2" gitRepoPath="/proj" />
       </QueryClientProvider>,
     );
-    // s2 无任何变更 → 直接落空态（展开态随重置清空的可见结果）
     expect(screen.getByText(t('panel.noChanges'))).toBeDefined();
   });
 });

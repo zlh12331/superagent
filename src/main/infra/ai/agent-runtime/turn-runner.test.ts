@@ -1,16 +1,8 @@
-// src/main/infra/ai/agent-runtime/turn-runner.test.ts
-// TurnRunner 单测：读流 → 翻译 → 事件产出 → 统计/终止原因
-//
-// 覆盖：正常流事件序列（turn-start + 翻译事件，finish 不翻译）+ onPart
-// 原始透传 + 中断归因（aborted vs timeout——isTimeout 回调的有无决定
-// abort 形态的归因出口）+ 非中断错误抛出 + 空闲超时（AI_TIMEOUT）。
-
 import { TurnEventType } from '@code-agent/shared/main';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TurnEventEmitter } from './turn-emitter';
 import { TurnRunner } from './turn-runner';
 
-/** 构造同步推送 parts 后关闭的 mock 流 */
 function createMockStream(parts: unknown[]): ReadableStream<unknown> {
   return new ReadableStream<unknown>({
     start(controller) {
@@ -53,7 +45,6 @@ describe('TurnRunner', () => {
 
     expect(result.reason).toBe('completed');
     expect(result.durationMs).toBeGreaterThanOrEqual(0);
-    // turn-start + 2 个翻译事件（finish 不翻译）
     expect(events).toHaveLength(3);
     expect(events[0]).toMatchObject({ type: TurnEventType.TURN_START, modelId: ctx.modelId });
     expect(events[1]).toMatchObject({ type: TurnEventType.TEXT_DELTA, text: 'hi' });
@@ -80,7 +71,6 @@ describe('TurnRunner', () => {
 
   it('用户中断（abort）：返回 reason=aborted', async () => {
     const runner = new TurnRunner({ ...ctx, controller, emitter });
-    // 流中抛 AbortError（模拟 streamText 感知 abort 后中断）
     const stream = new ReadableStream<unknown>({
       start(controller_) {
         controller_.enqueue({ type: 'text-delta', delta: 'hi' });
@@ -94,8 +84,6 @@ describe('TurnRunner', () => {
   });
 
   it('模型级超时（isTimeout 归因）：abort 形态返回 reason=timeout', async () => {
-    // combinedAbortSignals 把超时与用户中断折叠成同一 abort 形态：
-    // isTimeout 回调返回 true 时归因为 timeout（上层据此走错误出口）
     const runner = new TurnRunner({
       ...ctx,
       controller,
@@ -140,11 +128,8 @@ describe('TurnRunner', () => {
   it('流空闲超时：中断并抛 AI_TIMEOUT', async () => {
     vi.useFakeTimers();
     const runner = new TurnRunner({ ...ctx, controller, emitter, idleTimeoutMs: 100 });
-    // 永不推送的流
     const stream = new ReadableStream<unknown>({
-      pull() {
-        // 故意不 enqueue
-      },
+      pull() {},
     });
 
     const promise = runner.run(stream);

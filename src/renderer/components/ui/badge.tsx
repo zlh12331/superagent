@@ -1,7 +1,3 @@
-// src/renderer/components/ui/badge.tsx
-// 徽章组件（shadcn/ui new-york 风格，零依赖 span + cva 变体）
-// 设计文档 §2.3 shadcn/ui 组件库
-
 import { Slot } from '@radix-ui/react-slot';
 import { cva, type VariantProps } from 'class-variance-authority';
 import type * as React from 'react';

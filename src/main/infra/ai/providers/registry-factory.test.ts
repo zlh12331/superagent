@@ -1,14 +1,3 @@
-// src/main/infra/ai/providers/registry-factory.test.ts
-// Provider 工厂真实实例化集成测试（不 mock @ai-sdk/*）
-//
-// 目的：验证 AI SDK 能真实消费我们的工厂参数（DeepSeek 适配的
-// transformRequestBody / convertUsage / thinking 注入不导致 SDK 初始化失败）。
-// 不发起网络请求（仅实例化 LanguageModel 对象）。
-//
-// 说明：registry.test.ts 已覆盖"参数正确传入 createOpenAICompatible"；
-// 本文件补足"SDK 真实消费参数后能创建 LanguageModel"的集成盲区。
-// 真实网络链路的端到端验证依赖 E2E（需 API Key），不在单测范围。
-
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ProviderRegistry } from './registry';
 
@@ -26,10 +15,8 @@ const mocks = vi.hoisted(() => {
   return { mockApp, mockLogger };
 });
 
-// mock electron：config 依赖 app.isPackaged（registry 从 config.providers 读取 baseURL）
 vi.mock('electron', () => ({ app: mocks.mockApp }));
 
-// mock logger：避免触发真实 electron-log 初始化
 vi.mock('../../utils/logger', () => ({
   logger: mocks.mockLogger,
 }));
@@ -42,7 +29,6 @@ describe('Provider 工厂真实实例化（AI SDK 消费集成验证）', () => 
     registry = new ProviderRegistry();
   });
 
-  /** 断言 LanguageModel 实例具备 SDK 消费接口（v7 规范：doGenerate/doStream） */
   function expectModelUsable(model: unknown): void {
     expect(model).toBeDefined();
     const lm = model as { doGenerate?: unknown; doStream?: unknown };
@@ -53,7 +39,6 @@ describe('Provider 工厂真实实例化（AI SDK 消费集成验证）', () => 
   it('deepseek：createOpenAICompatible 参数可被 SDK 消费，LanguageModel 实例化成功', () => {
     const factory = registry.createFactory('deepseek', { apiKey: 'sk-test' });
 
-    // 不发起网络请求：仅实例化 LanguageModel 对象
     const model = factory('deepseek-v4-flash');
 
     expectModelUsable(model);
@@ -110,7 +95,6 @@ describe('其余内置工厂真实实例化（SDK 消费集成）', () => {
   });
 
   it('baseUrl 缺失时回落 config（env 覆盖链路生效）', () => {
-    // config.providers.<kind> 在 dev 环境有默认值（mock app.isPackaged=false）
     const factory = registry.createFactory('moonshot', { apiKey: 'sk-test' });
     expect(typeof factory).toBe('function');
   });

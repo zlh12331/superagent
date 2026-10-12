@@ -1,21 +1,9 @@
-// src/main/infra/ai/tools/ask-user-question.tool.ts
-// ask_user_question 工具：Agent 向用户交互式提问（对齐 qwen-code）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 接收 LLM 生成的问题列表（question/header/options/multiSelect）
-// - 经 AgentAskService 推送渲染层提问对话框，await 用户回答
-// - 回答作为 ToolResult 返回给 LLM（继续执行）
-// - 超时（60s）返回「用户未响应」，LLM 可继续或调整策略
-//
-// 权限：'ask'（交互类工具，天然需要用户参与）
-// ──────────────────────────────────────────────────────────────
-
+// ask-user-question.tool.ts：ask_user_question 工具——向用户提选择题（agent-ask-service 承载）
 import { z } from 'zod';
 import { t } from '../../i18n';
 import type { AgentAskService } from '../agent/agent-ask-service';
 import type { Tool, ToolContext, ToolResult } from './tool';
 
-/** 工具入参（与 shared AgentQuestion 对齐；本地 z 校验 LLM 生成） */
 const AskUserQuestionInputSchema = z.object({
   questions: z
     .array(
@@ -38,23 +26,12 @@ const AskUserQuestionInputSchema = z.object({
     .describe('问题列表（一次可多问）'),
 });
 
-/** 工具描述（提示 LLM 何时使用） */
 const toolDescription = `在执行过程中需要向用户提问时使用（收集偏好、确认方向、让用户在选项间选择等）。支持一次问多个问题，每个问题可带预置选项（单选/多选），用户也可以自由输入文本回答。请优先提供选项以降低用户输入成本。`;
 
-/**
- * 创建 ask_user_question 工具
- *
- * @param askService Agent 提问服务（pending 闭环）
- */
 export function createAskUserQuestionTool(askService: AgentAskService): Tool {
   return {
     name: 'ask_user_question',
     description: toolDescription,
-    // 2026-10-08 修复：原声明为 permission='ask' + category='exec'，造成两条真实后果——
-    // ① 默认 ask 模式下"想向用户提问，先要用户批准提问"（审批卡与提问弹窗串联，
-    //    且审批卡只在问"是否允许提问"、无实质信息）
-    // ② plan 模式被 isDeniedByPlanMode 拒绝：计划阶段恰是最需要确认方向的阶段却无法提问
-    // 提问零副作用（不写文件、不执行命令），归入 control 类别后两处同时修复。
     permission: 'auto' as const,
     category: 'control' as const,
     inputSchema: AskUserQuestionInputSchema,
@@ -62,7 +39,6 @@ export function createAskUserQuestionTool(askService: AgentAskService): Tool {
       const { questions } = AskUserQuestionInputSchema.parse(input);
       const { webContents } = context;
 
-      // 无窗口（后台执行/测试）时直接返回「无法提问」——不阻塞回合
       if (webContents === undefined || webContents.isDestroyed()) {
         return {
           title: t('tools.askUser.failed'),
@@ -78,7 +54,6 @@ export function createAskUserQuestionTool(askService: AgentAskService): Tool {
         };
       }
 
-      // 回答序列化为给 LLM 的结构化文本
       const rendered = questions
         .map((q, index) => {
           const answer = answers[index];

@@ -1,12 +1,3 @@
-// src/renderer/hooks/use-models.ts
-// 模型清单查询 hook（L3 服务端请求状态层）
-// ──────────────────────────────────────────────────────────────
-// P3 修复：ModelSelector 与 ModelsSection 此前各自拉取 models:list
-// （一 useQuery 一 useState），新增运行时模型后 composer 下拉 30s 内
-// 不刷新——双实现不互通。此处收敛为单一 queryKey + 查询 hook，
-// 增删 runtime model 的 mutation 统一 invalidate 共享 key。
-// ──────────────────────────────────────────────────────────────
-
 import type { ModelsListRes } from '@code-agent/shared/renderer';
 import { useQuery } from '@tanstack/react-query';
 

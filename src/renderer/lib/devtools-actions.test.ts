@@ -1,6 +1,3 @@
-// src/renderer/lib/devtools-actions.test.ts
-// DevTools open IPC bridge: mode passthrough + no-bridge
-
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { openDevTools } from './devtools-actions';
 import { ipcOk } from './ipc-factories';

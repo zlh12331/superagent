@@ -1,27 +1,15 @@
-// src/main/infra/ai/tools/load-skill.tool.ts
-// load_skill 工具：模型按名加载技能提示词（对齐 qwen Skills 工具语义）
-// ──────────────────────────────────────────────────────────────
-// 设计：
-// - permission='auto' / category='read'：加载技能是只读操作，任何模式自动放行
-// - 技能不存在时返回错误提示（让 LLM 从列表中选择正确名称）
-// ──────────────────────────────────────────────────────────────
-
+// load-skill.tool.ts：load_skill 工具——按名加载技能 prompt（skill-registry 承载）
 import { z } from 'zod';
 import { t } from '../../i18n';
 import type { SkillRegistry } from '../skills/skill-registry';
 import type { Tool, ToolContext, ToolResult } from './tool';
 
-/** load_skill 入参 */
 const LoadSkillInputSchema = z.object({
-  /** 技能名（skill:list 可查） */
   name: z.string().min(1).max(100),
 });
 
 type LoadSkillInput = z.infer<typeof LoadSkillInputSchema>;
 
-/**
- * 创建 load_skill 工具（依赖 SkillRegistry 注入）
- */
 export function createLoadSkillTool(skills: SkillRegistry): Tool<LoadSkillInput> {
   return {
     name: 'load_skill',

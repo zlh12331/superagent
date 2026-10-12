@@ -1,7 +1,3 @@
-/* ──────────────────────────────────────────────────────────────
-   文件模糊搜索结果行（fuzzy-search-dialog）· 会话与文件两类结果共用
-   行样式归类体系，选中态由 [aria-selected="true"] 单一来源驱动
-   ────────────────────────────────────────────────────────────── */
 .fuzzy-result {
   display: flex;
   width: 100%;
@@ -18,8 +14,6 @@
 }
 
 .fuzzy-result[aria-selected="true"] {
-  /* 选中态统一配方：品牌淡底 + inset 左条。2px 透明 border-left 为所有行
-     统一预留位置，选中条用 box-shadow 绘制（不占布局宽，选中前后无位移） */
   background: color-mix(in srgb, var(--accent) 8%, transparent);
   box-shadow: inset 2px 0 0 var(--accent);
 }
@@ -45,9 +39,6 @@
   color: var(--muted-foreground);
 }
 
-/* ──────────────────────────────────────────────────────────────
-   命令面板（⌘P）· 对齐原型 §命令面板
-   ────────────────────────────────────────────────────────────── */
 .palette-overlay {
   position: fixed;
   inset: 0;
@@ -128,7 +119,6 @@
 
 .palette-item.active,
 .palette-item[data-selected="true"] {
-  /* 选中态统一配方：品牌淡底 + inset 左条 */
   background: color-mix(in srgb, var(--accent) 8%, transparent);
   box-shadow: inset 2px 0 0 var(--accent);
 }

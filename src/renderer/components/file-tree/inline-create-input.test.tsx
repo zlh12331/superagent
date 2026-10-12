@@ -1,10 +1,3 @@
-// src/renderer/components/$1/inline-create-input.test.tsx
-// 行内新建输入单测（正向 / 边界 / 异常）
-// ──────────────────────────────────────────────────────────────
-// 重点守护 handledRef 失焦去重：Enter/Esc 已处理时，随后的 blur 不得二次提交
-// （此前无覆盖；若回归会导致「回车新建 + 失焦再建一次」重复落盘）。
-// ──────────────────────────────────────────────────────────────
-
 import { createEvent, fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -96,7 +89,6 @@ describe('InlineCreateInput', () => {
     fireEvent.change(input, { target: { value: 'a.ts' } });
     fireEvent.keyDown(input, { key: 'Escape' });
     fireEvent.keyDown(input, { key: 'Enter' });
-    // 取消后不得因后续 Enter 又把条目建出来
     expect(onCancel).toHaveBeenCalledTimes(1);
     expect(onConfirm).not.toHaveBeenCalled();
   });

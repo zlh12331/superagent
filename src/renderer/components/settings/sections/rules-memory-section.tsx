@@ -1,10 +1,3 @@
-// src/renderer/components/settings/sections/rules-memory-section.tsx
-// 规则与记忆 pane（对齐 Trae Work：规则（AGENTS.md）+ 记忆管理）
-// ──────────────────────────────────────────────────────────────
-// 规则：AGENTS.md 工程规范说明（项目根文件，agent 行为准则，纯静态）
-// 记忆：见 memory-panel.tsx（开关/状态/列表/清除，有状态管理界面）
-// ──────────────────────────────────────────────────────────────
-
 import { BookOpenText } from 'lucide-react';
 import type { ReactElement } from 'react';
 import { useTranslation } from '@/i18n/use-translation';
@@ -16,7 +9,6 @@ export function RulesMemorySection(): ReactElement {
 
   return (
     <div className="flex flex-col gap-4 pt-2">
-      {/* 规则：AGENTS.md */}
       <div>
         <div className="flex items-center gap-2">
           <BookOpenText className="text-muted-foreground size-3.5" strokeWidth={1.5} />
@@ -31,7 +23,6 @@ export function RulesMemorySection(): ReactElement {
         </div>
       </div>
 
-      {/* 记忆管理（开关/状态/列表/清除） */}
       <MemoryPanel />
     </div>
   );

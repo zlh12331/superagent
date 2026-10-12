@@ -1,5 +1,3 @@
-// src/renderer/components/chat/streaming-cursor.test.tsx
-// StreamingCursor 单测：aria-hidden 装饰性光标（不进入读屏树）
 import { render } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 

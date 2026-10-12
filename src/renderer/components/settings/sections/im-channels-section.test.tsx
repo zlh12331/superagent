@@ -1,17 +1,3 @@
-// src/renderer/components/$1/im-channels-section.test.tsx
-// IM 渠道区块测试（正向 / 边界 / 异常）
-// ──────────────────────────────────────────────────────────────
-// 覆盖动机：该文件此前 0% 覆盖（本轮覆盖率排查确认）。它是 7 渠道（QQ/微信/钉钉/
-// Telegram/飞书/企微/webhook）的统一启停界面，含查询 + 启停 mutation + token 输入，
-// 且启停按钮的禁用条件有三个维度（busy / running / implemented）。
-//
-// 重点关注：
-// 1. 查询失败 → 错误态可重试（历史上曾静默降级为空列表）
-// 2. 启停按钮分派：running → 停止，否则 → 启动
-// 3. 禁用矩阵：busy / 未实现渠道不可启动
-// 4. token 输入仅在「已实现且未配置」时出现，启动时随 token 一并提交
-// ──────────────────────────────────────────────────────────────
-
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -198,7 +184,6 @@ describe('ImChannelsSection · token 首次配置', () => {
     fireEvent.click(screen.getByRole('button', { name: i18n.t('settings.imChannelStart') }));
 
     await waitFor(() => expect(api.start).toHaveBeenCalled());
-    // 首尾空格被 trim
     expect(api.start).toHaveBeenCalledWith({ kind: 'telegram', token: 'tok-123' });
   });
 });

@@ -1,21 +1,3 @@
-// src/renderer/components/common/MotionReveal.tsx
-// 通用入场动效包装 · 一行启用
-// ──────────────────────────────────────────────────────────────
-// 职责：为子内容提供统一的入场动画（挂载即播 / 进入视口即播）。
-// 灵感来源于 MotionVault（third_party/motionvault）的 Reveal 类组件，
-// 但复用本项目 lib/motion 的缓动体系与 tokens，不引入外部依赖。
-//
-// 用法：
-//   <MotionReveal variant="blurUp" delay={0.15}>
-//     <h1>标题</h1>
-//   </MotionReveal>
-//   <MotionReveal variant="fadeIn" inView>
-//     <Card />   {/* 滚动进入视口时淡入（播放一次） */}
-//   </MotionReveal>
-//
-// 无障碍：动画纯视觉层不改语义；配合全局 MotionConfig reducedMotion 尊重系统减弱动效。
-// ──────────────────────────────────────────────────────────────
-
 import { motion, type Transition, type Variants } from 'motion/react';
 import type { ReactElement, ReactNode } from 'react';
 
@@ -54,7 +36,6 @@ export function MotionReveal({
   inView = false,
 }: MotionRevealProps): ReactElement {
   const base = PRESET_VARIANTS[variant];
-  // 追加统一 transition（时长/缓动/延迟），业务方无需每处重复
   const transition: Transition = { duration: 0.5, ease: easePaper, delay };
   const variantsWithDelay: Variants = {
     hidden: base.hidden,

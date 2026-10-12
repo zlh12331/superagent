@@ -1,17 +1,4 @@
-// src/main/infra/im/adapters/telegram-adapter.ts
-// Telegram 渠道适配器（Bot API 长轮询，原生 fetch 零依赖）
-// ──────────────────────────────────────────────────────────────
-// 协议：
-// - getMe 验证 token → 失败抛 AppError（AI_API_KEY_INVALID 语义的 IM 变体）
-// - getUpdates 长轮询（timeout=30s，offset 递增防重复）
-// - sendMessage 回发（失败重试 2 次退避）
-//
-// 设计：
-// - 轮询循环用 AbortController 控制（disconnect 时中止）
-// - 消息去重：Telegram offset 语义天然去重（确认后才推进 offset）
-// - 群聊消息剥离 @BotName 前缀（防止 bot 回复自己触发循环）
-// ──────────────────────────────────────────────────────────────
-
+// telegram-adapter.ts：Telegram Bot 渠道——long polling（getUpdates 30s 长轮询）收消息 + Bot API 回发
 import { AppError, ErrorCode } from '@code-agent/shared/main';
 import { logger } from '../../../utils/logger';
 import { proxiedFetch } from '../../network/proxied-fetch';
@@ -20,7 +7,6 @@ import type { ChannelIncomingMessage, ChannelTarget, IChannelAdapter } from '../
 const API_BASE = 'https://api.telegram.org';
 const POLL_TIMEOUT_MS = 30_000;
 
-/** Telegram 消息原始形状（长轮询响应子集） */
 interface TelegramUpdate {
   readonly update_id: number;
   readonly message?: {
@@ -32,24 +18,15 @@ interface TelegramUpdate {
   };
 }
 
-/**
- * Telegram Bot 渠道适配器
- */
 export class TelegramAdapter implements IChannelAdapter {
   readonly kind = 'telegram' as const;
   readonly displayName = 'Telegram';
   readonly implemented = true;
   readonly configHint: string = 'Bot Token（@BotFather 获取）';
 
-  /**
-   * HTTP 依赖注入点（测试传 fake fetch，生产默认全局 fetch）
-   * 注入而非 mock：网络外部依赖可替换，业务逻辑保持真实实现
-   */
   private readonly fetchFn: typeof fetch;
 
   constructor(options: { fetchFn?: typeof fetch } = {}) {
-    // 34 号：生产默认 proxiedFetch（fixed 模式经代理、localhost/bypass 直连、
-    // 其余零开销直通全局 fetch）；测试注入 fake fetch 语义不变
     this.fetchFn = options.fetchFn ?? (proxiedFetch as unknown as typeof fetch);
   }
 
@@ -71,7 +48,6 @@ export class TelegramAdapter implements IChannelAdapter {
     }
     this.botToken = token;
 
-    // 验证 token（getMe）
     const me = await this.callApi<{ ok: boolean; result: { username?: string } }>('getMe');
     if (!me.ok) {
       throw new AppError(ErrorCode.IM_CHANNEL_INVALID_TOKEN, 'Telegram token 无效');
@@ -83,11 +59,9 @@ export class TelegramAdapter implements IChannelAdapter {
       `Telegram 渠道已连接（@${me.result?.username ?? 'unknown'}）`,
     );
 
-    // 启动长轮询（后台协程）
     const pollController = new AbortController();
     this.pollController = pollController;
     void this.pollLoop(pollController).catch((err: unknown) => {
-      // 轮询异常（网络中断等）：标记断开，不崩溃
       if (!pollController.signal.aborted) {
         this.connected = false;
         logger.error({ error: err }, 'Telegram 轮询异常退出');
@@ -107,7 +81,6 @@ export class TelegramAdapter implements IChannelAdapter {
     if (this.botToken === undefined) {
       throw new AppError(ErrorCode.IM_CHANNEL_NOT_CONFIGURED, 'Telegram 渠道未连接');
     }
-    // 失败重试 2 次（指数退避：500ms / 1000ms）
     let lastError: unknown;
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
@@ -136,9 +109,6 @@ export class TelegramAdapter implements IChannelAdapter {
     };
   }
 
-  /**
-   * 长轮询循环：getUpdates（timeout=30s）→ 逐条确认 → offset 推进
-   */
   private async pollLoop(controller: AbortController): Promise<void> {
     let offset = 0;
     while (!controller.signal.aborted) {
@@ -165,24 +135,18 @@ export class TelegramAdapter implements IChannelAdapter {
         if (controller.signal.aborted) {
           break;
         }
-        // 网络抖动：退避后继续（不终止轮询）
         logger.warn({ error: err }, 'Telegram 轮询请求失败，3s 后重试');
         await new Promise((resolve) => setTimeout(resolve, 3000));
       }
     }
   }
 
-  /**
-   * 单条 update → 领域消息分发（过滤非文本 / 群聊 @bot 前缀剥离）
-   */
   private dispatchUpdate(update: TelegramUpdate): void {
     const message = update.message;
     if (message === undefined || message.text === undefined) {
-      return; // 非文本消息（图片/命令等）忽略
+      return;
     }
     let text = message.text;
-    // 群聊中 bot 名称为前缀时剥离（避免 bot 回复自身消息形成循环）
-    // 匹配形如 `@MyBot 用户内容` / `@MyBot\n用户内容`
     if (message.chat.type === 'group' || message.chat.type === 'supergroup') {
       const stripped = text.replace(/^@[A-Za-z0-9_]{3,64}\s*/, '');
       if (stripped !== text) {
@@ -201,15 +165,11 @@ export class TelegramAdapter implements IChannelAdapter {
       try {
         listener(incoming);
       } catch (err: unknown) {
-        // 监听器异常隔离：不中断其他监听器
         logger.error({ error: err }, 'Telegram 消息监听器异常');
       }
     }
   }
 
-  /**
-   * Bot API 调用（fetch + 表单编码，兼容 Node/Electron）
-   */
   private async callApi<T>(
     method: string,
     params: Record<string, string | number | readonly string[]> = {},
@@ -230,13 +190,9 @@ export class TelegramAdapter implements IChannelAdapter {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body,
-      // fetch 的 signal 接受 null：undefined 显式转 null
       signal: this.pollController?.signal ?? null,
     });
     if (!response.ok) {
-      // HTTP 401 = token 无效（Telegram Bot API 语义），任何方法的 401 都表示凭证问题
-      // （真实缺陷修复：原实现统一抛 REQUEST_FAILED，导致 getMe 校验时 token 无效
-      //  被错误分类，无法给出 INVALID_TOKEN 引导用户重新配置）
       if (response.status === 401) {
         throw new AppError(
           ErrorCode.IM_CHANNEL_INVALID_TOKEN,

@@ -1,24 +1,3 @@
-// src/renderer/hooks/use-file-tree-ops.ts
-// 文件树编辑操作 hook（L3 服务端请求状态层）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 封装 file:create / file:createDir IPC 调用
-// - 自动管理父目录的 pendingDirs 状态（IPC 前后置位/清除，给出在途视觉反馈）
-// - 成功后取消内联编辑状态（cancelCreate）
-// - 依赖 file:watch 事件自动同步文件树状态（useFileTree 已订阅）
-// - 错误时 toast 提示
-//
-// 设计依据（项目规范）：
-// - "Server state from IPC invoke (request-response) must use TanStack Query"
-//   文件树编辑操作是 mutation 类型，但结果由 watch 事件自动同步到 store，
-//   无需缓存，直接调用 IPC 即可（与 use-file-tree.ts 的 loadDir 设计一致）
-// - 不重复 watch 文件树（useFileTree 已订阅），仅触发变更
-//
-// 调用关系：
-// - 调用方：FileTreePanel 容器（工具栏菜单新建 / 树节点内联输入确认经回调上抛）
-// - 被调方：preload file API（IPC 调用）、file-tree-store（pendingDirs + 内联状态）
-// ──────────────────────────────────────────────────────────────
-
 import { toast } from 'sonner';
 
 import { useTranslation } from '@/i18n/use-translation';
@@ -39,7 +18,6 @@ import { useFileTreeStore } from '@/stores/transient/file-tree-store';
  * ```
  */
 export function useFileTreeOps() {
-  // 本地化文案
   const { t } = useTranslation();
   const setPendingDir = useFileTreeStore((s) => s.setPendingDir);
   const cancelCreate = useFileTreeStore((s) => s.cancelCreate);
@@ -69,8 +47,6 @@ export function useFileTreeOps() {
         description: err instanceof Error ? err.message : String(err),
       });
     }
-    // finally 语义（React Compiler 不优化 try/finally）：成功后不提前 return，
-    // 统一在这里复位 pending 后再返回结果
     setPendingDir(parentDir, false);
     return ok;
   }
@@ -94,13 +70,9 @@ export function useFileTreeOps() {
         description: err instanceof Error ? err.message : String(err),
       });
     }
-    // finally 语义（React Compiler 不优化 try/finally）：成功后不提前 return，
-    // 统一在这里复位 pending 后再返回结果
     setPendingDir(parentDir, false);
     return ok;
   }
-
-  // 删除/重命名已随 NodeMenu 菜单移除（用户要求：文件树节点更多操作不需要）——无 UI 入口的死代码清理
 
   return { createFile, createDir };
 }
@@ -113,7 +85,6 @@ export function useFileTreeOps() {
  */
 export function joinPath(parentDir: string, name: string): string {
   if (parentDir === '') return name;
-  // 同时支持 \ 和 / 分隔符，取最后出现的作为当前分隔符
   const lastSlash = parentDir.lastIndexOf('/');
   const lastBackslash = parentDir.lastIndexOf('\\');
   const sep = lastBackslash > lastSlash ? '\\' : '/';

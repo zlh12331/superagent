@@ -1,7 +1,3 @@
-// src/renderer/components/ui/radio-group.tsx
-// 单选组组件（shadcn/ui new-york 风格，基于 @radix-ui/react-radio-group）
-// 设计文档 §2.3 shadcn/ui 组件库
-
 import * as RadioGroupPrimitive from '@radix-ui/react-radio-group';
 import { CircleIcon } from 'lucide-react';
 import type * as React from 'react';

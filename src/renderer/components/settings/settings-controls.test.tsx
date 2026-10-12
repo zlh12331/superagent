@@ -1,16 +1,3 @@
-// src/renderer/components/$1/settings-controls.test.tsx
-// 设置通用控件集测试（正向 / 边界 / 异常）
-// ──────────────────────────────────────────────────────────────
-// 重点守护 SegControl 的**空串过滤**（2026-09 审计修复的真 bug）：
-// Radix ToggleGroup type="single" 点击「已选中项」时会触发
-// onItemDeactivate → setValue("")，把空串透传给 onChange。各调用点普遍做
-// `Number(value)` 写库（展开层级 / 字号），空串会变成 0：
-//   - 文件树「默认展开层级」= 0 → 默认展开链彻底失效（无报错）
-//   - 编辑器「字号」= 0
-// 且受控 value 变 "0" 后无选项匹配 → 控件显示「什么都没选」。
-// 本文件锁定该回归不会回来。
-// ──────────────────────────────────────────────────────────────
-
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
@@ -38,11 +25,9 @@ describe('SegControl', () => {
     const onChange = vi.fn();
     render(<SegControl value="2" onChange={onChange} options={OPTIONS} />);
 
-    // 点第 2 项（即当前选中项）
     const items = screen.getAllByRole('radio');
     await userEvent.click(items[1] as HTMLElement);
 
-    // 关键：不得回调空串——否则调用方 Number('') === 0 写入持久化设置
     expect(onChange).not.toHaveBeenCalled();
     expect(onChange.mock.calls.every((call) => call[0] !== '')).toBe(true);
   });
@@ -65,7 +50,6 @@ describe('SegControl', () => {
 
   it('可访问性：使用 RadioGroup 语义（roving tabindex，非手写 aria-pressed）', () => {
     render(<SegControl value="1" onChange={vi.fn()} options={OPTIONS} />);
-    // Radix ToggleGroup single → role="radio" + 容器 radiogroup
     expect(screen.getByRole('radiogroup')).toBeDefined();
     expect(screen.getAllByRole('radio')).toHaveLength(3);
     expect(screen.getAllByRole('radio')[0]?.getAttribute('aria-checked')).toBe('true');

@@ -1,10 +1,6 @@
 // scripts/lib/coverage-floors.test.ts
-// 覆盖率门槛真源（SSOT）读取/校验/收紧的单元测试
-// ──────────────────────────────────────────────────────────────
-// 这组测试的意义：门槛数字对外声称「按 80/75/80/80 卡关」而配置里其实是
-// 59/50/54/59（甚至注释谎报实测）。自洽性、棘轮、过期、config 接线
-// 四条规则必须有回归测试，否则下一个改配置的人仍可各写一套。
-// ──────────────────────────────────────────────────────────────
+// 覆盖率门槛真源读取与校验单测（config 接线 / floor≥ratchet / measured≥floor /
+// 实测过期四条判据的红绿 fixture）
 
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -53,7 +49,6 @@ function fixture(over: Partial<Record<keyof CoverageFloorsFile['layers'], LayerF
       shared: layer(),
       main: layer(),
       renderer: layer(),
-      // 按真源层级清单补齐治理层（LAYER_KEYS 与此处必须同步，缺层会被 parse 抛错）
       'renderer-settings': layer(),
       ...over,
     },
@@ -278,7 +273,6 @@ describe('真实仓库接线（回归防护）', () => {
     expect(validateConfigWiring(REPO_ROOT)).toEqual([]);
   });
 
-  // 仅覆盖接 vitest 的层；治理层（renderer-settings，LAYER_CONFIGS 无项）无 thresholds 接线
   const wiredLayers = LAYER_KEYS.filter((l) => typeof LAYER_CONFIGS[l] === 'string');
   it.each(wiredLayers)('%s 层门槛与 vitest 读取的键一致', (layerKey) => {
     const rel = LAYER_CONFIGS[layerKey];
@@ -294,9 +288,6 @@ describe('真实仓库接线（回归防护）', () => {
     ]);
   });
 
-  // 历史护栏「floor ≠ 规范值 80/75/80/80」随 2026-09-26 缺口清零失效（19fae76 补测达标），
-  // 改守不变式本身：floor 不得高于 min(规范目标, 实测−缓冲)，必须可由实测复现。
-  // 伪造场景（实测 64 时代硬写 80/75/80/80）在此断言下仍被拦：上限只有 59/50/54/59。
   it('渲染层 floor 不得超出实测可复现的上限（伪造成规范值仍会被拦）', () => {
     const file = loadCoverageFloors(join(REPO_ROOT, 'scripts/coverage-floors.json'));
     const renderer = file.layers.renderer;

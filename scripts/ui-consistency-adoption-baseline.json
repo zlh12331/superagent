@@ -3,12 +3,12 @@
     "count": 4
   },
   "AsyncBoundary": {
-    "count": 3
+    "count": 1
   },
   "SectionErrorBoundary": {
-    "count": 3
+    "count": 2
   },
   "DialogHost": {
-    "count": 2
+    "count": 1
   }
 }

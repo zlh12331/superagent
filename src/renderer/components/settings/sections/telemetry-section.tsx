@@ -1,9 +1,3 @@
-// telemetry-section.tsx（自 SettingsDialog 拆分）
-// 设置对话框 · 遥测级别（隐私合规，对标 VS Code telemetryLevel）
-// ──────────────────────────────────────────────
-// 拆分背景：SettingsDialog 1052 行多域混合，按域提取为独立文件（高内聚）
-// ──────────────────────────────────────────────
-
 import type { TelemetryLevel } from '@code-agent/shared/renderer';
 import { Shield } from 'lucide-react';
 import { Button } from '@/components/ui/button';

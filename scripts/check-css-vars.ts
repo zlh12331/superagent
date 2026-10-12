@@ -1,20 +1,6 @@
-// scripts/check-css-vars.ts
-// CSS 变量引用完整性门禁：扫描 var(--x) 引用，断言每个都有定义
-// ──────────────────────────────────────────────────────────────
-// 背景（2026-09-14）：实测发现 5 处 var(--x) 引用了从未定义的令牌
-// （--z-dropdown / --z-raised / --bg-elev-1 / --text-muted / --accent-2-dim），
-// 导致对应 CSS 声明被浏览器静默丢弃——比裸色值更隐蔽：
-//   check:tokens 查「裸色值/裸 z 数字」能查，
-//   但查不出「引用了不存在的令牌」。
-// 本门禁补上这个盲区（与 check:csp-hash / check:compiler 同属「防静默失效」家族）。
-// 判据核在 scripts/lib/css-vars.ts（反例测试同目录）。
-//
-// 豁免（按需，均需给出理由）：
-// - 运行时注入：Radix 等库在运行时设置（--radix-*）；Tailwind v4 动态前缀（--spacing 等）
-// - 带 fallback 的引用：var(--x, fallback) 即使 --x 未定义也有确定取值，不算失效
-//
-// 运行：pnpm check:css-vars
-// ──────────────────────────────────────────────────────────────
+// scripts/check-css-vars.ts：CSS 变量引用完整性门禁——扫描 var(--x) 引用，断言每个都有定义
+// 补 check:tokens 的盲区：它查裸色值/裸 z 数字，查不出「引用了不存在的令牌」，
+// 而后者会被浏览器静默丢弃（比裸色值更隐蔽）；判据与豁免规则在 scripts/lib/css-vars.ts，反例测试同目录。
 
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -22,6 +8,7 @@ import { join } from 'node:path';
 import { findMissingVars, scanCssVars } from './lib/css-vars';
 
 const ROOT = join(import.meta.dirname, '..');
+// 只覆盖第一方源码：产物与依赖目录由 SKIP_DIRS 兜底，无需在此枚举
 const SCAN_DIRS = ['src'];
 
 /** 扫描时跳过的目录名 */

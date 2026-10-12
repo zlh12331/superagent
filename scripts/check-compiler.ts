@@ -1,34 +1,23 @@
 // scripts/check-compiler.ts
-// React Compiler 生效门禁：断言渲染层产物含 react/compiler-runtime 编译痕迹
-// ──────────────────────────────────────────────────────────────
-// 背景：React Compiler 曾以 babel.plugins 形式"存在"数月而被 Vite 8（Rolldown）
-// 链路静默忽略（产物 0 处 compiler-runtime 引用、0 个 'use memo'），2026-08-30 才查明。
-// 现经 oxc-transform-react 启用（electron.vite.config.ts / vite.web.config.ts 的
-// react({ compiler: ... })）；oxc-transform-react 是 plugin-react v6 的可选 peerDep，
-// 缺失或被移除时 compiler 选项会再次静默失效。本脚本把"编译器必须真的在跑"变成机器闸。
-//
-// 判据（2026-09-24 升级）：不止断言"字符串存在"——`compiler-runtime` 字符串在 React 包
-// 自身（react/compiler-runtime.js 被打进 vendor chunk）也存在，编译器真失效时旧判据
-// 可能仍通过。现统计 **useMemoCache 运行时调用点**（`require_compiler_runtime(` 在
-// minified 产物中的形态）与含调用点的 chunk 数，双下限拦截：
-//   MIN_COMPILER_CHUNKS = 20 —— 2026-09-24 实测 28（对照 require_react 35 chunk），
-//   留 ~30% 余量容忍组件重构波动；复核流程：React 大版本升级或产物结构变化时
-//   重新实测并调整常量（只会从"通过"变"失败"提示复核，fail-closed 方向）。
-//
-// 产物不存在时仅提示（本地未构建场景不卡关）；CI 中 build 后与 check:bundle 同位运行。
-//
-// 运行：pnpm build && pnpm check:compiler
-// ──────────────────────────────────────────────────────────────
+// React Compiler 生效门禁：断言渲染层产物含 react/compiler-runtime 的调用点（useMemoCache 运行时痕迹）。
+// 编译器经 electron.vite.config.ts / vite.web.config.ts 的 react({ compiler }) 启用，而 oxc-transform-react
+// 是 plugin-react v6 的可选 peerDep——缺失或被移除时 compiler 选项会静默失效（无任何报错），故需机器闸。
+// 判据不止"字符串存在"：`compiler-runtime` 路径字符串在 react 包自身被打进的 vendor chunk 里也有，只查
+// 字符串会在编译器真失效时仍通过；故统计净调用点与含调用点的 chunk 数（双下限，见 MIN_COMPILER_CHUNKS）。
+// 产物不存在（本地未构建）时仅提示跳过，不卡关；CI 中在 build 之后运行：pnpm build && pnpm check:compiler
 
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { countCompilerCallSites } from './lib/compiler-output';
 
+// ───── 判据参数：产物位置 + 双下限之一 ─────
 const ROOT = join(import.meta.dirname, '..');
 const ASSETS_DIR = join(ROOT, 'out', 'renderer', 'assets');
 
-/** 含调用点的 chunk 数下限（2026-09-24 实测 28；复核流程见头注释） */
+/** 含调用点的 chunk 数下限：2026-09-24 实测 28（对照 require_react 的 35 个 chunk），留约 30% 余量
+ * 容忍组件重构波动；React 大版本升级或产物结构骤变致实测下降时重新取值并说明理由（只可能从
+ * "通过"变"失败"，fail-closed 方向） */
 const MIN_COMPILER_CHUNKS = 20;
 
 function main(): number {
@@ -44,7 +33,7 @@ function main(): number {
     return 0;
   }
 
-  // 判据核（lib 纯函数）：统计净调用点与应用 chunk 数
+  // 判据核在 lib 纯函数内（应用 chunk 的顶层调用减 vendor 的模块包装定义）
   const { totalCalls, chunksWithCalls } = countCompilerCallSites(
     files.map((f) => readFileSync(join(ASSETS_DIR, f), 'utf8')),
   );

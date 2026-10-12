@@ -1,6 +1,3 @@
-// src/main/infra/ai/tools/file-tools.test.ts
-// 文件类工具单测：read/write/edit/list-directory（真实 FileService + 临时目录）
-
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -15,7 +12,6 @@ import { createWriteFileTool } from './write-file.tool';
 
 let workDir: string;
 
-/** 构造工具执行上下文 */
 function createCtx(): ToolContext {
   return {
     workingDir: workDir,
@@ -78,7 +74,6 @@ describe('file 类工具（真实 FileService）', () => {
         { path: 'out.txt', content: '写入内容', append: false, createDirs: true },
         createCtx(),
       );
-      // metadata 结构：{ path, bytesWritten, append, createDirs }
       expect(result.metadata).toMatchObject({ path: join(workDir, 'out.txt') });
       expect((result.metadata as { bytesWritten?: number }).bytesWritten).toBeGreaterThan(0);
       const fs = await import('node:fs');
@@ -99,7 +94,6 @@ describe('file 类工具（真实 FileService）', () => {
   describe('edit_file', () => {
     it('精确替换：oldString 匹配后替换', async () => {
       writeFileSync(join(workDir, 'edit.txt'), 'const a = 1;\n', 'utf8');
-      // priorReadEnforcement 契约：编辑前必须先 read_file
       await createReadFileTool(getFileService()).execute(
         { path: 'edit.txt', offset: 0, limit: undefined },
         createCtx(),
@@ -114,7 +108,6 @@ describe('file 类工具（真实 FileService）', () => {
         },
         createCtx(),
       );
-      // metadata 结构：{ path, bytesWritten, replacedCount, addedLines, removedLines }
       expect((result.metadata as { replacedCount?: number }).replacedCount).toBeGreaterThan(0);
       const fs = await import('node:fs');
       expect(fs.readFileSync(join(workDir, 'edit.txt'), 'utf8')).toBe('const a = 2;\n');
@@ -122,7 +115,6 @@ describe('file 类工具（真实 FileService）', () => {
 
     it('找不到 oldString：抛 AppError（INVALID_INPUT）且内容不变', async () => {
       writeFileSync(join(workDir, 'edit2.txt'), 'content', 'utf8');
-      // priorReadEnforcement 契约：编辑前必须先 read_file
       await createReadFileTool(getFileService()).execute(
         { path: 'edit2.txt', offset: 0, limit: undefined },
         createCtx(),

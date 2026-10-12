@@ -1,16 +1,3 @@
-// src/main/infra/ai/tools/tool-executor.test.ts
-// ToolExecutor 单测：统一工具执行入口（权限检查 + 审批流 + plan 模式只读约束）
-//
-// 测试要点：
-// 1. 工具不存在 → TOOL_NOT_FOUND 错误结果
-// 2. permission='auto'：直接执行
-// 3. permission='ask' + 批准 → 执行；拒绝 → TOOL_PERMISSION_DENIED
-// 4. plan 模式 + ask 工具 → 直接拒绝（不请求审批，零副作用）★ 核心新特性
-// 5. plan 模式 + auto 工具 → 正常执行
-// 6. 执行前 abort → TOOL_ABORTED
-// 7. 执行抛错 → TOOL_EXECUTION_FAILED
-// 8. AGENT_TOOL_CALL / AGENT_TOOL_RESULT 事件推送
-
 import { ErrorCode, IPC_CHANNELS } from '@code-agent/shared/main';
 import type { WebContents } from 'electron';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -20,14 +7,12 @@ import type { IToolRegistry } from './tool-registry';
 
 const mocks = vi.hoisted(() => ({
   mockLogger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
-  // otel withSpan：直接透传回调（不依赖真实 OTel）
   mockWithSpan: vi.fn(async (_name: string, _attrs: unknown, fn: () => Promise<unknown>) => fn()),
 }));
 
 vi.mock('../../../utils/logger', () => ({ logger: mocks.mockLogger }));
 vi.mock('../../../telemetry/otel', () => ({ withSpan: mocks.mockWithSpan }));
 
-/** 创建 mock 工具 */
 function createMockTool(
   permission: 'auto' | 'ask' = 'ask',
   execute: (input: unknown, ctx: ToolContext) => Promise<ToolResult> = async () => ({
@@ -44,7 +29,6 @@ function createMockTool(
   } as unknown as Tool;
 }
 
-/** 创建 mock 注册表 */
 function createMockRegistry(tool: Tool | undefined): IToolRegistry {
   return {
     get: vi.fn(() => tool),
@@ -55,7 +39,6 @@ function createMockRegistry(tool: Tool | undefined): IToolRegistry {
   } as unknown as IToolRegistry;
 }
 
-/** 创建 mock WebContents（记录 send 调用） */
 function createMockWebContents() {
   return {
     isDestroyed: vi.fn(() => false),
@@ -63,7 +46,6 @@ function createMockWebContents() {
   } as unknown as WebContents & { send: ReturnType<typeof vi.fn> };
 }
 
-/** 创建基础 ToolContext */
 function createBaseCtx(overrides: Partial<ToolContext> = {}): ToolContext {
   return {
     workingDir: '/tmp/project',
@@ -258,11 +240,8 @@ describe('ToolExecutor', () => {
 
       const result = await executor.execute('mock_tool', 'call-1', {}, ctx, wc);
 
-      // 不请求审批
       expect(permissionService.requestApproval).not.toHaveBeenCalled();
-      // 不执行工具
       expect(execute).not.toHaveBeenCalled();
-      // 返回 TOOL_PERMISSION_DENIED
       expect(result.error?.code).toBe(ErrorCode.TOOL_PERMISSION_DENIED);
       expect(result.error?.message).toContain('工具调用被拒绝');
     });
@@ -311,7 +290,6 @@ describe('ToolExecutor', () => {
       expect(sentChannels).toContain(IPC_CHANNELS.AGENT_TOOL_CALL);
       expect(sentChannels).toContain(IPC_CHANNELS.AGENT_TOOL_RESULT);
 
-      // TOOL_CALL payload 含权限级别
       const callPayload = wc.send.mock.calls.find(
         ([ch]) => ch === IPC_CHANNELS.AGENT_TOOL_CALL,
       )?.[1];

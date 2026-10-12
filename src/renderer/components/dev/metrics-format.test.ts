@@ -1,11 +1,3 @@
-// src/renderer/components/$1/metrics-format.test.ts
-// 运行时指标格式化单测（正向 / 边界）
-// ──────────────────────────────────────────────────────────────
-// 三个函数的档位阈值是显式约定，用边界值锁住：
-// 每档的「起始值」与「上一档最大值」都要断言，避免再次出现
-// 「1 KB 显示成 0.0 MB」这类档位塌陷。
-// ──────────────────────────────────────────────────────────────
-
 import { describe, expect, it } from 'vitest';
 
 import { formatBytes, formatMs, formatUptime } from './metrics-format';

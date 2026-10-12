@@ -1,9 +1,3 @@
-// turns-section.tsx（自 SettingsDialog 拆分）
-// 设置对话框 · TurnsSection 独立面板
-// ──────────────────────────────────────────────
-// 拆分背景：SettingsDialog 1052 行多域混合，按域提取为独立文件（高内聚）
-// ──────────────────────────────────────────────
-
 import type { SessionRecentTurnsRes, TurnStatusText } from '@code-agent/shared/renderer';
 import { useQuery } from '@tanstack/react-query';
 import { History } from 'lucide-react';
@@ -20,8 +14,6 @@ export function TurnsSection(): ReactElement {
   const { t } = useTranslation();
   const { getErrorMessage } = useErrorMessage();
 
-  // 最近回合：TanStack Query（L3 服务端数据；浏览器模式守卫返回空列表）
-  // 四态契约：pending→行内加载、error→提示+重试（此前 error 被静默渲染成空态）
   const {
     data: turns,
     isPending,
@@ -69,7 +61,6 @@ export function TurnsSection(): ReactElement {
               </span>
               <span className="ml-2 shrink-0 text-muted-foreground">
                 {statusKey[turn.status] ?? turn.status}
-                {/* 单位走 i18n（此前用模板字面量拼 " tokens" / "s"，绕过 t()） */}
                 {turn.totalTokens !== undefined
                   ? t('chat.turnMetaTokens', { count: turn.totalTokens })
                   : ''}

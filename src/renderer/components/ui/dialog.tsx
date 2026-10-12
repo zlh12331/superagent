@@ -1,7 +1,3 @@
-// src/renderer/components/ui/dialog.tsx
-// 对话框组件（shadcn/ui new-york 风格，基于 @radix-ui/react-dialog）
-// 设计文档 §2.3 shadcn/ui 组件库
-
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { XIcon } from 'lucide-react';
 import type * as React from 'react';
@@ -74,7 +70,6 @@ export function DialogContent({
   /** 是否渲染右上角关闭按钮（默认 true；对齐参考项目 showCloseButton prop） */
   showCloseButton?: boolean;
 }): React.ReactElement {
-  // 本地化文案
   const { t } = useTranslation();
   return (
     <DialogPortal data-slot="dialog-portal">
@@ -88,7 +83,6 @@ export function DialogContent({
         {...props}
       >
         {children}
-        {/* 对齐参考项目：showCloseButton=false 时隐藏右上角关闭按钮（如搜索对话框） */}
         {showCloseButton && (
           <DialogPrimitive.Close className="ring-offset-background focus:ring-ring data-[state=open]:bg-accent data-[state=open]:text-muted-foreground absolute top-4 right-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-none disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4">
             <XIcon />

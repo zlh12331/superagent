@@ -1,6 +1,3 @@
-// src/main/ipc/devtools.handler.test.ts
-// devtools.handler 单测：devtools:open（BrowserWindow 查找 + openDevTools 调用）
-
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { mockFromWebContents } = vi.hoisted(() => ({
@@ -8,13 +5,11 @@ const { mockFromWebContents } = vi.hoisted(() => ({
 }));
 
 vi.mock('electron', () => ({
-  // 字符串键：避免 useNamingConvention 对 PascalCase 属性名的检查
   ['BrowserWindow']: { fromWebContents: mockFromWebContents },
 }));
 
 import { devtoolsHandlers } from './devtools.handler';
 
-/** 构造 sender 形状的 ctx（BrowserWindow.fromWebContents 需要 sender） */
 function createCtx(win: { webContents: { openDevTools: ReturnType<typeof vi.fn> } } | null) {
   const sender = { id: 1 };
   mockFromWebContents.mockReturnValue(win);

@@ -1,23 +1,9 @@
 // scripts/lib/i18n-hardcoded-scan.ts
-// 硬编码中文扫描核（AST 版，供 check-i18n.ts CLI 调用）+ 正则渐进兜底
-// ──────────────────────────────────────────────────────────────
-// 修复的盲区（对照旧实现 collectHardcodedZhText 的逐行正则）：
-// 1. 多行 JSX 文本节点：旧正则 `>…中文…<` 只匹配单行，跨行文本静默漏扫；
-// 2. 字符串字面量属性：`<X title="中文" />` 旧实现完全无匹配；
-// 3. 表达式容器：`{cond ? '是' : '否'}` 旧实现因含 `{}` 被显式排除。
-//
-// 判据（oxc-parser AST，随 knip 在依赖图中，devDependencies 显式声明）：
-// - JSXText 节点含中文 → 'jsx-text'；
-// - JSXAttribute 的字符串字面量值含中文 → 'attribute'；
-// - JSXExpressionContainer 内的字符串字面量 / 模板串含中文 → 'expression'。
-// 非 JSX 上下文的字符串字面量（工具函数内的 toast 文案等）不在本扫描域——
-// 它们属「工具 output 内文案」的后续迁移范围，且逐行正则时代也未纳入。
-//
-// 兜底：AST 解析失败（语法错误/解析器版本差异）时退回逐行正则——多行文本按
-// 「行内含中文且行不属于属性/标签边界」的宽松口径，属性用 `="…中文…"` 形态匹配。
-// 兜底路径与 AST 路径判据不同是显式取舍：宁误报不漏扫（硬编码文案是漏报代价
-// 高的方向性错误）。
-// ──────────────────────────────────────────────────────────────
+// 硬编码中文扫描核（oxc-parser AST 版，供 check-i18n.ts 调用）。修旧正则三盲区：
+// 跨行 JSX 文本节点静默漏扫 / 字符串字面量属性（title="中文"）完全无匹配 /
+// 表达式容器（{cond ? '是' : '否'}）被显式排除。判据：JSXText→jsx-text、
+// JSXAttribute 字符串值→attribute、表达式容器内字符串/模板串→expression；
+// 非 JSX 上下文字符串（工具函数内文案）不在本扫描域
 
 import { parseSync } from 'oxc-parser';
 
@@ -126,8 +112,6 @@ export function scanHardcodedZhByAst(content: string): HardcodedZhHit[] | null {
         return;
       }
       if (type !== 'Literal' && type !== 'TemplateLiteral') return;
-      // 字符串字面量 / 模板串：仅 JSX 域内（属性或表达式容器）纳入；
-      // 属性语境优先（`{x && <div title="中"/>}` 属属性而非表达式文案）
       const inAttribute = hasContext(stack, ['JSXAttribute']);
       const inExpression = hasContext(stack, ['JSXExpressionContainer']);
       if (!inAttribute && !inExpression) return;
@@ -149,7 +133,6 @@ export function scanHardcodedZhByAst(content: string): HardcodedZhHit[] | null {
     [],
   );
 
-  // 先序遍历天然按行序产出，按行号稳定排序防遍历顺序差异
   return hits.sort((a, b) => a.line - b.line);
 }
 

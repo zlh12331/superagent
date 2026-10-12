@@ -1,22 +1,8 @@
 // scripts/lib/commit-header.ts
-// 提交标题的严格结构校验（Conventional Commits，无冗余字符）
-// ──────────────────────────────────────────────────────────────
-// 为什么自研（2026-09-20 实证缺口）：
-//   commitlint 的 header 解析用**贪婪括号匹配**，`fix(autostart)+build(release): …`
-//   会被解析成 type=fix、scope=`autostart)+build(release)`——于是只触发 scope-enum
-//   （本仓库刻意设为 warning 级，不阻断）而放行。但 release-please 用严格
-//   Conventional Commits 解析器，对该 header 直接抛 `unexpected token '+' at 1:15`
-//   并**跳过该提交**；若它是版本区间内唯一提交 → 「0 commits」→ 不开 Release PR
-//   （实测：PR #56 的 squash 标题写成双 type 后，v1.3.1 之后的发版通道静默阻断）。
-//   且 commitlint 21.x **没有** header-pattern 规则（写入未知规则会直接抛错），
-//   故以本模块 + commit-msg 钩子补齐这道闸门。
-//
-// 校验口径：header 必须**恰好**匹配 `type(scope)!: subject`
-// - type ∈ 白名单（与 commitlint.config.js 的 type-enum 保持一致）
-// - scope 可选，仅允许 [a-z0-9._-]（禁止括号、加号、空格等）
-// - `!` 破坏性标记可选，必须紧贴 scope/type
-// - 冒号后**必须**有一个空格，然后是非空 subject
-// ──────────────────────────────────────────────────────────────
+// 提交标题严格结构校验（Conventional Commits）。为什么自研（2026-09-20 实证缺口）：
+// commitlint 用贪婪括号匹配，`fix(a)+build(b): …` 只触发 scope-enum（warning 级）
+// 即放行；而 release-please 的严格解析器对该 header 直接抛错并**跳过该提交**——
+// 若它是版本区间内唯一提交则「0 commits」、发版通道静默阻断（PR #56 实测）
 
 /** 允许的 type（须与 commitlint.config.js 的 type-enum 逐字一致） */
 export const ALLOWED_TYPES = [
@@ -60,11 +46,9 @@ export function checkCommitHeader(header: string): HeaderCheckResult {
   if (trimmed === '') {
     return { ok: false, reason: '提交标题为空' };
   }
-  // 合并提交（GitHub 的 "Merge branch ..."）不适用本规范：放行
   if (trimmed.startsWith('Merge ') || trimmed.startsWith('Revert "')) {
     return { ok: true };
   }
-  // fixup!/squash! 等前缀由 git 生成，放行（rebase 中间态）
   if (/^(fixup|squash|amend)! /.test(trimmed)) {
     return { ok: true };
   }
@@ -73,7 +57,6 @@ export function checkCommitHeader(header: string): HeaderCheckResult {
     return { ok: true };
   }
 
-  // 给出针对性诊断：区分「双 type 拼接」这一最常见的真实事故
   if (/^[a-z]+\([^)]*\)\+\s*[a-z]+\(/i.test(trimmed)) {
     return {
       ok: false,

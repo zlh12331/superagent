@@ -1,14 +1,4 @@
-// src/main/ipc/system.handler.ts
-// 系统级 IPC handler（运行时可观测性，定义表驱动）
-//
-// 职责：
-// - getStatus：返回运行时状态（内存/CPU/uptime/版本），DevPanel Metrics tab 使用
-// - read（logs 域）：读取最近 N 行日志（从 main.log 文件尾部倒读），DevPanel Logs tab 使用
-//
-// 设计：
-// - getStatus 读取 Node.js 原生 process.memoryUsage / cpuUsage
-// - read 使用 fs.open 从文件尾部按块倒读，避免大文件全量加载拖慢 IPC
-
+// system.handler.ts：system 域（进程状态快照）+ logs 域（日志尾部读取，日志面板消费）
 import { open } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { InferHandlers, IPC_DEFINITIONS } from '@code-agent/shared/main';
@@ -17,14 +7,12 @@ import { app } from 'electron';
 import { logger } from '../utils/logger';
 import type { IpcHandlerContext } from '../utils/wrap';
 
-/** logs:read 入参默认行数 */
+// 日志尾部默认 200 行，硬上限 2000（主进程日志面板拉全量会把日志文件整个读进内存）
 const DEFAULT_LINES = 200;
-/** logs:read 入参最大行数（防止大文件拖慢渲染层，与 schemas/system.ts 一致） */
 const MAX_LINES = 2000;
 
-/** System 域 handler 实现（system:getStatus） */
+/** 进程状态快照：版本/平台/运行时长/内存/CPU（诊断与设置关于页消费） */
 export const systemHandlers: InferHandlers<typeof IPC_DEFINITIONS, IpcHandlerContext>['system'] = {
-  // system:getStatus：查询运行时状态（内存/CPU/uptime/版本）
   getStatus: async () => {
     const mem = process.memoryUsage();
     const cpu = process.cpuUsage();
@@ -53,9 +41,8 @@ export const systemHandlers: InferHandlers<typeof IPC_DEFINITIONS, IpcHandlerCon
   },
 };
 
-/** Logs 域 handler 实现（logs:read） */
+/** 日志尾部读取：可按级别过滤；文件缺失/读取失败返回空集不抛（日志面板不允许炸） */
 export const logsHandlers: InferHandlers<typeof IPC_DEFINITIONS, IpcHandlerContext>['logs'] = {
-  // logs:read：读取最近 N 行日志（从文件尾部倒读）
   read: async (input) => {
     const requestedLines = input?.lines ?? DEFAULT_LINES;
     const lines = Math.min(requestedLines, MAX_LINES);
@@ -63,7 +50,6 @@ export const logsHandlers: InferHandlers<typeof IPC_DEFINITIONS, IpcHandlerConte
 
     try {
       const allLines = await readTailLines(logPath, lines);
-      // 级别过滤（可选）
       const level = input?.level;
       const filtered =
         level !== undefined ? allLines.filter((line) => line.includes(`[${level}]`)) : allLines;
@@ -76,7 +62,6 @@ export const logsHandlers: InferHandlers<typeof IPC_DEFINITIONS, IpcHandlerConte
       };
     } catch (err) {
       logger.error({ error: err, logPath }, '读取日志文件失败');
-      // 文件不存在或读取失败时返回空结果，而非抛错（避免 DevPanel 崩溃）
       return {
         lines: [],
         total: 0,
@@ -87,16 +72,8 @@ export const logsHandlers: InferHandlers<typeof IPC_DEFINITIONS, IpcHandlerConte
   },
 };
 
-/**
- * 从文件尾部读取最近 N 行（高效版，不全量加载）
- *
- * 策略：
- * - 从文件末尾向前按 4KB 块倒读
- * - 累积到足够行数后停止
- * - 返回按时间正序的行数组
- *
- * 性能：100MB 日志文件读取 200 行约 <10ms，避免全量 readFile 拖慢 IPC。
- */
+// 尾部读取从文件末尾按 4KB 块倒着找换行符，凑够行数即止——日志文件可能数十 MB，
+// 全量读再 slice 会白读一大截
 async function readTailLines(filePath: string, lines: number): Promise<string[]> {
   const file = await open(filePath, 'r');
   try {
@@ -106,7 +83,7 @@ async function readTailLines(filePath: string, lines: number): Promise<string[]>
       return [];
     }
 
-    const blockSize = 4 * 1024; // 4KB
+    const blockSize = 4 * 1024;
     const chunks: Buffer[] = [];
     let position = fileSize;
     let newlineCount = 0;
@@ -117,7 +94,6 @@ async function readTailLines(filePath: string, lines: number): Promise<string[]>
       const buffer = Buffer.alloc(readSize);
       await file.read(buffer, 0, readSize, position);
       chunks.unshift(buffer);
-      // 统计换行符数量
       for (let i = 0; i < readSize; i++) {
         if (buffer[i] === 0x0a) {
           newlineCount++;
@@ -130,14 +106,9 @@ async function readTailLines(filePath: string, lines: number): Promise<string[]>
 
     const content = Buffer.concat(chunks).toString('utf-8');
     const allLines = content.split('\n');
-    // 移除空行（文件末尾通常有一个空行）
     const nonEmpty = allLines.filter((line) => line.length > 0);
-    // 最近的 N 行（正序）
     return nonEmpty.slice(-lines);
   } finally {
-    // L5 修复：close 失败单独记录 warn，避免覆盖 try 块的原始错误
-    // - 原实现：finally 中 `await file.close()` 直接抛错会替换 try 块的原始错误（read/stat 失败的 stack 丢失）
-    // - 修复后：close 失败仅 warn，不影响 readTailLines 的返回值或抛出的原始错误
     try {
       await file.close();
     } catch (closeError) {

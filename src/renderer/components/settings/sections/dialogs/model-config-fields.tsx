@@ -1,17 +1,10 @@
-// src/renderer/components/settings/sections/dialogs/model-config-fields.tsx
-// 模型配置弹窗 · 表单字段区（API 基础配置区 + 高级配置区）
-// ──────────────────────────────────────────────────────────────
-// 纯展示组件：表单值/错误/联动均由父层 ModelConfigDialog 持有。
-// 高级配置区字段首版不持久化（仅表单交互，见文档 3.3.4 字段映射）。
-// ──────────────────────────────────────────────────────────────
-
 import type {
   ApiKeyProvider,
   AvailableModelInfo,
   ModelApiFormat,
 } from '@code-agent/shared/renderer';
 import { ChevronDown, ChevronRight, Eye, EyeOff } from 'lucide-react';
-import { type ReactElement, useState } from 'react';
+import { type ChangeEvent, type ReactElement, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -88,6 +81,62 @@ export interface ModelConfigFieldsProps {
 const CONTEXT_INPUT_SHORTCUTS = ['128k', '256k', '512k', '1M'] as const;
 const CONTEXT_OUTPUT_SHORTCUTS = ['4k', '16k', '32k', '128k'] as const;
 
+/** schema 上限（packages/shared settings.ts 的 10_000_000 护栏，保存侧同口径拦截） */
+export const CONTEXT_TOKENS_MAX = 10_000_000;
+
+/**
+ * tokens → 厂商标称 K/M 显示（二进制/十进制自适应）
+ *
+ * 显示口径：厂商标称混用二进制（131072→128k）与十进制（384000→384k）。
+ * Ki 档位判据 = 能被 1024 整除**且商为 2 的幂**——128/256/512…是厂商惯用的二进制档位，
+ * 而 384000 = 375×1024 虽整除但商非 2 幂，是十进制 384K 的巧合整除，不能按 Ki 显示；
+ * 否则能被 1000 整除按十进制 K；否则四舍五入取近似。
+ * 与 parseTokenLabel 构成换算对——parse 侧 'k' 恒按 ×1024（二进制 K 是 Token 计数惯例），
+ * 故十进制标称值经「预填→保存」会二进制化（384000→393216，+2.4% 漂移，方向保守：
+ * 仅影响压缩预算/输出钳制，不损数据）。末尾回环自校验兜底超限死角：
+ * 10000000 → "10000k" 解析超上限会卡保存校验 → 回退纯 Token 数（parse 恒精确）。
+ */
+export function formatTokenLabel(tokens: number): string {
+  if (tokens % (1024 * 1024) === 0 && tokens >= 1024 * 1024) {
+    return `${tokens / (1024 * 1024)}M`;
+  }
+  const quotient = tokens / 1024;
+  if (Number.isInteger(quotient) && isPowerOfTwo(quotient)) {
+    return `${quotient}k`;
+  }
+  const candidate = tokens % 1000 === 0 ? `${tokens / 1000}k` : `${Math.round(tokens / 1000)}k`;
+  return parseTokenLabel(candidate) !== undefined ? candidate : `${tokens}`;
+}
+
+/** 判 2 的幂（Ki 档位商识别：正整数且二进制仅一位为 1） */
+function isPowerOfTwo(n: number): boolean {
+  return n > 0 && (n & (n - 1)) === 0;
+}
+
+/**
+ * K/M 快捷值或纯 Token 数 → tokens（表单值解析回传持久化）
+ *
+ * 纯数字按原始 tokens；k/K 按 ×1024（二进制 K 是 Token 计数惯例）；
+ * m/M 按 ×1024²。非法（非数字/非正数/超 schema 上限）返回 undefined。
+ */
+export function parseTokenLabel(raw: string): number | undefined {
+  const value = raw.trim();
+  if (value === '') {
+    return undefined;
+  }
+  const match = value.match(/^(\d+)([kKmM]?)$/);
+  if (match === null) {
+    return undefined;
+  }
+  const base = Number(match[1]);
+  if (!Number.isFinite(base) || base <= 0) {
+    return undefined;
+  }
+  const suffix = match[2]?.toLowerCase() ?? '';
+  const tokens = suffix === 'k' ? base * 1024 : suffix === 'm' ? base * 1024 * 1024 : base;
+  return tokens <= CONTEXT_TOKENS_MAX ? tokens : undefined;
+}
+
 /** 字段级样式常量（多处复用，收敛字面量） */
 const FIELD_INPUT_CLASS = 'text-xs';
 const FIELD_LABEL_CLASS = 'text-2xs text-muted-foreground font-medium';
@@ -110,6 +159,9 @@ function ApiKeyField({
 }): ReactElement {
   const { t } = useTranslation();
   const [showApiKey, setShowApiKey] = useState(false);
+  const forwardInput = (event: ChangeEvent<HTMLInputElement>): void => {
+    onChange(event.currentTarget.value);
+  };
 
   return (
     <div className="flex flex-col gap-1.5">
@@ -120,7 +172,7 @@ function ApiKeyField({
           value={value}
           placeholder={t('settings.modelMgmt.apiKeyPlaceholder')}
           className={cn(FIELD_INPUT_CLASS, 'min-w-0 flex-1')}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={forwardInput}
         />
         <Button
           variant="ghost"
@@ -170,6 +222,29 @@ export function ModelConfigFields({
   /** modelId 锁定：编辑模式（update 主键）或服务商下拉已选定 */
   const modelIdLocked = isEdit || (isProvider && !values.useOtherModel);
 
+  /** 选中预设模型时用厂商适配的官方数值预填高级配置（仅填空字段——用户手改过的不覆盖）。
+   * ⚠ 显示口径：厂商标称混用二进制（131072→128k）与十进制（384000→384k），换算走
+   * formatTokenLabel 自适应；持久化方向由 dialog 的 parseTokenLabel 解析回传 */
+  const applyPresetCapabilities = (modelId: string): void => {
+    const preset = providerModels.find((m) => m.id === modelId);
+    const caps = preset?.capabilities as
+      | { contextWindowSize?: number; maxOutputTokens?: number; vision?: boolean }
+      | undefined;
+    if (caps === undefined) {
+      return;
+    }
+    if (values.contextInput.trim() === '' && caps.contextWindowSize !== undefined) {
+      onFieldChange('contextInput', formatTokenLabel(caps.contextWindowSize));
+    }
+    if (values.contextOutput.trim() === '' && caps.maxOutputTokens !== undefined) {
+      onFieldChange('contextOutput', formatTokenLabel(caps.maxOutputTokens));
+    }
+    // 视觉：capabilities.vision（仅自动填「支持」——无视觉标注的模型不主动改用户选择）
+    if (caps.vision === true && values.imageSupport === 'unsupport') {
+      onFieldChange('imageSupport', 'support');
+    }
+  };
+
   const inputClass = 'text-xs';
   const labelClass = 'text-2xs text-muted-foreground font-medium';
   const thinkingLabels: Record<string, string> = {
@@ -180,7 +255,6 @@ export function ModelConfigFields({
 
   return (
     <div className="flex flex-col gap-3">
-      {/* ── API 基础配置区 ─────────────────────────────── */}
       {isProvider && (
         <>
           <div className="flex flex-col gap-1.5">
@@ -189,8 +263,6 @@ export function ModelConfigFields({
               value={values.providerKind}
               disabled={providerKindLocked}
               onValueChange={(v) => {
-                // 切换厂商时清空已选模型：旧厂商的 selectedModel 对新厂商无效
-                // （否则 effectiveModelId 残留跨厂商模型 id → 保存出错配模型）
                 onFieldChange('providerKind', v as ApiKeyProvider);
                 onFieldChange('selectedModel', '');
                 onFieldChange('useOtherModel', false);
@@ -219,6 +291,8 @@ export function ModelConfigFields({
                 } else {
                   onFieldChange('useOtherModel', false);
                   onFieldChange('selectedModel', v);
+                  // 选中预设模型：capabilities 自动预填高级配置（厂商适配的官方数值）
+                  applyPresetCapabilities(v);
                 }
               }}
             >
@@ -244,9 +318,6 @@ export function ModelConfigFields({
         <>
           <div className="flex flex-col gap-1.5">
             <Label className={labelClass}>{t('settings.modelMgmt.apiFormatLabel')}</Label>
-            {/* 三格式可选（2026-10-08）：此前是写死单选的禁用下拉——用户配
-                Responses / Anthropic 协议的网关时无法表达，只能被按 Chat
-                Completions 调用而 404/400 */}
             <Select
               value={values.apiFormat}
               onValueChange={(v) => onFieldChange('apiFormat', v as ModelApiFormat)}
@@ -255,7 +326,6 @@ export function ModelConfigFields({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {/* key 必须是 t() 的字面量实参（check:i18n 静态扫描；拼 key 会被判冗余） */}
                 <SelectItem value="openai-chat" className={inputClass}>
                   {t('settings.modelMgmt.apiFormat_openai-chat')}
                 </SelectItem>
@@ -295,7 +365,6 @@ export function ModelConfigFields({
 
       <div className="flex flex-col gap-1.5">
         <Label className={labelClass}>{t('settings.modelMgmt.modelIdLabel')} *</Label>
-        {/* 锁定：编辑模式（update 以 modelId 为主键，改动即保存静默无效）或服务商下拉已选定 */}
         <Input
           type="text"
           value={isProvider && !values.useOtherModel ? values.selectedModel : values.modelId}
@@ -340,7 +409,6 @@ export function ModelConfigFields({
 
       {testError !== undefined && <p className="text-error-text text-2xs">{testError}</p>}
 
-      {/* ── 高级配置区（折叠） ──────────────────────────── */}
       <Button
         variant="ghost"
         size="sm"

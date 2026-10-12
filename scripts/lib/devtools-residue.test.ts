@@ -1,4 +1,6 @@
 // scripts/lib/devtools-residue.test.ts
+// devtools 残留扫描核单测：两个标记串的红绿 fixture（真残留/干净产物）
+
 import { describe, expect, it } from 'vitest';
 
 import { findDevtoolsResidue } from './devtools-residue';

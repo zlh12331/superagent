@@ -1,6 +1,3 @@
-// src/renderer/lib/settings-bootstrap.test.ts
-// settings-bootstrap 单测（S1：SQLite 快照 / legacy 迁移 / 浏览器回退）
-
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { bootstrapSettings } from './settings-bootstrap';
 import { SETTINGS_STORAGE_KEY } from './theme-init';
@@ -41,9 +38,7 @@ describe('bootstrapSettings', () => {
     } as never;
     const { theme } = await bootstrapSettings();
     expect(theme).toBe('dark');
-    // 迁移写入（shortcuts 经 v3 归一化后落库）
     expect(setMock).toHaveBeenCalled();
-    // legacy 清理
     expect(localStorage.getItem(SETTINGS_STORAGE_KEY)).toBeNull();
   });
 

@@ -1,15 +1,12 @@
-// packages/shared/src/__tests__/settings-schema.test.ts
-// settings schema 单测：P0 收口——settings:set key 白名单 + lsp 命令门
-//
-// 背景：key 曾为自由字符串，渲染层可覆写主进程消费的任意 app_settings 键
-// 且持久化重启仍生效；lsp.serverCommands 值曾可为任意路径形态的可执行文件。
-
+// settings-schema.test.ts：settings:set 入参校验契约——key 白名单 + lsp/proxy/appearance/terminal/editor 五组值级门禁
+// 边界：只锁 schemas/settings.ts 层面的接受/拒绝；读侧归一（clampZoom 等）与落库、渲染层 store 行为不在本套件内
 import { describe, expect, it } from 'vitest';
 import { ZOOM_LEVELS } from '../constants/zoom';
 import { isSafeLsServerCommand, SETTING_KEYS, SettingsSetReqSchema } from '../schemas/settings';
 
 describe('SETTING_KEYS 白名单', () => {
   it('覆盖渲染层全部持久化分组（含直写的 im.allowedGroups 与 memory/update/notification/proxy/appearance/terminal 开关）', () => {
+    // 全等断言（非子集）：该表同时是 settings:resetAll 的删除范围与设置导入的写入白名单，增删键必须显式改到这里
     expect(SETTING_KEYS).toEqual([
       'theme',
       'language',
@@ -27,7 +24,7 @@ describe('SETTING_KEYS 白名单', () => {
       'proxy',
       'appearance',
       'terminal',
-      'im.allowedGroups',
+      'im.allowedGroups', // 唯一带点号的直写键：'im' 整组属主进程内部命名空间不可覆写，仅单放群白名单这一项
     ]);
   });
 });
@@ -48,6 +45,7 @@ describe('SettingsSetReqSchema · key 白名单（P0）', () => {
   });
 
   it('白名单外键拒绝（含主进程内部配置命名空间）', () => {
+    // '__proto__' 是原型链特殊键：按键写入路径绝不能接受它，故纳入拒绝集
     for (const key of ['lsp2', 'runtime.models', 'im', '__proto__', 'theme.dark', '']) {
       expect(SettingsSetReqSchema.safeParse({ key, value: {} }).success).toBe(false);
     }
@@ -95,6 +93,7 @@ describe('SettingsSetReqSchema · appearance 值级门禁（35 号）', () => {
   });
 
   it('非法档位/非对象/缺 zoom → 拒绝', () => {
+    // 0.93 取档位间的近似值（读侧 clampZoom 会归一到 0.9）：写入侧只认精确档位，不做归一
     for (const value of [{ zoom: 0.93 }, { zoom: 3 }, {}, null, '1']) {
       expect(SettingsSetReqSchema.safeParse({ key: 'appearance', value }).success).toBe(false);
     }
@@ -103,6 +102,7 @@ describe('SettingsSetReqSchema · appearance 值级门禁（35 号）', () => {
 
 describe('SettingsSetReqSchema · terminal 值级门禁（36 号 B）', () => {
   it('合法 shell + 字号档位通过（shell 跨平台写入合法，读侧回落是 fail-open 取舍）', () => {
+    // 收全集（如 zsh 在 Windows 上不适用也算合法）：写入侧不判平台适用性，由读侧 terminalShellChoicesForPlatform 收敛
     for (const shell of ['auto', 'powershell', 'gitbash', 'zsh']) {
       expect(
         SettingsSetReqSchema.safeParse({ key: 'terminal', value: { shell, fontSize: 13 } }).success,

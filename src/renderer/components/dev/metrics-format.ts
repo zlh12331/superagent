@@ -1,7 +1,3 @@
-// src/renderer/components/dev/metrics-format.ts
-// 运行时指标的数值格式化（纯函数，从 MetricsPanel 外提以便单测边界）
-// ──────────────────────────────────────────────────────────────
-
 /**
  * 字节 → 人类可读（B / KB / MB / GB）
  *

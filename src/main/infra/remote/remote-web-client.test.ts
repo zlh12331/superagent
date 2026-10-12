@@ -1,16 +1,7 @@
-// src/main/infra/remote/remote-web-client.test.ts
-// 手机控制页完整性单测：CSP 哈希与内联字节一致 · 零外部资源 · 无令牌泄露
-// ──────────────────────────────────────────────────────────────
-// 为什么值得单测：控制页的 CSP 是按内联 <script>/<style> 的 sha256 授权的，
-// 页面与哈希必须来自同一批字节——任何一侧改动而另一侧未跟上，浏览器就会
-// 直接拒绝执行脚本（表现为"页面打开但点不动"），且只在真机上暴露。
-// ──────────────────────────────────────────────────────────────
-
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { REMOTE_CLIENT_CSP, REMOTE_CLIENT_HTML } from './remote-web-client';
 
-/** 取内联块字节（`<tag>...</tag>` 之间的原文，含缩进与换行） */
 function inlineBlock(tag: 'script' | 'style'): string {
   const matched = new RegExp(`<${tag}>([\\s\\S]*)</${tag}>`).exec(REMOTE_CLIENT_HTML);
   const body = matched?.[1];
