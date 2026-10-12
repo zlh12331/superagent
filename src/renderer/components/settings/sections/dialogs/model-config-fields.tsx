@@ -163,6 +163,34 @@ export function ModelConfigFields({
   /** modelId 锁定：编辑模式（update 主键）或服务商下拉已选定 */
   const modelIdLocked = isEdit || (isProvider && !values.useOtherModel);
 
+  /** 选中预设模型时用厂商适配的官方数值预填高级配置（仅填空字段——用户手改过的不覆盖） */
+  const applyPresetCapabilities = (modelId: string): void => {
+    const preset = providerModels.find((m) => m.id === modelId);
+    const caps = preset?.capabilities as
+      | { contextWindowSize?: number; maxOutputTokens?: number; vision?: boolean }
+      | undefined;
+    if (caps === undefined) {
+      return;
+    }
+    // 上下文输入：capabilities.contextWindowSize（tokens → k 显示，与快捷按钮单位一致）
+    if (values.contextInput.trim() === '' && caps.contextWindowSize !== undefined) {
+      onFieldChange('contextInput', `${Math.round(caps.contextWindowSize / 1024)}k`);
+    }
+    // 上下文输出：capabilities.maxOutputTokens
+    if (values.contextOutput.trim() === '' && caps.maxOutputTokens !== undefined) {
+      onFieldChange(
+        'contextOutput',
+        caps.maxOutputTokens % 1024 === 0
+          ? `${Math.round(caps.maxOutputTokens / 1024)}k`
+          : String(caps.maxOutputTokens),
+      );
+    }
+    // 视觉：capabilities.vision（仅自动填「支持」——无视觉标注的模型不主动改用户选择）
+    if (caps.vision === true && values.imageSupport === 'unsupport') {
+      onFieldChange('imageSupport', 'support');
+    }
+  };
+
   const inputClass = 'text-xs';
   const labelClass = 'text-2xs text-muted-foreground font-medium';
   const thinkingLabels: Record<string, string> = {
@@ -209,6 +237,8 @@ export function ModelConfigFields({
                 } else {
                   onFieldChange('useOtherModel', false);
                   onFieldChange('selectedModel', v);
+                  // 选中预设模型：capabilities 自动预填高级配置（厂商适配的官方数值）
+                  applyPresetCapabilities(v);
                 }
               }}
             >

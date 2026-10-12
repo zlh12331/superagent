@@ -88,6 +88,34 @@ export const BUILTIN_MODELS: readonly ModelEntry[] = [
     generationConfig: { reasoningEffort: 'max' },
   },
   {
+    // 官方契约：glm-5.3-flash 原生多模态 VLM（视觉理解），1M/128K，强制思考；
+    // 定价为 GLM-5.3 的 1/10
+    id: 'glm-5.3-flash',
+    providerKind: 'zhipu',
+    displayName: 'GLM-5.3 Flash（多模态，1M 上下文）',
+    capabilities: {
+      reasoning: true,
+      vision: true,
+      contextWindowSize: 1_000_000,
+      maxOutputTokens: 128_000,
+    },
+    generationConfig: { reasoningEffort: 'max' },
+  },
+  {
+    // 官方契约：glm-5.3-flashx 推理 200 tokens/s（Flash 加速版），能力同 Flash；
+    // Coding Plan 暂未开放 FlashX（额度仅 Flash）
+    id: 'glm-5.3-flashx',
+    providerKind: 'zhipu',
+    displayName: 'GLM-5.3 FlashX（多模态，高速）',
+    capabilities: {
+      reasoning: true,
+      vision: true,
+      contextWindowSize: 1_000_000,
+      maxOutputTokens: 128_000,
+    },
+    generationConfig: { reasoningEffort: 'max' },
+  },
+  {
     id: 'mimo-v2.6-flash',
     providerKind: 'mimo',
     displayName: 'MiMo V2.6 Flash',
@@ -125,7 +153,7 @@ export const BUILTIN_MODELS: readonly ModelEntry[] = [
 /** 各厂商默认模型（只登记深度适配厂商；未登记 kind = 无预设，设置面不展示该厂商） */
 export const DEFAULT_MODEL_BY_KIND: Partial<Record<ProviderKind, string>> = {
   deepseek: DEFAULT_MODEL,
-  zhipu: 'glm-5.2',
+  zhipu: 'glm-5.3-flash',
   mimo: 'mimo-v2.6-pro',
 };
 
