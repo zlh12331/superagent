@@ -1,14 +1,14 @@
 # 技术栈文档
 
 > 基于 `code-agent-desktop` 实际 [package.json](file:///package.json) 整理。
-> 整理时间：2026-07-23（依赖清单 2026-08-11 同步；**2026-09-30 全量对账**——版本号/pnpm 11/allowBuilds/tsconfig 引用/workspace 三包按现值核对；**2026-10-09 pnpm 12.10.1 升级**——packageManager/engines/锁文件同步，version 行随包现值修正）
+> 整理时间：2026-07-23（依赖清单 2026-08-11 同步；**2026-09-30 全量对账**——版本号/pnpm 11/allowBuilds/tsconfig 引用/workspace 三包按现值核对；**2026-10-09 pnpm 12.10.1 升级**——packageManager/engines/锁文件同步，version 行随包现值修正；**2026-10-12 全量对账**——Node 26/pnpm 12 引擎锚点 + 依赖表现值 + allowBuilds 清单按 package.json / pnpm-workspace.yaml 实测修正）
 
 ## 1. 项目基本信息
 
 | 项              | 值                                                              | 来源                                         |
 | -------------- | -------------------------------------------------------------- | ------------------------------------------ |
 | name           | `code-agent-desktop`                                           | [package.json](file:///package.json) |
-| version        | `1.8.0-beta.3`                                                 | [package.json](file:///package.json) |
+| version        | `1.8.0`                                                        | [package.json](file:///package.json) |
 | description    | Code Agent Desktop - 生产级 Electron Code Agent 桌面应用（Windows 桌面端） | [package.json](file:///package.json) |
 | type           | `module`                                                       | [package.json](file:///package.json) |
 | main           | `./out/main/index.js`                                          | [package.json](file:///package.json) |
@@ -18,10 +18,10 @@
 
 | 依赖      | 版本要求        | 来源                                               |
 | ------- | ----------- | ------------------------------------------------ |
-| Node.js | `>=24.13.0` | [package.json](file:///package.json) |
-| pnpm    | `>=11.0.0`  | [package.json](file:///package.json) |
+| Node.js | `>=26.0.0` | [package.json](file:///package.json) |
+| pnpm    | `>=12.0.0`  | [package.json](file:///package.json) |
 
-构建脚本决策（pnpm 11：`allowBuilds` 取代 `onlyBuiltDependencies`）在 [pnpm-workspace.yaml](file:///pnpm-workspace.yaml)：放行 `better-sqlite3` / `electron` / `esbuild` / `node-pty` / `libxmljs2`，显式 false 拒绝 `@sentry/cli` / `@swc/core` / `electron-winstaller` / `msw` / `protobufjs`（pnpm 11 对未决策包报 ERR_PNPM_IGNORED_BUILDS 阻断 install，必须逐一表态）。
+构建脚本决策（pnpm 12 沿用 `allowBuilds`，取代旧 `onlyBuiltDependencies`）在 [pnpm-workspace.yaml](file:///pnpm-workspace.yaml)：放行 `better-sqlite3` / `electron` / `esbuild` / `node-pty`，显式 false 拒绝 `@sentry/cli` / `@swc/core` / `electron-winstaller` / `msw` / `protobufjs`（pnpm 对未决策包报 ERR_PNPM_IGNORED_BUILDS 阻断 install，必须逐一表态）。
 
 ## 3. 依赖分类清单
 
@@ -29,27 +29,27 @@
 
 | 依赖                            | 版本             | 类型                            |
 | ----------------------------- | -------------- | ----------------------------- |
-| `electron`                    | `^44.2.0`      | devDep                        |
+| `electron`                    | `^44.7.0`      | devDep                        |
 | `electron-vite`               | `6.0.0-beta.1` | dep                           |
 | `electron-updater`            | `^6.8.9`       | dep                           |
 | `electron-log`                | `^5`           | dep                           |
 | `electron-builder`            | `^26`          | devDep                        |
-| `@electron/rebuild`           | `^4.2.0`       | devDep                        |
+| `@electron/rebuild`           | `^4.2.1`       | devDep                        |
 | `electron-devtools-installer` | `^4.0.0`       | devDep                        |
 | `vite`                        | `^8`           | dep                           |
-| `@vitejs/plugin-react`        | `^6.1.1`       | devDep                        |
-| `oxc-transform-react`         | `^0.148.0`     | devDep（React Compiler oxc 通道） |
+| `@vitejs/plugin-react`        | `^6.1.2`       | devDep                        |
+| `oxc-transform-react`         | `^0.152.0`     | devDep（React Compiler oxc 通道） |
 
 ### 3.2 React 全家桶
 
 | 依赖                                                               | 版本                                |
 | ---------------------------------------------------------------- | --------------------------------- |
-| `react`（devDep）                                                | `^19.2.8`                         |
-| `react-dom`                                                      | `^19.2.8`                         |
-| `react-router`                                                   | `^8.3.1`                          |
-| `react-i18next` / `i18next` / `i18next-browser-languagedetector` | `^17.0.13` / `^26.4.2` / `^8.2.1` |
-| `@tanstack/react-query`                                          | `^5.102.8`                        |
-| `react-error-boundary`                                           | `^6.1.4`                          |
+| `react`（devDep）                                                | `^19.3.0`                         |
+| `react-dom`                                                      | `^19.3.0`                         |
+| `react-router`                                                   | `^8.4.0`                          |
+| `react-i18next` / `i18next` / `i18next-browser-languagedetector` | `^17.0.16` / `^26.4.2` / `^8.2.1` |
+| `@tanstack/react-query`                                          | `^5.104.1`                        |
+| `react-error-boundary`                                           | `^6.1.6`                          |
 | `react-hotkeys-hook`                                             | `^5.3.3`                          |
 | `react-markdown` / `remark-gfm`                                  | `^10.1.0` / `^4.0.1`              |
 | `react-activity-calendar`                                        | `^3.2.1`                          |
@@ -58,12 +58,12 @@
 
 | 依赖                          | 版本        | 用途                                                        |
 | --------------------------- | --------- | --------------------------------------------------------- |
-| `ai` (Vercel AI SDK)        | `^7.0.92` | streamText / tools / stopWhen 多轮工具调用                      |
-| `@ai-sdk/openai`            | `^4.0.58` | OpenAI provider                                           |
-| `@ai-sdk/anthropic`         | `^4.0.49` | Anthropic provider                                        |
-| `@ai-sdk/openai-compatible` | `^3.0.43` | DeepSeek 等 OpenAI 兼容 provider                             |
-| `@ai-sdk/react`             | `^4.0.95` | useChat 等 React hooks                                     |
-| `@modelcontextprotocol/sdk` | `^1.32.0` | MCP server 集成（stdio / sse / streamable-http 三态 transport） |
+| `ai` (Vercel AI SDK)        | `^7.0.133` | streamText / tools / stopWhen 多轮工具调用                      |
+| `@ai-sdk/openai`            | `^4.0.89` | OpenAI provider                                           |
+| `@ai-sdk/anthropic`         | `^4.0.76` | Anthropic provider                                        |
+| `@ai-sdk/openai-compatible` | `^3.0.66` | DeepSeek 等 OpenAI 兼容 provider                             |
+| `@ai-sdk/react`             | `^4.0.136` | useChat 等 React hooks                                     |
+| `@modelcontextprotocol/sdk` | `^1.32.1` | MCP server 集成（stdio / sse / streamable-http 三态 transport） |
 | `gpt-tokenizer`             | `^4.0.0`  | token 计数                                                  |
 
 ### 3.4 数据库
@@ -71,8 +71,8 @@
 | 依赖                      | 版本         | 用途                                                                  |
 | ----------------------- | ---------- | ------------------------------------------------------------------- |
 | `better-sqlite3`        | `^13.0.3`  | SQLite 原生绑定                                                         |
-| `drizzle-orm`           | `^0.45.2`  | TypeScript ORM                                                      |
-| `drizzle-kit`           | `^0.31.10` | devDep，迁移工具（[drizzle.config.ts](file:///drizzle.config.ts) 已在根目录提供） |
+| `drizzle-orm`           | `^0.45.3`  | TypeScript ORM                                                      |
+| `drizzle-kit`           | `^0.31.11` | devDep，迁移工具（[drizzle.config.ts](file:///drizzle.config.ts) 已在根目录提供） |
 | `@types/better-sqlite3` | `^9.6.0`   | devDep                                                              |
 
 ### 3.5 UI / 样式
@@ -81,9 +81,9 @@
 | ----------------------------------------------------------------------------------------- | ------------------------------------------- |
 | `@tailwindcss/vite` / `tailwindcss`                                                       | `^4` / `^4`                                 |
 | `@radix-ui/react-{dialog,dropdown-menu,label,scroll-area,slot,tabs,tooltip,alert-dialog}` | 多个                                          |
-| `class-variance-authority` / `clsx` / `tailwind-merge` / `tw-animate-css`                 | `^0.7.1` / `^2.1.1` / `^3.6.0` / `^1.4.0`   |
-| `lucide-react` / `cmdk` / `sonner` / `motion`                                             | `^1.25.0` / `^1.1.1` / `^2.0.7` / `^13.0.0` |
-| `shiki`                                                                                   | `^4.4.3`                                    |
+| `class-variance-authority` / `clsx` / `tailwind-merge` / `tw-animate-css`                 | `^0.7.1` / `^2.1.1` / `^3.7.0` / `^1.4.0`   |
+| `lucide-react` / `cmdk` / `sonner` / `motion`                                             | `^1.53.0` / `^1.1.1` / `^2.0.8` / `^14.0.0` |
+| `shiki`                                                                                   | `^4.5.0`                                    |
 
 ### 3.6 终端 / 文件系统 / 搜索
 
@@ -99,13 +99,15 @@
 | `fuse.js`                           | `^7.5.0`             | 模糊搜索                                                                                            |
 
 > 2026-08-11 同步：依赖清单对齐 package.json（radix 补 alert-dialog 去 separator；AI 栈补 openai/anthropic provider；react-virtuoso → react-activity-calendar；motion ^13；补 tree-sitter-wasms）。
+>
+> 2026-10-12 同步：依赖表对齐 package.json 现值（electron ^44.7.0 / oxc ^0.152.0 / motion ^14 / ai ^7.0.133 / @ai-sdk 系 / react 19.3 / playwright 1.64 / vitest 5.0.3 / zod 4.6.5 / otel 0.223 + 2.12 / @types/node 26.6.4 等）。
 
 ### 3.7 状态 / 校验
 
 | 依赖              | 版本        |
 | --------------- | --------- |
 | `zustand`       | `^5.0.15` |
-| `zod`           | `^4.5.4`  |
+| `zod`           | `^4.6.5`  |
 | `@dnd-kit/core` | `^6.3.1`  |
 
 ### 3.8 监控 / 可观测性
@@ -113,20 +115,20 @@
 | 依赖                                        | 版本         | 用途                          |
 | ----------------------------------------- | ---------- | --------------------------- |
 | `@opentelemetry/api`                      | `^1.9.1`   | OTel API                    |
-| `@opentelemetry/exporter-trace-otlp-http` | `^0.222.0` | OTLP HTTP exporter          |
-| `@opentelemetry/resources`                | `^2.11.0`  | Resource 定义                 |
-| `@opentelemetry/sdk-trace-base`           | `^2.11.0`  | Tracer 基础                   |
-| `@opentelemetry/sdk-trace-node`           | `^2.11.0`  | Node Tracer                 |
+| `@opentelemetry/exporter-trace-otlp-http` | `^0.223.0` | OTLP HTTP exporter          |
+| `@opentelemetry/resources`                | `^2.12.0`  | Resource 定义                 |
+| `@opentelemetry/sdk-trace-base`           | `^2.12.0`  | Tracer 基础                   |
+| `@opentelemetry/sdk-trace-node`           | `^2.12.0`  | Node Tracer                 |
 
 ### 3.9 测试
 
 | 依赖                                                   | 版本                               | 用途                 |
 | ---------------------------------------------------- | -------------------------------- | ------------------ |
-| `vitest` / `@vitest/coverage-v8`                     | `^5.0.0` / `^5.0.0`              | 单测框架 + v8 coverage |
-| `@playwright/test` / `playwright`                    | `^1.62.1` / `^1.62.1`            | E2E 测试             |
+| `vitest` / `@vitest/coverage-v8`                     | `^5.0.3` / `^5.0.3`              | 单测框架 + v8 coverage |
+| `@playwright/test` / `playwright`                    | `^1.64.0` / `^1.64.0`            | E2E 测试             |
 | `@testing-library/react` / `jest-dom` / `user-event` | `^16.3.3` / `^7.0.1` / `^14.6.7` | 组件测试               |
 | `@axe-core/playwright`                               | `^4.13.0`                        | a11y 审计            |
-| `jsdom`                                              | `^30.0.1`                        | DOM 环境             |
+| `jsdom`                                              | `^30.1.2`                        | DOM 环境             |
 
 ### 3.10 工程化 / 工具
 
@@ -135,11 +137,11 @@
 | `@biomejs/biome`                          | `^2`                  | lint + format 二合一 |
 | `typescript`                              | `^7.0.2`              | TS 编译器            |
 | `tsx`                                     | `^4`                  | TS 脚本执行           |
-| `husky` / `lint-staged`                   | `^9` / `^17.1.0`      | Git hooks         |
-| `@commitlint/cli` / `config-conventional` | `^21.2.2` / `^21.2.2` | 提交规范              |
+| `husky` / `lint-staged`                   | `^9` / `^17.6.0`      | Git hooks         |
+| `@commitlint/cli` / `config-conventional` | `^21.2.3` / `^21.2.3` | 提交规范              |
 | `audit-ci`                                | `^7.1.0`              | 依赖审计              |
 | `cross-env`                               | `^10.1.0`             | 跨平台环境变量           |
-| `@types/node`                             | `^26.4.1`             | Node.js 类型        |
+| `@types/node`                             | `^26.6.4`             | Node.js 类型        |
 
 ### 3.11 workspace 内部包
 
@@ -262,16 +264,16 @@ references: packages/tsconfig, packages/shared, src/main, src/preload, src/rende
 
 ## 9. 关键风险点
 
-1. **`electron-vite 6.0.0-beta.1`**：构建链核心依赖使用 beta 版本，存在稳定性风险（Electron 44 + pnpm 11 已实测稳定运行）
+1. **`electron-vite 6.0.0-beta.1`**：构建链核心依赖使用 beta 版本，存在稳定性风险（Electron 44 + pnpm 12 已实测稳定运行）
 2. **自动更新依赖仓库可见性**：`electron-builder.yml` `publish` 为 `provider: github`，自动更新源为 GitHub Releases；私有仓库的资产下载需认证 token，面向用户分发需将仓库转为公开
 
 ## 10. 关键亮点
 
 1. **顶配 TypeScript 严格度**：`base.json` 开启了几乎所有严格选项，远超默认 `strict: true`
-2. **Biome v2 统一工具链**：用 Biome 2.5.4 同时替代 ESLint + Prettier，配合 22 组 overrides 精细化放宽命名约定
-3. **React 19.2 + React Compiler**：渲染层经 `oxc-transform-react` 启用 React Compiler（`compilationMode: 'infer'` 自动 memoize；`check:compiler` 门禁防 oxc 依赖缺失导致的静默失效）
+2. **Biome v2 统一工具链**：用 Biome 2.5.15 同时替代 ESLint + Prettier，配合 22 组 overrides 精细化放宽命名约定
+3. **React 19.3 + React Compiler**：渲染层经 `oxc-transform-react` 启用 React Compiler（`compilationMode: 'infer'` 自动 memoize；`check:compiler` 门禁防 oxc 依赖缺失导致的静默失效）
 4. **Tailwind v4 官方 Vite 插件**：弃用 v3 postcss 流程，改用 `@tailwindcss/vite`，与 Vite 8 原生集成
 5. **完整 monorepo**：pnpm workspace + 两个内部包，主应用三入口严格分离
 6. **preload CJS 输出**：明确注释 sandbox: true 限制，preload 强制 `format: 'cjs'` + `.cjs` 扩展名
-7. **原生模块编译管控**：pnpm 11 的构建脚本决策在 [pnpm-workspace.yaml](file:///pnpm-workspace.yaml) `allowBuilds`（取代旧 `pnpm.onlyBuiltDependencies`）：放行 `better-sqlite3` / `electron` / `esbuild` / `node-pty` / `libxmljs2`，显式 false 拒绝 `@sentry/cli` / `@swc/core` / `electron-winstaller` / `msw` / `protobufjs`
+7. **原生模块编译管控**：pnpm 12 沿用的构建脚本决策（pnpm 11 引入）在 [pnpm-workspace.yaml](file:///pnpm-workspace.yaml) `allowBuilds`（取代旧 `pnpm.onlyBuiltDependencies`）：放行 `better-sqlite3` / `electron` / `esbuild` / `node-pty`，显式 false 拒绝 `@sentry/cli` / `@swc/core` / `electron-winstaller` / `msw` / `protobufjs`
 

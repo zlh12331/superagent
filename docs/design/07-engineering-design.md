@@ -7,13 +7,13 @@
 
 | 维度 | 实现 |
 |------|------|
-| 包管理 | pnpm 10 workspace |
-| Node 版本 | `>=24.13.0`（engines 强制） |
+| 包管理 | pnpm 12 workspace |
+| Node 版本 | `>=26.0.0`（engines 强制） |
 | 构建 | electron-vite 6.0.0-beta.1 + vite 8 |
 | Lint/Format | Biome v2（替代 ESLint + Prettier） |
 | 类型检查 | TypeScript 7.0.2 strict mode |
-| 单元测试 | vitest 4.0.0 + @vitest/coverage-v8 |
-| E2E 测试 | Playwright 1.58（3 套配置） |
+| 单元测试 | vitest 5.0.3 + @vitest/coverage-v8 |
+| E2E 测试 | Playwright 1.64（3 套配置） |
 | 安全审计 | audit-ci 7.1.0 |
 | Git 钩子 | husky 9 + lint-staged 17 + commitlint 21 |
 | 打包 | electron-builder 26（NSIS） |

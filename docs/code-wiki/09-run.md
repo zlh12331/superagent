@@ -6,7 +6,7 @@
 
 | 项 | 要求 |
 |---|---|
-| Node.js | `>=24.13.0`（`engines`）；TRAE IDE 终端可能注入自带 Node（v22）导致版本不符，属 TRAE 限制，系统 Node 正确安装即可） |
+| Node.js | `>=26.0.0`（`engines`）；TRAE IDE 终端可能注入自带 Node（v22）导致版本不符，属 TRAE 限制，系统 Node 正确安装即可） |
 | pnpm | `>=12.0.0`（`packageManager: pnpm@12.10.1`；**构建脚本决策在 `pnpm-workspace.yaml` 的 `allowBuilds`**——pnpm 11 起不再读 `package.json#pnpm.onlyBuiltDependencies`） |
 | 原生模块 | better-sqlite3 / esbuild / node-pty 等（allowBuilds 放行编译；postinstall 走 `scripts/postinstall-rebuild.mjs`） |
 
@@ -62,7 +62,7 @@ pnpm test:coverage    # 覆盖率（下限棘轮，数字真源 scripts/coverage
 
 - `pnpm test` 全链：packages(shared) → main → renderer → integration → scripts（任一层失败即中断）。
 
-- 原生模块 ABI：Electron 44 与 Node 24 同构（NODE_MODULE_VERSION=137），无需切换脚本（rebuild-native.mjs 已删，2026-08）；若未来版本再次分叉，按 process.versions.modules 对比重新引入。
+- 原生模块 ABI：Electron 44 内嵌 Node 24.21.0，Electron ABI（NODE_MODULE_VERSION）=**149**；dev/CI Node 26 线（26.8.1）ABI=**147**——两者**不同构**（2026-10-12 实测：`ELECTRON_RUN_AS_NODE=1 node_modules/.bin/electron -p process.versions.modules`）。postinstall 每次安装强制 `@electron/rebuild` 重编 better-sqlite3/node-pty 为 Electron ABI（失败仅告警不阻断，`SKIP_ELECTRON_REBUILD=1` 跳过）；ABI 数值如再漂移以同命令实测为准。
 
 ### 4.2 E2E / Electron / Smoke（Playwright）
 
@@ -108,7 +108,7 @@ release 打 tag → publish 转正式。打包验证不在 CI（PR 阶段），�
 - **每次代码改动同步 CodeGraph 索引**：pre-commit 钩子内自动 `codegraph sync`（60s 超时容错，`SKIP_CODEGRAPH_SYNC=1` 跳过）。
 - **每次实现轮次做 git commit**（`gh` / 常规 commit；commitlint conventional 规范 + husky 钩子）。钩子分工：`pre-commit` 跑 gitleaks 暂存区扫描 + lint-staged 自动修复 + codegraph sync；`commit-msg` 跑 commitlint + `check-commit-msg` 双 type 标题拦截（双 type 会静默阻断 release-please 发版通道，2026-09-20 实证）；`pre-push` **仅**密钥扫描（`gitleaks git` 扫待推送区间，约 1.5 秒，未安装即失败），其余检查交 CI / `pnpm verify:local`。
 - **前端 mock 层保留**：渲染层 `dev/mock-api.ts`（浏览器 dev 模式走 IPC mock），前端可独立开发（不用 MSW，见 03/08）。
-- **原生模块双环境**：Node 测试环境与 Electron 运行时同 ABI（Electron 44 = Node 24，modules 137），postinstall 智能检测（ABI 就绪跳过 rebuild）。
+- **原生模块双环境**：Electron 运行时 ABI（44.7.0=149，内嵌 Node 24.21.0）与 Node 测试环境（26.8.1=147）**不同构**；postinstall 每次 install 强制按 Electron ABI 重编 better-sqlite3/node-pty（失败仅告警；`SKIP_ELECTRON_REBUILD=1` 跳过）。
 - **CSS 令牌**：改令牌改 `tokens/aurora.json`（`pnpm tokens:build` 生成），禁止手改 `tokens.css`——生成物一致性由 `tokens:check` 卡关，设计令牌用法由 `check:tokens` 卡关。
 - **i18n**：新增 key 需补全 en/zh-CN 两组（`check:i18n --strict` 卡缺失/冗余/双语不一致/JSX 硬编码中文）。
 - **版本/CHANGELOG**：由 release-please 自动化（`.github/workflows/release-please.yml`），push main 开 Release PR；**合并 Release PR 不打 tag**——tag 与 Release 由 release.yml 在三平台构建全部成功后创建（防空版本占号，详见 RELEASING.md）。
