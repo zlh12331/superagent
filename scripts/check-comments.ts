@@ -1,4 +1,4 @@
-// scripts/check-comments.ts：过期注释门禁——扫描 src/**/*.{ts,tsx} 与 docs/design/*.md，报告注释与代码已漂移的位置
+// scripts/check-comments.ts：过期注释门禁——扫描 src/**/*.{ts,tsx} 与 docs/design/、docs/implementation/ 的 .md（archive 冻结区不扫），报告注释与代码已漂移的位置
 // 判据与规则实现在 scripts/lib/comments-rules.ts（反例测试同目录）；本文件只做收集、派发与退出码。
 // 与 check:tsdoc 互补：后者拦「缺失 TSDoc」，本脚本规则 A 拦「过期 @param」（注释与签名漂移）。
 
@@ -8,7 +8,11 @@ import { join, relative } from 'node:path';
 import { type CommentProblem, createCommentRules } from './lib/comments-rules';
 
 const ROOT = join(import.meta.dirname, '..');
-const SCAN_DIRS = [join(ROOT, 'src'), join(ROOT, 'docs', 'design')];
+const SCAN_DIRS = [
+  join(ROOT, 'src'),
+  join(ROOT, 'docs', 'design'),
+  join(ROOT, 'docs', 'implementation'),
+];
 
 /** 根 package.json scripts 键集合（规则 D 的存在性判据；加载失败即门禁自身失效，直接抛） */
 const ROOT_SCRIPTS: ReadonlySet<string> = new Set(
@@ -37,7 +41,7 @@ const rules = createCommentRules({
 
 function collectFiles(dir: string, acc: string[] = []): string[] {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    if (entry.name === 'node_modules') continue;
+    if (entry.name === 'node_modules' || entry.name === 'archive') continue;
     const full = join(dir, entry.name);
     if (entry.isDirectory()) collectFiles(full, acc);
     else if (entry.name.includes('.test.')) continue;
