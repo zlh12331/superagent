@@ -57,8 +57,8 @@ pre-push 钩子：**仅密钥扫描**（`gitleaks git --log-opts="<远端 main>.
 
 ## 文档地图
 
-- **docs/design/**：设计文档（常态化维护）。入口 [docs/design/README.md](docs/design/README.md)（规范 01~24 + 32 号流程 + 治理索引 + 维护约定与维护矩阵）；code-wiki 子目录为代码库导航（新成员读 00-index 起）。新增设计规范用主题命名、不带编号。
-- **docs/implementation/**：实施记录（一次性归档）。入口 [docs/implementation/README.md](docs/implementation/README.md)；新功能实施记录按 32 号流程以 `NN-<slug>-spec.md` 落位（编号从 40 续号）并登记；一次性交付归档进 `implementation/archive/`。
+- **docs/design/**：设计文档（常态化维护）。入口 [docs/design/README.md](docs/design/README.md)（规范 01~24 + 32 号流程 + agent-runtime/renderer 两篇主题命名规范 + 治理索引 + 维护约定与维护矩阵）；代码现状导航以附录形式内嵌于对应规范。新增设计规范用主题命名、不带编号。
+- **docs/implementation/**：实施记录（一次性归档）。入口 [docs/implementation/README.md](docs/implementation/README.md)；新功能实施记录按 32 号流程以 `NN-<slug>-spec.md` 落位（编号从 40 续号）并登记。
 
 ## 架构
 
