@@ -320,7 +320,7 @@ Latest 切换）——`gh run list` 匹配旧 run 假绿的教训已入档。
 | 社区面更正 | v1.1 §6 所写「Discussions reply templates」**不是真实存在的 GitHub 功能**（2026-10-07 实证：SavedReply 为 viewer 级个人便签且无 API 管理入口，262 个 mutation 无一可写）——其意图由 **Discussion category forms**（开帖侧结构化表单，真实功能）更优实现，见上 |
 | Renovate | 周末批次 + 上海时区；非 major 归一组；electron major `enabled:false`；react-query 双包同 PR；`minimumReleaseAge: 1 day`（供应链 24h 缓冲） |
 
-### 6.2 workflow 一览（8 个，全部 active、全 pin SHA、显式 permissions）
+### 6.2 workflow 一览（9 个，全部 active、显式 permissions；第三方 action 7 处引用已 pin SHA）
 
 | workflow | 职责一句话 |
 |---|---|
@@ -329,19 +329,24 @@ Latest 切换）——`gh run list` 匹配旧 run 假绿的教训已入档。
 | release-please.yml | 版本推导 + Release PR（skip-github-release；禁 release-type 输入；独立 RELEASE_PLEASE_TOKEN） |
 | codeql.yml | advanced setup（排除 vendored 路径），javascript-typescript + actions 双语言 |
 | labeler.yml | PR 区域标签（8 个，v5，pin SHA） |
-| first-interaction.yml | 首次 issue/PR 欢迎固定文案（**云端版本待修**，见 6.3） |
+| discussion-welcome.yml | Discussions 新帖自动接纳（首发判定 + 版块固定欢迎文案，github-script 实现，2026-10-08 新增） |
+| first-interaction.yml | 首次 issue/PR 欢迎固定文案（`pull_request_target`——fork PR 令牌可写、可正常发评论，2026-10-07 收口） |
 | issue-metrics.yml | 周一 cron 只读统计，输出 Job Summary |
 | pr-title.yml | PR 标题语义校验（2026-10-09 新增，ruleset 第 6 项必需检查 `Lint PR Title`；squash 标题 = commit message，release-please 升版链护栏；全 PR 含 Release PR 必跑） |
 
-### 6.3 已知缺口（21 个本地未推提交，拍板暂缓，推送需维护者指令）
+### 6.3 本地未推提交状态（2026-10-12 复核）
 
-| 组 | 提交 | 云端风险状态 |
-|---|---|---|
-| 安全修复 | e6a5e858（ci.yml `HEAD_REF` env 中转收口）/ 583bcb15（first-interaction 改 `pull_request_target`）/ 0be1fd0c（scope 闸门 patch 缺失 fail-closed）/ d74355e7（注释漂移） | 云端 first-interaction 仍为 `pull_request`（**fork PR 必红**，raw 内容实锤）；ci.yml 无 env 中转（注入面未收口） |
-| 依赖收窄 | f627573f（dependabot.yml 收窄至根 npm） | 云端无 dependabot.yml（PR #112 已关未并），Dependabot 安全更新在无收窄状态下运行 |
-| a11y / 测试 | a11y 二期三期（5 提交） | 不影响云端 |
-| 文档同步 | 7 提交 | 不影响云端 |
-| 清理 | displayName 死字段等（2 提交） | 不影响云端 |
+2026-10-07 审计列出的缺口已**全部修复并推送**（哈希为现行可达提交，云端 workflow 行为已与仓库一致）：
+
+| 组 | 修复提交（已推送） |
+|---|---|
+| 安全修复 | 0f873453（ci.yml `HEAD_REF` env 中转收口）/ 6d651b1e（first-interaction 改 `pull_request_target`，fork PR 可发评论）/ 88824f94（scope 闸门 patch 缺失 fail-closed） |
+| 依赖收窄 | 2e0d7c58（dependabot.yml 收窄至根 npm 并关闭版本更新轨） |
+| a11y / 测试 | 三期收口全覆盖（6c827a20 / 9cddb87f） |
+| 文档同步 | verify:local 声明与 Release PR 门禁例外（08c2a143）等 |
+| 清理 | displayName 死字段删除（b5b72f19） |
+
+当前本地仍有**数十个提交未推送**（注释剥离与面向人写回 / Agent 运行时 AIMD 与流恢复 / 模型页预设收紧等；2026-10-12 文档对账批次中仅 ci.yml 头注释一处触碰 `.github/`，不改 workflow 行为），推送需维护者指令。
 
 ---
 
