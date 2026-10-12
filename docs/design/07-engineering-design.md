@@ -300,14 +300,14 @@ tsconfig 启用以下严格选项：
 
 ### 8.1 Node 版本
 
-- engines 强制：`>=24.13.0`
-- CI 使用：Node 24
-- 已知问题：TRAE IDE 终端注入其 bundled Node 路径，可能与系统 Node 版本不一致（v22 vs v24），但仅影响 IDE 内终端，不影响 CI/外部工具
+- engines 强制：`>=26.0.0`
+- CI 使用：Node 26
+- 已知问题：TRAE IDE 终端注入其 bundled Node 路径，可能与系统 Node 版本不一致（v22 vs v26），但仅影响 IDE 内终端，不影响 CI/外部工具
 
 ### 8.2 pnpm
 
-- engines：`>=10.0.0`
-- `packageManager: pnpm@10.0.0`
+- engines：`>=12.0.0`
+- `packageManager: pnpm@12.10.1`
 - CI：`pnpm/action-setup@v4`
 
 ### 8.3 .env 环境变量
