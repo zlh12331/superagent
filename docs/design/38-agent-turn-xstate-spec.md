@@ -179,7 +179,7 @@ journey-agent E2E 3/3（真实窗口审批全链路）。
   真正的"事件驱动执行流"重构（invoke 接管 tool execute 的 await）受 AI SDK v7
   streamText 内部结构约束，维持不做（§1.2 既定边界）。
 - **并行子任务**：TeamService.runTeam 已用 Promise.all 并行委派 + 失败隔离，
-  run_team 工具已接通（1-4 成员），子代理回合同样过并发门（容量 4，FIFO）——
+  run_team 工具已接通（1-4 成员），子代理回合同样过并发门（per-provider 桶，桶基线容量 4，AIMD 自适应）——
   并行执行的运行时已存在。机器层"并行状态"是控制流建模工具，而这里的并行
   发生在**工具执行内部**（run_team 的 execute 内），机器视角始终是一个工具
   调用——无需并行状态。

@@ -46,7 +46,7 @@ ai/
 
 | 文件 | 职责 |
 |---|---|
-| `create-stream.ts` | 请求级流创建 + **重试**：创建 `streamText`、拿到 `toUIMessageStream()` reader；只重试"创建 + 首 part"，首 part 成功后不重试（防重复工具副作用） |
+| `create-stream.ts` | 请求级流创建 + **重试**：创建 `streamText`、拿到 `toUIMessageStream()` reader；重试边界 = 首个真实内容事件（非空 delta / tool-call 等）——边界前的结构事件缓冲为 prelude，重试时原序回注（无感重试窗口）；边界后断流由 `agent/turn-assembly.ts` 从对话锚点续写恢复 |
 | `turn-runner.ts` | 回合执行器：复用上层 reader，循环读取流并翻译为 `TurnEvent`；含 tool-call 循环检测、abort 归类、错误传播、finally 清理 |
 | `agent-turn-machine.ts` | 回合状态机（**xstate v5 实现**：idle / running / waitingApproval / ended 等），驱动审批等待 |
 | `turn-translator.ts` | 把 AI SDK 流 part 翻译为内部 `TurnEvent` |
@@ -55,7 +55,7 @@ ai/
 | `text-delta-batcher.ts` | 文本增量批处理（高频 delta 合并降低事件量） |
 | `stream-reader.ts` | 读取/消费 `UIMessageStream` 的封装 |
 | `active-session-registry.ts` | 活跃 stream 注册表（共享 CAS 删除，防旧 stream 覆盖新 controller） |
-| `concurrency-gate.ts` | 并发公平调度门（默认槽位 `DEFAULT_MAX_CONCURRENT_TURNS`，FIFO，防供应商 429） |
+| `concurrency-gate.ts` | per-provider 分桶并发门（每桶基线 `DEFAULT_MAX_CONCURRENT_PER_PROVIDER`=4，桶内 FIFO + AIMD 自适应 cap + 独立冷却，防供应商 429） |
 | `loop-detector.ts` | 工具调用循环检测 |
 | `abort-utils.ts` | abort 信号工具 |
 
@@ -67,7 +67,7 @@ ai/
 
 - `LlmClient`：统一封装 `model(...)` / `streamText(...)` / 结构化输出等，供 agent 主流程与 side-query（标题、GoalJudge、CommandClassifier）共用。
 - `ai-provider.ts`：`llmClient` 单例 + `runtimeModelStore`（运行时自定义模型）+ `resetAIProvider()`。
-- `retry.ts`：重试层——定义可重试错误集合、解析 `Retry-After`、指数退避执行器；支持 abort 中断重试链。
+- `retry.ts`：重试层——定义可重试错误集合、解析 `Retry-After`（含采纳窗口与双头解析）、equal-jitter 指数退避执行器（参数经 `CODE_AGENT_MODEL_RETRY_*` 环境变量可调）；支持 abort 中断重试链。
 
 ### 4.2 models（`models/`）
 

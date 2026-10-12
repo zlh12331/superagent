@@ -49,7 +49,7 @@ MemoryHubService（懒启动 sidecar）◄─ 工具（MemoryPort）+ memory 域
 PromptService、MemoryService、LspManager、UpdateService、CodebaseService、SessionService、GitService 等 ◄─ 惰性加载
 ```
 
-**并发闸**（`ConcurrencyGate`）：agent 回合共用同一 FIFO 槽位，防供应商 API 429。
+**并发闸**（`ConcurrencyGate`）：agent 回合按 provider 分桶（每桶基线容量 4，AIMD 自适应浮动），桶内 FIFO + 限流冷却，防供应商 API 429。
 
 **dispose/初始化顺序**（依赖反向）：AgentService/AI 先于 PermissionService；File/Search/Terminal/Git/Session 在其后；`resetAIProvider` 与 `closeDb` 最后。不可逆。
 
