@@ -149,9 +149,12 @@ export const runtimeModels = sqliteTable(
     displayName: text('display_name'),
     timeoutMs: integer('timeout_ms'),
     apiFormat: text('api_format'),
-    // 用户在高级配置里手填的能力覆盖（JSON：contextWindowSize/maxOutputTokens/vision）；
-    // null = 未填写（resolve 时回退内置清单 capabilities）
-    capabilities: text('capabilities', { mode: 'json' }),
+    // 用户在高级配置里手填的能力覆盖（JSON 文本：contextWindowSize/maxOutputTokens/vision）；
+    // null = 未填写（resolve 时回退内置清单 capabilities）。
+    // 刻意用纯 text 而非 mode:'json'：编解码由 runtime-model-store 单点管理——
+    // json 模式的 mapFromDriverValue 在 drizzle 内层 JSON.parse，一行坏数据会让
+    // 整表 list() 抛错；序列化层数（是否手动 stringify）也由 store 决定，防双编
+    capabilities: text('capabilities'),
     isEnabled: integer('is_enabled').$type<0 | 1>().notNull().default(1),
     createdAt: integer('created_at').notNull(),
   },

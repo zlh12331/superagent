@@ -64,27 +64,45 @@ export interface UpdateRuntimeModelInput {
   readonly isEnabled?: boolean;
 }
 
-/** row.capabilities JSON → 类型化覆盖（畸形 JSON 丢弃，不抛错） */
+/** row.capabilities → 类型化覆盖（畸形值丢弃，不抛错）。
+ *
+ * 列为纯 text（schema.ts 注明原因：drizzle json 模式会在内层 JSON.parse，
+ * 一行坏数据打挂整表 list），序列化由本文件单点管理：写入 JSON.stringify 一次，
+ * 读取 JSON.parse 一次。string 分支同时天然兼容修复前的双重编码存量行
+ * （drizzle json 模式读回内层文本——再 parse 一次即可还原），object 分支防御
+ * 未来形态漂移 */
 function parseCapabilitiesOverride(raw: unknown): RuntimeCapabilitiesOverride | undefined {
-  if (typeof raw !== 'string') {
+  let candidate: unknown = raw;
+  if (typeof candidate === 'string') {
+    try {
+      candidate = JSON.parse(candidate);
+    } catch {
+      return undefined;
+    }
+    // 存量双编码行：第一层剥出的是内层 JSON 文本（string），再剥一层才是对象
+    if (typeof candidate === 'string') {
+      try {
+        candidate = JSON.parse(candidate);
+      } catch {
+        return undefined;
+      }
+    }
+  }
+  if (typeof candidate !== 'object' || candidate === null || Array.isArray(candidate)) {
     return undefined;
   }
-  try {
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
-    const out: Record<string, unknown> = {};
-    if (typeof parsed['contextWindowSize'] === 'number') {
-      out['contextWindowSize'] = parsed['contextWindowSize'];
-    }
-    if (typeof parsed['maxOutputTokens'] === 'number') {
-      out['maxOutputTokens'] = parsed['maxOutputTokens'];
-    }
-    if (typeof parsed['vision'] === 'boolean') {
-      out['vision'] = parsed['vision'];
-    }
-    return Object.keys(out).length > 0 ? (out as RuntimeCapabilitiesOverride) : undefined;
-  } catch {
-    return undefined;
+  const parsed = candidate as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+  if (typeof parsed['contextWindowSize'] === 'number') {
+    out['contextWindowSize'] = parsed['contextWindowSize'];
   }
+  if (typeof parsed['maxOutputTokens'] === 'number') {
+    out['maxOutputTokens'] = parsed['maxOutputTokens'];
+  }
+  if (typeof parsed['vision'] === 'boolean') {
+    out['vision'] = parsed['vision'];
+  }
+  return Object.keys(out).length > 0 ? (out as RuntimeCapabilitiesOverride) : undefined;
 }
 
 function rowToRecord(row: {

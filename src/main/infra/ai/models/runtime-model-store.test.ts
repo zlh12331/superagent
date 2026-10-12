@@ -145,6 +145,32 @@ describe('RuntimeModelStore', () => {
     expect(resolved.capabilities.vision).toBe(false);
   });
 
+  it('存量双重编码行兼容读取（修复前手动 stringify + drizzle json 模式再 stringify）', async () => {
+    const { getDb } = await import('../../storage/db');
+    await store.add({ modelId: 'legacy-dbl', providerKind: 'deepseek' });
+    // 修复前存储文本 = JSON.stringify(JSON.stringify(obj))——双层编码形态
+    const legacyText = JSON.stringify(JSON.stringify({ contextWindowSize: 131_072 }));
+    const db = getDb();
+    (db.$client as import('better-sqlite3').Database)
+      .prepare("UPDATE runtime_models SET capabilities = ? WHERE model_id = 'legacy-dbl'")
+      .run(legacyText);
+
+    expect((await store.list())[0]).toMatchObject({
+      capabilitiesOverride: { contextWindowSize: 131_072 },
+    });
+  });
+
+  it('capabilities 畸形值：list 不抛错（纯 text 列不做 drizzle 内层 parse）、覆盖按缺省处理', async () => {
+    const { getDb } = await import('../../storage/db');
+    await store.add({ modelId: 'legacy-bad', providerKind: 'deepseek' });
+    const db = getDb();
+    (db.$client as import('better-sqlite3').Database)
+      .prepare("UPDATE runtime_models SET capabilities = 'not-json' WHERE model_id = 'legacy-bad'")
+      .run();
+
+    expect((await store.list())[0]?.capabilitiesOverride).toBeUndefined();
+  });
+
   it('update：capabilities 三态（覆盖写入 / null 清除 / 省略不改）', async () => {
     await store.add({
       modelId: 'my-coder',
