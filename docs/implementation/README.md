@@ -25,15 +25,8 @@
 
 > 32 号（新功能三阶段流程）是**现行流程规范**而非一次性记录，留在 [../design/32-feature-workflow-spec.md](../design/32-feature-workflow-spec.md)。
 
-## 二、归档区（archive/）
-
-已完结的一次性交付记录，只读留档，不再维护：
-
-- [archive/compose-spec/](archive/compose-spec/)：早期设计规范系列（design-truth / design-identity / design-signature-moment / design-style-architecture / design-tokens-debt）
-- [archive/ux-audit-report.md](archive/ux-audit-report.md)：UX 审计报告
-
-## 三、登记约定
+## 二、登记约定
 
 1. 新功能按 32 号流程（`../design/32-feature-workflow-spec.md`）产出 `NN-<slug>-spec.md` 落本目录，**编号从 40 续号**，并在上方索引表登记。
 2. 实施记录写完后**冻结**：后续语义演进时更新对应的设计规范（`../design/`），不在实施记录里追加；实施记录只补"实施状态"一栏。
-3. 彻底过时的一次性交付移入 `archive/` 并在本文件第二节登记。
+3. 彻底过时的实施记录直接删除（git 历史可追回），不设归档目录。
