@@ -477,6 +477,39 @@ export const SetTelemetryLevelResSchema = z.object({
 /**
  * settings:addRuntimeModel 入参 zod schema（自定义模型）
  */
+/**
+ * 能力覆盖（高级配置手填项；省略字段 = 回退内置清单 capabilities）。
+ * 三态语义：Add 省略 = 未填写；Update 省略 = 不修改，null = 清除覆盖。
+ */
+export const ModelCapabilitiesOverrideSchema = z
+  .object({
+    contextWindowSize: z.number().int().positive().max(10_000_000).nullable().optional(),
+    maxOutputTokens: z.number().int().positive().max(10_000_000).nullable().optional(),
+    vision: z.boolean().nullable().optional(),
+  })
+  // null/undefined 字段收敛为缺省（输出干净的可选 number/boolean，兼容 RuntimeCapabilitiesOverride
+  // 的 exactOptionalPropertyTypes 判定）；Update 清除覆盖走外层 capabilities 的 null 三态
+  .transform((v) => {
+    const out: {
+      contextWindowSize?: number;
+      maxOutputTokens?: number;
+      vision?: boolean;
+    } = {};
+    if (typeof v.contextWindowSize === 'number') {
+      out.contextWindowSize = v.contextWindowSize;
+    }
+    if (typeof v.maxOutputTokens === 'number') {
+      out.maxOutputTokens = v.maxOutputTokens;
+    }
+    if (typeof v.vision === 'boolean') {
+      out.vision = v.vision;
+    }
+    return out;
+  });
+
+/** 能力覆盖 TypeScript 类型（transform 收敛后的干净可选字段） */
+export type ModelCapabilitiesOverride = z.infer<typeof ModelCapabilitiesOverrideSchema>;
+
 export const AddRuntimeModelReqSchema = z.object({
   // 模型 id（全局唯一，如 custom-coder）
   modelId: z.string().min(1).max(100),
@@ -506,6 +539,10 @@ export const AddRuntimeModelReqSchema = z.object({
   isEnabled: z.boolean().optional(),
   // API 协议格式（省略 = openai-chat，与存量行为一致——见 ModelApiFormatSchema）
   apiFormat: ModelApiFormatSchema.optional(),
+  // 能力覆盖（高级配置；省略 = 未填写，resolve 回退内置清单）。
+  // 允许显式 undefined（IPC handler 透传形态）——exactOptionalPropertyTypes 下 handler
+  // 展开字段可能带 undefined 值
+  capabilities: ModelCapabilitiesOverrideSchema.optional(),
 });
 
 /** settings:addRuntimeModel 响应 payload */
@@ -564,6 +601,8 @@ export const UpdateRuntimeModelReqSchema = z.object({
   apiFormat: ModelApiFormatSchema.optional(),
   // 启停状态（省略 = 不修改）
   isEnabled: z.boolean().optional(),
+  // 能力覆盖（三态：省略 = 不修改，null = 清除覆盖回退内置清单）
+  capabilities: ModelCapabilitiesOverrideSchema.nullable().optional(),
 });
 
 /** settings:updateRuntimeModel 响应 payload */
@@ -590,6 +629,8 @@ export interface RuntimeModelInfo {
   readonly isEnabled: boolean;
   /** 创建时间（Unix timestamp 毫秒） */
   readonly createdAt: number;
+  /** 能力覆盖（高级配置手填项；省略 = 未覆盖，回退内置清单） */
+  readonly capabilities?: ModelCapabilitiesOverride;
 }
 
 /** settings:listRuntimeModels 响应 payload */
@@ -615,6 +656,7 @@ export const ListRuntimeModelsResSchema = z.object({
       apiFormat: ModelApiFormatSchema.optional(),
       isEnabled: z.boolean(),
       createdAt: z.number().int(),
+      capabilities: ModelCapabilitiesOverrideSchema.optional(),
     }),
   ),
 });
