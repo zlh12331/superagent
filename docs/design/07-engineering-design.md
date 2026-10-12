@@ -99,10 +99,11 @@
 on:
   pull_request:
     branches: [main]
+  merge_group: # merge queue 队列树把关（2026-10-07 接入）
   workflow_dispatch: # 允许手动触发（便于调试）
 ```
 
-**只由 PR 触发，不再 push: main**（2026-09-10 方案二「CI on PR, CD on main」）：ruleset 强制 main 所有提交走 PR 且 PR 必含 main 最新提交（squash/rebase 合入树与 PR head 一致）⇒ 必需检查在合并前已对相同内容跑过，push 阶段重复无增益。合并后 main 仍有 CodeQL + secret scanning（GitHub 托管）。详细依据见 `docs/design/29-pipeline-spec.md`。
+**由 PR 与 merge_group 触发，不再 push: main**（2026-09-10 方案二「CI on PR, CD on main」；2026-10-07 接入 merge queue 后增加 merge_group 监听，必需检查改在队列树上把关）：ruleset 强制 main 所有提交走 PR 且 PR 必含 main 最新提交（squash/rebase 合入树与 PR head 一致）⇒ 必需检查在合并前已对相同内容跑过，push 阶段重复无增益。合并后 main 仍有 CodeQL + secret scanning（GitHub 托管）。详细依据见 `docs/design/29-pipeline-spec.md`。
 
 ### 3.2 并发控制
 
