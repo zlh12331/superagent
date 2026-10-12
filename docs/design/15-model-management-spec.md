@@ -7,6 +7,7 @@
 > **实现状态（已落地）**：本文描述的目标形态已全部实现——列表页 `models-section.tsx`、三类弹窗 `sections/dialogs/{add-model-dialog,model-config-dialog,model-config-fields}.tsx`、删除确认；后端 `settings:addRuntimeModel / updateRuntimeModel / removeRuntimeModel / listRuntimeModels` 与 `models:test` 均已进定义表并接线。
 > 表单锁定规则：编辑模式下 `providerKind` 与 `modelId` 均为只读（`updateRuntimeModel` 以 `modelId` 为主键定位行，允许改动会导致保存静默失效）。
 > **2026-10-08 补载 §七「模型路由」**：对话链路如何消费所选模型（三档解析 / 拒绝路径 / 能力继承 / 缓存失效 / 已知边界）。
+> **2026-10-12 同步**：预设网格收紧为深度适配厂商（DeepSeek / 智谱 GLM / 小米 MiMo，见 `PROVIDER_LABELS`）；预设模型选中后按 `capabilities` 官方数值自动预填高级配置。
 
 ## 一、设置页面全局概览
 
@@ -142,9 +143,9 @@ interface Model {
 | 模型网格 | 2 列网格 | 模型卡片（数量 = 本项目实际适配厂商数） | 正常 | 内容区 | 圆角卡片  |
 | 模型卡片 | 卡片项   | 品牌 Logo + 名称 + 右箭头 > | 正常 | 网格项 | 圆角卡片、悬停背景色加深 |
 
-网格项 = 本项目已适配厂商全量清单（kind 单一真源 shared `ApiKeyProviderSchema`，渲染层 `PROVIDER_LABELS` 静态展示映射）：DeepSeek / OpenAI / Anthropic / Ollama / Moonshot Kimi / 智谱 GLM / 通义千问 / 豆包（火山方舟）/ 硅基流动 / OpenRouter，另置「自定义模型」入口。全量展示不依赖 API Key 配置状态（密钥在配置弹窗内填写）。
+网格项 = 预设厂商清单（渲染层 `PROVIDER_LABELS` 静态展示映射，**只收录深度适配厂商**——预设网格的语义是「适配好的开箱即用」，2026-10-12 收紧）：DeepSeek / 智谱 GLM / 小米 MiMo，另置「自定义模型」入口。其余 `ApiKeyProviderSchema` 中的 kind（OpenAI / Anthropic / Ollama / Moonshot Kimi / 通义千问 / 豆包（火山方舟）/ 硅基流动 / OpenRouter）协议通但无精细适配，经「自定义模型」入口自填 baseUrl/apiFormat。展示不依赖 API Key 配置状态（密钥在配置弹窗内填写）。
 
-> 注：产品截图中的厂商（MiniMax CN、阿里云、小米 MiMo 等）为参考项目的适配清单，本项目未适配则不显示，不照抄。
+> 注：产品截图中的厂商清单（MiniMax CN、阿里云等）为参考项目的适配列表，本项目预设网格只保留深度适配厂商，不照抄。
 
 #### 3.2.3 交互与行为
 
@@ -283,7 +284,7 @@ interface ModelConfig {
 
 #### 3.3.5 动态与条件逻辑
 
-* 选"使用其他模型"→模型 ID 可编辑；选厂商预设模型→自动填充
+* 选"使用其他模型"→模型 ID 可编辑；选厂商预设模型→按该模型 `capabilities`（厂商适配的官方数值）预填高级配置（仅填空字段，用户手改过的不覆盖）
 
 * 必填项非空才可提交；范围校验（Temperature 0\~2 / TopP 0\~1 / TopK 1\~100）
 
