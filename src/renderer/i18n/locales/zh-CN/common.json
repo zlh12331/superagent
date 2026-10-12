@@ -667,6 +667,7 @@
       "advancedConfig": "高级配置",
       "contextInputLabel": "上下文窗口（输入）",
       "contextOutputLabel": "上下文窗口（输出）",
+      "contextFormatError": "上下文窗口需为 Token 数或 k/M 快捷值（≤1000 万，如 872000、384k、1M）",
       "toolCallRoundsLabel": "工具调用轮数",
       "imageSupportLabel": "支持图片输入",
       "imageSupportYes": "支持",

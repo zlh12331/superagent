@@ -4,7 +4,7 @@ import type {
   ModelApiFormat,
 } from '@code-agent/shared/renderer';
 import { ChevronDown, ChevronRight, Eye, EyeOff } from 'lucide-react';
-import { type ReactElement, useState } from 'react';
+import { type ChangeEvent, type ReactElement, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -81,6 +81,50 @@ export interface ModelConfigFieldsProps {
 const CONTEXT_INPUT_SHORTCUTS = ['128k', '256k', '512k', '1M'] as const;
 const CONTEXT_OUTPUT_SHORTCUTS = ['4k', '16k', '32k', '128k'] as const;
 
+/** schema 上限（packages/shared settings.ts 的 10_000_000 护栏，保存侧同口径拦截） */
+export const CONTEXT_TOKENS_MAX = 10_000_000;
+
+/**
+ * tokens → 厂商标称 K/M 显示（二进制/十进制自适应）
+ *
+ * 显示口径：厂商标称混用二进制（131072→128k）与十进制（384000→384k），
+ * 换算自适应——能被 1024² 整除按 M（/1024²），否则能被 1024 整除按 k（/1024），
+ * 否则按十进制 K（/1000）。与 parseTokenLabel 构成双向换算对。
+ */
+export function formatTokenLabel(tokens: number): string {
+  if (tokens % (1024 * 1024) === 0 && tokens >= 1024 * 1024) {
+    return `${tokens / (1024 * 1024)}M`;
+  }
+  if (tokens % 1024 === 0) {
+    return `${tokens / 1024}k`;
+  }
+  return `${Math.round(tokens / 1000)}k`;
+}
+
+/**
+ * K/M 快捷值或纯 Token 数 → tokens（表单值解析回传持久化）
+ *
+ * 纯数字按原始 tokens；k/K 按 ×1024（二进制 K 是 Token 计数惯例）；
+ * m/M 按 ×1024²。非法（非数字/非正数/超 schema 上限）返回 undefined。
+ */
+export function parseTokenLabel(raw: string): number | undefined {
+  const value = raw.trim();
+  if (value === '') {
+    return undefined;
+  }
+  const match = value.match(/^(\d+)([kKmM]?)$/);
+  if (match === null) {
+    return undefined;
+  }
+  const base = Number(match[1]);
+  if (!Number.isFinite(base) || base <= 0) {
+    return undefined;
+  }
+  const suffix = match[2]?.toLowerCase() ?? '';
+  const tokens = suffix === 'k' ? base * 1024 : suffix === 'm' ? base * 1024 * 1024 : base;
+  return tokens <= CONTEXT_TOKENS_MAX ? tokens : undefined;
+}
+
 /** 字段级样式常量（多处复用，收敛字面量） */
 const FIELD_INPUT_CLASS = 'text-xs';
 const FIELD_LABEL_CLASS = 'text-2xs text-muted-foreground font-medium';
@@ -103,6 +147,9 @@ function ApiKeyField({
 }): ReactElement {
   const { t } = useTranslation();
   const [showApiKey, setShowApiKey] = useState(false);
+  const forwardInput = (event: ChangeEvent<HTMLInputElement>): void => {
+    onChange(event.currentTarget.value);
+  };
 
   return (
     <div className="flex flex-col gap-1.5">
@@ -113,7 +160,7 @@ function ApiKeyField({
           value={value}
           placeholder={t('settings.modelMgmt.apiKeyPlaceholder')}
           className={cn(FIELD_INPUT_CLASS, 'min-w-0 flex-1')}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={forwardInput}
         />
         <Button
           variant="ghost"
@@ -164,9 +211,8 @@ export function ModelConfigFields({
   const modelIdLocked = isEdit || (isProvider && !values.useOtherModel);
 
   /** 选中预设模型时用厂商适配的官方数值预填高级配置（仅填空字段——用户手改过的不覆盖）。
-   * ⚠ 显示口径：厂商标称混用二进制（131072→128K）与十进制（384000→384K），换算自适应——
-   * 能被 1024 整除按 Ki（/1024），否则按十进制 K（/1000）。另：高级配置字段当前为 UI
-   * 预填展示，未接入 addRuntimeModel 持久化（schema 无对应字段） */
+   * ⚠ 显示口径：厂商标称混用二进制（131072→128k）与十进制（384000→384k），换算走
+   * formatTokenLabel 自适应；持久化方向由 dialog 的 parseTokenLabel 解析回传 */
   const applyPresetCapabilities = (modelId: string): void => {
     const preset = providerModels.find((m) => m.id === modelId);
     const caps = preset?.capabilities as
@@ -175,14 +221,11 @@ export function ModelConfigFields({
     if (caps === undefined) {
       return;
     }
-    // tokens → 厂商标称 K 显示（二进制/十进制自适应）
-    const toKLabel = (tokens: number): string =>
-      tokens % 1024 === 0 ? `${tokens / 1024}k` : `${Math.round(tokens / 1000)}k`;
     if (values.contextInput.trim() === '' && caps.contextWindowSize !== undefined) {
-      onFieldChange('contextInput', toKLabel(caps.contextWindowSize));
+      onFieldChange('contextInput', formatTokenLabel(caps.contextWindowSize));
     }
     if (values.contextOutput.trim() === '' && caps.maxOutputTokens !== undefined) {
-      onFieldChange('contextOutput', toKLabel(caps.maxOutputTokens));
+      onFieldChange('contextOutput', formatTokenLabel(caps.maxOutputTokens));
     }
     // 视觉：capabilities.vision（仅自动填「支持」——无视觉标注的模型不主动改用户选择）
     if (caps.vision === true && values.imageSupport === 'unsupport') {

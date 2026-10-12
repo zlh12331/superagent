@@ -667,6 +667,7 @@
       "advancedConfig": "Advanced",
       "contextInputLabel": "Context window (input)",
       "contextOutputLabel": "Context window (output)",
+      "contextFormatError": "Context window must be a token count or k/M shorthand (≤10M, e.g. 872000, 384k, 1M)",
       "toolCallRoundsLabel": "Tool call rounds",
       "imageSupportLabel": "Image input",
       "imageSupportYes": "Supported",

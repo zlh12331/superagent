@@ -1,4 +1,8 @@
-import type { ApiKeyProvider, RuntimeModelInfo } from '@code-agent/shared/renderer';
+import type {
+  ApiKeyProvider,
+  ModelCapabilitiesOverride,
+  RuntimeModelInfo,
+} from '@code-agent/shared/renderer';
 import { Loader2, TriangleAlert } from 'lucide-react';
 import { type ReactElement, useEffect, useState } from 'react';
 import { toast } from 'sonner';
@@ -22,9 +26,11 @@ import { useTranslation } from '@/i18n/use-translation';
 import { openExternal } from '@/lib/app-actions';
 import { providerApiKeyUrl } from '../provider-labels';
 import {
+  formatTokenLabel,
   ModelConfigFields,
   type ModelConfigFormValues,
   type ModelConfigMode,
+  parseTokenLabel,
 } from './model-config-fields';
 
 /** 模型配置弹窗 props（新增/编辑双模式，mode 与 editingModel 联动见字段注释） */
@@ -96,6 +102,76 @@ function trimOptionalFields(values: ModelConfigFormValues): {
 }
 
 /**
+ * 高级配置表单值 → 能力覆盖 payload（k 字符串解析回 tokens）
+ *
+ * - 上下文输入/输出：非空且可解析才携带（解析失败由 validate 拦截，此处不触发）
+ * - 视觉（vision）：自定义模式无内置清单兜底，表单是唯一真源，'support'/'unsupport' 都携带；
+ *   服务商/编辑模式的预设以内置清单权威（默认值会误标文本模型为支持视觉），
+ *   仅 'unsupport' 携带 false（显式关闭）
+ * - 三项全空 → undefined（不携带，resolve 全量回退内置清单）
+ */
+function buildCapabilitiesOverride(
+  values: ModelConfigFormValues,
+  isCustom: boolean,
+): ModelCapabilitiesOverride | undefined {
+  const contextWindowSize = parseTokenLabel(values.contextInput);
+  const maxOutputTokens = parseTokenLabel(values.contextOutput);
+  const vision =
+    isCustom || values.imageSupport === 'unsupport' ? values.imageSupport === 'support' : undefined;
+  if (contextWindowSize === undefined && maxOutputTokens === undefined && vision === undefined) {
+    return undefined;
+  }
+  return {
+    ...(contextWindowSize !== undefined ? { contextWindowSize } : {}),
+    ...(maxOutputTokens !== undefined ? { maxOutputTokens } : {}),
+    ...(vision !== undefined ? { vision } : {}),
+  };
+}
+
+/**
+ * 编辑模式表单值（已有配置 + 能力覆盖回显预填）
+ *
+ * 能力覆盖回显：tokens → K/M 显示（与保存侧 parseTokenLabel 双向换算）；
+ * vision 未覆盖（undefined）按默认「支持」显示——覆盖语义仅在用户改选时落库。
+ */
+function buildEditValues(editingModel: RuntimeModelInfo): ModelConfigFormValues {
+  const caps = editingModel.capabilities;
+  return {
+    ...createDefaultValues(),
+    providerKind: editingModel.providerKind,
+    modelId: editingModel.modelId,
+    displayName: editingModel.displayName ?? '',
+    requestUrl: editingModel.baseUrl ?? '',
+    apiFormat: editingModel.apiFormat ?? 'openai-chat',
+    timeoutSeconds:
+      editingModel.timeoutMs !== undefined ? String(editingModel.timeoutMs / 1000) : '',
+    ...(caps?.contextWindowSize !== undefined
+      ? { contextInput: formatTokenLabel(caps.contextWindowSize) }
+      : {}),
+    ...(caps?.maxOutputTokens !== undefined
+      ? { contextOutput: formatTokenLabel(caps.maxOutputTokens) }
+      : {}),
+    ...(caps?.vision === false ? { imageSupport: 'unsupport' } : {}),
+  };
+}
+
+/**
+ * 上下文窗口格式校验（非空必须可解析：纯 Token 数或 k/M 快捷值，≤ schema 上限）
+ *
+ * 独立成函数动机：validate 的 6 项范围校验已贴近阈值 15，这两个
+ * 「非空 && 不可解析」条件此前把认知复杂度推到 19。
+ */
+function contextFormatErrorOf(values: ModelConfigFormValues): string | null {
+  if (values.contextInput.trim() !== '' && parseTokenLabel(values.contextInput) === undefined) {
+    return 'settings.modelMgmt.contextFormatError';
+  }
+  if (values.contextOutput.trim() !== '' && parseTokenLabel(values.contextOutput) === undefined) {
+    return 'settings.modelMgmt.contextFormatError';
+  }
+  return null;
+}
+
+/**
  * 模型配置弹窗
  *
  * - 服务商模式：选厂商进入，显示厂商/模型下拉 + 模型 ID + API 密钥
@@ -132,16 +208,7 @@ export function ModelConfigDialog({
   useEffect(() => {
     if (!open) return;
     if (isEdit && editingModel !== undefined) {
-      setValues({
-        ...createDefaultValues(),
-        providerKind: editingModel.providerKind,
-        modelId: editingModel.modelId,
-        displayName: editingModel.displayName ?? '',
-        requestUrl: editingModel.baseUrl ?? '',
-        apiFormat: editingModel.apiFormat ?? 'openai-chat',
-        timeoutSeconds:
-          editingModel.timeoutMs !== undefined ? String(editingModel.timeoutMs / 1000) : '',
-      });
+      setValues(buildEditValues(editingModel));
     } else {
       setValues({
         ...createDefaultValues(),
@@ -194,6 +261,10 @@ export function ModelConfigDialog({
     if (!inRange(values.topK, 1, 100)) {
       return t('settings.modelMgmt.topKRange');
     }
+    const contextError = contextFormatErrorOf(values);
+    if (contextError !== null) {
+      return t(contextError);
+    }
     return null;
   };
 
@@ -244,9 +315,11 @@ export function ModelConfigDialog({
     }
   };
 
-  /** 按模式分发保存：服务商模式密钥走厂商级 keychain，其余走模型级 */
+  /** 按模式分发保存：服务商模式密钥走厂商级 keychain，其余走模型级；
+   * capabilities 三分支同口径携带（空 = 不带，resolve 回退内置清单） */
   const saveByMode = async (): Promise<void> => {
     const fields = trimOptionalFields(values);
+    const capabilities = buildCapabilitiesOverride(values, isCustom);
     if (isEdit) {
       await updateMutation.mutateAsync({
         modelId: values.modelId.trim(),
@@ -255,6 +328,7 @@ export function ModelConfigDialog({
         ...fields.apiKey,
         timeoutMs: fields.timeoutMs,
         apiFormat: values.apiFormat,
+        ...(capabilities !== undefined ? { capabilities } : {}),
       });
       toast.success(t('settings.modelMgmt.modelUpdated'));
       return;
@@ -271,6 +345,7 @@ export function ModelConfigDialog({
         providerKind: values.providerKind,
         ...fields.displayName,
         timeoutMs: fields.timeoutMs,
+        ...(capabilities !== undefined ? { capabilities } : {}),
       });
       toast.success(t('settings.modelMgmt.modelAdded'));
       return;
@@ -283,6 +358,7 @@ export function ModelConfigDialog({
       ...fields.displayName,
       timeoutMs: fields.timeoutMs,
       apiFormat: values.apiFormat,
+      ...(capabilities !== undefined ? { capabilities } : {}),
     });
     toast.success(t('settings.modelMgmt.modelAdded'));
   };
